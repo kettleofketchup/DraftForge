@@ -37,6 +37,7 @@ from .test_bracket import force_mismatched_winning_team
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_discord import seed_discord_members
+from .test_discord_activity import discord_activity_setup
 from .test_dota_lobby import (
     dota_lobby_data,
     dota_lobby_game_lobby,
@@ -62,6 +63,7 @@ from .test_herodraft import (
     warp_herodraft_round,
 )
 from .test_org_features import login_org_features, org_features_data, reset_org_features
+from .test_signup_history import reset_signup_history, signup_history_data
 from .test_steam import create_test_match
 from .test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 
@@ -270,6 +272,12 @@ urlpatterns = [
         seed_discord_members,
         name="test-seed-discord-members",
     ),
+    # Discord Activity launch staged against the TEST-stack Discord fake
+    path(
+        "discord-activity/setup/",
+        discord_activity_setup,
+        name="test-discord-activity-setup",
+    ),
     # Events reset (preserves fixtures for E2E tests)
     path(
         "events/reset/",
@@ -365,6 +373,16 @@ urlpatterns = [
         "game-org-mmr/approve-setup/",
         game_org_mmr_approve_setup,
         name="test-game-org-mmr-approve-setup",
+    ),
+    path(
+        "signup-history/data/",
+        signup_history_data,
+        name="test-signup-history-data",
+    ),
+    path(
+        "signup-history/reset/",
+        reset_signup_history,
+        name="test-signup-history-reset",
     ),
     path("healthz/", healthz, name="test-healthz"),
     # Bracket scenario helpers (gated on TEST=true)

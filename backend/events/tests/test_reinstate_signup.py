@@ -29,7 +29,7 @@ from org.models import Organization
 
 
 class ReinstateSignupTest(TestCase):
-    """Regression coverage for the two-state reinstate path added on PR #203."""
+    """Reinstate per state: signups_open and roll_call differ, other states raise."""
 
     def setUp(self):
         self.org = Organization.objects.create(name="Reinstate Org")

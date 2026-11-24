@@ -89,12 +89,30 @@ afterEach(async () => {
   cleanup();
   await new Promise((resolve) => setTimeout(resolve, 0));
   useLeagueStore.setState({ currentLeague: null });
+  useUserStore.setState({ tournament: null } as never);
 });
 
 describe('PlayerModal edit button for org staff', () => {
   it('shows edit to staff of the league parent org', async () => {
     openOnLeaguePage({ staff_organization_ids: [ORG_PK] });
     expect(await screen.findByTestId('edit-user-btn')).toBeTruthy();
+  });
+
+  it('gives league staff an MMR-only edit for a player of the tournament', async () => {
+    useUserStore.setState({
+      tournament: { pk: 77, league_pk: LEAGUE_PK, users: [player] },
+    } as never);
+    openOnLeaguePage({ staff_league_ids: [LEAGUE_PK] });
+    fireEvent.click(await screen.findByTestId('edit-user-btn'));
+    expect(await screen.findByTestId('edit-user-mmr')).toBeTruthy();
+    expect(screen.queryByTestId('edit-user-nickname')).toBeNull();
+    expect(screen.queryByTestId('edit-user-steam_account_id')).toBeNull();
+  });
+
+  it('hides edit from league staff outside a tournament', async () => {
+    openOnLeaguePage({ staff_league_ids: [LEAGUE_PK] });
+    await screen.findByText('alice');
+    expect(screen.queryByTestId('edit-user-btn')).toBeNull();
   });
 
   it('hides edit from a user with no org role', async () => {

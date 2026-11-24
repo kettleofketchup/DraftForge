@@ -21,5 +21,10 @@ export { EventStateBadge } from './EventStateBadge';
 export { EventStrip } from './EventStrip';
 export { MmrApprovalModal } from './MmrApprovalModal';
 export { OverrideWarningDialog } from './OverrideWarningDialog';
+export {
+  SignupHistorySection,
+  type HistoryMemberOption,
+  type SignupHistorySectionProps,
+} from './SignupHistorySection';
 export { SubscriberList } from './SubscriberList';
 export { useOverrideRetry } from './useOverrideRetry';

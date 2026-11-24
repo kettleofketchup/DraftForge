@@ -27,7 +27,6 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Game, Tournament
 from discordbot.models import (
     ChannelType,
     DiscordEvent,
@@ -42,7 +41,9 @@ from discordbot.models import (
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
+from events.ledger import SignupActor
 from events.models import Event, EventRepeater, RepeaterSubscription
+from events.ready_check import READY_CHECK_HELD_MESSAGE, transition_with_ready_check
 from events.serializers import EventSerializer
 from events.services import clear_signup_dedup_state, generate_events_for_repeater
 from org.models import OrgUser
@@ -801,9 +802,16 @@ def transition_event_state(request: Request, pk: int) -> Response:
     if not new_state:
         return Response({"error": "state required"}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        event.transition_state(new_state)
+        started = transition_with_ready_check(
+            event, new_state, actor=SignupActor.system()
+        )
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    if not started:
+        return Response(
+            {"code": "ready_check_held", "error": READY_CHECK_HELD_MESSAGE},
+            status=status.HTTP_409_CONFLICT,
+        )
     return Response({"id": event.pk, "state": event.state})
 
 
@@ -840,100 +848,6 @@ def auto_close_event(request: Request, pk: int) -> Response:
         expected_from=[s for s, t in _AUTO_CLOSE_TARGETS.items() if t == target],
     )
     return Response({"closed": result.closed, "state": result.state})
-
-
-# ---------------------------------------------------------------------------
-# Tournament reads (for Celery tasks)
-# ---------------------------------------------------------------------------
-
-
-@api_view(["GET"])
-@authentication_classes(_auth)
-@permission_classes(_perm)
-def get_tournament_for_task(request: Request, tournament_id: int) -> Response:
-    """Get tournament config data for Celery tasks."""
-
-    try:
-        t = Tournament.objects.get(pk=tournament_id)
-    except Tournament.DoesNotExist:
-        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
-    return Response(
-        {
-            "id": t.pk,
-            "name": t.name,
-            "state": t.state,
-            "date_played": t.date_played.isoformat() if t.date_played else None,
-            "auto_create_hero_drafts": t.auto_create_hero_drafts,
-            "discord_send_draft_link": t.discord_send_draft_link,
-            "discord_send_herodraft_link": t.discord_send_herodraft_link,
-            "tournament_type": t.tournament_type,
-            "draft_type": t.draft_type,
-        }
-    )
-
-
-@api_view(["GET"])
-@authentication_classes(_auth)
-@permission_classes(_perm)
-def get_tournament_participants(request: Request, tournament_id: int) -> Response:
-    """Get tournament participants with Discord IDs (for DM sending).
-
-    Returns the full tournament membership pool (``Tournament.users``) —
-    captains and undrafted participants alike. A roster-based query
-    (``Team.members``) would miss the undrafted pool: at draft-start time
-    only captains have been seeded onto team rosters.
-    """
-
-    users = (
-        CustomUser.objects.filter(
-            tournaments=tournament_id,
-            discordId__isnull=False,
-        )
-        .exclude(discordId="")
-        .distinct()
-        .values("pk", "discordId", "username")
-    )
-    return Response(
-        [
-            {
-                "user_pk": u["pk"],
-                "discord_id": u["discordId"],
-                "username": u["username"] or "",
-            }
-            for u in users
-        ]
-    )
-
-
-@api_view(["GET"])
-@authentication_classes(_auth)
-@permission_classes(_perm)
-def get_match_participants(request: Request, game_id: int) -> Response:
-    """Get players from both teams in a match (for hero draft DMs)."""
-
-    try:
-        game = Game.objects.select_related("radiant_team", "dire_team").get(pk=game_id)
-    except Game.DoesNotExist:
-        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
-    users = (
-        CustomUser.objects.filter(
-            teams_as_member__in=[game.radiant_team, game.dire_team],
-            discordId__isnull=False,
-        )
-        .exclude(discordId="")
-        .distinct()
-        .values("pk", "discordId", "username")
-    )
-    return Response(
-        [
-            {
-                "user_pk": u["pk"],
-                "discord_id": u["discordId"],
-                "username": u["username"] or "",
-            }
-            for u in users
-        ]
-    )
 
 
 # ---------------------------------------------------------------------------

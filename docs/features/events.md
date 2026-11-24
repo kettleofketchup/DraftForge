@@ -90,6 +90,10 @@ The response carries `created_count` plus a message that distinguishes "no new e
 
 While a series is paused, realign is skipped entirely rather than run against a schedule that generates nothing — otherwise it would simply delete the series' remaining events.
 
+### Deleting a Series
+
+Deleting a series (`events.services.teardown_event_repeater`) also deletes its `upcoming`, `signups_open` and `roll_call` events, with their Discord scheduled events and tournaments. Its `in_progress`, `completed` and `cancelled` events are kept and lose their link to the series.
+
 ### Discord Integration
 
 | Feature | Description |
@@ -274,7 +278,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/event-signups/{id}/reject/` | Reject a signup |
 | POST | `/api/event-signups/{id}/confirm/` | Confirm attendance (roll-call) |
 | POST | `/api/event-signups/{id}/unconfirm/` | Reverse a confirm |
-| POST | `/api/event-signups/{id}/demote/` | Demote approved/confirmed back to pending |
+| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the end of the waitlist. Nobody is promoted into the freed seat; staff fill it by hand |
 | POST | `/api/event-signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
 | POST | `/api/event-signups/{id}/reinstate/` | Re-enable a cancelled signup |
 

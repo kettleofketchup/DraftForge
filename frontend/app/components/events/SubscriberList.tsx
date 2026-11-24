@@ -5,6 +5,7 @@ import { getRepeaterSubscribers } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { repeaterKeys } from '~/hooks/useEvent';
 
 interface SubscriberListProps {
   repeaterId: number;
@@ -13,7 +14,7 @@ interface SubscriberListProps {
 export function SubscriberList({ repeaterId }: SubscriberListProps) {
   const [expanded, setExpanded] = useState(false);
   const { data: subscribers, isLoading } = useQuery({
-    queryKey: ['repeater-subscribers', repeaterId],
+    queryKey: repeaterKeys.subscribers(repeaterId),
     queryFn: () => getRepeaterSubscribers(repeaterId),
   });
 

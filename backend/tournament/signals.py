@@ -4,7 +4,7 @@ Django signals for Team and Tournament member management.
 Handles:
 - Captain/deputy succession when members are removed
 - Empty teams: kept when referenced, deleted otherwise, both audited
-- Cascade removal from tournament.users to team.members
+- Cascade removal from tournament.users to the members of teams still playing
 - Auto-add tournament users to organization and league
 - Mark a tournament past when its bracket final is decided (issue #419)
 """
@@ -16,18 +16,13 @@ from django.db.models.signals import m2m_changed, post_save, pre_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
-from app.models import (
-    CustomUser,
-    Game,
-    Team,
-    TeamLogAction,
-    TeamLogVia,
-    Tournament,
-)
+from app.models import CustomUser
 from league.models import LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_map
 from org.models import OrgUser
 from telemetry.logging import get_logger
+from tournament.models import Game, Team, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_audit import (
     log_snapshot_fields,
     roster_snapshot,
@@ -46,7 +41,7 @@ from tournament.services.tournament_completion import sync_tournament_completion
 log = get_logger(__name__)
 
 
-@receiver(m2m_changed, sender="app.Team_members")
+@receiver(m2m_changed, sender="tournament.Team_members")
 def handle_team_member_removal(
     sender: type,
     instance: Team | CustomUser,
@@ -208,7 +203,7 @@ def _handle_empty_team(team: Team, removed_pks: set[int]) -> None:
     team.delete()
 
 
-@receiver(m2m_changed, sender="app.Tournament_users")
+@receiver(m2m_changed, sender="tournament.Tournament_users")
 def handle_tournament_user_removal(
     sender: type,
     instance: Tournament,
@@ -216,30 +211,24 @@ def handle_tournament_user_removal(
     pk_set: set[int] | None,
     **kwargs: object,
 ) -> None:
-    """Cascade removal from tournament.users to team.members."""
-    # Handle clear all users
+    """Cascade removal from tournament.users into the rosters of teams still playing."""
+    if action not in ("post_clear", "post_remove"):
+        return
+
+    live_teams = instance.teams.nocache().filter(placement__isnull=True).order_by("pk")
     if action == "post_clear":
-        # Clear all teams' members - this triggers team deletion via team signal
-        for team in instance.teams.all():
+        for team in live_teams:
             team.members.clear()
         return
 
-    if action != "post_remove":
-        return
-
-    tournament = instance
-    removed_pks = pk_set
-
-    # Remove users from all teams in this tournament
-    for team in tournament.teams.all():
-        members_to_remove = team.members.filter(pk__in=removed_pks)
+    for team in live_teams:
+        members_to_remove = team.members.filter(pk__in=pk_set or ())
         if not members_to_remove.exists():
             continue
-        # This will trigger handle_team_member_removal signal
         team.members.remove(*members_to_remove)
 
 
-@receiver(m2m_changed, sender="app.Tournament_users")
+@receiver(m2m_changed, sender="tournament.Tournament_users")
 def handle_tournament_user_addition(
     sender: type,
     instance: Tournament,
@@ -316,7 +305,7 @@ def handle_tournament_user_addition(
             )
 
 
-@receiver(pre_save, sender="app.Game", dispatch_uid="game_track_winner_change")
+@receiver(pre_save, sender="tournament.Game", dispatch_uid="game_track_winner_change")
 def track_game_winner_change(
     sender: type[Game], instance: Game, raw: bool = False, **kwargs: object
 ) -> None:
@@ -335,7 +324,9 @@ def track_game_winner_change(
     instance._prior_winning_team_id = prior
 
 
-@receiver(post_save, sender="app.Game", dispatch_uid="game_sync_tournament_completion")
+@receiver(
+    post_save, sender="tournament.Game", dispatch_uid="game_sync_tournament_completion"
+)
 def sync_tournament_on_game_result(
     sender: type[Game], instance: Game, raw: bool = False, **kwargs: object
 ) -> None:

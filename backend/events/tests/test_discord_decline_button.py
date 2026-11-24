@@ -5,7 +5,13 @@ from django.utils import timezone
 
 from app.models import CustomUser, GameType
 from events.discord.handlers import handle_decline_button
-from events.models import Event, EventSignup, EventState, SignupStatus
+from events.models import (
+    Event,
+    EventSignup,
+    EventState,
+    SignupLedgerEntry,
+    SignupStatus,
+)
 from events.services import decline_signup
 from events.tests.actors import SYSTEM
 from org.models import Organization
@@ -53,6 +59,12 @@ class DeclineSignupServiceTests(TestCase):
         )
         with self.assertRaises(ValueError):
             decline_signup(self.event, self.user, actor=SYSTEM)
+
+    def test_ledger_snapshots_the_stored_event_not_a_stale_instance(self) -> None:
+        Event.objects.filter(pk=self.event.pk).update(name="Renamed")
+        signup = decline_signup(self.event, self.user, actor=SYSTEM)
+        entry = SignupLedgerEntry.objects.get(signup=signup)
+        self.assertEqual(entry.event_snapshot["name"], "Renamed")
 
 
 class HandleDeclineButtonTests(TestCase):

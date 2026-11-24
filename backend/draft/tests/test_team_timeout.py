@@ -8,7 +8,6 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import Team
 from draft.models import Draft, DraftRound, TeamDraftState
 from draft.services import shuffle as shuffle_draft
 from draft.services import team as teamdraft
@@ -20,6 +19,7 @@ from draft.services.team_timeout import (
 )
 from draft.tasks import team_tick as teamdraft_tick
 from draft.tests.team_fixtures import TimedDraftFixture
+from tournament.models import Team
 
 CAPTAIN_MMRS = [
     1000,

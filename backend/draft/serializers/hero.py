@@ -3,9 +3,10 @@ from typing import Any
 from rest_framework import serializers
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer, tournament_organization
+from app.serializers import TournamentUserSerializer
 from draft.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftRound
 from org.models import OrgUser
+from tournament.serializers.users import tournament_organization
 
 
 class HeroDraftRoundSerializerFull(serializers.ModelSerializer):
@@ -105,6 +106,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
     current_round = serializers.SerializerMethodField()
     tournament_id = serializers.SerializerMethodField()
     organization_pk = serializers.SerializerMethodField()
+    league_pk = serializers.SerializerMethodField()
 
     class Meta:
         model = HeroDraft
@@ -114,6 +116,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             "game",
             "tournament_id",
             "organization_pk",
+            "league_pk",
             "state",
             "roll_winner",
             "draft_teams",
@@ -160,6 +163,11 @@ class HeroDraftSerializer(serializers.ModelSerializer):
 
     def get_organization_pk(self, obj: HeroDraft) -> int | None:
         return self._organization_pk
+
+    def get_league_pk(self, obj: HeroDraft) -> int | None:
+        if obj.game and obj.game.tournament:
+            return obj.game.tournament.league_id
+        return None
 
     def get_roll_winner(self, obj: HeroDraft) -> dict[str, Any] | None:
         if obj.roll_winner_id is None:

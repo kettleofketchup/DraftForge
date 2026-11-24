@@ -15,8 +15,7 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from app.models import CustomUser, Tournament
-from app.serializers import TournamentSerializer
+from app.models import CustomUser
 from bracket.models import TournamentBracket
 from common.utils import isTestEnvironment
 from draft.models import Draft, DraftRound
@@ -24,6 +23,8 @@ from draft.serializers.hero import HeroDraftSerializer
 from draft.services.hero_chat import reset_draft_chat
 from league.models import LeagueUser
 from org.models import OrgUser
+from tournament.models import Tournament
+from tournament.serializers.tournament import TournamentSerializer
 
 # Demo tournament names (must match populate.py)
 DEMO_TOURNAMENTS = {

@@ -7,21 +7,25 @@ import type { EventCaptainReviews, ModerationReview } from '../schemas';
 import {
   DEFAULT_TRAITS,
   eventAggregate,
-  eventReviews,
+  moderationCaptain,
   moderationReview,
 } from './fixtures';
 
 function captainWith(
   overrides: Partial<EventCaptainReviews> = {},
 ): EventCaptainReviews {
-  return { ...eventReviews().captains[0], ...overrides };
+  return moderationCaptain(overrides);
 }
+
+const OWN_NOTE =
+  'You captained this team. Another org moderator, or site staff, has to release it. Your results show here once released.';
 
 function renderTable(
   captain: EventCaptainReviews,
   handlers: {
     onVoid?: (r: ModerationReview) => void;
     onUnvoid?: (r: ModerationReview) => void;
+    onRelease?: (c: EventCaptainReviews) => void;
   } = {},
   viewerPk: number | null = 1,
 ) {
@@ -33,6 +37,7 @@ function renderTable(
       onVoid={handlers.onVoid ?? vi.fn()}
       onUnvoid={handlers.onUnvoid ?? vi.fn()}
       pendingPk={null}
+      onRelease={handlers.onRelease ?? vi.fn()}
     />,
   );
 }
@@ -113,7 +118,7 @@ describe('ReviewModerationTable', () => {
       }),
     );
     expect(screen.getByTestId('leadership-moderation-own-7')).toHaveTextContent(
-      'You captained this team. Another admin has to moderate its reviews.',
+      OWN_NOTE,
     );
     expect(screen.getByTestId('leadership-moderation-7')).toHaveTextContent(
       '4.1',
@@ -208,5 +213,112 @@ describe('ReviewModerationTable', () => {
     } finally {
       restore();
     }
+  });
+
+  describe('release state', () => {
+    it.each([
+      ['released', 'Released'],
+      ['pending', 'Pending release'],
+      ['open', 'Window open'],
+      ['short', 'Not enough reviews'],
+      ['voided', 'Voided'],
+      ['hidden', 'Hidden'],
+    ] as const)('badges %s as %s', (state, label) => {
+      renderTable(captainWith({ release_state: state, released: false }));
+      expect(
+        screen.getByTestId('leadership-release-state-7'),
+      ).toHaveTextContent(new RegExp(`^${label}$`));
+    });
+
+    it('shows the live count against the floor', () => {
+      renderTable(
+        captainWith({
+          release_state: 'short',
+          live_reviews: 1,
+          release_floor: 2,
+        }),
+      );
+      expect(
+        screen.getByTestId('leadership-release-count-7'),
+      ).toHaveTextContent('1 / 2 reviews');
+    });
+
+    it('offers Release and the auto-release time only while pending', () => {
+      const onRelease = vi.fn();
+      const captain = captainWith({
+        release_state: 'pending',
+        released: false,
+        can_release: true,
+        auto_release_at: '2026-11-26T12:00:00Z',
+      });
+      renderTable(captain, { onRelease });
+      expect(screen.getByTestId('leadership-auto-release-7')).toHaveTextContent(
+        /^auto-releases .*2026/,
+      );
+      fireEvent.click(screen.getByTestId('leadership-release-7'));
+      expect(onRelease).toHaveBeenCalledWith(captain);
+    });
+
+    it('hides Release without can_release', () => {
+      renderTable(
+        captainWith({ release_state: 'pending', can_release: false }),
+      );
+      expect(screen.queryByTestId('leadership-release-7')).toBeNull();
+    });
+
+    it('shows no auto-release text on a row that is not pending', () => {
+      renderTable(
+        captainWith({
+          release_state: 'short',
+          auto_release_at: '2026-11-26T12:00:00Z',
+        }),
+      );
+      expect(screen.queryByTestId('leadership-auto-release-7')).toBeNull();
+    });
+
+    it('names who released it and when', () => {
+      renderTable(
+        captainWith({
+          release_state: 'released',
+          released_at: '2026-11-23T10:02:00Z',
+          released_by: { pk: 4, username: 'dana' },
+        }),
+      );
+      expect(screen.getByTestId('leadership-released-by-7')).toHaveTextContent(
+        /^by dana · .*2026/,
+      );
+    });
+
+    it('shows nothing extra for a release without a stamp', () => {
+      renderTable(
+        captainWith({ release_state: 'released', released_at: null }),
+      );
+      expect(screen.queryByTestId('leadership-released-by-7')).toBeNull();
+    });
+
+    it('hides counts, release and auto-release on the own row', () => {
+      renderTable(
+        captainWith({
+          own_snapshot: true,
+          reviews: null,
+          release_state: 'hidden',
+          released: false,
+          live_reviews: null,
+          release_floor: null,
+          auto_release_at: null,
+          can_release: false,
+        }),
+      );
+      expect(
+        screen.getByTestId('leadership-moderation-own-7'),
+      ).toHaveTextContent(OWN_NOTE);
+      expect(
+        screen.getByTestId('leadership-release-state-7'),
+      ).toHaveTextContent('Hidden');
+      expect(screen.queryByTestId('leadership-release-count-7')).toBeNull();
+      expect(screen.queryByTestId('leadership-auto-release-7')).toBeNull();
+      expect(screen.queryByTestId('leadership-release-7')).toBeNull();
+      expect(screen.queryByRole('table')).toBeNull();
+    });
   });
 });
