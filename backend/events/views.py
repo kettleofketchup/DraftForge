@@ -2041,7 +2041,7 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         _task(
             "signup_update",
             "Signup Update",
-            enabled=event.discord_announcement and has_channel,
+            enabled=has_signup_post,
             log_source=None,
             check_interval="On signup change",
             description="Edits announcement embed with updated signup counts",
