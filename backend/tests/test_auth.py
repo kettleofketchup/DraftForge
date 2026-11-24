@@ -65,6 +65,10 @@ from tests.data.users import (
     STAFF_USER,
     USER_CLAIMER,
 )
+from tests.helpers.knocked_out_roster_fixture import (
+    KNOCKED_OUT_ROSTER_TOURNAMENT_NAME,
+    populate_knocked_out_roster_tournament,
+)
 from tests.helpers.team_management_fixture import (
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
     populate_team_management_tournament,
@@ -1011,6 +1015,7 @@ def reset_tournament_by_key(request, key: str):
         "bracket_placement_single": populate_bracket_placement_single,
         "bracket_placement_double": populate_bracket_placement_double,
         "team_management": populate_team_management_tournament,
+        "knocked_out_roster": populate_knocked_out_roster_tournament,
     }
 
     def clear_existing_draft_redis(name: str) -> None:
@@ -1030,6 +1035,7 @@ def reset_tournament_by_key(request, key: str):
         "bracket_placement_single": BRACKET_PLACEMENT_SINGLE_TOURNAMENT.name,
         "bracket_placement_double": BRACKET_PLACEMENT_DOUBLE_TOURNAMENT.name,
         "team_management": TEAM_MANAGEMENT_TOURNAMENT_NAME,
+        "knocked_out_roster": KNOCKED_OUT_ROSTER_TOURNAMENT_NAME,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)

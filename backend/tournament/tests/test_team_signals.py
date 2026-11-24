@@ -20,6 +20,7 @@ from league.models import League
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
 from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction
 from tournament.services.team_leadership import successor_after_removal
 from tournament.services.team_signals import (
     TeamRosterChange,
@@ -232,6 +233,112 @@ class TournamentUserRemovalCascadeTests(TestCase):
         self.tournament.users.clear()
 
         self.assertEqual(Team.objects.filter(tournament=self.tournament).count(), 0)
+
+
+class KnockedOutRosterCascadeTests(TournamentUserRemovalCascadeTests):
+    """Issue #842: removal leaves knocked-out rosters alone."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.team1.deputy_captain = self.users[1]
+        self.team1.placement = 3
+        self.team1.save()
+        self.team1.dropin_members.add(self.users[2])
+        self.team1.left_members.add(self.users[3])
+
+    def _roster(self, team: Team) -> dict[str, Any]:
+        team = Team.objects.nocache().get(pk=team.pk)
+        return {
+            "members": set(team.members.values_list("pk", flat=True)),
+            "dropin": set(team.dropin_members.values_list("pk", flat=True)),
+            "left": set(team.left_members.values_list("pk", flat=True)),
+            "captain": team.captain_id,
+            "deputy": team.deputy_captain_id,
+        }
+
+    def test_removed_user_stays_on_knocked_out_roster(self) -> None:
+        before = self._roster(self.team1)
+
+        self.tournament.users.remove(self.users[4])
+
+        self.assertEqual(self._roster(self.team1), before)
+        self.assertNotIn(self.users[4], self.tournament.users.all())
+
+    def test_removed_captain_keeps_knocked_out_leadership(self) -> None:
+        before = self._roster(self.team1)
+
+        self.tournament.users.remove(self.users[0], self.users[1])
+
+        self.assertEqual(self._roster(self.team1), before)
+        self.assertFalse(
+            TeamLog.objects.filter(
+                team=self.team1, action=TeamLogAction.SYSTEM_SUCCESSION
+            ).exists()
+        )
+
+    def test_live_team_still_cascades_with_succession(self) -> None:
+        self.tournament.users.remove(self.users[5], self.users[6])
+
+        team2 = Team.objects.nocache().get(pk=self.team2.pk)
+        self.assertEqual(
+            set(team2.members.values_list("pk", flat=True)),
+            {u.pk for u in self.users[7:]},
+        )
+        self.assertIsNotNone(team2.captain_id)
+        self.assertIn(team2.captain_id, {u.pk for u in self.users[7:]})
+        self.assertTrue(
+            TeamLog.objects.filter(
+                team=team2, action=TeamLogAction.SYSTEM_SUCCESSION
+            ).exists()
+        )
+
+    def test_knocked_out_team_never_deleted(self) -> None:
+        before = self._roster(self.team1)
+
+        self.tournament.users.remove(*self.users[:5])
+
+        self.assertTrue(Team.objects.filter(pk=self.team1.pk).exists())
+        self.assertEqual(self._roster(self.team1), before)
+
+    def test_clear_keeps_knocked_out_team_and_empties_live_team(self) -> None:
+        before = self._roster(self.team1)
+
+        self.tournament.users.clear()
+
+        self.assertEqual(self._roster(self.team1), before)
+        self.assertFalse(Team.objects.filter(pk=self.team2.pk).exists())
+
+    def test_no_dangling_teams_after_tournament_user_clear(self) -> None:
+        self.tournament.users.clear()
+
+        self.assertEqual(
+            list(
+                Team.objects.filter(tournament=self.tournament).values_list(
+                    "pk", flat=True
+                )
+            ),
+            [self.team1.pk],
+        )
+
+    def test_tournament_all_team_users_removed_deletes_team(self) -> None:
+        self.tournament.users.remove(*self.users[5:])
+
+        self.assertFalse(Team.objects.filter(pk=self.team2.pk).exists())
+        self.assertTrue(Team.objects.filter(pk=self.team1.pk).exists())
+
+    def test_tournament_user_removal_cascades_to_team(self) -> None:
+        self.tournament.users.remove(self.users[7])
+
+        self.assertNotIn(
+            self.users[7], Team.objects.nocache().get(pk=self.team2.pk).members.all()
+        )
+
+    def test_tournament_captain_removal_triggers_succession(self) -> None:
+        self.tournament.users.remove(self.users[5])
+
+        self.assertEqual(
+            Team.objects.nocache().get(pk=self.team2.pk).captain_id, self.users[6].pk
+        )
 
 
 class TeamValidationTests(TestCase):
