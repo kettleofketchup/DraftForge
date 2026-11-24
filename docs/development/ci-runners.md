@@ -1,11 +1,12 @@
 # CI Runners
 
-Almost every CI job runs on GitHub-hosted runners. One job, `playwright.yml` `prepare`
+Most CI jobs run on GitHub-hosted runners. One job, `playwright.yml` `prepare`
 (added in #787), builds the stack images and the test database once per content hash
 before the test jobs start. It runs on `ubuntu-latest` by default. For pull requests from
 allowlisted authors on branches in this repo, and only when a repository variable opts
 in, it runs on a self-hosted runner in the home Kubernetes cluster (label
-`draftforge-home`) instead.
+`draftforge-home`) instead. A handful of small jobs use the same guard to free hosted
+slots for the test jobs; see [Small jobs on the home runner](#small-jobs-on-the-home-runner).
 
 The cluster side (ARC runners, BuildKit, Zot) lives in the home GitOps repo:
 `apps/github-runners`, `apps/buildkit`, `apps/zot`, and the human runbook
@@ -13,7 +14,8 @@ The cluster side (ARC runners, BuildKit, Zot) lives in the home GitOps repo:
 
 !!! warning "The home runner is off until a human sets the repo variables"
     With `SELF_HOSTED_RUNNERS` unset, `prepare` runs on `ubuntu-latest` exactly as #787
-    shipped it and `HOME_PREPARE` is `false`, so every job runs on hosted runners. See
+    shipped it, `HOME_PREPARE` is `false`, and the small jobs stay hosted too, so every
+    job runs on hosted runners. See
     [Human actions](#human-actions-in-order).
 
 ## What runs where
@@ -21,13 +23,15 @@ The cluster side (ARC runners, BuildKit, Zot) lives in the home GitOps repo:
 | Job | Where | Reason |
 |---|---|---|
 | `playwright/prepare` | `ubuntu-latest`; the home runner for allowlisted same-repo PRs when `SELF_HOSTED_RUNNERS` is `true` | Builds missing stack images and the test DB once per hash; every test job waits for it |
+| `unit-tests/typecheck`, `changelog`, `shellcheck/shellcheck`, `shellcheck/runs-on-guard`, `frontend-format/prettier`, `frontend-shadcn-lint/shadcn-lint`, `pr-labeler/label` | `ubuntu-latest`; the home runner under the same guard and switch as `prepare` | Short and image-free; moving them frees hosted slots for the test jobs ([below](#small-jobs-on-the-home-runner)) |
 | 15 stack jobs (chromium ×4, mobile ×2, herodraft ×2, layout, events ×2, org-features, backend ×3) and `unit-tests/unit` | GitHub | Execution-bound; the home cluster is far too small to run them |
 | `preview-images/build` | GitHub | A 2-runner pool would saturate on every push and `npm run build` is uncached; it reads `main`'s GHCR `:buildcache` read-only instead |
 | `preview-images/report` (`pull_request`), `preview-queue` (`pull_request_target`, `workflow_run`) | GitHub | Write permissions |
 | `build-docker-images` | GitHub | Pushes prod `:latest` and GHCR `:buildcache`; trusted builds never touch the shared BuildKit |
 | `build-test-db` | GitHub | No BuildKit benefit; daemon-only commands |
 | `release-docker-images` | GitHub, `--no-cache` | Release artifacts |
-| `record-demos`, changelog, shellcheck, format, shadcn-lint, docs, helm-chart, labelers | GitHub | Write permissions or too short to matter |
+| `record-demos`, docs, helm-chart | GitHub | Write permissions, or not on the PR path |
+| `issue-labeler` | GitHub | `issues` events; the runner's hook refuses anything but `pull_request` |
 
 ## The `prepare` job
 
@@ -82,7 +86,7 @@ Two repository variables (Settings → Secrets and variables → Actions → Var
 
 | Variable | Value | Effect |
 |---|---|---|
-| `SELF_HOSTED_RUNNERS` | `true` to enable; unset or anything else to disable | The kill switch. Unset means `prepare` runs on `ubuntu-latest` for every event. |
+| `SELF_HOSTED_RUNNERS` | `true` to enable; unset or anything else to disable | The kill switch. Unset means `prepare` and the small jobs run on `ubuntu-latest` for every event. |
 | `HOME_RUNNER_AUTHORS` | Comma-separated GitHub logins, default `kettleofketchup` | Who may use the home runner. Both the PR author and the triggering actor must be listed. |
 
 `HOME_RUNNER_AUTHORS` must stay equal to the home repo's
@@ -123,8 +127,8 @@ optional job the tests never wait on, and it is accepted.
 | Home `prepare` fails, or the hook refuses it | Test jobs start at once (`!cancelled()`), pull what exists and rebuild the rest in-job |
 | Home BuildKit unreachable | `ci::home-builder` errors, `prepare` fails, as the row above |
 | Home `prepare` pushed but a test job cannot pull `draftforge-ci/*` (for example a package-permission error, see H-R5) | The pull falls back to `draftforge/<img>:<hash>`, then the in-job rebuild |
-| Home pool busy (2 runners) | `prepare` waits for a runner; the test jobs wait with it |
-| **`SELF_HOSTED_RUNNERS` is `true` and the home pool is down** (no runner carries `draftforge-home`: scale set not registered, controller down, cluster down) | GitHub does not fail the job: `prepare` stays queued, and every test job waits on it. GitHub cancels a job queued for 24 h, then the test jobs run (and fall back). The PR concurrency group (`cancel-in-progress` on `pull_request`) cancels the whole run on the next push, and the new run queues the same way. Fix: unset `SELF_HOSTED_RUNNERS`, then cancel or re-run the stuck runs; new runs go hosted at once |
+| Home pool busy (every runner taken, small jobs included) | `prepare` waits for a runner; the test jobs wait with it |
+| **`SELF_HOSTED_RUNNERS` is `true` and the home pool is down** (no runner carries `draftforge-home`: scale set not registered, controller down, cluster down) | GitHub does not fail the job: `prepare` stays queued, and every test job waits on it. GitHub cancels a job queued for 24 h, then the test jobs run (and fall back). The PR concurrency group (`cancel-in-progress` on `pull_request`) cancels the whole run on the next push, and the new run queues the same way. The small jobs queue the same way and their checks never report. Fix: unset `SELF_HOSTED_RUNNERS`, then cancel or re-run the stuck runs; new runs go hosted at once |
 
 Nothing about the home path can block `main`: pushes, tags and dispatches never match the
 guard.
@@ -132,6 +136,48 @@ guard.
 On lockfile PRs the home `prepare` uploads roughly 600 MB per dev image from the home
 uplink. If that is slower than a hosted build, the home path costs wall clock on exactly
 the PRs it was meant to speed up; canary (a) in the home runbook measures it.
+
+## Small jobs on the home runner
+
+The repo gets 20 concurrent hosted jobs, and every PR push launches about 24, so test
+jobs wait for a hosted slot (measured: median 5 min, p90 17 min). The jobs below are
+short, need no stack images and no Docker daemon, and only read the repo, so they run on
+`draftforge-home` under the same rule as `prepare`, leaving the hosted slots to the
+Playwright and backend jobs:
+
+| Workflow | Job | Check name |
+|---|---|---|
+| `unit-tests.yml` | `typecheck` | `Typecheck (frontend)` |
+| `changelog.yml` | `changelog` | `changelog` |
+| `shellcheck.yml` | `shellcheck` | `shellcheck (just recipes)` |
+| `shellcheck.yml` | `runs-on-guard` | `runs-on guard (home runner label)` |
+| `frontend-format.yml` | `prettier` | `prettier (frontend)` |
+| `frontend-shadcn-lint.yml` | `shadcn-lint` | `shadcn-lint (design system)` |
+| `pr-labeler.yml` | `label` | `label` |
+
+Each has `prepare`'s `runs-on` expression verbatim (the guard below), so the kill
+switch, the author allowlist and the same-repo rule apply unchanged; pushes to `main`,
+forks, other authors and an unset `SELF_HOSTED_RUNNERS` all resolve to `ubuntu-latest`.
+`issue-labeler` stays hosted: it runs on `issues` events, which the runner's
+job-started hook refuses. `typecheck` was split out of `unit-tests.yml` `unit` for this;
+`unit` needs the toolchain and a registry login, so it stays hosted.
+
+The home runner is the stock `ghcr.io/actions/actions-runner` image (Ubuntu 24.04),
+non-root, with no usable `sudo` and no Docker daemon, 1 CPU and 3 GiB per pod. It has
+`bash`, `curl`, `git`, `python3` 3.12, `jq`, `sha256sum`, `tar`, `gzip` and `unzip`;
+it has no `xz`, `yq`, `gh`, `node` or `zstd`. So these jobs get every tool from a setup
+action or a checksummed download that also works on hosted runners: `shellcheck`
+unpacks its `.tar.xz` with Python's `tarfile` instead of `tar -xJ`, and `runs-on-guard`
+installs a pinned `yq`. The `setup-node` npm cache is saved with gzip on the home runner
+(no `zstd`), so it does not share entries with the hosted runs; a miss only costs the
+download.
+
+**If the pool is down** while `SELF_HOSTED_RUNNERS` is `true`, these jobs queue like
+`prepare` does: GitHub does not fall back to a hosted runner, and their checks never
+report. Unset the variable (see [Stopping](#stopping)); new runs go hosted at once.
+
+To add or remove a job, change its `runs-on`, the allowlist in
+`scripts/check-runs-on.sh` and its test, and this table together.
 
 ## Cache and image names
 
@@ -222,19 +268,24 @@ busybox test-DB image through buildx and pushes only
 `shellcheck.yml`) fails when:
 
 - any job's `runs-on` is not a literal GitHub-hosted label (`ubuntu-*`, `windows-*`,
-  `macos-*`), except `playwright.yml` `prepare`. An expression, a variable such as
-  `fromJSON(vars.PREPARE_RUNNER)`, `self-hosted`, a runner group or a matrix value can
-  all land a job on a self-hosted runner, so none is allowed;
-- `prepare`'s `runs-on` is not exactly the guarded expression above (whitespace
-  aside; containing the clauses is not enough, `(... || true)` would pass that), or it
-  has no `timeout-minutes`;
-- `env.HOME_PREPARE` is not exactly the same guard;
-- `draftforge-home` appears anywhere other than `prepare`'s `runs-on`;
+  `macos-*`), unless the job is on its allowlist of (workflow file, job id) pairs:
+  `prepare` plus the [small jobs](#small-jobs-on-the-home-runner). An expression, a
+  variable such as `fromJSON(vars.PREPARE_RUNNER)`, `self-hosted`, a runner group or a
+  matrix value can all land a job on a self-hosted runner, so none is allowed;
+- an allowlisted job's `runs-on` is not exactly the guarded expression above
+  (whitespace aside; containing the clauses is not enough, `(... || true)` would pass
+  that), it has no `timeout-minutes`, or it no longer exists (a stale entry);
+- `playwright.yml`'s `env.HOME_PREPARE`, or any other workflow's, is not exactly the
+  same guard;
+- `draftforge-home` appears anywhere other than an allowlisted job's `runs-on`;
 - a job calls a reusable workflow from another repository;
-- a workflow that can use the label triggers on `pull_request_target` or `workflow_run`.
+- a workflow with an allowlisted job triggers on `pull_request_target`, `workflow_run`
+  or `issues`.
 
 So no job can resolve to a self-hosted label without the guard, and the one
-`pull_request_target` workflow (`preview-queue.yml`) stays on `ubuntu-latest`.
+`pull_request_target` workflow (`preview-queue.yml`) and `issue-labeler.yml` stay on
+`ubuntu-latest`. `shellcheck.yml`'s path filter includes `.github/workflows/**` and the
+guard's own scripts, so the guard runs on every workflow change.
 
 It catches mistakes by trusted authors. On `pull_request` GitHub runs the PR head's copy
 of the workflows, so a fork can write `runs-on: draftforge-home` on any job and edit the
@@ -318,9 +369,9 @@ The test-DB reuse stays enabled: the runner spike measured `just db::populate::f
 
 There are two different stops.
 
-**Stop home prepare.** Unset `SELF_HOSTED_RUNNERS` (or set it to anything but `true`).
-New runs send `prepare` to `ubuntu-latest` at once. Runs already queued on
-`draftforge-home` keep waiting (their `runs-on` was evaluated when they were queued), and
+**Stop home prepare and the small jobs.** Unset `SELF_HOSTED_RUNNERS` (or set it to
+anything but `true`). New runs send `prepare` and the small jobs to `ubuntu-latest` at
+once. Runs already queued on `draftforge-home` keep waiting (their `runs-on` was evaluated when they were queued), and
 their test jobs wait with them: cancel those runs in the Actions tab and re-run them, or
 push again (PR concurrency cancels the old run). This does not stop the pool.
 
