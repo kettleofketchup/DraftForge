@@ -161,5 +161,5 @@ class ReadyCheckEntryAdmin(_ReadOnlyFieldsAdmin):
 
 @admin.register(EventVoicePresence)
 class EventVoicePresenceAdmin(_ReadOnlyFieldsAdmin):
-    list_display = ["id", "event", "user", "present", "first_joined_at"]
-    list_filter = ["present"]
+    list_display = ["id", "event", "user", "present", "source", "first_joined_at"]
+    list_filter = ["present", "source"]

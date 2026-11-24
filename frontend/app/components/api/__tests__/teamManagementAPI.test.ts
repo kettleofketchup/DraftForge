@@ -14,6 +14,7 @@ import {
   markTeamDropout,
   removeTeamStandin,
   renameTeam,
+  replaceTeamCaptain,
   restoreTeamMember,
   runTeamAction,
   setTeamCaptain,
@@ -80,11 +81,41 @@ describe('ManagedTeamSchema', () => {
       organization_pk: _org,
       league_pk: _league,
       other_team_user_pks: _others,
+      other_teams: _otherTeams,
       ...viewer
     } = managedTeam;
     const team = ManagedTeamSchema.parse({ ...viewer, can_manage_team: false });
     expect(team.organization_pk).toBeUndefined();
     expect(team.other_team_user_pks).toBeUndefined();
+    expect(team.other_teams).toBeUndefined();
+  });
+
+  it('parses other teams with their placement', () => {
+    const team = ManagedTeamSchema.parse(managedTeam);
+    expect(team.other_teams).toEqual([
+      {
+        pk: 2,
+        name: 'Others',
+        placement: null,
+        member_pks: [6],
+        dropin_pks: [],
+      },
+      {
+        pk: 3,
+        name: 'Fallen',
+        placement: 3,
+        member_pks: [21],
+        dropin_pks: [],
+      },
+    ]);
+  });
+
+  it('rejects a malformed other team', () => {
+    const bad = {
+      ...managedTeam,
+      other_teams: [{ pk: 2, name: 'Others', placement: 'x' }],
+    };
+    expect(ManagedTeamSchema.safeParse(bad).success).toBe(false);
   });
 
   it('accepts a team without a tournament', () => {
@@ -199,6 +230,19 @@ describe('team actions', () => {
     });
   });
 
+  it('replaceTeamCaptain posts the user and dropout flag', async () => {
+    await replaceTeamCaptain(5, {
+      user_id: 7,
+      mark_outgoing_dropout: false,
+      ...body,
+    });
+    expect(post).toHaveBeenCalledWith('/teams/5/replace-captain/', {
+      user_id: 7,
+      mark_outgoing_dropout: false,
+      ...body,
+    });
+  });
+
   it('rejects a malformed response', async () => {
     post.mockResolvedValue({ data: { ...managedTeam, members: 'x' } });
     await expect(addTeamStandin(5, { user_id: 7, ...body })).rejects.toThrow();
@@ -306,6 +350,18 @@ describe('runTeamAction', () => {
       { kind: 'sub_in', standin, replacing: null },
       'sub-in',
       { standin_id: standin.pk, replacing_id: null },
+    ],
+    [
+      'replace_captain (keep outgoing)',
+      { kind: 'replace_captain', user: member, markOutgoingDropout: false },
+      'replace-captain',
+      { user_id: member.pk, mark_outgoing_dropout: false },
+    ],
+    [
+      'replace_captain (default dropout)',
+      { kind: 'replace_captain', user: standin },
+      'replace-captain',
+      { user_id: standin.pk, mark_outgoing_dropout: true },
     ],
   ])('%s posts its endpoint and body', async (_name, action, path, ids) => {
     const result = await runTeamAction(5, action, ackBody);

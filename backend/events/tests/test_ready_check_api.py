@@ -144,6 +144,48 @@ class ReadyCheckApiTestCase(EventTestCase):
     def _ledger_count(self, event: Event) -> int:
         return SignupLedgerEntry.objects.filter(event=event).count()
 
+    def _allowed_roles(self) -> dict[str, Callable[[Event], CustomUser]]:
+        return {
+            "org_staff": lambda _event: self.admin,
+            "league_staff": lambda _event: self.league_staff,
+            "host": lambda _event: self.host,
+            "helper": lambda _event: self.helper,
+        }
+
+    def _denied_roles(self) -> dict[str, Callable[[Event], CustomUser]]:
+        def member(event: Event) -> CustomUser:
+            return EventSignup.objects.filter(event=event).first().user  # type: ignore[union-attr]
+
+        def other_host(_event: Event) -> CustomUser:
+            user = self.make_user()
+            self.make_event(host=user)
+            return user
+
+        def other_helper(_event: Event) -> CustomUser:
+            user = self.make_user()
+            self.make_event().helpers.add(user)
+            return user
+
+        def promoter(_event: Event) -> CustomUser:
+            user = self.make_user()
+            self.org.promoters.add(user)
+            return user
+
+        def removed_helper(event: Event) -> CustomUser:
+            user = self.make_user()
+            event.helpers.add(user)
+            event.helpers.remove(user)
+            return user
+
+        return {
+            "member": member,
+            "non_member": lambda _event: self.unrelated_user,
+            "other_event_host": other_host,
+            "other_event_helper": other_helper,
+            "promoter": promoter,
+            "removed_helper": removed_helper,
+        }
+
 
 @override_settings(READY_CHECK_AUTOMATIC_LIVE=True)
 class RoleMatrixTests(ReadyCheckApiTestCase):
@@ -192,48 +234,6 @@ class RoleMatrixTests(ReadyCheckApiTestCase):
         return Setup(event, "post", self._rc_path(event, endpoint), {})
 
     ENDPOINTS = ("get", "open", "escalate", "close", "resolve", "confirm")
-
-    def _allowed_roles(self) -> dict[str, Callable[[Event], CustomUser]]:
-        return {
-            "org_staff": lambda _event: self.admin,
-            "league_staff": lambda _event: self.league_staff,
-            "host": lambda _event: self.host,
-            "helper": lambda _event: self.helper,
-        }
-
-    def _denied_roles(self) -> dict[str, Callable[[Event], CustomUser]]:
-        def member(event: Event) -> CustomUser:
-            return EventSignup.objects.filter(event=event).first().user  # type: ignore[union-attr]
-
-        def other_host(_event: Event) -> CustomUser:
-            user = self.make_user()
-            self.make_event(host=user)
-            return user
-
-        def other_helper(_event: Event) -> CustomUser:
-            user = self.make_user()
-            self.make_event().helpers.add(user)
-            return user
-
-        def promoter(_event: Event) -> CustomUser:
-            user = self.make_user()
-            self.org.promoters.add(user)
-            return user
-
-        def removed_helper(event: Event) -> CustomUser:
-            user = self.make_user()
-            event.helpers.add(user)
-            event.helpers.remove(user)
-            return user
-
-        return {
-            "member": member,
-            "non_member": lambda _event: self.unrelated_user,
-            "other_event_host": other_host,
-            "other_event_helper": other_helper,
-            "promoter": promoter,
-            "removed_helper": removed_helper,
-        }
 
     def test_allowed_roles_succeed_on_every_operator_endpoint(self) -> None:
         for endpoint in self.ENDPOINTS:

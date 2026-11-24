@@ -31,7 +31,7 @@ import { useRenderPromo, useSendPromo, useUndoPromoSend } from './queries';
 import {
   DISCORD_DM_LIMIT,
   promoSendSchema,
-  type CandidateRow,
+  type LinkedCandidate,
   type PromoEvent,
   type PromoSendForm,
   type PromoSendResult,
@@ -44,7 +44,7 @@ export interface ComposePanelProps {
   orgId: number;
   access: OrgFeatureAccess;
   event: PromoEvent;
-  candidate: CandidateRow;
+  candidate: LinkedCandidate;
   templates: PromoTemplate[];
   onSent?: (send: PromoSendResult | null) => void;
 }

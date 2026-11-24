@@ -22,4 +22,5 @@ export const TeamSchema = z.object({
   draft_is_ready: z.boolean().optional(),
   draft_is_connected: z.boolean().optional(),
   leadership_problems: z.array(LeadershipProblemSchema).optional(),
+  placement: z.number().nullable().optional(),
 });

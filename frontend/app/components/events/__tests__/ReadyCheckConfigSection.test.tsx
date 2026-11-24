@@ -181,7 +181,7 @@ describe('ReadyCheckConfigSection', () => {
       'Not active yet',
     );
     expect(screen.getByTestId(IDS.voiceNotActive)).toHaveTextContent(
-      'Not active yet',
+      'Not active yet: the start cull is saved but does not run until a later release. Voice presence confirms members who join the event voice channel during a ready check, when it is on.',
     );
   });
 

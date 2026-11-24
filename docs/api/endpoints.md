@@ -194,6 +194,10 @@ tournament's signups are open as defined above.
   row's name and tournament columns hold the values after the update. Updates to only
   `draft_order`, `current_points` or `placement` write no row. Every row sends
   `team_roster_changed`, renames included.
+- Setting `placement` from a number to `null` reopens the team, and is refused with
+  `409` while one of its members or stand-ins is also on another team in the tournament
+  that has no placement. Nothing is saved and no audit row is written. See
+  [Placement and roster conflicts](#placement-and-roster-conflicts).
 
 ### Deleting a team
 
@@ -248,14 +252,17 @@ organization's owner, admins and staff. A team without a tournament can't be man
 | POST | `/api/teams/{id}/standins/` | `{user_id, reason, acknowledged_codes?}` |
 | POST | `/api/teams/{id}/standins/remove/` | `{user_id, reason, acknowledged_codes?}` |
 | POST | `/api/teams/{id}/sub-in/` | `{standin_id, replacing_id?, reason, acknowledged_codes?}`; `replacing_id` is an int or `null` |
+| POST | `/api/teams/{id}/replace-captain/` | `{user_id, mark_outgoing_dropout?, reason, acknowledged_codes?}`; `mark_outgoing_dropout` defaults to `true` |
 | POST | `/api/teams/{id}/rename/` | `{name, reason, acknowledged_codes?}` |
 | GET | `/api/teams/{id}/history/?page=&page_size=` | none |
 | GET | `/api/teams/{id}/usage/` | none |
 
 `reason` is trimmed and at most 500 characters. `acknowledged_codes` is the
 [staff override](../development/staff-overrides.md) field; every action accepts it, but
-today only `standins/` can return a `409` (the team's stand-in limit and the event's
-eligibility rules).
+only `standins/` and `replace-captain/` can return a `409`. `standins/` checks the team's
+stand-in limit and the event's eligibility rules; `replace-captain/` checks only the
+eligibility rules, and only for a new captain who is not already a member, stand-in or
+dropout of the team.
 
 | Outcome | Status | Body |
 |---------|--------|------|
@@ -281,6 +288,31 @@ user who is neither a member nor a stand-in), `already_deputy`, `no_deputy`,
 `leadership_invariant`, `name_blank`, `name_too_long` and `name_unchanged`.
 `captain_not_member`, `deputy_not_member` and `deputy_is_captain` are the same code
 strings that `leadership_problems` uses (below).
+
+`on_other_team` counts only the tournament's live teams (no `placement`). A player on a
+team that already has a placement is free for every action on another team, and the
+placed team's rows are left as they are, so the player is listed on both. The detail
+names the live team and ends with `If that team is out of the tournament, set its
+placement first.`
+
+#### Replace captain
+
+`POST /api/teams/{id}/replace-captain/` makes `user_id` captain in one audited step
+(`replace_captain` in the audit log). The user can be a member, stand-in or dropout of
+this team, or any other tournament or organization user who is not on another live team.
+
+1. The user becomes a member: they leave the stand-ins and dropouts, and join the
+   tournament's players if they weren't one.
+2. If the user was the deputy, the deputy is cleared.
+3. The user becomes captain. Draft rounds and live drafts follow, as for `set-captain/`.
+4. With `mark_outgoing_dropout` (the default), the old captain moves from members to
+   `left_members`. No automatic succession runs. With `false` they stay a member.
+
+It refuses with `already_captain` when the user already captains the team, and with
+`on_other_team` when the user is on another live team. Picking the current captain when
+they are not a member adds them back as a member instead. The audit row's `details` add `replacing_user_id`,
+`new_captain_source` (`member`, `standin`, `dropout` or `outside`) and `outgoing`
+(`dropped`, `kept`, `not_member` or `none`).
 
 A successful action can also change rows outside the team: a subbed-in stand-in or a new
 captain joins the tournament's players, and a captain change moves draft rounds and
@@ -369,8 +401,16 @@ system rows or deleted users.
   without a tournament.
 - When `can_manage_team` is true, `GET /api/teams/{id}/` and the action responses also
   carry `organization_pk` and `league_pk` (the tournament's, or `null`) and
-  `other_team_user_pks` (members and stand-ins of the tournament's other teams). The
-  stand-in search uses them. They are computed per request, outside the team cache.
+  `other_team_user_pks` (members and stand-ins of the tournament's other live teams,
+  those with no `placement`) and `other_teams`. The stand-in and captain pickers use
+  them. They are computed per request, outside the team cache.
+- `other_teams` lists every other team in the tournament, live and placed, live teams
+  first, then by placement and name. Dropouts are left out:
+
+    ```json
+    [{"pk": 42, "name": "TM Delta", "placement": 4, "member_pks": [61, 62, 63], "dropin_pks": []}]
+    ```
+
 - Teams in the tournament payload (`GET /api/tournaments/{id}/`) also carry
   `leadership_problems`.
 - `leadership_problems` lists a captain or deputy who is not a member, or a deputy who is
@@ -383,6 +423,30 @@ system rows or deleted users.
     `field` is `captain` or `deputy_captain`; `code` is `captain_not_member`,
     `deputy_not_member` or `deputy_is_captain`. Fix one with `set-captain/` or
     `set-deputy/`.
+
+### Placement and roster conflicts
+
+A team with a `placement` is out of the tournament, and its players are free to join
+other teams. Three requests reopen a placed team by clearing its placement:
+
+- `PATCH /api/bracket/tournaments/{tid}/teams/{id}/placement/` with
+  `{"placement": null}` (tournament staff; a positive integer sets the placement);
+- `POST /api/bracket/games/{id}/advance-winner/` with `{"winner": null}`, which clears
+  the loser's placement, and on grand finals both teams';
+- `PATCH /api/teams/{id}/` with `placement: null`.
+
+Each refuses with `409` while a member or stand-in of a reopened team is also on another
+team that would be live, and changes nothing:
+
+```json
+{
+  "code": "roster_conflict",
+  "error": "delta_1 also play for TM Bravo. Resolve that before reopening this team.",
+  "details": {"team_id": 42, "user_ids": [61]}
+}
+```
+
+Move the player off the live team first, then clear the placement.
 
 ## Games
 
@@ -752,7 +816,28 @@ throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go throu
 |--------|----------|-------------|
 | POST | `/api/organizations/{id}/leadership/events/{event_id}/release/` | Release an event's captain review results when the org requires staff release. Body `{"captains": [org_user_id, ...]}` (1–64 ids, all or nothing) or `{}` (every pending captain except your own). `200 {"released": [ids], "skipped": [{"org_user_id", "code"}]}` (skip codes: `own_snapshot`, `voided`, `window_open`, `not_enough_reviews`, `already_released`); `400` malformed body, `403 not_permitted` / `cannot_release_own_reviews`, `404` event or captain not in the org, `409 release_not_required` / `already_released` / `window_open` / `not_enough_reviews` / `snapshot_voided` / `nothing_to_release` |
 
+### Event voice presence
+
+Both methods require event operator access (organization or league staff, host or helpers).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/events/{id}/voice-presence/` | Returns `feed` with guild and channel heartbeat ages (seconds, or null), `voice_channel_id` and `presences` with user IDs, source, present flag and feed timestamps. |
+| POST | `/api/events/{id}/voice-presence/` | Body: `{"user_id": int, "present": bool, "reason": str}`; reason is required, stripped, 1–500 characters. Returns `presence`, `ledger_entry_id`, `confirm` (result or null). 400 `invalid` or `not_signed_up`; 403 for non-operators; 404 for an unknown event or user. |
+
+See [Voice presence](../features/events/roll-call.md#voice-presence) for confirmation and manual-pin rules.
+
 ### Internal
+
+Voice feed routes require `X-Internal-Token` and an allowed source IP. Logical outcomes are 200; invalid payloads are 400, unauthorized calls are 401/403. IDs are strings of 1–20 digits.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/internal/discord/voice/watched-channels/` | Returns `channels` (`guild_id`, `channel_id`, `event_ids`), `ttl_seconds` (60), `available`. |
+| POST | `/api/internal/discord/voice/state/` | Body: `guild_id`, `discord_user_id`, nullable `before_channel_id` and `after_channel_id`. |
+| POST | `/api/internal/discord/voice/snapshot/` | Body: `guild_id`, `channels` (`channel_id`, `member_ids`), optional `missing_channel_ids`. Maximum 100 channels and 5000 member IDs per channel; duplicate member IDs are collapsed. |
+
+Both POSTs return `success`, `detail`, and counts (`events`, `joined`, `left`, `confirmed`, `unknown_users`, `not_signed_up`). A snapshot refreshes heartbeat only after each visible channel has applied; missing channels are not cleared.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

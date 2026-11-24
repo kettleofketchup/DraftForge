@@ -40,6 +40,8 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `herodraft` | `view` | — | `draft/views/hero.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
+| `events` | `voice_presence` | — | `events/voice_presence.py` | State/snapshot applied, channel missing, heartbeat unavailable, manual set, confirm skipped |
+| `discord` | `voice` | — | `discordbot/voice_feed.py`, `discordbot/bot.py` | Watched refresh, state reports, snapshots posted/skipped, queue full, worker failures |
 | `events` | `scheduling` | — | `events/tasks.py`, `events/management/` | Event generation, signup opening, repeaters |
 | `events` | `eligibility` | — | `events/eligibility/evaluate.py` | `eligibility_evaluated`: reason `codes` and `admissible` for every signup evaluation |
 | `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
@@ -49,7 +51,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `avatars` | `legacy` | — | `user/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
 | `discord` | `lease` | — | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
 | `discord` | `interaction` | `["events","signup"]` | `discordbot/components/{base,dota,deadlock,default,registry}.py`, `discordbot/signup_responses.py`, `discordbot/log_context.py`, `events/discord/providers/`, `events/discord/handlers.py`, `events/discord/_shared.py` | Discord-bot UI plumbing (per-game provider modules) + response delivery + signup-flow business logic: button/modal/select callbacks and their handlers. Per-game flows are tag-differentiated, NOT new subsystems. |
-| `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py`, `events/signup_post_lock.py` (mark/clear pending) | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
+| `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py`, `events/signup_post_lock.py` (mark/clear pending), `discordbot/internal_voice_views.py` | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
 | `discord` | `celery` | `["events","signup"]` | `events/tasks.py` (Discord-dispatching tasks), `events/signup_post_lock.py` (acquire/release lock) | `celery_task_started/finished/failed/retry` bookend logs |
 | `cache` | `invalidate` | — | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |
 | `websocket` | `broadcast` | — | `draft/services/team_broadcast.py`, `draft/services/hero_broadcast.py` | Draft / herodraft event + state broadcast to channel groups (`kind` field distinguishes draft/herodraft/herodraft_state) |
