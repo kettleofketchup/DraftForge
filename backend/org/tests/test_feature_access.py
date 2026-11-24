@@ -18,8 +18,8 @@ from org.models import Organization, OrgUser
 from org.permissions import (
     has_org_promoter_access,
     is_org_role_holder,
-    is_site_admin,
 )
+from user.permissions import is_site_admin
 
 
 class FeatureAccessTest(TestCase):
