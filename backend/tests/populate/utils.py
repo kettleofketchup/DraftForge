@@ -49,7 +49,6 @@ def generate_mock_discord_members(count=100):
     used_usernames = set()
 
     for i in range(count):
-        # Pick a unique username
         if i < len(MOCK_USERNAMES):
             username = MOCK_USERNAMES[i]
         else:
@@ -67,7 +66,7 @@ def generate_mock_discord_members(count=100):
             "user": {
                 "id": discord_id,
                 "username": username,
-                "avatar": None,  # No avatar for mock users
+                "avatar": None,
                 "discriminator": "0",
                 "global_name": username.replace("_", " ").title(),
             },
@@ -119,7 +118,6 @@ def create_user(
     """
     user, created = CustomUser.objects.get_or_create(discordId=user_data["user"]["id"])
     if not created:
-        # Ensure OrgUser exists for existing user
         if organization:
             ensure_org_user(user, organization)
         return user
@@ -312,7 +310,6 @@ def get_or_create_demo_user(username, user_data, organization=None):
     mmr = user_data.get("mmr", 3000)
     explicit_pk = user_data.get("pk")
 
-    # If explicit pk is set, use pk-based lookup first
     if explicit_pk:
         user = CustomUser.objects.filter(pk=explicit_pk).first()
     else:
@@ -326,7 +323,6 @@ def get_or_create_demo_user(username, user_data, organization=None):
         user = CustomUser.objects.filter(steam_account_id=steam_account_id).first()
 
     if not user:
-        # Create new user with real position data
         positions = PositionsModel.objects.create(
             carry=pos_data.get("carry", 3),
             mid=pos_data.get("mid", 3),
@@ -344,10 +340,8 @@ def get_or_create_demo_user(username, user_data, organization=None):
             create_kwargs["pk"] = explicit_pk
         user = CustomUser.objects.create(**create_kwargs)
     else:
-        # Update existing user with latest data
         if steam_account_id and user.steam_account_id != steam_account_id:
             user.steam_account_id = steam_account_id
-        # Update positions if provided
         if pos_data and user.positions:
             user.positions.carry = pos_data.get("carry", user.positions.carry)
             user.positions.mid = pos_data.get("mid", user.positions.mid)
