@@ -66,6 +66,7 @@ from events.models import (
     EventRepeater,
     EventSignup,
     EventTeam,
+    EventVoicePresence,
     OrgEventDefaults,
     ReadyCheck,
     ReadyCheckEntry,
@@ -109,6 +110,7 @@ from events.serializers import (
     ReadyCheckResolveInputSerializer,
     ReadyCheckSerializer,
     RepeaterSubscriptionSerializer,
+    VoicePresenceOverrideInputSerializer,
 )
 from events.services import (
     OccurrenceCollision,
@@ -144,6 +146,7 @@ from events.services import (
 )
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
+from events.voice_presence import set_presence_manually, voice_feed_age_seconds
 from lobby.passwords import PasswordMode
 from org.feature_errors import not_permitted
 from org.mmr import OrgMmrError, game_for_event, validate_org_mmr
@@ -1242,6 +1245,76 @@ class EventViewSet(viewsets.ModelViewSet):
         if not has_event_operator_access(request.user, event):
             raise PermissionDenied()
         return event
+
+    @action(detail=True, methods=["get", "post"], url_path="voice-presence")
+    def voice_presence(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        fields = (
+            "user_id",
+            "present",
+            "source",
+            "first_joined_at",
+            "last_joined_at",
+            "last_left_at",
+            "last_seen_at",
+        )
+        if request.method == "GET":
+            guild_id = event.organization.discord_server_id or None
+            channel_id = event.event_voice_channel_id
+            return Response(
+                {
+                    "feed": {
+                        "guild_id": guild_id,
+                        "age_seconds": voice_feed_age_seconds(guild_id)
+                        if guild_id
+                        else None,
+                        "channel_age_seconds": (
+                            voice_feed_age_seconds(guild_id, channel_id)
+                            if guild_id and channel_id
+                            else None
+                        ),
+                    },
+                    "voice_channel_id": channel_id,
+                    "presences": list(
+                        EventVoicePresence.objects.filter(event=event)
+                        .order_by("user_id")
+                        .values(*fields)
+                    ),
+                }
+            )
+        body = VoicePresenceOverrideInputSerializer(data=request.data)
+        if not body.is_valid():
+            return Response({"code": "invalid", "error": body.errors}, status=400)
+        member = (
+            CustomUser.objects.nocache()
+            .filter(pk=body.validated_data["user_id"])
+            .first()
+        )
+        if member is None:
+            return Response({"error": "User not found."}, status=404)
+        try:
+            result = set_presence_manually(
+                event,
+                member,
+                present=body.validated_data["present"],
+                reason=body.validated_data["reason"],
+                actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+            )
+        except ValueError as exc:
+            if str(exc) != "not_signed_up":
+                raise
+            return Response(
+                {"code": "not_signed_up", "error": "User is not signed up."}, status=400
+            )
+        return Response(
+            {
+                "presence": {
+                    field: getattr(result.presence, field) for field in fields
+                },
+                "ledger_entry_id": result.ledger_entry_id,
+                "confirm": str(result.confirm) if result.confirm is not None else None,
+            }
+        )
 
     @action(detail=True, methods=["get"], url_path="ready-check")
     def ready_check(self, request: Request, pk: str | None = None) -> Response:
