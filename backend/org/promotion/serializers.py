@@ -4,6 +4,7 @@ from rest_framework import serializers
 
 from events.models import Event
 from org.models import PromoSend, PromoTemplate
+from org.promotion.recipients import CandidateSource
 from org.promotion.services import MAX_SEND_TEXT
 
 
@@ -22,10 +23,18 @@ class PromoEventSerializer(serializers.ModelSerializer):
 
 
 class CandidatesQuerySerializer(serializers.Serializer):
+    source = serializers.ChoiceField(
+        choices=[s.value for s in CandidateSource], default=CandidateSource.RECENT
+    )
     n = serializers.CharField(required=False, allow_blank=True)
+    days = serializers.CharField(required=False, allow_blank=True)
     hide_signed_up = serializers.BooleanField(default=True)
     hide_messaged = serializers.BooleanField(default=True)
     q = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class DiscordMemberRequestSerializer(serializers.Serializer):
+    discord_id = serializers.RegexField(r"^\d{1,20}$")
 
 
 class RenderRequestSerializer(serializers.Serializer):
