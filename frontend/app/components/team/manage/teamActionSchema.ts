@@ -14,3 +14,8 @@ export const subInSchema = teamActionSchema.extend({
   replacing_id: z.number().int().positive().nullable(),
 });
 export type SubInFormValues = z.infer<typeof subInSchema>;
+
+export const replaceCaptainSchema = teamActionSchema.extend({
+  mark_outgoing_dropout: z.boolean().default(true),
+});
+export type ReplaceCaptainFormValues = z.infer<typeof replaceCaptainSchema>;

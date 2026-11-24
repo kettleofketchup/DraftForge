@@ -178,7 +178,23 @@
     "can_manage_team": true,
     "organization_pk": 7,
     "league_pk": 3,
-    "other_team_user_pks": []
+    "other_team_user_pks": [],
+    "other_teams": [
+      {
+        "pk": 2,
+        "name": "Others",
+        "placement": null,
+        "member_pks": [6],
+        "dropin_pks": []
+      },
+      {
+        "pk": 3,
+        "name": "Fallen",
+        "placement": 3,
+        "member_pks": [21],
+        "dropin_pks": []
+      }
+    ]
   },
   "ghostCaptainTeam": {
     "pk": 2,

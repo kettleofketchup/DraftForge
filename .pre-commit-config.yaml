@@ -43,3 +43,11 @@ repos:
         language: system
         files: ^frontend/(app/.*\.(js|jsx|ts|tsx)|eslint\.shadcn\.config\.js|shadcn-lint-suppressions\.json|eslint-rules/.*\.js)$
         pass_filenames: true
+      # One whole-project run per commit (tsc needs the full program), not per file.
+      - id: frontend-typecheck
+        name: tsc typecheck (frontend)
+        entry: npm --prefix frontend run typecheck
+        language: system
+        files: ^frontend/(.*\.(ts|tsx|mts|cts)|[^/]+\.config\.[cm]?js|tsconfig[^/]*\.json|package(-lock)?\.json)$
+        pass_filenames: false
+        require_serial: true

@@ -146,5 +146,6 @@ const retry = useOverrideRetry((ack) =>
 
 - [Team management](../api/endpoints.md#team-management) (`/api/teams/{id}/...`): every
   action accepts `acknowledged_codes` and records overridden codes in the team audit log.
-  Only `standins/` can answer `409` today, for the stand-in limit (`team_standin_cap`) and event
-  eligibility codes.
+  Only `standins/` and `replace-captain/` can answer `409`. Both check the event eligibility
+  codes; the stand-in limit (`team_standin_cap`) applies only to `standins/`, and
+  `replace-captain/` checks eligibility only for a new captain who is not already on the team.
