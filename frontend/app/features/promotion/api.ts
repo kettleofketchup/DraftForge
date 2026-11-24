@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import api from '~/components/api/axios';
 import {
+  CandidateRowSchema,
   CandidatesResponseSchema,
   PromoEventSchema,
   PromoSendResultSchema,
   PromoTemplateSchema,
   RenderResponseSchema,
   type CandidateFilters,
+  type CandidateRow,
   type CandidatesResponse,
   type PromoEvent,
   type PromoSendInput,
@@ -67,7 +69,9 @@ export async function getCandidates(
     `${base(orgId)}/events/${eventId}/candidates/`,
     {
       params: {
+        source: filters.source,
         n: filters.n,
+        days: filters.days,
         hide_signed_up: filters.hideSignedUp,
         hide_messaged: filters.hideMessaged,
         ...(filters.q ? { q: filters.q } : {}),
@@ -75,6 +79,18 @@ export async function getCandidates(
     },
   );
   return CandidatesResponseSchema.parse(response.data);
+}
+
+export async function resolveDiscordMember(
+  orgId: number,
+  eventId: number,
+  discordId: string,
+): Promise<CandidateRow> {
+  const response = await api.post(
+    `${base(orgId)}/events/${eventId}/candidates/discord/`,
+    { discord_id: discordId },
+  );
+  return CandidateRowSchema.parse(response.data);
 }
 
 export async function renderPromo(

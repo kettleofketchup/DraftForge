@@ -9,7 +9,7 @@ import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgF
 import { createI18nInstance } from '~/i18n/config';
 import { renderPromo, sendPromo } from '../api';
 import { ComposePanel } from '../ComposePanel';
-import type { CandidateRow, PromoEvent, PromoTemplate } from '../schemas';
+import type { LinkedCandidate, PromoEvent, PromoTemplate } from '../schemas';
 
 vi.mock('../api', () => ({
   renderPromo: vi.fn(),
@@ -38,7 +38,7 @@ const event: PromoEvent = {
   signups_open_at: null,
 };
 
-const candidate: CandidateRow = {
+const candidate: LinkedCandidate = {
   user_pk: 42,
   username: 'ana',
   nickname: null,
