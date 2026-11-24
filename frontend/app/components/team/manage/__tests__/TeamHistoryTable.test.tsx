@@ -181,4 +181,19 @@ describe('teamLogChanges', () => {
       `deputy: ${DisplayName(people.deputy)} -> none`,
     ]);
   });
+
+  it('reports a placement change', () => {
+    expect(
+      teamLogChanges(
+        { before: { placement: null }, after: { placement: 4 } },
+        resolveUser,
+      ),
+    ).toEqual(['placement: in tournament -> 4th']);
+    expect(
+      teamLogChanges(
+        { before: { placement: 2 }, after: { placement: null } },
+        resolveUser,
+      ),
+    ).toEqual(['placement: 2nd -> in tournament']);
+  });
 });

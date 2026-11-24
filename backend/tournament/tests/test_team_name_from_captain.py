@@ -70,3 +70,24 @@ class TeamNameFromCaptainTest(TestCase):
         steam = CustomUser.objects.create(username=None, steamid=76561198000077001)
         tournament = self._tournament(None, 4)
         self.assertEqual(self._team_name(tournament, steam), f"User {steam.pk}'s Team")
+
+    def test_draft_order_targets_live_team_when_captaining_two(self) -> None:
+        tournament = self._tournament(None, 6)
+        eliminated = Team.objects.create(
+            tournament=tournament, name="Out", captain=self.captain, placement=4
+        )
+        live = Team.objects.create(
+            tournament=tournament, name="Live", captain=self.captain
+        )
+        resp = self.client.post(
+            URL,
+            {
+                "tournament_pk": tournament.pk,
+                "user_pk": self.captain.pk,
+                "draft_order": 2,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(Team.objects.nocache().get(pk=live.pk).draft_order, 2)
+        self.assertEqual(Team.objects.nocache().get(pk=eliminated.pk).draft_order, 0)

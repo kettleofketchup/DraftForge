@@ -9,7 +9,7 @@ from app.models import CustomUser
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound, TeamDraftState
 from draft.services.team_broadcast import broadcast_event_after_commit
 from telemetry.logging import get_logger
-from tournament.models import Team, Tournament
+from tournament.models import LIVE_TEAM_FIRST, Team, Tournament
 
 log = get_logger(__name__)
 
@@ -78,9 +78,11 @@ def emit_event(
 
 
 def team_for_round(draft: Draft, round: DraftRound) -> Team | None:
-    return Team.objects.filter(
-        tournament=draft.tournament, captain_id=round.captain_id
-    ).first()
+    return (
+        Team.objects.filter(tournament=draft.tournament, captain_id=round.captain_id)
+        .order_by(*LIVE_TEAM_FIRST)
+        .first()
+    )
 
 
 def activate_round(

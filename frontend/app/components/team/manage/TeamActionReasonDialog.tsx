@@ -7,6 +7,7 @@ import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -21,11 +22,16 @@ import {
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
 import { DisplayName } from '~/components/user/avatar';
-import { subInSchema, teamActionSchema } from './teamActionSchema';
+import {
+  replaceCaptainSchema,
+  subInSchema,
+  teamActionSchema,
+} from './teamActionSchema';
 
 export interface TeamActionReasonValues {
   reason: string;
   replacing_id?: number | null;
+  mark_outgoing_dropout?: boolean;
 }
 
 export interface TeamActionReasonDialogProps {
@@ -39,6 +45,7 @@ export interface TeamActionReasonDialogProps {
   defaultReason?: string;
   replacingOptions?: RosterUser[];
   replacingCaptain?: { pk: number; warning: ReactNode };
+  outgoingDropout?: { name: string };
   pending: boolean;
   /** Return the request promise: the dialog stays loading until it settles. */
   onSubmit: (values: TeamActionReasonValues) => Promise<unknown>;
@@ -50,9 +57,17 @@ function initialValues(
   open: boolean,
   defaultReason: string,
   withReplacing: boolean,
+  withOutgoing: boolean,
 ): TeamActionReasonValues {
   const reason = open ? defaultReason : '';
-  return withReplacing ? { reason, replacing_id: null } : { reason };
+  if (withReplacing) return { reason, replacing_id: null };
+  if (withOutgoing) return { reason, mark_outgoing_dropout: true };
+  return { reason };
+}
+
+function schemaFor(withReplacing: boolean, withOutgoing: boolean) {
+  if (withReplacing) return subInSchema;
+  return withOutgoing ? replaceCaptainSchema : teamActionSchema;
 }
 
 export function TeamActionReasonDialog({
@@ -66,14 +81,21 @@ export function TeamActionReasonDialog({
   defaultReason = '',
   replacingOptions,
   replacingCaptain,
+  outgoingDropout,
   pending,
   onSubmit,
 }: TeamActionReasonDialogProps) {
   const withReplacing = replacingOptions !== undefined;
+  const withOutgoing = !withReplacing && outgoingDropout !== undefined;
   const form = useForm<TeamActionReasonValues>({
-    resolver: zodResolver(withReplacing ? subInSchema : teamActionSchema),
+    resolver: zodResolver(schemaFor(withReplacing, withOutgoing)),
     mode: 'onChange',
-    defaultValues: initialValues(open, defaultReason, withReplacing),
+    defaultValues: initialValues(
+      open,
+      defaultReason,
+      withReplacing,
+      withOutgoing,
+    ),
   });
   const replacingId = form.watch('replacing_id');
   const shownWarning =
@@ -84,8 +106,8 @@ export function TeamActionReasonDialog({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    form.reset(initialValues(open, defaultReason, withReplacing));
-  }, [open, defaultReason, withReplacing, form]);
+    form.reset(initialValues(open, defaultReason, withReplacing, withOutgoing));
+  }, [open, defaultReason, withReplacing, withOutgoing, form]);
 
   // RHF's resolver is async, so isLoading alone lets a second press through.
   const handleConfirm = (): Promise<void> => {
@@ -165,6 +187,35 @@ export function TeamActionReasonDialog({
                       one, the replaced player becomes a dropout.
                     </p>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
+            {withOutgoing && outgoingDropout ? (
+              <FormField
+                control={form.control}
+                name="mark_outgoing_dropout"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3 space-y-0">
+                    <FormControl>
+                      <input
+                        type="checkbox"
+                        checked={!!field.value}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                        data-testid="team-action-outgoing-dropout"
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+                      />
+                    </FormControl>
+                    <div>
+                      <FormLabel className="cursor-pointer text-sm font-medium">
+                        Mark {outgoingDropout.name} as a dropout (they left the
+                        team)
+                      </FormLabel>
+                      <FormDescription>
+                        Unchecked: {outgoingDropout.name} stays on the team as a
+                        member.
+                      </FormDescription>
+                    </div>
                   </FormItem>
                 )}
               />

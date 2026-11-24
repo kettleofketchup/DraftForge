@@ -20,7 +20,7 @@ from org.models_leadership import CaptainReview, EventCaptain
 from org.standing import ledger
 from org.standing.kinds import kinds_for
 from telemetry.logging import get_logger
-from tournament.models import Team
+from tournament.models import ORIGINAL_CAPTAINCY_FIRST, Team, with_captain_acquired_at
 
 log = get_logger(__name__)
 
@@ -182,12 +182,15 @@ def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
     if locked.tournament_id is None:
         return SnapshotResult(captains=0, awarded=0)
     teams = list(
-        Team.objects.nocache()
-        .filter(tournament_id=locked.tournament_id, captain__isnull=False)
+        with_captain_acquired_at(
+            Team.objects.nocache().filter(
+                tournament_id=locked.tournament_id, captain__isnull=False
+            )
+        )
         .prefetch_related(
             Prefetch("members", queryset=CustomUser.objects.nocache().only("pk"))
         )
-        .order_by("pk")
+        .order_by(*ORIGINAL_CAPTAINCY_FIRST)
     )
     planned = _plan(locked, teams)
     draft_state = (
