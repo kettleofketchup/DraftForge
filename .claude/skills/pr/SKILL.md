@@ -10,7 +10,7 @@ Drive a PR from "branch pushed" to an actionable report without the user babysit
 1. Resolve PR state (reuse the open PR or create one).
 2. Check every feature the PR adds has Playwright E2E coverage; flag gaps and offer a subagent to write the specs.
 3. Post before/after screenshots of visual changes as a PR comment, or a one-line comment saying there are none.
-4. Watch GitHub Actions checks until none are pending (up to 30 min).
+4. Monitor main conflicts and PR CI/CD every five minutes in a progressive diagnose → repair → verify → push → recheck loop; keep watching after green checks until the PR closes or monitoring is stopped.
 5. Pull the failed jobs' error lines and report findings with next steps.
 6. Offer pre-existing problems the branch found as GitHub issues and separate fix PRs.
 
@@ -33,12 +33,14 @@ pr_json=$(gh pr view --json number,state,headRefName,baseRefName,url,comments 2>
 ```
 
 - Empty `pr_json` → Phase 2 (create).
-- `OPEN` → Phase 3 (E2E coverage).
+- `OPEN` → start the [five-minute conflict and CI/CD monitor](references/monitoring-main.md), then Phase 3 (E2E coverage).
 - `MERGED` / `CLOSED` → report and stop; ask whether to open a new one.
 
 ### Phase 2 — Create the PR (if missing)
 
 Title/body from commits when the branch has 1–3 commits; otherwise ask the user once for a title. HEREDOC body with `## Summary` and `## Test plan`. Add a `changelog.d/` fragment first if the change is user- or operator-visible ([changelog skill](../changelog/SKILL.md)). Exact commands: [references/creating-the-pr.md](references/creating-the-pr.md).
+
+After creating the PR, start the [five-minute conflict and CI/CD monitor](references/monitoring-main.md). Reuse one active monitor per PR; run it alongside the remaining phases.
 
 ### Phase 3 — E2E coverage
 
@@ -67,7 +69,7 @@ Phase 4 is done when the PR has a new screenshot comment (or the skip / pending 
 timeout 30m gh pr checks "$PR" --watch --interval 60
 ```
 
-Narrate in single lines. Polling detail and timeout handling: [references/monitoring-ci.md](references/monitoring-ci.md).
+Run this initial CI watch in the background alongside the five-minute monitor; never block conflict events waiting for it. Narrate in single lines. Polling detail and timeout handling: [references/monitoring-ci.md](references/monitoring-ci.md). A 30-minute CI snapshot does not stop the [progressive monitor](references/monitoring-main.md); diagnose and repair new-head failures through its loop.
 
 ### Phase 6 — Analyse and report
 
@@ -79,8 +81,9 @@ Always run this, even when CI is green. Collect every problem the branch's work 
 
 ## Scope
 
-- Pushes only through the creation pre-flight; a dirty or unpushed branch is reported to the user.
-- Reports CI failures with next steps; fixing them is a separate request.
+- Push through creation pre-flight and verified conflict/CI repairs only. Report dirty, divergent or already-unpushed branches rather than overwriting work; honor explicit no-commit/no-push instructions and tool approvals.
+- Repair PR-introduced CI failures progressively; surface pre-existing failures through Phase 7 and pause on ambiguous or infrastructure blockers.
+- Merge main into the PR branch only when conflicts arise. Never merge the PR itself. Monitoring is session-only; re-arm expired Monitor windows while the PR remains open.
 - Extracts error lines; raw `--log-failed` output stays out of the chat.
 
 ## References

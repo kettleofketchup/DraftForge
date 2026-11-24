@@ -1,0 +1,2 @@
+- Staff can replace a team's captain in one step from the team manage dialog, picking a teammate, a stand-in, or a player whose team is already out of the tournament; the old captain is marked a dropout unless you untick it.
+- The team manage dialog shows whether a team is still in the tournament, eliminated or the winner, lets staff set a team's placement (with a reason, recorded in the team history), and players of eliminated teams can now be added to other teams.

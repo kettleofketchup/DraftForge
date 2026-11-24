@@ -1,0 +1,1 @@
+- League lists now check the data the server sends, so an unexpected response is logged as an error instead of silently filling the list with incomplete leagues.

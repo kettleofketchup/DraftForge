@@ -6,7 +6,7 @@ import type { ManagedTeam } from '~/components/api/teamManagementAPI';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { DisplayName } from '~/components/user/avatar';
 import { LeadershipProblemsBanner } from '../LeadershipProblemsBanner';
-import { CAPTAIN_CHANGE_WARNING } from '../teamActionCopy';
+import { captainSuccessionWarning } from '../teamActionCopy';
 import { TeamRosterPanel, type PendingTeamAction } from '../TeamRosterPanel';
 import {
   ghostCaptainDropoutTeam,
@@ -487,7 +487,7 @@ describe('roster rows', () => {
       summary: `Mark ${name(people.captain)} as a dropout of ${managedTeam.name}.`,
       confirmText: 'Mark dropout',
       destructive: true,
-      warning: WARNING,
+      warning: captainSuccessionWarning(managedTeam, people.captain.pk),
     });
   });
 
@@ -525,7 +525,7 @@ describe('roster rows', () => {
       withReplacing: true,
       replacingCaptain: {
         pk: managedTeam.captain!.pk,
-        warning: CAPTAIN_CHANGE_WARNING,
+        warning: captainSuccessionWarning(managedTeam, people.captain.pk),
       },
     });
   });
@@ -552,6 +552,33 @@ describe('roster rows', () => {
         screen.getByTestId(memberRow(managedTeam.captain!.pk)),
       ).getByTestId('roster-status-captain'),
     ).toBeTruthy();
+  });
+
+  it('"Replace captain…" on the captain row opens the captain picker', () => {
+    const onReplaceCaptain = vi.fn();
+    const spy = renderPanel(managedTeam, { onReplaceCaptain });
+    openRowMenu(people.captain.pk);
+    fireEvent.click(
+      screen.getByTestId(`team-roster-replace-captain-${people.captain.pk}`),
+    );
+    expect(onReplaceCaptain).toHaveBeenCalledTimes(1);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('offers "Replace captain…" on the captain row only', () => {
+    renderPanel(managedTeam, { onReplaceCaptain: vi.fn() });
+    openRowMenu(people.member.pk);
+    expect(
+      screen.queryByRole('menuitem', { name: 'Replace captain…' }),
+    ).toBeNull();
+  });
+
+  it('has no "Replace captain…" without a picker to open', () => {
+    renderPanel(managedTeam);
+    openRowMenu(people.captain.pk);
+    expect(
+      screen.queryByRole('menuitem', { name: 'Replace captain…' }),
+    ).toBeNull();
   });
 
   it('renders the add stand-in slot in the table toolbar', () => {

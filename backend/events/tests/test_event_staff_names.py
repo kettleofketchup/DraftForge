@@ -85,7 +85,9 @@ class PublicOrgStaffNamesTest(EventNameFixture):
             starts_at="2026-01-01",
         )
         RepeaterSubscription.objects.create(event_repeater=repeater, user=self.host)
-        rows = self._get(f"/api/events/repeaters/{repeater.pk}/subscribers/")
+        rows = self._get(
+            f"/api/events/repeaters/{repeater.pk}/subscribers/", self.owner
+        )
         self.assertEqual(rows[0]["nickname"], "HostSite")
         self.assertEqual(rows[0]["discordNickname"], "Gwaihir")
 

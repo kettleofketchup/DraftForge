@@ -507,6 +507,14 @@ class ReadyCheckResolveInputSerializer(serializers.Serializer):
     )
 
 
+class VoicePresenceOverrideInputSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    present = serializers.BooleanField()
+    reason = serializers.CharField(
+        max_length=500, allow_blank=False, trim_whitespace=True
+    )
+
+
 class ReadyCheckConfirmInputSerializer(serializers.Serializer):
     user_id = serializers.IntegerField()
 

@@ -139,6 +139,62 @@ describe('TeamActionReasonDialog', () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
+  describe('outgoing dropout checkbox', () => {
+    const outgoingDropout = { name: 'BKBHater' };
+
+    async function confirm() {
+      const button = screen.getByTestId('team-action-confirm');
+      await waitFor(() => expect(button).toHaveProperty('disabled', false));
+      fireEvent.click(button);
+    }
+
+    it('is absent without outgoingDropout', () => {
+      renderDialog();
+      expect(screen.queryByTestId('team-action-outgoing-dropout')).toBeNull();
+    });
+
+    it('renders checked with the label and hint', () => {
+      renderDialog({ outgoingDropout });
+      const box = screen.getByTestId(
+        'team-action-outgoing-dropout',
+      ) as HTMLInputElement;
+      expect(box.checked).toBe(true);
+      expect(
+        screen.getByText('Mark BKBHater as a dropout (they left the team)'),
+      ).toBeTruthy();
+      expect(
+        screen.getByText('Unchecked: BKBHater stays on the team as a member.'),
+      ).toBeTruthy();
+    });
+
+    it('submits true by default', async () => {
+      const { onSubmit } = renderDialog({
+        outgoingDropout,
+        defaultReason: 'captain quit',
+      });
+      await confirm();
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0]).toEqual({
+        reason: 'captain quit',
+        mark_outgoing_dropout: true,
+      });
+    });
+
+    it('submits false once unchecked', async () => {
+      const { onSubmit } = renderDialog({
+        outgoingDropout,
+        defaultReason: 'captain stays on',
+      });
+      fireEvent.click(screen.getByTestId('team-action-outgoing-dropout'));
+      await confirm();
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+      expect(onSubmit.mock.calls[0][0]).toEqual({
+        reason: 'captain stays on',
+        mark_outgoing_dropout: false,
+      });
+    });
+  });
+
   describe('replacing select', () => {
     const options = [people.member, people.deputy];
 

@@ -42,6 +42,7 @@ from tournament.serializers.team import (
     TeamDeputyRequestSerializer,
     TeamLogSerializer,
     TeamRenameRequestSerializer,
+    TeamReplaceCaptainRequestSerializer,
     TeamSerializer,
     TeamSerializerSlim,
     TeamSubInRequestSerializer,
@@ -51,7 +52,7 @@ from tournament.services import team_management
 from tournament.services.team_audit import log_snapshot_fields
 from tournament.services.team_references import team_references, team_usage
 from tournament.services.team_signals import TeamRosterChange, team_roster_changed
-from tournament.tests.test_team_management import TeamManagementFixture
+from tournament.tests.test_team_management import TeamManagementFixture, eliminate
 from tournament.views.team import TeamView
 from user.serializers import UserSerializer
 from user.tests.test_cacheops_integration import _redis_reachable
@@ -367,6 +368,10 @@ def prepare_sub_in(t: Any) -> dict[str, Any]:
     }
 
 
+def prepare_replace_captain(t: Any) -> dict[str, Any]:
+    return {"user_id": t.m1.pk, "reason": "matrix check"}
+
+
 ACTION_CASES: list[ActionCase] = [
     ActionCase("set-captain", lambda t: {"user_id": t.m1.pk, "reason": "matrix check"}),
     ActionCase("set-deputy", lambda t: {"user_id": t.m1.pk, "reason": "matrix check"}),
@@ -378,6 +383,7 @@ ACTION_CASES: list[ActionCase] = [
     ),
     ActionCase("standins/remove", prepare_standins_remove),
     ActionCase("sub-in", prepare_sub_in),
+    ActionCase("replace-captain", prepare_replace_captain),
 ]
 
 
@@ -605,6 +611,7 @@ class RosterActionTests(TeamApiFixture, TestCase):
             ("teams-standins", "standins"),
             ("teams-standins-remove", "standins/remove"),
             ("teams-sub-in", "sub-in"),
+            ("teams-replace-captain", "replace-captain"),
         ):
             with self.subTest(name=name):
                 self.assertEqual(
@@ -792,6 +799,155 @@ class CachedPermissionTests(TeamApiFixture, TransactionTestCase):
         self.assertEqual(self.log_count(), before)
 
 
+class ReplaceCaptainApiTests(TeamApiFixture, TestCase):
+    def user_ids(self, rows: list[dict[str, Any]]) -> list[int]:
+        return [row["pk"] for row in rows]
+
+    def replace(
+        self, user: CustomUser, staff: CustomUser | None = None, **extra: Any
+    ) -> Any:
+        body = {"user_id": user.pk, "reason": "takeover", **extra}
+        return self.post("replace-captain", body, user=staff)
+
+    def replace_logs(self) -> list[TeamLog]:
+        return list(
+            TeamLog.objects.filter(
+                team_snapshot_id=self.team.pk, action=TeamLogAction.REPLACE_CAPTAIN
+            ).order_by("pk")
+        )
+
+    def test_serializer_defaults_mark_outgoing_dropout(self) -> None:
+        body = TeamReplaceCaptainRequestSerializer(
+            data={"user_id": self.m1.pk, "reason": "r"}
+        )
+        self.assertTrue(body.is_valid(), body.errors)
+        self.assertIs(body.validated_data["mark_outgoing_dropout"], True)
+        self.assertEqual(body.validated_data["user_id"], self.m1)
+
+    def test_200_body_has_new_captain_left_members_other_teams(self) -> None:
+        resp = self.replace(self.m1)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["captain"]["pk"], self.m1.pk)
+        self.assertIn(self.c.pk, self.user_ids(data["left_members"]))
+        self.assertIs(data["can_manage_team"], True)
+        self.assertEqual(
+            data["other_teams"],
+            [
+                {
+                    "pk": self.other.pk,
+                    "name": "Others",
+                    "placement": None,
+                    "member_pks": [self.o1.pk],
+                    "dropin_pks": [],
+                }
+            ],
+        )
+        log = self.replace_logs()[-1]
+        self.assertEqual(log.via, "web")
+        self.assertEqual(log.actor_id, self.site_staff.pk)
+        self.assertEqual(log.reason, "takeover")
+
+    def test_default_marks_outgoing_dropout(self) -> None:
+        data = self.replace(self.m1).json()
+        self.assertNotIn(self.c.pk, self.user_ids(data["members"]))
+        self.assertIn(self.c.pk, self.user_ids(data["left_members"]))
+
+    def test_false_keeps_outgoing_member(self) -> None:
+        resp = self.replace(self.m1, mark_outgoing_dropout=False)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["captain"]["pk"], self.m1.pk)
+        self.assertIn(self.c.pk, self.user_ids(data["members"]))
+        self.assertEqual(data["left_members"], [])
+
+    def test_eliminated_team_captain_takes_over(self) -> None:
+        eliminate(self.other, 3)
+        resp = self.replace(self.o1)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        data = resp.json()
+        self.assertEqual(data["captain"]["pk"], self.o1.pk)
+        self.assertEqual(data["other_teams"][0]["placement"], 3)
+        other = Team.objects.nocache().get(pk=self.other.pk)
+        self.assertEqual(other.captain_id, self.o1.pk)
+        self.assertTrue(other.members.filter(pk=self.o1.pk).exists())
+
+    def test_on_other_team_400(self) -> None:
+        resp = self.replace(self.o1)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        data = resp.json()
+        self.assertEqual(data["code"], "on_other_team")
+        self.assertIn("Others", data["detail"])
+        self.assertEqual(self.log_count(), 0)
+        self.assertEqual(
+            Team.objects.nocache().get(pk=self.team.pk).captain_id, self.c.pk
+        )
+
+    def test_missing_reason_400(self) -> None:
+        for reason in (None, "", "  "):
+            with self.subTest(reason=reason):
+                body: dict[str, Any] = {"user_id": self.m1.pk}
+                if reason is not None:
+                    body["reason"] = reason
+                resp = self.post("replace-captain", body)
+                self.assertEqual(resp.status_code, 400, resp.content)
+                self.assertIn("reason", resp.json())
+        self.assertEqual(self.log_count(), 0)
+
+    def test_unknown_user_400(self) -> None:
+        resp = self.post("replace-captain", {"user_id": 999999, "reason": "r"})
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("user_id", resp.json())
+
+    def test_non_bool_flag_400(self) -> None:
+        resp = self.replace(self.m1, mark_outgoing_dropout="maybe")
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("mark_outgoing_dropout", resp.json())
+        self.assertEqual(self.log_count(), 0)
+
+    def test_eligibility_409_then_acknowledged_200(self) -> None:
+        user = self.gate_event()
+        resp = self.replace(user)
+        self.assertEqual(resp.status_code, 409, resp.content)
+        data = resp.json()
+        self.assertEqual(data["code"], "override_required")
+        codes = [v["code"] for v in data["violations"]]
+        self.assertIn("below_min_mmr", codes)
+        self.assertEqual(self.log_count(), 0)
+
+        resp = self.replace(user, acknowledged_codes=codes)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["captain"]["pk"], user.pk)
+        log = self.replace_logs()[-1]
+        self.assertIn("below_min_mmr", log.override_rules)
+
+    def test_double_submit_same_user_already_captain(self) -> None:
+        self.assertEqual(self.replace(self.m1).status_code, 200)
+        resp = self.replace(self.m1)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertEqual(resp.json()["code"], "already_captain")
+        self.assertEqual(len(self.replace_logs()), 1)
+
+    def test_two_staff_different_candidates(self) -> None:
+        first = self.replace(self.m1, staff=self.site_staff)
+        self.assertEqual(first.status_code, 200, first.content)
+        second = self.replace(self.m2, staff=self.org_staff)
+        self.assertEqual(second.status_code, 200, second.content)
+
+        team = Team.objects.nocache().get(pk=self.team.pk)
+        self.assertEqual(team.captain_id, self.m2.pk)
+        left = set(team.left_members.values_list("pk", flat=True))
+        self.assertEqual(left, {self.c.pk, self.m1.pk})
+        members = set(team.members.values_list("pk", flat=True))
+        self.assertIn(self.m2.pk, members)
+        self.assertNotIn(self.m1.pk, members)
+        logs = self.replace_logs()
+        self.assertEqual(len(logs), 2)
+        self.assertEqual(logs[0].details["replacing_user_id"], self.c.pk)
+        self.assertEqual(logs[1].details["replacing_user_id"], self.m1.pk)
+        self.assertEqual(logs[1].actor_id, self.org_staff.pk)
+
+
 class CanManageTeamTests(TeamApiFixture, TestCase):
     def detail(self, user: CustomUser | None, team: Team | None = None) -> Any:
         pk = (self.team if team is None else team).pk
@@ -856,6 +1012,57 @@ class CanManageTeamTests(TeamApiFixture, TestCase):
         data = resp.json()
         self.assertEqual(data["organization_pk"], self.org.pk)
         self.assertEqual(data["other_team_user_pks"], [self.o1.pk])
+
+    def test_other_team_user_pks_excludes_placed_team(self) -> None:
+        live = Team.objects.create(tournament=self.tournament, name="Live")
+        live.members.add(self.outsider)
+        self.other.dropin_members.add(self.m1)
+        eliminate(self.other, 4)
+        data = self.detail(self.league_admin)
+        self.assertEqual(data["other_team_user_pks"], [self.outsider.pk])
+
+    def test_other_teams_lists_live_and_placed_with_placement(self) -> None:
+        zulu = Team.objects.create(tournament=self.tournament, name="Zulu")
+        bravo = Team.objects.create(tournament=self.tournament, name="Bravo")
+        charlie = Team.objects.create(tournament=self.tournament, name="Charlie")
+        apex = Team.objects.create(tournament=self.tournament, name="Apex")
+        zulu.members.add(self.outsider)
+        bravo.dropin_members.add(self.m1)
+        bravo.left_members.add(self.m2)
+        eliminate(zulu, 2)
+        eliminate(bravo, 2)
+        eliminate(charlie, 1)
+        elsewhere = Team.objects.create(
+            tournament=self.other_org_tournament(), name="Aaa Elsewhere"
+        )
+        elsewhere.members.add(self.o1)
+
+        rows = self.detail(self.league_admin)["other_teams"]
+        self.assertEqual(
+            [r["name"] for r in rows], ["Apex", "Others", "Charlie", "Bravo", "Zulu"]
+        )
+        by_name = {r["name"]: r for r in rows}
+        self.assertEqual(
+            by_name["Others"],
+            {
+                "pk": self.other.pk,
+                "name": "Others",
+                "placement": None,
+                "member_pks": [self.o1.pk],
+                "dropin_pks": [],
+            },
+        )
+        self.assertEqual(by_name["Apex"]["pk"], apex.pk)
+        self.assertEqual(by_name["Charlie"]["placement"], 1)
+        self.assertEqual(by_name["Zulu"]["placement"], 2)
+        self.assertEqual(by_name["Zulu"]["member_pks"], [self.outsider.pk])
+        self.assertEqual(by_name["Bravo"]["member_pks"], [])
+        self.assertEqual(by_name["Bravo"]["dropin_pks"], [self.m1.pk])
+
+    def test_other_teams_absent_for_non_staff(self) -> None:
+        for user in (self.outsider, self.c, None):
+            with self.subTest(user=user):
+                self.assertNotIn("other_teams", self.detail(user))
 
 
 class CanManageTeamCacheTests(TeamApiFixture, TransactionTestCase):
@@ -1277,3 +1484,57 @@ class TeamUsageTests(TeamApiFixture, TestCase):
                 self.assertEqual(resp.json()["code"], "not_permitted")
         resp = APIClient().get(action_url(self.team.pk, "usage"))
         self.assertEqual(resp.status_code, 401)
+
+
+class TeamPatchPlacementGuardTests(TeamApiFixture, TestCase):
+    def patch(self, team: Team, body: dict[str, Any]) -> Any:
+        return self.client_for(self.site_staff).patch(
+            f"/api/teams/{team.pk}/", body, format="json"
+        )
+
+    def take_over(self) -> None:
+        eliminate(self.other, 4)
+        team_management.replace_captain(
+            self.team, self.o1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+    def legacy_rows(self, team: Team) -> int:
+        return TeamLog.objects.filter(
+            team_snapshot_id=team.pk, action=TeamLogAction.LEGACY_PATCH
+        ).count()
+
+    def test_patch_placement_null_after_takeover_409(self) -> None:
+        self.take_over()
+
+        resp = self.patch(self.other, {"placement": None})
+
+        self.assertEqual(resp.status_code, 409, resp.content)
+        body = resp.json()
+        self.assertEqual(body["code"], "roster_conflict")
+        self.assertEqual(
+            body["details"], {"team_id": self.other.pk, "user_ids": [self.o1.pk]}
+        )
+        self.assertIn(self.o1.username, body["error"])
+        self.assertEqual(Team.objects.nocache().get(pk=self.other.pk).placement, 4)
+        self.assertEqual(self.legacy_rows(self.other), 0)
+
+    def test_patch_placement_null_without_conflict_ok(self) -> None:
+        eliminate(self.other, 4)
+
+        resp = self.patch(self.other, {"placement": None})
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertIsNone(Team.objects.nocache().get(pk=self.other.pk).placement)
+
+    def test_patch_other_fields_unaffected(self) -> None:
+        self.take_over()
+
+        resp = self.patch(self.other, {"name": "Renamed Others"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        resp = self.patch(self.other, {"placement": 3})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        other = Team.objects.nocache().get(pk=self.other.pk)
+        self.assertEqual(other.name, "Renamed Others")
+        self.assertEqual(other.placement, 3)

@@ -12,11 +12,17 @@ from django.utils import timezone as tz
 
 from app.models import CustomUser, GameType, PositionsModel
 from discordbot.models import DiscordEvent
-from events.constants import EventState, RepeatFrequency, SignupStatus
+from events.constants import (
+    EventState,
+    RepeatFrequency,
+    SignupStatus,
+    VoicePresenceSource,
+)
 from events.models import (
     Event,
     EventRepeater,
     EventSignup,
+    EventVoicePresence,
     OrgEventDefaults,
     RepeaterSubscription,
     RollCallMode,
@@ -42,11 +48,10 @@ from tests.populate.utils import ensure_league_user, ensure_org_user
 from tournament.models import Team, Tournament
 
 
-def populate_events_data(force=False):
+def populate_events_data(force: bool = False) -> None:
     """Create dedicated Events Test Org, League, users, and a sample event."""
     print("  Populating events E2E data...")
 
-    # 1. Create org
     org, _ = Organization.objects.update_or_create(
         name=EVENTS_ORG.name,
         defaults={
@@ -57,7 +62,6 @@ def populate_events_data(force=False):
         },
     )
 
-    # 2. Create league
     league, _ = League.objects.update_or_create(
         steam_league_id=EVENTS_LEAGUE.steam_league_id,
         defaults={
@@ -77,7 +81,6 @@ def populate_events_data(force=False):
         },
     )
 
-    # 3. Create admin user
     admin_positions = PositionsModel.objects.create(
         carry=EVENT_ADMIN_USER.positions.carry if EVENT_ADMIN_USER.positions else 3,
         mid=EVENT_ADMIN_USER.positions.mid if EVENT_ADMIN_USER.positions else 3,
@@ -106,7 +109,6 @@ def populate_events_data(force=False):
     admin_org_user = ensure_org_user(admin_user, org, mmr=EVENT_ADMIN_USER.mmr or 4500)
     ensure_league_user(admin_user, admin_org_user, league)
 
-    # 3b. Create player users with varied MMR
     for i, user_data in enumerate(EVENTS_USERS):
         positions = PositionsModel.objects.create(
             carry=user_data.positions.carry if user_data.positions else 3,
@@ -195,7 +197,6 @@ def populate_events_data(force=False):
         )
     print(f"    Created {len(dota_profiles)} Dota 2 profiles with rank data")
 
-    # 4. Grant admin access
     event_admin = CustomUser.objects.filter(pk=EVENT_ADMIN_USER.pk).first()
     site_admin = CustomUser.objects.filter(pk=ADMIN_USER.pk).first()
     org.admins.clear()
@@ -307,7 +308,6 @@ def populate_events_data(force=False):
         event=demo_signup_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add signups from first 6 players
     for user_data in EVENTS_USERS[:6]:
         user = CustomUser.objects.get(pk=user_data.pk)
         EventSignup.objects.update_or_create(
@@ -385,7 +385,6 @@ def populate_events_data(force=False):
         event=demo_rollcall_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add signups — 6 confirmed, 4 approved (waiting)
     for i, user_data in enumerate(EVENTS_USERS[:10]):
         user = CustomUser.objects.get(pk=user_data.pk)
         status = SignupStatus.CONFIRMED if i < 6 else SignupStatus.APPROVED
@@ -423,6 +422,7 @@ def populate_events_data(force=False):
             "start_cull_minutes_after": 1,
             "post_cull_fill_mode": PostCullFillMode.LINE_ORDER,
             "event_voice_channel_id": "100000000000000528",
+            "voice_presence_confirms": True,
         },
     )
     for i, user_data in enumerate(EVENTS_USERS[:7]):
@@ -432,6 +432,23 @@ def populate_events_data(force=False):
             event=demo_ready_check_event,
             user=user,
             defaults={"status": status},
+        )
+
+    presence_now = tz.now()
+    for i, user_data in enumerate(EVENTS_USERS[:2]):
+        EventVoicePresence.objects.update_or_create(
+            event=demo_ready_check_event,
+            user_id=user_data.pk,
+            defaults={
+                "guild_id": org.discord_server_id,
+                "channel_id": "100000000000000528",
+                "present": i == 0,
+                "source": VoicePresenceSource.FEED,
+                "first_joined_at": presence_now,
+                "last_joined_at": presence_now,
+                "last_seen_at": presence_now,
+                "last_left_at": None if i == 0 else presence_now,
+            },
         )
 
     demo_past_event, _ = Event.objects.update_or_create(
@@ -457,7 +474,6 @@ def populate_events_data(force=False):
         event=demo_past_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add past signups — all confirmed
     for user_data in EVENTS_USERS[:8]:
         user = CustomUser.objects.get(pk=user_data.pk)
         EventSignup.objects.update_or_create(
@@ -559,12 +575,10 @@ def populate_events_data(force=False):
             "draft_order": 2,
         },
     )
-    # Add captains as team members
     team_a.members.add(site_admin)
     team_b.members.add(CustomUser.objects.get(pk=EVENTS_USERS[0].pk))
     print("    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
 
-    # 6. Create org event defaults
     OrgEventDefaults.objects.update_or_create(
         organization=org,
         defaults={
