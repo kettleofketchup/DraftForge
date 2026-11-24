@@ -13,6 +13,7 @@ import { SecondaryButton } from '~/components/ui/buttons';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
+import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
@@ -24,16 +25,45 @@ import {
   reportPromoError,
   usePreviewOptions,
 } from './feedback';
-import { useCandidates, useUndoPromoSend } from './queries';
 import {
+  useCandidates,
+  useResolveDiscordMember,
+  useUndoPromoSend,
+} from './queries';
+import {
+  DAYS_OPTIONS,
   MAX_POOL_N,
+  isLinked,
   type CandidateFilters,
   type CandidateRow,
+  type CandidateSource,
+  type LinkedCandidate,
 } from './schemas';
 
 const log = getLogger('CandidateList');
 
 const POOL_OPTIONS = Array.from({ length: MAX_POOL_N }, (_, i) => i + 1);
+
+const SOURCE_TABS: readonly { value: CandidateSource; label: string }[] = [
+  { value: 'recent', label: 'Recent players' },
+  { value: 'active', label: 'Active members' },
+  { value: 'discord', label: 'New on Discord' },
+];
+
+const EMPTY_MESSAGE: Record<CandidateSource, string> = {
+  recent:
+    'No players match. Recent players without a linked Discord account are not listed.',
+  active:
+    'No members match. Members without a linked Discord account are not listed.',
+  discord:
+    'No new Discord members match. The organization needs a linked Discord server.',
+};
+
+function rowTestId(row: CandidateRow): string {
+  return row.user_pk != null
+    ? String(row.user_pk)
+    : `discord-${row.discordId ?? ''}`;
+}
 const SEARCH_DEBOUNCE_MS = 300;
 
 export interface CandidateListProps {
@@ -43,7 +73,7 @@ export interface CandidateListProps {
   filters: CandidateFilters;
   onFiltersChange: (filters: CandidateFilters) => void;
   selectedPk: number | null;
-  onSelect: (row: CandidateRow) => void;
+  onSelect: (row: LinkedCandidate) => void;
   /** A send shown elsewhere with its own undo; its row button is hidden to avoid duplicates. */
   hideUndoFor: number | null;
 }
@@ -65,6 +95,7 @@ export function CandidateList({
     filters,
   );
   const undo = useUndoPromoSend(orgId, access);
+  const resolve = useResolveDiscordMember(orgId, access, eventId);
   const previewOptions = usePreviewOptions();
   const [search, setSearch] = useState(filters.q);
 
@@ -99,41 +130,129 @@ export function CandidateList({
     });
   };
 
+  const onMessage = (row: CandidateRow): void => {
+    if (isLinked(row)) {
+      onSelect(row);
+      return;
+    }
+    if (!row.discordId) return;
+    resolve.mutate(row.discordId, {
+      onSuccess: (resolved) => {
+        if (isLinked(resolved)) onSelect(resolved);
+      },
+      onError: (err) => {
+        const message = reportPromoError(
+          log,
+          'promo_resolve_member_failed',
+          err,
+          { orgId, eventId },
+        );
+        toast.error(message || 'Could not prepare this member');
+      },
+    });
+  };
+
   const poolN = data?.n ?? filters.n;
+
+  const detail = (row: CandidateRow): string | null => {
+    if (filters.source === 'recent' && row.recent_count != null)
+      return `Played ${row.recent_count} of the last ${poolN}`;
+    if (filters.source === 'active' && row.last_active_at)
+      return `Active ${relativeFromIso(row.last_active_at, previewOptions)}`;
+    if (filters.source === 'discord' && row.discord_joined_at)
+      return `Joined Discord ${relativeFromIso(row.discord_joined_at, previewOptions)}`;
+    return null;
+  };
 
   return (
     <section className="flex flex-col gap-3" data-testid="promo-candidate-list">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">
-            Recent tournaments
-          </Label>
-          <BrandSelect
-            value={String(filters.n)}
-            onValueChange={(value) =>
-              onFiltersChange({ ...filters, n: Number(value) })
-            }
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        size="sm"
+        value={filters.source}
+        onValueChange={(next) => {
+          if (next)
+            onFiltersChange({ ...filters, source: next as CandidateSource });
+        }}
+        aria-label="Who to show"
+        className="flex-wrap justify-start"
+        data-testid="promo-source"
+      >
+        {SOURCE_TABS.map((tab) => (
+          <ToggleGroupItem
+            key={tab.value}
+            value={tab.value}
+            data-testid={`promo-source-${tab.value}`}
           >
-            <BrandSelectTrigger
-              className="w-24"
-              aria-label="Recent tournaments"
-              data-testid="promo-pool-n"
+            {tab.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      <div className="flex flex-wrap items-end gap-3">
+        {filters.source === 'recent' ? (
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">
+              Recent tournaments
+            </Label>
+            <BrandSelect
+              value={String(filters.n)}
+              onValueChange={(value) =>
+                onFiltersChange({ ...filters, n: Number(value) })
+              }
             >
-              <SelectValue />
-            </BrandSelectTrigger>
-            <BrandSelectContent>
-              {POOL_OPTIONS.map((n) => (
-                <BrandSelectItem
-                  key={n}
-                  value={String(n)}
-                  data-testid={`promo-pool-n-${n}`}
-                >
-                  {n}
-                </BrandSelectItem>
-              ))}
-            </BrandSelectContent>
-          </BrandSelect>
-        </div>
+              <BrandSelectTrigger
+                className="w-24"
+                aria-label="Recent tournaments"
+                data-testid="promo-pool-n"
+              >
+                <SelectValue />
+              </BrandSelectTrigger>
+              <BrandSelectContent>
+                {POOL_OPTIONS.map((n) => (
+                  <BrandSelectItem
+                    key={n}
+                    value={String(n)}
+                    data-testid={`promo-pool-n-${n}`}
+                  >
+                    {n}
+                  </BrandSelectItem>
+                ))}
+              </BrandSelectContent>
+            </BrandSelect>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs text-muted-foreground">
+              {filters.source === 'active' ? 'Active within' : 'Joined within'}
+            </Label>
+            <BrandSelect
+              value={String(filters.days)}
+              onValueChange={(value) =>
+                onFiltersChange({ ...filters, days: Number(value) })
+              }
+            >
+              <BrandSelectTrigger
+                className="w-28"
+                aria-label="Days"
+                data-testid="promo-days"
+              >
+                <SelectValue />
+              </BrandSelectTrigger>
+              <BrandSelectContent>
+                {DAYS_OPTIONS.map((days) => (
+                  <BrandSelectItem
+                    key={days}
+                    value={String(days)}
+                    data-testid={`promo-days-${days}`}
+                  >
+                    {days} days
+                  </BrandSelectItem>
+                ))}
+              </BrandSelectContent>
+            </BrandSelect>
+          </div>
+        )}
         <div className="flex items-center gap-2 min-h-11">
           <Switch
             id="promo-hide-signed-up"
@@ -182,32 +301,39 @@ export function CandidateList({
           className="text-sm text-muted-foreground"
           data-testid="promo-candidates-empty"
         >
-          No players match. Recent players without a linked Discord account are
-          not listed.
+          {EMPTY_MESSAGE[filters.source]}
         </p>
       )}
 
       <ul className="flex flex-col gap-2">
         {data?.rows.map((row) => {
           const last = row.last_messaged;
-          const selected = row.user_pk === selectedPk;
+          const selected = row.user_pk != null && row.user_pk === selectedPk;
+          const testId = rowTestId(row);
+          const info = detail(row);
           return (
             <li
-              key={row.user_pk}
+              key={testId}
               className={cn(
                 'flex flex-wrap items-center gap-3 rounded-md border p-3',
                 selected
                   ? 'border-primary bg-primary/10'
                   : 'border-border bg-base-900/40',
               )}
-              data-testid={`promo-candidate-${row.user_pk}`}
+              data-testid={`promo-candidate-${testId}`}
             >
-              <UserAvatar user={{ ...row, pk: row.user_pk }} size="sm" />
+              <UserAvatar
+                user={{ ...row, pk: row.user_pk ?? undefined }}
+                size="sm"
+              />
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{DisplayName(row)}</span>
                   {row.signed_up && (
                     <Badge variant="secondary">Signed up</Badge>
+                  )}
+                  {!isLinked(row) && (
+                    <Badge variant="outline">No account yet</Badge>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -221,15 +347,13 @@ export function CandidateList({
                         className="size-6"
                         onClick={() => copyDiscord(row.discordUsername!)}
                         aria-label="Copy Discord username"
-                        data-testid={`promo-copy-discord-${row.user_pk}`}
+                        data-testid={`promo-copy-discord-${testId}`}
                       >
                         <Copy className="size-3" />
                       </SecondaryButton>
                     </span>
                   )}
-                  <span>
-                    Played {row.recent_count} of the last {poolN}
-                  </span>
+                  {info && <span>{info}</span>}
                   {last && (
                     <span data-testid={`promo-last-messaged-${row.user_pk}`}>
                       Messaged by {last.by ?? 'someone'},{' '}
@@ -254,9 +378,10 @@ export function CandidateList({
                 <SecondaryButton
                   type="button"
                   size="sm"
-                  onClick={() => onSelect(row)}
+                  onClick={() => onMessage(row)}
+                  disabled={!isLinked(row) && resolve.isPending}
                   aria-pressed={selected}
-                  data-testid={`promo-select-${row.user_pk}`}
+                  data-testid={`promo-select-${testId}`}
                 >
                   {selected ? 'Selected' : 'Message'}
                 </SecondaryButton>

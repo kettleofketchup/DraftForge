@@ -16,6 +16,8 @@ export function makeOrgFeatureAccess(
     canViewOwnConduct: false,
     canViewConductDetails: false,
     canManageConduct: false,
+    mmrSyncEnabled: false,
+    canUseMmrSync: false,
     standingTracks: [],
     ...overrides,
   };

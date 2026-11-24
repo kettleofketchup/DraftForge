@@ -82,7 +82,12 @@ describe('PromotionDashboard', () => {
   it('drops the chosen player when the selected event leaves the events list', async () => {
     vi.mocked(getPromoEvents).mockResolvedValue([eventA, eventB]);
     vi.mocked(getPromoTemplates).mockResolvedValue([]);
-    vi.mocked(getCandidates).mockResolvedValue({ n: 3, rows: [candidate] });
+    vi.mocked(getCandidates).mockResolvedValue({
+      source: 'recent',
+      n: 3,
+      days: 30,
+      rows: [candidate],
+    });
     vi.mocked(renderPromo).mockResolvedValue({
       text: 'Hey',
       warnings: [],

@@ -6,6 +6,11 @@ export const DISCORD_DM_LIMIT = 2000;
 export const MAX_SEND_TEXT = 4000;
 export const DEFAULT_POOL_N = 3;
 export const MAX_POOL_N = 10;
+export const DEFAULT_DAYS = 30;
+export const DAYS_OPTIONS: readonly number[] = [7, 14, 30, 90];
+
+export const CANDIDATE_SOURCES = ['recent', 'active', 'discord'] as const;
+export type CandidateSource = (typeof CANDIDATE_SOURCES)[number];
 export const PROMOTABLE_STATES: readonly string[] = [
   'upcoming',
   'signups_open',
@@ -39,7 +44,7 @@ export const LastMessagedSchema = z.object({
 export type LastMessaged = z.infer<typeof LastMessagedSchema>;
 
 export const CandidateRowSchema = z.object({
-  user_pk: z.number(),
+  user_pk: z.number().nullable(),
   username: z.string(),
   nickname: z.string().nullable(),
   discordUsername: z.string().nullable(),
@@ -47,28 +52,42 @@ export const CandidateRowSchema = z.object({
   guildNickname: z.string().nullish(),
   discordId: z.string().nullable(),
   avatarUrl: z.string().nullable(),
-  recent_count: z.number(),
+  recent_count: z.number().nullable(),
+  last_active_at: z.string().nullish(),
+  discord_joined_at: z.string().nullish(),
   last_messaged: LastMessagedSchema.nullable(),
   earning_send_exists: z.boolean(),
   signed_up: z.boolean(),
 });
 export type CandidateRow = z.infer<typeof CandidateRowSchema>;
+/** A candidate with a DraftForge account, the only kind a message can be recorded for. */
+export type LinkedCandidate = CandidateRow & { user_pk: number };
+
+export function isLinked(row: CandidateRow): row is LinkedCandidate {
+  return row.user_pk != null;
+}
 
 export const CandidatesResponseSchema = z.object({
+  source: z.enum(CANDIDATE_SOURCES),
   n: z.number(),
+  days: z.number(),
   rows: z.array(CandidateRowSchema),
 });
 export type CandidatesResponse = z.infer<typeof CandidatesResponseSchema>;
 
 export interface CandidateFilters {
+  source: CandidateSource;
   n: number;
+  days: number;
   hideSignedUp: boolean;
   hideMessaged: boolean;
   q: string;
 }
 
 export const DEFAULT_CANDIDATE_FILTERS: CandidateFilters = {
+  source: 'recent',
   n: DEFAULT_POOL_N,
+  days: DEFAULT_DAYS,
   hideSignedUp: true,
   hideMessaged: true,
   q: '',
