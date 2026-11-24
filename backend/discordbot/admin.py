@@ -111,7 +111,6 @@ class DiscordEventDMAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["dm_type", "delivered", "responded"]
-    raw_id_fields = ["ledger_entry"]
     readonly_fields = ["ledger_entry"]
 
 

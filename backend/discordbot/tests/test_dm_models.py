@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from django.contrib import admin
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
@@ -115,6 +115,17 @@ class DiscordDMModelTests(TestCase):
         )
         row.refresh_from_db()
         self.assertEqual(row.event_dm, event_dm)
+        field = DiscordEventDM._meta.get_field("ledger_entry")
+        self.assertIs(field.remote_field.on_delete, models.PROTECT)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            DiscordEventDM.objects.create(
+                discord_event=discord_event,
+                org_user=org_user,
+                dm_type=DMType.PROFILE_UPDATE,
+                ledger_entry=row,
+            )
+        event_dm.delete()
+        self.assertTrue(DiscordDM.objects.filter(pk=row.pk).exists())
 
 
 class DiscordDMAdminTests(TestCase):

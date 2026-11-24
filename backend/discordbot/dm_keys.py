@@ -26,11 +26,17 @@ def signup_confirmation_key(*, interaction_id: int | str) -> str:
 def leadership_review_key(
     *, snapshot_id: int, rater_org_user_id: int, part: int
 ) -> str:
-    return f"leadership_review:snapshot:{snapshot_id}:rater:{rater_org_user_id}:part:{part}"
+    return (
+        f"leadership_review:snapshot:{snapshot_id}"
+        f":rater:{rater_org_user_id}:part:{part}"
+    )
 
 
 def test_notification_key(*, event_pk: int, discord_id: str, request_id: str) -> str:
     return f"test_notification:event:{event_pk}:discord:{discord_id}:req:{request_id}"
+
+
+test_notification_key.__test__ = False  # type: ignore[attr-defined]
 
 
 KEY_BUILDERS: dict[DMKind, Callable[..., str]] = {

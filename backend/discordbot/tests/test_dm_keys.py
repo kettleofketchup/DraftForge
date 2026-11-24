@@ -7,9 +7,11 @@ from discordbot.dm_keys import (
     lobby_info_key,
     signup_confirmation_key,
     signup_reminder_key,
-    test_notification_key,
     tournament_draft_link_key,
     tournament_herodraft_link_key,
+)
+from discordbot.dm_keys import (
+    test_notification_key as build_test_notification_key,
 )
 from discordbot.models import DMKind
 
@@ -53,7 +55,7 @@ class DMKeyTests(SimpleTestCase):
 
     def test_test_notification_key(self) -> None:
         self.assertEqual(
-            test_notification_key(event_pk=1, discord_id="d", request_id="r"),
+            build_test_notification_key(event_pk=1, discord_id="d", request_id="r"),
             "test_notification:event:1:discord:d:req:r",
         )
 
@@ -101,3 +103,7 @@ class DMContextTests(SimpleTestCase):
         self.assertEqual(
             validate_context(DMKind.TOURNAMENT_DRAFT_LINK, data, backfill=True), data
         )
+        with self.assertRaises(ValueError):
+            validate_context(DMKind.SIGNUP_REMINDER, data, backfill=True)
+        with self.assertRaises(ValueError):
+            validate_context(DMKind.LEADERSHIP_REVIEW, data, backfill=True)

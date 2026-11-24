@@ -60,7 +60,11 @@ def validate_context(
     kind: DMKind, data: Mapping[str, object], *, backfill: bool = False
 ) -> dict[str, object]:
     payload = dict(data)
-    if backfill and set(payload) == {"legacy_kind_unknown"}:
+    if (
+        backfill
+        and DMKind(kind) == DMKind.TOURNAMENT_DRAFT_LINK
+        and set(payload) == {"legacy_kind_unknown"}
+    ):
         model: type[BaseModel] = _BackfillContext
     else:
         model = CONTEXT_MODELS[DMKind(kind)]
