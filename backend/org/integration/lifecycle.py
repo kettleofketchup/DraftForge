@@ -12,7 +12,13 @@ moves, and only to the account that owns that Discord ID:
   applied or canceled and name ``drop`` as sender or recipient are pointed at
   ``keep``, following the sends the merge moves, so the delete hook that
   runs for ``drop`` finds nothing of the merged account's to cancel. Their
-  frozen payloads keep the identity recorded at send time.
+  frozen payloads keep the identity recorded at send time, so they still name
+  ``drop``'s user ID after ``drop`` is gone. That is deliberate: the adaptor
+  writes SFG from the Discord IDs alone (``keep`` owns the one recorded) and
+  only hashes the user IDs, and the payload cannot be rewritten without
+  breaking its hash. Deletion therefore matches rows by the sender and
+  recipient columns, which the merge moved to ``keep``, never by payload
+  user IDs; deleting ``keep`` later cancels and redacts those rows.
 - ``cancel_or_redact_promotion_identity(user)`` runs before an account is
   deleted, from a ``pre_delete`` receiver in ``org.signals`` so no delete
   path can skip it. Its receipts are quarantined as ``account_deleted`` and

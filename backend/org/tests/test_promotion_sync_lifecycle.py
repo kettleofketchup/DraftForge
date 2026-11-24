@@ -140,6 +140,37 @@ class MergeTests(_ImportBase):
         self.assertEqual(row.payload, before.payload)
 
     @override_settings(DISCORD_BOT_TOKEN="test-bot-token")
+    def test_deleting_the_kept_account_after_a_merge_cancels_and_redacts(
+        self,
+    ) -> None:
+        """The merge deletes ``drop`` but leaves the row owed to SFG; its
+        payload still names ``drop``'s user ID, as recorded at send time.
+        Deleting ``keep`` later must still find, cancel and redact that row,
+        though no payload field names ``keep``.
+        """
+        drop = self.non_member_player("ob_md_drop")
+        send = self._send(self.users["promoter"], drop)
+        before = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        keep = self._take_over_discord(drop, "ob_md_keep")
+        drop_pk = drop.pk
+
+        merge_discord_accounts(keep, drop)
+
+        self.assertFalse(CustomUser.objects.filter(pk=drop_pk).exists())
+        row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        self.assertEqual(row.state, OutboxState.PENDING)
+        self.assertEqual(row.payload["recipient"]["user_id"], str(drop_pk))
+        self.assertEqual(row.payload["recipient"]["discord_id"], keep.discordId)
+
+        CustomUser.objects.get(pk=keep.pk).delete()
+
+        row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        self.assertEqual(row.state, OutboxState.CANCELED)
+        self.assertEqual(row.last_reason, "account_deleted")
+        self.assertIsNone(row.payload)
+        self.assertEqual(row.payload_hash, before.payload_hash)
+
+    @override_settings(DISCORD_BOT_TOKEN="test-bot-token")
     def test_reconcile_leaves_terminal_outbox_rows_alone(self) -> None:
         drop = self.non_member_player("ob_term_drop")
         send = self._send(self.users["promoter"], drop)

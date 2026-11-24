@@ -421,6 +421,59 @@ class LeaseTests(_DispatchFixture):
         self.assertEqual(inner.calls, [])
         self.assertEqual(self.row(send).state, OutboxState.APPLIED)
 
+    def test_slow_adaptor_cannot_expire_later_leases_or_backdate_retries(
+        self,
+    ) -> None:
+        """Each row is leased and rescheduled from the clock at that moment.
+
+        Every request takes longer than a whole lease. Were the run's start
+        time used for every row, later rows would be leased already expired
+        and a second dispatcher would resend them, and Retry-After would be
+        measured from a moment long past.
+        """
+        sends = [self._send(self.promoter, text=f"slow {i}") for i in range(3)]
+        lease = timedelta(seconds=65)  # max(2 * 5s timeout, 5s + 60s)
+        retry_after = timedelta(seconds=600)
+        clock = [timezone.now() + timedelta(seconds=1)]
+        answered_at: dict[str, Any] = {}
+        expired: list[str] = []
+        resent: list[str] = []
+
+        def tick() -> Any:
+            return clock[0]
+
+        def respond(payload: dict[str, Any]) -> ReceiptOutcome:
+            # dispatch_due turns a client exception into a retry, so problems
+            # are collected here and asserted after the run.
+            row = self.row(int(payload["local_send_id"]))
+            if row.state != OutboxState.IN_FLIGHT or (
+                row.lease_expires_at < clock[0] + lease
+            ):
+                expired.append(payload["local_send_id"])
+            # A second dispatcher at this moment must not take the row.
+            if claim(row, now=clock[0], config=_config()) is not None:
+                resent.append(payload["delivery_id"])
+            clock[0] += lease + timedelta(seconds=5)
+            answered_at[payload["local_send_id"]] = clock[0]
+            return ReceiptOutcome(
+                OutcomeKind.RETRYABLE,
+                "rate_limited",
+                http_status=429,
+                retry_after=retry_after.total_seconds(),
+            )
+
+        client = FakeClient(respond)
+        dispatch_due(client=client, clock=tick)
+        self.assertEqual(len(client.calls), 3)
+        self.assertEqual(expired, [])
+        self.assertEqual(resent, [])
+        for send in sends:
+            row = self.row(send)
+            self.assertEqual(row.state, OutboxState.RETRY)
+            self.assertEqual(row.attempts, 1)
+            self.assertGreaterEqual(row.due_at, answered_at[str(send.pk)] + retry_after)
+            self.assertEqual(row.updated_at, answered_at[str(send.pk)])
+
     def test_claim_is_compare_and_set(self) -> None:
         send = self._send(self.promoter)
         row = self.row(send)

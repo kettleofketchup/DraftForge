@@ -27,12 +27,17 @@ States after an answer:
 A row whose lease expired (the dispatcher died mid-request) is due again and
 is resent with the same delivery UUID and bytes. Rows are dispatched only for
 orgs and events bound in ``SFG_PROMOTION_SYNC``; others stay pending.
+
+The clock is read again for each claim and after each answer, never once per
+run: a run that sends many rows to a slow adaptor would otherwise lease later
+rows already expired and schedule retries in the past.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Final, Protocol
@@ -338,12 +343,21 @@ def dispatch_due(
     now: datetime | None = None,
     resume_paused: bool = False,
     client: ReceiptClient | None = None,
+    clock: Callable[[], datetime] = timezone.now,
 ) -> DispatchReport:
+    """Lease, send and finalize up to ``limit`` due rows.
+
+    ``clock`` is read before each claim and after each answer. ``now``
+    pins it to one instant, for tests only.
+    """
     config = _config()
     if not config.enabled:
         log.info("promo_dispatch_disabled", system="org", subsystem="integration")
         return DispatchReport(enabled=False)
-    now = now or timezone.now()
+    if now is not None:
+        pinned = now
+        clock = lambda: pinned  # noqa: E731
+    now = clock()
     if client is None:
         client = PromotionAdaptorClient(config)
     report = DispatchReport(enabled=True)
@@ -367,7 +381,7 @@ def dispatch_due(
     rows = list(due.filter(bound).order_by("due_at", "pk")[:limit])
     report.due = len(rows)
     for row in rows:
-        lease = claim(row, now=now, config=config)
+        lease = claim(row, now=clock(), config=config)
         if lease is None:
             continue
         report.leased += 1
@@ -383,7 +397,7 @@ def dispatch_due(
                 delivery_id=lease.delivery_id,
             )
             outcome = ReceiptOutcome(OutcomeKind.RETRYABLE, DISPATCH_ERROR, None)
-        fields = _finalize(lease, outcome, now, config)
+        fields = _finalize(lease, outcome, clock(), config)
         if fields is None:
             report.discarded += 1
             continue
