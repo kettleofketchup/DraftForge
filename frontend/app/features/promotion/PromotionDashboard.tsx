@@ -1,20 +1,34 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { toast } from 'sonner';
+import { GAME_LABEL, toGameType } from '~/components/game/constants';
 import { SecondaryButton } from '~/components/ui/buttons';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
+import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { CandidateList } from './CandidateList';
-import { ComposePanel } from './ComposePanel';
-import { usePreviewOptions } from './feedback';
-import { usePromoEvents, usePromoTemplates } from './queries';
+import { reportPromoError, usePreviewOptions } from './feedback';
+import { candidateRowId, type ComposeMode } from './promotionColumns';
+import {
+  PromotionMessageDialog,
+  type PromotionComposer,
+} from './PromotionMessageDialog';
+import {
+  usePromoEvents,
+  usePromoTemplates,
+  useResolveDiscordMember,
+} from './queries';
 import {
   DEFAULT_CANDIDATE_FILTERS,
+  isLinked,
   type CandidateFilters,
-  type LinkedCandidate,
+  type CandidateRow,
   type PromoEvent,
   type PromoSendResult,
 } from './schemas';
+
+const log = getLogger('PromotionDashboard');
 
 export interface PromotionDashboardProps {
   orgId: number;
@@ -50,14 +64,28 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const [filters, setFilters] = useState<CandidateFilters>(
     DEFAULT_CANDIDATE_FILTERS,
   );
-  const [candidate, setCandidate] = useState<LinkedCandidate | null>(null);
+  const [composer, setComposer] = useState<PromotionComposer | null>(null);
   const [justSent, setJustSent] = useState<number | null>(null);
+  const [pendingRowId, setPendingRowId] = useState<string | null>(null);
+  // Bumped whenever the recipient context changes; a resolve that settles
+  // under an older value is dropped instead of opening a stale composer.
+  const contextToken = useRef(0);
+  const resolve = useResolveDiscordMember(orgId, access, eventId ?? 0);
 
-  const resetEvent = useCallback((id: number | null): void => {
-    setEventId(id);
-    setCandidate(null);
+  const closeComposer = useCallback((): void => {
+    contextToken.current += 1;
+    setComposer(null);
     setJustSent(null);
+    setPendingRowId(null);
   }, []);
+
+  const resetEvent = useCallback(
+    (id: number | null): void => {
+      setEventId(id);
+      closeComposer();
+    },
+    [closeComposer],
+  );
 
   useEffect(() => {
     if (eventId != null || !events.data) return;
@@ -79,12 +107,51 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const onSent = useCallback((send: PromoSendResult | null) => {
     setJustSent(send?.id ?? null);
   }, []);
-  const onSelectCandidate = (row: LinkedCandidate): void => {
-    setCandidate(row);
-    setJustSent(null);
-  };
+
+  const resolveMutate = resolve.mutate;
+  const onCompose = useCallback(
+    (row: CandidateRow, mode: ComposeMode): void => {
+      contextToken.current += 1;
+      const token = contextToken.current;
+      setJustSent(null);
+      if (isLinked(row)) {
+        setPendingRowId(null);
+        setComposer({ candidate: row, mode });
+        return;
+      }
+      if (!row.discordId || eventId == null) return;
+      const rowId = candidateRowId(row);
+      setComposer(null);
+      setPendingRowId(rowId);
+      resolveMutate(row.discordId, {
+        onSuccess: (resolved) => {
+          if (token !== contextToken.current) {
+            log.info('promo_resolve_member_discarded', { orgId, eventId });
+            return;
+          }
+          setPendingRowId(null);
+          if (isLinked(resolved)) setComposer({ candidate: resolved, mode });
+        },
+        onError: (err) => {
+          if (token !== contextToken.current) return;
+          setPendingRowId(null);
+          const message = reportPromoError(
+            log,
+            'promo_resolve_member_failed',
+            err,
+            { orgId, eventId },
+          );
+          toast.error(message || 'Could not prepare this member');
+        },
+      });
+    },
+    [eventId, orgId, resolveMutate],
+  );
 
   const selectedEvent = events.data?.find((e) => e.id === eventId) ?? null;
+  const gameLabel = selectedEvent
+    ? GAME_LABEL[toGameType(selectedEvent.game_type)]
+    : 'Game';
 
   return (
     <div className="flex flex-col gap-4" data-testid="promo-dashboard">
@@ -136,7 +203,14 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
       </section>
 
       {selectedEvent && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <>
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="promo-pick-player"
+          >
+            Choose an audience, then use Message on a player to write a DM, or
+            Mark as sent to record one you already sent. One player at a time.
+          </p>
           <CandidateList
             key={selectedEvent.id}
             orgId={orgId}
@@ -144,35 +218,24 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
             eventId={selectedEvent.id}
             filters={filters}
             onFiltersChange={(next) => {
-              if (next.source !== filters.source) {
-                setCandidate(null);
-                setJustSent(null);
-              }
+              if (next.source !== filters.source) closeComposer();
               setFilters(next);
             }}
-            selectedPk={candidate?.user_pk ?? null}
-            onSelect={onSelectCandidate}
-            hideUndoFor={justSent}
+            onCompose={onCompose}
+            pendingRowId={pendingRowId}
+            hideUndoFor={composer ? justSent : null}
           />
-          {candidate ? (
-            <ComposePanel
-              key={`${selectedEvent.id}-${candidate.user_pk}`}
-              orgId={orgId}
-              access={access}
-              event={selectedEvent}
-              candidate={candidate}
-              templates={templates.data ?? []}
-              onSent={onSent}
-            />
-          ) : (
-            <p
-              className="text-sm text-muted-foreground"
-              data-testid="promo-pick-player"
-            >
-              Pick a player to write a message.
-            </p>
-          )}
-        </div>
+          <PromotionMessageDialog
+            orgId={orgId}
+            access={access}
+            event={selectedEvent}
+            composer={composer}
+            templates={templates.data ?? []}
+            gameLabel={gameLabel}
+            onClose={closeComposer}
+            onSent={onSent}
+          />
+        </>
       )}
     </div>
   );

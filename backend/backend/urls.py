@@ -41,6 +41,7 @@ from app.views.internal import (
     update_user_avatar,
 )
 from app.views.ssr import EventSSRView, UserSSRView
+from app.views.steam_verification import steam_verification
 from app.views.user_search import search_users
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
@@ -163,6 +164,11 @@ urlpatterns = [
         "api/users/steam-account-id/<int:steam_account_id>/",
         app_views.steam_account_id_lookup,
         name="steam_account_id_lookup",
+    ),
+    path(
+        "api/users/<int:pk>/steam-verification/",
+        steam_verification,
+        name="user_steam_verification",
     ),
     # User profile (see backend/user/urls.py)
     path("api/users/", include("user.urls")),

@@ -87,6 +87,8 @@ interface Props {
   organizationId?: number;
   /** Forwarded to UserCard. */
   leagueId?: number;
+  /** Forwarded to UserCard. */
+  showSteamVerification?: boolean;
 }
 
 export function VirtualizedUserGrid({
@@ -98,6 +100,7 @@ export function VirtualizedUserGrid({
   deleteButtonType,
   organizationId,
   leagueId,
+  showSteamVerification,
 }: Props) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const [columns, setColumns] = useState(() => cols.base);
@@ -202,6 +205,7 @@ export function VirtualizedUserGrid({
                 compact={compact}
                 organizationId={organizationId}
                 leagueId={leagueId}
+                showSteamVerification={showSteamVerification}
               />
             ))}
           </div>

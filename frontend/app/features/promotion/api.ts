@@ -75,6 +75,8 @@ export async function getCandidates(
         hide_signed_up: filters.hideSignedUp,
         hide_messaged: filters.hideMessaged,
         ...(filters.q ? { q: filters.q } : {}),
+        ...(filters.minMmr != null ? { min_mmr: filters.minMmr } : {}),
+        ...(filters.maxMmr != null ? { max_mmr: filters.maxMmr } : {}),
       },
     },
   );

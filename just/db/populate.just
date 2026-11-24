@@ -17,10 +17,15 @@ all:
 # Force fresh populate (bypasses cache): new test DB, migrate, populate_all --force
 [group('db::populate')]
 fresh:
-    rm -f {{quote(test_db)}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    stopped=$({{just}} db::drop-test-db)
+    trap '[[ -n "$stopped" ]] && echo "test DB not ready; $stopped left stopped (just test::compose start $stopped)" >&2' ERR
     touch {{quote(test_db)}}
     {{just}} db::migrate::test
     {{just}} db::manage test populate_all --force
+    read -ra stopped_services <<< "$stopped"
+    {{just}} db::start-test-db-users "${stopped_services[@]}"
 
 [group('db::populate')]
 users *flags:
