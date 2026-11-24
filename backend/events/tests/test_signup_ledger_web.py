@@ -7,8 +7,10 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import CustomUser
 from events.constants import ActorRole, SignupAction, SignupMeans, SignupStatus
+from events.ledger import SignupActor
 from events.models import Event, EventSignup, SignupLedgerEntry
 from events.serializers import EventSignupSerializer
+from events.services import staff_add_signup
 from events.tests.base import EventTestCase
 from org.models import OrgLog
 from tests.test_auth import bulk_rsvp_for_event
@@ -244,6 +246,39 @@ class SignupLedgerWebTests(EventTestCase):
                     signup, context={"request": response.wsgi_request}
                 ).data
                 self.assertEqual(set(response.data.keys()), set(expected.keys()))
+
+    def _staff_actor(self) -> SignupActor:
+        return SignupActor(user=self.admin, role=ActorRole.STAFF, means=SignupMeans.WEB)
+
+    def test_staff_add_records_reason(self, _notify: Any) -> None:
+        event = self.make_event()
+        staff_add_signup(event, self.user, actor=self._staff_actor(), reason="x")
+        entry = self._single(event)
+        self.assertEqual(entry.action, SignupAction.STAFF_ADDED)
+        self.assertEqual(entry.reason, "x")
+
+        other = self.make_event()
+        staff_add_signup(other, self.user, actor=self._staff_actor())
+        default_entry = self._single(other)
+        self.assertEqual(default_entry.action, SignupAction.STAFF_ADDED)
+        self.assertEqual(default_entry.reason, "")
+
+    def test_staff_readd_cancelled_records_reason(self, _notify: Any) -> None:
+        event = self.make_event(max_players=1)
+        EventSignup.objects.create(
+            event=event, user=self.admin, status=SignupStatus.APPROVED
+        )
+        EventSignup.objects.create(
+            event=event, user=self.user, status=SignupStatus.CANCELLED
+        )
+        signup = staff_add_signup(
+            event, self.user, actor=self._staff_actor(), reason="y"
+        )
+        self.assertEqual(signup.status, SignupStatus.WAITLISTED)
+        entry = self._single(event)
+        self.assertEqual(entry.action, SignupAction.STAFF_ADDED)
+        self.assertEqual(entry.reason, "y")
+        self.assertIsNotNone(entry.before)
 
 
 @override_settings(DEBUG=True, TEST=True, RELEASE=False, NODE_ENV="test")

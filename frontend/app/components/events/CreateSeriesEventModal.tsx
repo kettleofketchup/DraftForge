@@ -12,6 +12,7 @@ import {
   lobbyPasswordPayload,
   refineLobbyPassword,
 } from '~/components/lobby/password';
+import { repeaterKeys } from '~/hooks/useEvent';
 import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection } from './DiscordConfigSection';
@@ -151,10 +152,13 @@ export function CreateSeriesEventModal({
       });
       toast.success('One-off event created');
       queryClient.invalidateQueries({
-        queryKey: ['repeater-events', repeater.id],
+        queryKey: repeaterKeys.events(repeater.id),
       });
       queryClient.invalidateQueries({ queryKey: ['events'] });
-      queryClient.invalidateQueries({ queryKey: ['repeater', repeater.id] });
+      queryClient.invalidateQueries({
+        queryKey: repeaterKeys.detail(repeater.id),
+      });
+      queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
       onOpenChange(false);
     } catch (err) {
       const response = (

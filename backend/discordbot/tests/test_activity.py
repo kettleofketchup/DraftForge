@@ -6,6 +6,7 @@ import time
 from datetime import date
 from io import StringIO
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from asgiref.sync import async_to_sync
@@ -27,6 +28,7 @@ from structlog.contextvars import clear_contextvars, get_contextvars
 from structlog.testing import capture_logs
 
 from app.models import CustomUser
+from discordbot import activity_auth
 from discordbot.activity import activity_session, launch_message, resolve_instance
 from discordbot.activity_auth import (
     HERO_SUFFIXES,
@@ -1462,6 +1464,9 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
         self.assertTrue(connected)
         return socket
 
+    async def _consumer_cleaned_up(self) -> None:
+        await asyncio.wait_for(self.consumer_cleaned_up.wait(), timeout=5)
+
     async def _assert_round_trip_after_revalidation(self, socket):
         await asyncio.sleep(0.1)
         await socket.send_to(text_data="ping")
@@ -1498,7 +1503,7 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
                 await socket.receive_output(timeout=5),
                 {"type": "websocket.close", "code": 4403},
             )
-            await self.consumer_cleaned_up.wait()
+            await self._consumer_cleaned_up()
             await socket.disconnect()
         closed = [e for e in logs if e["event"] == "activity_socket_closed"]
         self.assertEqual(len(closed), 1)
@@ -1530,7 +1535,7 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
                 await socket.receive_output(timeout=5),
                 {"type": "websocket.close", "code": 4401},
             )
-            await self.consumer_cleaned_up.wait()
+            await self._consumer_cleaned_up()
             await socket.disconnect()
 
     async def test_open_socket_closes_after_mapping_revocation(self):
@@ -1545,7 +1550,7 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
                 await socket.receive_output(timeout=5),
                 {"type": "websocket.close", "code": 4401},
             )
-            await self.consumer_cleaned_up.wait()
+            await self._consumer_cleaned_up()
             await socket.disconnect()
 
     async def test_open_socket_closes_after_account_deactivation(self):
@@ -1566,7 +1571,7 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
                 await socket.receive_output(timeout=5),
                 {"type": "websocket.close", "code": 4401},
             )
-            await self.consumer_cleaned_up.wait()
+            await self._consumer_cleaned_up()
             await socket.disconnect()
         closed = [e for e in logs if e["event"] == "activity_socket_closed"]
         self.assertEqual([e["reason"] for e in closed], ["revoked"])
@@ -1582,7 +1587,7 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
                     await socket.receive_output(timeout=5),
                     {"type": "websocket.close", "code": 4401},
                 )
-            await self.consumer_cleaned_up.wait()
+            await self._consumer_cleaned_up()
             await socket.disconnect()
         rejected = [e for e in logs if e["event"] == "activity_auth_rejected"]
         self.assertEqual([e["reason"] for e in rejected], ["disabled"])
@@ -1594,19 +1599,23 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
         )
 
     async def test_open_socket_expires_before_periodic_revalidation(self):
-        data = signing.loads(self.token.replace(".", ":"), salt=SALT)
-        data["expires"] = time.time() + 0.1
-        token = signing.dumps(data, salt=SALT).replace(":", ".")
+        token_data = activity_auth._token_data
+
+        def expiring_soon(token: str) -> dict[str, Any]:
+            # Expiry is relative to each read, so a slow handshake can't expire the token.
+            return {**token_data(token), "expires": time.time() + 0.1}
+
         with (
             patch("discordbot.activity_auth.SOCKET_REVALIDATE_SECONDS", 30),
+            patch("discordbot.activity_auth._token_data", expiring_soon),
             capture_logs() as logs,
         ):
-            socket = await self._open_guarded_socket(token)
+            socket = await self._open_guarded_socket()
             self.assertEqual(
                 await socket.receive_output(timeout=5),
                 {"type": "websocket.close", "code": 4401},
             )
-            await self.consumer_cleaned_up.wait()
+            await self._consumer_cleaned_up()
             await socket.disconnect()
         closed = [e for e in logs if e["event"] == "activity_socket_closed"]
         self.assertEqual([e["reason"] for e in closed], ["expired"])
@@ -1620,7 +1629,7 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
         with capture_logs() as logs:
             socket = await self._open_guarded_socket()
             await socket.disconnect(code=1000)
-            await self.consumer_cleaned_up.wait()
+            await self._consumer_cleaned_up()
             await asyncio.sleep(0.05)
         closed = [e for e in logs if e["event"] == "activity_socket_closed"]
         self.assertEqual(len(closed), 1)
@@ -1659,7 +1668,7 @@ class ActivitySocketDatabaseTests(ClearIntentsMixin, TransactionTestCase):
         with capture_logs() as logs:
             socket.future.cancel()
             with self.assertRaises(asyncio.CancelledError):
-                await socket.future
+                await asyncio.wait_for(socket.future, timeout=5)
         closed = [e for e in logs if e["event"] == "activity_socket_closed"]
         self.assertEqual([e["reason"] for e in closed], ["cancelled"])
 

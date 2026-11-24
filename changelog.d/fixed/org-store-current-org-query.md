@@ -1,0 +1,1 @@
+- Tournament and league pages now pick up organization changes, such as a newly linked Discord server, without a page reload (#890)

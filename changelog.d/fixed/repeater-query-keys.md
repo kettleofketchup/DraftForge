@@ -1,0 +1,1 @@
+- Event series stay in sync across pages: renaming, pausing, subscribing to or creating a series now shows up on the Events page, the organization page and the series page without a reload, and deleting a series removes its upcoming events from the event lists straight away

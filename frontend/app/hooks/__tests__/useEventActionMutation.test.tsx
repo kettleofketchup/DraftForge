@@ -9,8 +9,15 @@ import {
 } from '~/features/org-features/queryKeys';
 
 const api = vi.hoisted(() => ({
+  cancelEvent: vi.fn(),
   completeEvent: vi.fn(),
+  deleteEvent: vi.fn(),
+  openSignups: vi.fn(),
+  reopenSignups: vi.fn(),
+  restartTournament: vi.fn(),
   setEventStaff: vi.fn(),
+  startRollCall: vi.fn(),
+  startTournament: vi.fn(),
 }));
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
@@ -18,7 +25,7 @@ vi.mock('~/components/api/api', async (importOriginal) => ({
   ...api,
 }));
 
-import { useEventActionMutation } from '../useEvent';
+import { signupHistoryKey, useEventActionMutation } from '../useEvent';
 
 const EVENT_ID = 7;
 const ORG_ID = 3;
@@ -66,7 +73,7 @@ function setup() {
   const hook = renderHook(() => useEventActionMutation(EVENT_ID), { wrapper });
   const invalid = (key: readonly unknown[]) =>
     client.getQueryState(key)?.isInvalidated ?? false;
-  return { hook, keys, invalid };
+  return { hook, keys, invalid, client };
 }
 
 describe('useEventActionMutation contribution invalidation', () => {
@@ -96,4 +103,62 @@ describe('useEventActionMutation contribution invalidation', () => {
       expect(invalid(keys.otherOrgBoard)).toBe(false);
     },
   );
+});
+
+describe('useEventActionMutation signup history invalidation', () => {
+  const actions = [
+    'openSignups',
+    'startRollCall',
+    'reopenSignups',
+    'startTournament',
+    'cancelEvent',
+    'restartTournament',
+    'completeEvent',
+    'setEventStaff',
+  ] as const;
+
+  beforeEach(() => {
+    api.deleteEvent.mockResolvedValue(undefined);
+    for (const action of actions) {
+      api[action].mockResolvedValue({ pk: EVENT_ID, organization: ORG_ID });
+    }
+  });
+
+  it.each(actions)('%s refreshes this event history only', async (action) => {
+    const { hook, client, invalid } = setup();
+    const keys = {
+      all: signupHistoryKey(EVENT_ID, {}),
+      member: signupHistoryKey(EVENT_ID, { user: 5 }),
+      otherEvent: signupHistoryKey(EVENT_ID + 1, {}),
+    };
+    for (const key of Object.values(keys)) {
+      client.setQueryData(key, { pages: [], pageParams: [] });
+    }
+    await act(async () => {
+      await (
+        hook.result.current[action].mutateAsync as (v?: unknown) => unknown
+      )({ host: null, helpers: [] });
+    });
+    expect(invalid(keys.all)).toBe(true);
+    expect(invalid(keys.member)).toBe(true);
+    expect(invalid(keys.otherEvent)).toBe(false);
+  });
+
+  it('deleteEvent drops this event history and keeps other events', async () => {
+    const { hook, client } = setup();
+    const own = signupHistoryKey(EVENT_ID, { user: 5 });
+    const other = signupHistoryKey(EVENT_ID + 1, {});
+    client.setQueryData(signupHistoryKey(EVENT_ID, {}), { pages: [] });
+    client.setQueryData(own, { pages: [] });
+    client.setQueryData(other, { pages: [] });
+    await act(async () => {
+      await hook.result.current.deleteEvent.mutateAsync();
+    });
+    expect(
+      client.getQueryCache().findAll({
+        queryKey: ['event-signup-history', EVENT_ID],
+      }),
+    ).toHaveLength(0);
+    expect(client.getQueryData(other)).toBeDefined();
+  });
 });
