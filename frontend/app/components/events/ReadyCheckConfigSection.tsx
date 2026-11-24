@@ -481,8 +481,9 @@ export function ReadyCheckConfigSection<
             className="text-sm text-muted-foreground"
             data-testid={IDS.voiceNotActive}
           >
-            Not active yet: voice presence and the start cull are saved but do
-            not run until a later release.
+            Not active yet: the start cull is saved but does not run until a
+            later release. Voice presence confirms members who join the event
+            voice channel during a ready check, when it is on.
           </p>
           <FormField
             control={control}

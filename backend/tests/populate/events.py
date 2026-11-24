@@ -12,11 +12,17 @@ from django.utils import timezone as tz
 
 from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
 from discordbot.models import DiscordEvent
-from events.constants import EventState, RepeatFrequency, SignupStatus
+from events.constants import (
+    EventState,
+    RepeatFrequency,
+    SignupStatus,
+    VoicePresenceSource,
+)
 from events.models import (
     Event,
     EventRepeater,
     EventSignup,
+    EventVoicePresence,
     OrgEventDefaults,
     RepeaterSubscription,
     RollCallMode,
@@ -41,7 +47,7 @@ from tests.data.users import EVENT_LEAGUE_STAFF_USER
 from tests.populate.utils import ensure_league_user, ensure_org_user
 
 
-def populate_events_data(force=False):
+def populate_events_data(force: bool = False) -> None:
     """Create dedicated Events Test Org, League, users, and a sample event."""
     print("  Populating events E2E data...")
 
@@ -422,6 +428,7 @@ def populate_events_data(force=False):
             "start_cull_minutes_after": 1,
             "post_cull_fill_mode": PostCullFillMode.LINE_ORDER,
             "event_voice_channel_id": "100000000000000528",
+            "voice_presence_confirms": True,
         },
     )
     for i, user_data in enumerate(EVENTS_USERS[:7]):
@@ -431,6 +438,23 @@ def populate_events_data(force=False):
             event=demo_ready_check_event,
             user=user,
             defaults={"status": status},
+        )
+
+    presence_now = tz.now()
+    for i, user_data in enumerate(EVENTS_USERS[:2]):
+        EventVoicePresence.objects.update_or_create(
+            event=demo_ready_check_event,
+            user_id=user_data.pk,
+            defaults={
+                "guild_id": org.discord_server_id,
+                "channel_id": "100000000000000528",
+                "present": i == 0,
+                "source": VoicePresenceSource.FEED,
+                "first_joined_at": presence_now,
+                "last_joined_at": presence_now,
+                "last_seen_at": presence_now,
+                "last_left_at": None if i == 0 else presence_now,
+            },
         )
 
     demo_past_event, _ = Event.objects.update_or_create(
