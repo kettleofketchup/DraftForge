@@ -215,6 +215,15 @@ export {
   type OrgFeaturesTestData,
 } from './org-features';
 
+// MMR sync API utilities (19-org-features/13-mmr-sync-api spec)
+export {
+  loginMmrSync,
+  mmrSyncRequest,
+  resetMmrSync,
+  type MmrSyncRole,
+  type MmrSyncTestData,
+} from './mmr-sync';
+
 // Discord Activity harness (27-activity specs)
 export {
   ACTIVITY_HARNESS_PATH,

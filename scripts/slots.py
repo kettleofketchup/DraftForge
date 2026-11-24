@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import json
 import os
 import re
 import secrets
@@ -1585,9 +1586,97 @@ def prepare(
     return compose_argv(stack, *args, slot=slot, root=root), compose_env(stack, slot)
 
 
-def _running_services(base: list[str], env: Mapping[str, str], host: Host) -> list[str]:
-    _, out = host.run([*base, "ps", "--services", "--status", "running"], env, True)
+def _running_services(
+    base: list[str], env: Mapping[str, str], host: Host, *, restarting: bool = False
+) -> list[str]:
+    status = [
+        "--status",
+        "running",
+        *(["--status", "restarting"] if restarting else []),
+    ]
+    _, out = host.run([*base, "ps", "--services", *status], env, True)
     return [s for s in out.split() if s]
+
+
+RUN_OPTS_WITH_VALUE: Final = frozenset(
+    {
+        "--cap-add",
+        "--cap-drop",
+        "--entrypoint",
+        "-e",
+        "--env",
+        "--env-from-file",
+        "-l",
+        "--label",
+        "--name",
+        "-p",
+        "--publish",
+        "--pull",
+        "-u",
+        "--user",
+        "-v",
+        "--volume",
+        "-w",
+        "--workdir",
+    }
+)
+
+
+def run_target(args: Sequence[str]) -> tuple[str | None, bool]:
+    """The service a `compose run` argv targets, and whether it passed --no-deps."""
+    no_deps = False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--no-deps":
+            no_deps = True
+        elif a in RUN_OPTS_WITH_VALUE:
+            i += 1
+        elif not a.startswith("-"):
+            return a, no_deps
+        i += 1
+    return None, no_deps
+
+
+def dependency_closure(config: Mapping[str, object], service: str) -> set[str]:
+    services = cast("Mapping[str, Mapping[str, object]]", config.get("services") or {})
+    seen: set[str] = set()
+    todo = list(
+        cast("Mapping[str, object]", services.get(service, {}).get("depends_on") or {})
+    )
+    while todo:
+        s = todo.pop()
+        if s in seen:
+            continue
+        seen.add(s)
+        todo += list(
+            cast("Mapping[str, object]", services.get(s, {}).get("depends_on") or {})
+        )
+    return seen
+
+
+def _run_dependencies(
+    base: list[str], env: Mapping[str, str], host: Host, args: Sequence[str]
+) -> set[str]:
+    """Services `compose run` may start for its target: the target's depends_on closure."""
+    service, no_deps = run_target(args)
+    if service is None or no_deps:
+        return set()
+    code, out = host.run(
+        [*base, *ALL_PROFILES, "config", "--format", "json"], env, True
+    )
+    try:
+        config = json.loads(out) if code == 0 else None
+    except json.JSONDecodeError:
+        config = None
+    if not isinstance(config, dict):
+        print(
+            "warning: could not read the compose config; services test::run starts "
+            "for its dependencies stay up",
+            file=sys.stderr,
+        )
+        return set()
+    return dependency_closure(config, service)
 
 
 def _run_ephemeral(args: Sequence[str], root: Path, host: Host) -> int:
@@ -1673,14 +1762,26 @@ def run_one_off(
     if root / COMPOSE_DIR / OFFLINE_FILE in files:
         print(OFFLINE_NOTE, file=sys.stderr)
     base = _base_argv(slot.project, files, root)
-    before = set(_running_services(base, env, host))
+    # Only the run's own dependencies are cleaned up: a service started meanwhile
+    # by someone else (the dota-lobby simulator) or restarting at the snapshot
+    # is not ours to remove.
+    deps = _run_dependencies(base, env, host, args)
+    before = set(_running_services(base, env, host, restarting=True)) if deps else set()
     try:
         code, _ = host.run(
             compose_argv("test", "run", *args, slot=slot, root=root), env, False
         )
         return code
     finally:
-        started = [s for s in _running_services(base, env, host) if s not in before]
+        started = (
+            [
+                s
+                for s in _running_services(base, env, host)
+                if s in deps and s not in before
+            ]
+            if deps
+            else []
+        )
         if started:
             host.run([*base, "stop", *started], env, False)
             host.run([*base, "rm", "-f", *started], env, False)

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as https from 'node:https';
 import * as path from 'node:path';
 import { API_URL } from '../fixtures/base-url';
+import { RUN_LOGS_DIR } from '../run-dir';
 
 /**
  * Playwright reporter that pings `/api/healthz` after every test and writes a
@@ -16,7 +17,10 @@ import { API_URL } from '../fixtures/base-url';
  * accumulated DB / Celery / Redis state. With this reporter every run
  * produces a timeseries we can correlate with failures.
  *
- * Output: `frontend/test-results/run-logs/health-probe-<stamp>.jsonl`.
+ * Output: `<run dir>/run-logs/health-probe-<stamp>.jsonl` (see ../run-dir.ts;
+ * `frontend/test-results/latest/run-logs/` for the newest local run). Losing
+ * the file never fails the run: a write that fails is logged once and the
+ * reporter carries on.
  *
  * Pair with `playwright.config.ts` `trace: 'retain-on-failure'` and
  * `just test::pw::headless-with-logs` (which streams backend logs to the
@@ -99,23 +103,30 @@ function probeOnce(): Promise<ProbeResult> {
 class HealthProbeReporter implements Reporter {
   private logFile = '';
   private testIndex = 0;
+  private warned = false;
+
+  private append(entry: Record<string, unknown>) {
+    try {
+      fs.mkdirSync(path.dirname(this.logFile), { recursive: true });
+      fs.appendFileSync(this.logFile, JSON.stringify(entry) + '\n');
+    } catch (err) {
+      if (!this.warned) {
+        this.warned = true;
+        console.warn(`[health-probe] cannot write ${this.logFile}: ${err}`);
+      }
+    }
+  }
 
   onBegin() {
-    const dir = path.resolve('test-results/run-logs');
-    fs.mkdirSync(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    this.logFile = path.join(dir, `health-probe-${stamp}.jsonl`);
-    fs.writeFileSync(
-      this.logFile,
-      JSON.stringify({ event: 'begin', timestamp: new Date().toISOString() }) +
-        '\n',
-    );
+    this.logFile = path.join(RUN_LOGS_DIR, `health-probe-${stamp}.jsonl`);
+    this.append({ event: 'begin', timestamp: new Date().toISOString() });
   }
 
   async onTestEnd(test: TestCase, result: TestResult) {
     this.testIndex += 1;
     const probe = await probeOnce();
-    const line = JSON.stringify({
+    this.append({
       event: 'test-end',
       idx: this.testIndex,
       timestamp: new Date().toISOString(),
@@ -129,18 +140,14 @@ class HealthProbeReporter implements Reporter {
       probeDbMs: probe.dbMs,
       probeError: probe.error,
     });
-    fs.appendFileSync(this.logFile, line + '\n');
   }
 
   onEnd() {
-    fs.appendFileSync(
-      this.logFile,
-      JSON.stringify({
-        event: 'end',
-        timestamp: new Date().toISOString(),
-        totalTests: this.testIndex,
-      }) + '\n',
-    );
+    this.append({
+      event: 'end',
+      timestamp: new Date().toISOString(),
+      totalTests: this.testIndex,
+    });
   }
 }
 

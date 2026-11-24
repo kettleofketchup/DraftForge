@@ -132,6 +132,23 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
             countdown=settings.SIGNUP_POST.debounce_seconds,
         )
 
+    def test_signup_only_burst_enqueues_one_task(self) -> None:
+        self.post_event.discord_announcement = False
+        self.post_event.discord_post_signups = True
+        self.post_event.discord_post_signups_channel_id = "signup-channel"
+        self.post_event.save()
+        with patch(
+            "events.discord.dispatch._current_interaction_id",
+            return_value="interaction",
+        ):
+            for _ in range(5):
+                notify_signup_changed(self.post_event)
+        self.apply_async.assert_called_once_with(
+            (self.pk,),
+            {"interaction_id": "interaction"},
+            countdown=settings.SIGNUP_POST.debounce_seconds,
+        )
+
     def test_second_run_reschedules_while_locked(self) -> None:
         self.assertIsNotNone(signup_post_lock.acquire_lock(self.pk))
 

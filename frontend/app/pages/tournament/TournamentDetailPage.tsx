@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { deleteTournament } from '~/components/api/api';
 import { toGameType } from '~/components/game/constants';
+import { useCurrentOrganization } from '~/components/organization/hooks/useOrganization';
 import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
 import type { TournamentType } from '~/components/tournament/types';
 import {
@@ -23,7 +24,6 @@ import { useTournament } from '~/hooks/useTournament';
 import { useTournamentSocket } from '~/hooks/useTournamentSocket';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { useLeagueStore } from '~/store/leagueStore';
-import { useOrgStore } from '~/store/orgStore';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -63,7 +63,7 @@ export const TournamentDetailPage: React.FC = () => {
     );
   }, [tournament]);
 
-  // Sync hydrated data to userStore for ~35 existing consumers
+  // Sync hydrated data to userStore for its existing consumers
   useEffect(() => {
     if (hydratedTournament) {
       // Ingest _users dict into entity cache for cross-page deduplication
@@ -168,10 +168,10 @@ export const TournamentDetailPage: React.FC = () => {
     setActiveTab(tab);
     setPendingDraftId(Number.isNaN(draftId) ? null : draftId);
     setPendingMatchId(matchId);
-    setLive(isLive);
-    if (isLive) {
+    if (isLive && !useTournamentStore.getState().live) {
       setAutoAdvance(true);
     }
+    setLive(isLive);
   }, [
     slug,
     setActiveTab,
@@ -182,17 +182,7 @@ export const TournamentDetailPage: React.FC = () => {
     navigate,
   ]);
 
-  // Set org context from tournament
-  useEffect(() => {
-    if (tournament?.organization_pk) {
-      useOrgStore.getState().getOrganization(tournament.organization_pk);
-    } else {
-      useOrgStore.getState().setCurrentOrg(null);
-    }
-    return () => {
-      useOrgStore.getState().reset();
-    };
-  }, [tournament?.organization_pk]);
+  useCurrentOrganization(tournament?.organization_pk ?? undefined);
 
   useProvideGameType(tournament ? toGameType(tournament.game_type) : null);
 

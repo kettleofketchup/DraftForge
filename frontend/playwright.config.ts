@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { BASE_URL } from './tests/playwright/fixtures/base-url';
+import { HTML_REPORT_DIR, OUTPUT_DIR } from './tests/playwright/run-dir';
 
 /**
  * Playwright configuration for E2E tests.
@@ -46,10 +47,11 @@ export default defineConfig({
 
   // Reporters: html + list locally, add github reporter in CI. The
   // health-probe reporter pings /api/healthz/ after every test and writes a
-  // JSONL timeseries to test-results/run-logs/ — used to correlate transient
-  // first-attempt timeouts with backend pressure across the run.
+  // JSONL timeseries to the run's run-logs/ — used to correlate transient
+  // first-attempt timeouts with backend pressure across the run. Output
+  // locations come from tests/playwright/run-dir.ts.
   reporter: [
-    ['html', { open: 'never' }],
+    ['html', { open: 'never', outputFolder: HTML_REPORT_DIR }],
     ['list'],
     ['./tests/playwright/reporters/health-probe-reporter.ts'],
     ...(process.env.CI
@@ -193,7 +195,8 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         // Always headless — visible browsers steal user focus during local
-        // runs. For visual debugging, open `test-results/.../trace.zip` via
+        // runs. For visual debugging, open
+        // `test-results/latest/artifacts/.../trace.zip` via
         // `npx playwright show-trace` instead.
         headless: true,
         launchOptions: {
@@ -328,5 +331,5 @@ export default defineConfig({
   },
 
   // Output directory for test artifacts
-  outputDir: 'test-results/',
+  outputDir: OUTPUT_DIR,
 });

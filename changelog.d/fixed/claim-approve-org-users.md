@@ -1,0 +1,1 @@
+- Approving a profile claim now updates the organization's Users tab and member count right away: the merged profile disappears and the claimer shows up, without reloading the page.

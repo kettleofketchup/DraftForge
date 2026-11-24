@@ -1,3 +1,4 @@
+import json
 import re
 import shutil
 from collections.abc import Callable
@@ -15,15 +16,28 @@ from scripts.slots import (
     compose_cmd,
     compose_env,
     compose_files,
+    dependency_closure,
     ensure_slot,
     prepare,
     run_one_off,
+    run_target,
     slot_env_for,
     split_verb,
 )
 
 MakeWt = Callable[[str], Path]
 SCALE = ["--scale", "celery-beat=0", "--scale", "discord-bot=0"]
+CONFIG_JSON = json.dumps(
+    {
+        "services": {
+            "redis": {},
+            "backend": {"depends_on": {"redis": {"condition": "service_started"}}},
+            "frontend": {},
+            "nginx": {"depends_on": {"backend": {}, "frontend": {}}},
+            "dota-lobby": {"depends_on": {"backend": {}}},
+        }
+    }
+)
 
 
 def _files(argv: list[str]) -> list[str]:
@@ -241,7 +255,8 @@ def test_run_one_off_with_slot_stops_only_new_services(
     wt = make_worktree("a")
     ensure_slot(wt, fake_host)
     fake_host.run_outputs = [
-        (0, "redis\nnginx\n"),
+        (0, CONFIG_JSON),
+        (0, "nginx\n"),
         (5, ""),
         (0, "redis\nnginx\nbackend\n"),
         (0, ""),
@@ -250,9 +265,18 @@ def test_run_one_off_with_slot_stops_only_new_services(
     assert run_one_off(["--rm", "backend", "true"], root=wt, host=fake_host) == 5
     calls = fake_host.compose_calls
     assert all(c[c.index("-p") + 1] == "df-s3" for c in calls)
-    assert calls[1][calls[1].index("run") :] == ["run", "--rm", "backend", "true"]
-    assert calls[3][calls[3].index("stop") :] == ["stop", "backend"]
-    assert calls[4][calls[4].index("rm") :] == ["rm", "-f", "backend"]
+    assert calls[0][-5:] == ["--profile", "*", "config", "--format", "json"]
+    assert calls[1][calls[1].index("ps") :] == [
+        "ps",
+        "--services",
+        "--status",
+        "running",
+        "--status",
+        "restarting",
+    ]
+    assert calls[2][calls[2].index("run") :] == ["run", "--rm", "backend", "true"]
+    assert calls[4][calls[4].index("stop") :] == ["stop", "redis"]
+    assert calls[5][calls[5].index("rm") :] == ["rm", "-f", "redis"]
     for e in fake_host.run_envs:
         assert (
             e["PATH"]
@@ -268,7 +292,14 @@ def test_run_one_off_cleans_up_when_run_raises(
     wt = make_worktree("a")
     ensure_slot(wt, fake_host)
     outputs = iter(
-        [(0, "redis\n"), KeyboardInterrupt(), (0, "redis\nbackend\n"), (0, ""), (0, "")]
+        [
+            (0, CONFIG_JSON),
+            (0, ""),
+            KeyboardInterrupt(),
+            (0, "redis\nbackend\n"),
+            (0, ""),
+            (0, ""),
+        ]
     )
     seen: list[list[str]] = []
 
@@ -282,7 +313,83 @@ def test_run_one_off_cleans_up_when_run_raises(
     monkeypatch.setattr(fake_host, "run", run)
     with pytest.raises(KeyboardInterrupt):
         run_one_off(["--rm", "backend", "true"], root=wt, host=fake_host)
-    assert seen[-1][seen[-1].index("rm") :] == ["rm", "-f", "backend"]
+    assert seen[-1][seen[-1].index("rm") :] == ["rm", "-f", "redis"]
+
+
+def test_run_one_off_keeps_services_it_did_not_start(
+    fake_host: FakeHost, make_worktree: MakeWt, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The simulator came up (just test::dota-lobby up) and frontend left its
+    # restart loop while the run was in progress: neither is a dependency of
+    # backend, so neither is the run's to remove.
+    monkeypatch.setenv("DF_SLOT", "3")
+    wt = make_worktree("a")
+    ensure_slot(wt, fake_host)
+    fake_host.run_outputs = [
+        (0, CONFIG_JSON),
+        (0, "redis\nbackend\nnginx\n"),
+        (0, ""),
+        (0, "redis\nbackend\nnginx\nfrontend\ndota-lobby\n"),
+    ]
+    assert (
+        run_one_off(
+            ["--rm", "--entrypoint", "", "backend", "sh", "-c", "true"],
+            root=wt,
+            host=fake_host,
+        )
+        == 0
+    )
+    verbs = [c[c.index("-p") + 2 :] for c in fake_host.compose_calls]
+    assert not any("stop" in v or "rm" in v for v in verbs)
+
+
+def test_run_one_off_no_deps_skips_cleanup(
+    fake_host: FakeHost, make_worktree: MakeWt, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    wt = make_worktree("a")
+    ensure_slot(wt, fake_host)
+    assert (
+        run_one_off(["--rm", "--no-deps", "backend", "true"], root=wt, host=fake_host)
+        == 0
+    )
+    (call,) = fake_host.compose_calls
+    assert "run" in call
+
+
+def test_run_one_off_unreadable_config_keeps_everything(
+    fake_host: FakeHost,
+    make_worktree: MakeWt,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    wt = make_worktree("a")
+    ensure_slot(wt, fake_host)
+    fake_host.run_outputs = [(1, ""), (0, "")]
+    assert run_one_off(["--rm", "backend", "true"], root=wt, host=fake_host) == 0
+    assert len(fake_host.compose_calls) == 2
+    assert "could not read the compose config" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("args", "expected"),
+    [
+        (["--rm", "--entrypoint", "", "backend", "sh", "-c", "x"], ("backend", False)),
+        (["-e", "A=1", "-u", "0", "--no-deps", "redis"], ("redis", True)),
+        (["--entrypoint=", "-eA=1", "nginx", "ls", "-l"], ("nginx", False)),
+        (["--rm"], (None, False)),
+    ],
+)
+def test_run_target(args: list[str], expected: tuple[str | None, bool]) -> None:
+    assert run_target(args) == expected
+
+
+def test_dependency_closure_is_transitive() -> None:
+    config = json.loads(CONFIG_JSON)
+    assert dependency_closure(config, "nginx") == {"backend", "frontend", "redis"}
+    assert dependency_closure(config, "backend") == {"redis"}
+    assert dependency_closure(config, "missing") == set()
 
 
 def test_run_one_off_mismatched_slot_propagates(

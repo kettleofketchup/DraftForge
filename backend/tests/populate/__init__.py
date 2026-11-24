@@ -55,6 +55,7 @@ from tests.populate.league_stats import (
     populate_league_stats_data,
     populate_league_stats_showcase,
 )
+from tests.populate.mmr_sync import populate_mmr_sync_data
 from tests.populate.org_delete import populate_org_delete
 from tests.populate.org_features import populate_org_features_data
 from tests.populate.organizations import (
@@ -62,6 +63,7 @@ from tests.populate.organizations import (
     populate_organizations_and_leagues,
 )
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
+from tests.populate.signup_history import populate_signup_history_data
 from tests.populate.steam import populate_steam_matches
 from tests.populate.tournament_discovery import populate_tournament_discovery
 from tests.populate.tournaments import populate_real_tournament_38, populate_tournaments
@@ -119,12 +121,16 @@ def populate_all(force: bool = False) -> None:
         # After every pk-sensitive step: these users take auto-incremented pks.
         ("Discord Name Sync Users", populate_discord_name_sync_users),
         ("Discord Avatars", populate_committed_avatars),
-        # Last: explicit pks (org/league 50, users 8000-8007) bump the
-        # auto-increment counters every step above relies on.
+        # Late: their explicit pks (org/league 50, users
+        # 8000-8007; org 60, users 9000-9006) bump the auto-increment
+        # counters every step above relies on.
         ("Game Org MMR Data", populate_game_org_mmr_data),
+        ("Signup History Data", populate_signup_history_data),
         # Its tournament (explicit pk 950) brings auto-pk teams, games and
         # matches, so it goes after every pk-sensitive step.
         ("Activity Bracket Data", populate_activity_bracket_data),
+        # Explicit pks (orgs 55-56, users 8100-8104), after Game Org MMR.
+        ("MMR Sync API Data", populate_mmr_sync_data),
     ]
 
     console = Console()
@@ -175,6 +181,8 @@ __all__ = [
     "populate_user_edit_data",
     "populate_events_data",
     "populate_game_org_mmr_data",
+    "populate_mmr_sync_data",
+    "populate_signup_history_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_league_stats_data",
