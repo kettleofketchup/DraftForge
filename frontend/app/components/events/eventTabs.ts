@@ -7,9 +7,9 @@ export type EventTabCounts = {
 
 export type EventTabOption = { value: string; label: string };
 
-const STAFF_TABS = new Set(['history']);
+const STAFF_TABS = new Set(['discord', 'history']);
 
-/** Phone page-nav options for the event page; History is staff-only. */
+/** Phone page-nav options; Discord and History are staff-only. */
 export function eventTabOptions(
   isAdmin: boolean,
   counts: EventTabCounts,
@@ -24,7 +24,7 @@ export function eventTabOptions(
     ...(counts.removed > 0
       ? [{ value: 'removed', label: `${counts.removed} Removed` }]
       : []),
-    { value: 'discord', label: 'Discord' },
+    ...(isAdmin ? [{ value: 'discord', label: 'Discord' }] : []),
     ...(isAdmin ? [{ value: 'history', label: 'History' }] : []),
   ];
 }

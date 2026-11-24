@@ -11,7 +11,7 @@ import { usePromoEvents, usePromoTemplates } from './queries';
 import {
   DEFAULT_CANDIDATE_FILTERS,
   type CandidateFilters,
-  type CandidateRow,
+  type LinkedCandidate,
   type PromoEvent,
   type PromoSendResult,
 } from './schemas';
@@ -50,7 +50,7 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const [filters, setFilters] = useState<CandidateFilters>(
     DEFAULT_CANDIDATE_FILTERS,
   );
-  const [candidate, setCandidate] = useState<CandidateRow | null>(null);
+  const [candidate, setCandidate] = useState<LinkedCandidate | null>(null);
   const [justSent, setJustSent] = useState<number | null>(null);
 
   const resetEvent = useCallback((id: number | null): void => {
@@ -79,7 +79,7 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const onSent = useCallback((send: PromoSendResult | null) => {
     setJustSent(send?.id ?? null);
   }, []);
-  const onSelectCandidate = (row: CandidateRow): void => {
+  const onSelectCandidate = (row: LinkedCandidate): void => {
     setCandidate(row);
     setJustSent(null);
   };
@@ -143,7 +143,13 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
             access={access}
             eventId={selectedEvent.id}
             filters={filters}
-            onFiltersChange={setFilters}
+            onFiltersChange={(next) => {
+              if (next.source !== filters.source) {
+                setCandidate(null);
+                setJustSent(null);
+              }
+              setFilters(next);
+            }}
             selectedPk={candidate?.user_pk ?? null}
             onSelect={onSelectCandidate}
             hideUndoFor={justSent}

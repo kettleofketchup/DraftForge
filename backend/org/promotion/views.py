@@ -15,7 +15,17 @@ from org.feature_errors import not_permitted, require_org_staff, require_promote
 from org.features import FeatureKey, org_has_feature
 from org.models import Organization, PromoSend, PromoTemplate
 from org.permissions import has_org_staff_access
-from org.promotion.recipients import CandidateRow, candidates, clamp_pool_n
+from org.promotion.recipients import (
+    DEFAULT_POOL_N,
+    MAX_DAYS,
+    CandidateRow,
+    CandidateSource,
+    candidates,
+    clamp_days,
+    clamp_pool_n,
+    find_guild_joiner,
+    user_for_guild_member,
+)
 from org.promotion.render import (
     PLACEHOLDERS,
     build_context,
@@ -24,6 +34,7 @@ from org.promotion.render import (
 )
 from org.promotion.serializers import (
     CandidatesQuerySerializer,
+    DiscordMemberRequestSerializer,
     PromoEventSerializer,
     PromoTemplateSerializer,
     RenderRequestSerializer,
@@ -188,17 +199,62 @@ def promotion_candidates(request: Request, org_id: int, event_id: int) -> Respon
     query.is_valid(raise_exception=True)
     params = query.validated_data
     n = clamp_pool_n(params.get("n") or None)
+    days = clamp_days(params.get("days") or None)
+    source = CandidateSource(params["source"])
     rows = candidates(
         org,
         event,
         n=n,
         sender=request.user,
+        source=source,
+        days=days,
         hide_signed_up=params["hide_signed_up"],
         hide_messaged=params["hide_messaged"],
         q=params["q"],
     )
     _fill_can_undo(rows, request.user, org)
-    return Response({"n": n, "rows": rows})
+    return Response({"source": source, "n": n, "days": days, "rows": rows})
+
+
+@api_view(["POST"])
+@parser_classes([JSONParser])
+@permission_classes([AllowAny])
+def promotion_discord_member(request: Request, org_id: int, event_id: int) -> Response:
+    org = _promoter_org(request, org_id)
+    event = _event(org, event_id)
+    body = DiscordMemberRequestSerializer(data=request.data)
+    body.is_valid(raise_exception=True)
+    discord_id = body.validated_data["discord_id"]
+    joiner = find_guild_joiner(org, discord_id)
+    if joiner is None:
+        raise ValidationError(
+            {"discord_id": ["not a recent member of this organization's Discord"]}
+        )
+    user = user_for_guild_member(joiner["member"])
+    log.info(
+        "promo_discord_member_resolved",
+        system="org",
+        subsystem="promotion",
+        org_id=org.pk,
+        event_id=event.pk,
+        user_id=user.pk,
+        actor_id=request.user.pk,
+    )
+    rows = candidates(
+        org,
+        event,
+        n=DEFAULT_POOL_N,
+        sender=request.user,
+        source=CandidateSource.DISCORD,
+        days=MAX_DAYS,
+        hide_signed_up=False,
+        hide_messaged=False,
+    )
+    row = next((r for r in rows if r["user_pk"] == user.pk), None)
+    if row is None:
+        raise ValidationError({"discord_id": ["this player cannot be promoted to"]})
+    _fill_can_undo([row], request.user, org)
+    return Response(row)
 
 
 @api_view(["POST"])
