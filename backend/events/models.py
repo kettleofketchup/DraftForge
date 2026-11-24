@@ -706,6 +706,7 @@ class EventSignup(models.Model):
         null=True,
         db_default=RsvpClass.STANDARD,
     )
+    self_made = models.BooleanField(default=False, db_default=False)
 
     objects = line.EventSignupQuerySet.as_manager()
 

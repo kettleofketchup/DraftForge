@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
@@ -7,6 +7,11 @@ import { GAME_TYPE, type GameTypeValue } from '~/components/game/constants';
 import { resetGameType, withGameType } from '~/test-utils/gameType';
 import { MmrApprovalModal } from '../MmrApprovalModal';
 import type { EventSignupType } from '../schemas';
+
+const mutate = vi.hoisted(() => vi.fn());
+vi.mock('~/features/steam-verification', () => ({
+  useSetSteamVerification: () => ({ mutate, isPending: false }),
+}));
 
 const signup = {
   id: 11,
@@ -21,11 +26,11 @@ const signup = {
   user_data: { pk: 5, username: 'player-five', steam_account_id: 123456 },
 } as unknown as EventSignupType;
 
-function renderModal(gameType: GameTypeValue) {
+function renderModal(gameType: GameTypeValue, row: EventSignupType = signup) {
   withGameType(gameType);
   render(
     <MmrApprovalModal
-      signup={signup}
+      signup={row}
       open
       onOpenChange={vi.fn()}
       onApprove={vi.fn()}
@@ -49,5 +54,80 @@ describe('MmrApprovalModal external profile links', () => {
     expect(screen.getByText('player-five')).toBeTruthy();
     expect(screen.queryByTitle('View Dotabuff profile')).toBeNull();
     expect(screen.queryByText('Dotabuff')).toBeNull();
+  });
+});
+
+describe('MmrApprovalModal Friend ID verification', () => {
+  afterEach(() => {
+    cleanup();
+    resetGameType();
+    mutate.mockReset();
+  });
+
+  const verifiable = {
+    ...signup,
+    can_verify_steam_account: true,
+    user_data: {
+      ...signup.user_data,
+      steam_account_verified: false,
+      steam_account_exists_checked: true,
+    },
+  } as unknown as EventSignupType;
+
+  it.each([GAME_TYPE.DOTA2, GAME_TYPE.DEADLOCK])(
+    'shows the Unverified badge next to the Friend ID (game %s)',
+    (gameType) => {
+      renderModal(gameType);
+      expect(screen.getByTestId('mmr-modal-friend-id').textContent).toContain(
+        'Friend ID 123456',
+      );
+      expect(screen.getByTestId('steam-verification-unverified')).toBeTruthy();
+    },
+  );
+
+  it('hides Verify when the row says the viewer cannot verify', () => {
+    renderModal(GAME_TYPE.DOTA2);
+    expect(screen.queryByTestId('steam-verify-button')).toBeNull();
+  });
+
+  it('Verify posts the displayed Friend ID when the row allows it', () => {
+    renderModal(GAME_TYPE.DOTA2, verifiable);
+    fireEvent.click(screen.getByTestId('steam-verify-button'));
+    expect(mutate).toHaveBeenCalledWith({
+      verified: true,
+      steamAccountId: 123456,
+    });
+  });
+
+  it('shows a refetched row as verified and keeps the typed MMR', () => {
+    withGameType(GAME_TYPE.DOTA2);
+    const props = { open: true, onOpenChange: vi.fn(), onApprove: vi.fn() };
+    const { rerender } = render(
+      <MmrApprovalModal signup={verifiable} {...props} />,
+    );
+    fireEvent.change(screen.getByTestId('mmr-input'), {
+      target: { value: '4100' },
+    });
+    const refetched = {
+      ...verifiable,
+      user_data: {
+        ...verifiable.user_data,
+        steam_account_verified: true,
+        steam_account_verified_org_name: 'Org Seven',
+      },
+    } as unknown as EventSignupType;
+    rerender(<MmrApprovalModal signup={refetched} {...props} />);
+    expect(screen.getByTestId('steam-verification-verified')).toBeTruthy();
+    expect((screen.getByTestId('mmr-input') as HTMLInputElement).value).toBe(
+      '4100',
+    );
+  });
+
+  it('keeps a single Dotabuff link on Dota and none on Deadlock', () => {
+    renderModal(GAME_TYPE.DOTA2, verifiable);
+    expect(screen.getAllByTitle('View Dotabuff profile')).toHaveLength(1);
+    cleanup();
+    renderModal(GAME_TYPE.DEADLOCK, verifiable);
+    expect(screen.queryByTitle('View Dotabuff profile')).toBeNull();
   });
 });

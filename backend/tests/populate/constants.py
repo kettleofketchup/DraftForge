@@ -130,3 +130,12 @@ MOCK_USERNAMES = [
 
 NAME_SYNC_USERNAME: Final[str] = "name_sync_dragonclaw"
 NAME_SYNC_GLOBAL_ONLY_USERNAME: Final[str] = "name_sync_globalonly"
+
+# populate_steam_verification_data; mirrored in frontend fixtures/constants.ts.
+STEAM_VERIFY_EVENT_NAME: Final[str] = "Steam Friend ID Verify Event"
+STEAM_VERIFY_UNVERIFIED_USERNAME: Final[str] = "steam_verify_unverified"
+STEAM_VERIFY_UNVERIFIED_PK: Final[int] = 5101
+STEAM_VERIFY_UNVERIFIED_FRIEND_ID: Final[int] = 939924373
+STEAM_VERIFY_VERIFIED_USERNAME: Final[str] = "steam_verify_verified"
+STEAM_VERIFY_VERIFIED_PK: Final[int] = 5102
+STEAM_VERIFY_VERIFIED_FRIEND_ID: Final[int] = 939924374

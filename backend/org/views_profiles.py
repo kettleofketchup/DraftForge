@@ -3,20 +3,25 @@
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.db.models import QuerySet
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
+from app.models import CustomUser
+from app.permissions_steam import can_verify_steam_account
 from events.eligibility import (
     claim_friend_id,
+    precheck_friend_id,
     refresh_unmet_requirements,
     validate_friend_id,
 )
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.permissions import has_org_staff_access
+from user.querysets import with_user_profiles
 
 DOTA_PROFILE_FIELDS = {
     "rank_status",
@@ -35,9 +40,21 @@ DOTA_PROFILE_FIELDS = {
 FRIEND_ID_FIELD = "steam_account_id"
 
 
+def _friend_id_error(exc: ValidationError) -> Response:
+    http_status = (
+        status.HTTP_429_TOO_MANY_REQUESTS
+        if exc.code == "steam_lookup_rate_limited"
+        else status.HTTP_400_BAD_REQUEST
+    )
+    return Response(
+        {FRIEND_ID_FIELD: exc.messages[0], "code": exc.code}, status=http_status
+    )
+
+
 def _serialize_dota_profile(
     profile: PlayerDotaProfile, org_user: OrgUser
 ) -> dict[str, Any]:
+    user = org_user.user
     return {
         "id": profile.pk,
         "org_user_id": profile.org_user_id,
@@ -48,13 +65,25 @@ def _serialize_dota_profile(
         "mmr": profile.mmr,
         "rank_screenshot": profile.rank_screenshot or None,
         "battlecup_screenshot": profile.battlecup_screenshot or None,
-        FRIEND_ID_FIELD: org_user.user.steam_account_id,
+        FRIEND_ID_FIELD: user.steam_account_id,
+        "steam_account_verified": user.steam_account_verified,
+        "steam_account_verified_at": (
+            user.steam_account_verified_at.isoformat()
+            if user.steam_account_verified_at
+            else None
+        ),
+        "steam_account_verified_org_name": user.steam_account_verified_org_name,
+        "steam_account_exists_checked": user.steam_account_exists_checked,
         "pos_1": profile.pos_1,
         "pos_2": profile.pos_2,
         "pos_3": profile.pos_3,
         "pos_4": profile.pos_4,
         "pos_5": profile.pos_5,
     }
+
+
+def _org_users() -> QuerySet[OrgUser]:
+    return with_user_profiles(OrgUser.objects.all(), "user", steam_verified_org=True)
 
 
 def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
@@ -72,20 +101,27 @@ def _invalid_rank_status(data: dict[str, Any]) -> Response | None:
     return None
 
 
+def _friend_id(data: dict[str, Any]) -> str:
+    return str(data.get(FRIEND_ID_FIELD) or "")
+
+
 def _apply_dota_profile_patch(
-    org_user: OrgUser, data: dict[str, Any]
+    org_user: OrgUser, data: dict[str, Any], *, actor: CustomUser
 ) -> PlayerDotaProfile:
-    """Raises ValidationError for a bad friend ID before writing anything."""
+    """Raises ValidationError for a bad friend ID before writing anything.
+
+    The Steam existence pre-check is the caller's job (outside atomic).
+    """
     fields = {f: data[f] for f in DOTA_PROFILE_FIELDS if f in data}
     user = org_user.user
-    friend_id = str(data.get(FRIEND_ID_FIELD) or "")
-    validate_friend_id(friend_id, user)
+    friend_id = _friend_id(data)
+    validate_friend_id(friend_id, user, check_exists=False)
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     previous_status = profile.rank_status
     for field, value in fields.items():
         setattr(profile, field, value)
     profile.sync_rank_declaration(previous_status)
-    claim_friend_id(user, friend_id)
+    claim_friend_id(user, friend_id, verified_by=actor)
     profile.save()
     invalidate_obj(profile)
     invalidate_obj(org_user)
@@ -100,7 +136,7 @@ def get_my_dota_profile(request: Request, org_id: int) -> Response:
     GET /api/organizations/<org_id>/my-dota-profile/
     """
     try:
-        org_user = OrgUser.objects.get(user=request.user, organization_id=org_id)
+        org_user = _org_users().get(user=request.user, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "Not a member of this organization"},
@@ -118,7 +154,7 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
     PATCH /api/organizations/<org_id>/my-dota-profile/
     """
     try:
-        org_user = OrgUser.objects.get(user=request.user, organization_id=org_id)
+        org_user = _org_users().get(user=request.user, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "Not a member of this organization"},
@@ -128,12 +164,10 @@ def update_my_dota_profile(request: Request, org_id: int) -> Response:
     if (error := _invalid_rank_status(request.data)) is not None:
         return error
     try:
-        profile = _apply_dota_profile_patch(org_user, request.data)
+        precheck_friend_id(_friend_id(request.data), request.user)
+        profile = _apply_dota_profile_patch(org_user, request.data, actor=request.user)
     except ValidationError as e:
-        return Response(
-            {FRIEND_ID_FIELD: e.messages[0]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return _friend_id_error(e)
     return Response(_serialize_dota_profile(profile, org_user))
 
 
@@ -152,7 +186,7 @@ def get_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Respon
         return Response(status=status.HTTP_403_FORBIDDEN)
 
     try:
-        org_user = OrgUser.objects.get(user_id=user_pk, organization_id=org_id)
+        org_user = _org_users().get(user_id=user_pk, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "User is not a member of this organization"},
@@ -178,7 +212,7 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
         return Response(status=status.HTTP_403_FORBIDDEN)
 
     try:
-        org_user = OrgUser.objects.get(user_id=user_pk, organization_id=org_id)
+        org_user = _org_users().get(user_id=user_pk, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(
             {"error": "User is not a member of this organization"},
@@ -188,12 +222,13 @@ def update_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
     if (error := _invalid_rank_status(request.data)) is not None:
         return error
     try:
-        profile = _apply_dota_profile_patch(org_user, request.data)
+        if can_verify_steam_account(request.user, org_user.user) is None:
+            precheck_friend_id(
+                _friend_id(request.data), org_user.user, budget_user=request.user
+            )
+        profile = _apply_dota_profile_patch(org_user, request.data, actor=request.user)
     except ValidationError as e:
-        return Response(
-            {FRIEND_ID_FIELD: e.messages[0]},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return _friend_id_error(e)
     return Response(_serialize_dota_profile(profile, org_user))
 
 
@@ -212,7 +247,7 @@ def delete_user_dota_profile(request: Request, org_id: int, user_pk: int) -> Res
         return Response(status=status.HTTP_403_FORBIDDEN)
 
     try:
-        org_user = OrgUser.objects.get(user_id=user_pk, organization_id=org_id)
+        org_user = _org_users().get(user_id=user_pk, organization_id=org_id)
     except OrgUser.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 

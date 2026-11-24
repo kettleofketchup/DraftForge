@@ -202,7 +202,8 @@ directly in `backend/` fails the recipe, because no group would run it.
 
 Vitest, the promotion fixture check and the slot guards run in the
 `Unit tests (Vitest, slot guards)` job of `.github/workflows/unit-tests.yml`, on a runner
-without the Docker stack.
+without the Docker stack. The frontend typecheck runs in its own `Typecheck (frontend)`
+job in the same workflow.
 
 `just py::test` runs the same modules with pytest on the host (`backend/pytest.ini`,
 `backend/conftest.py`): same temp-file test DB and `DOTA_LOBBY_*` defaults as

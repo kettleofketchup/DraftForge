@@ -88,3 +88,37 @@ describe('steamAccountIdConflictFromError', () => {
     );
   });
 });
+
+describe('steamAccountIdConflictFromError Steam lookup codes', () => {
+  const notFound =
+    'No Steam account has Friend ID 123. Check the number on your Dota 2 profile or Steam friends page.';
+  const rateLimited = 'Too many Friend ID checks. Try again in an hour.';
+
+  it.each([
+    ['steam_account_not_found', notFound],
+    ['steam_lookup_rate_limited', rateLimited],
+    ['invalid_friend_id', 'Friend ID must be a number.'],
+  ])('reads the org endpoint {error, code} body for %s', (code, message) => {
+    expect(steamAccountIdConflictFromError({ error: message, code })).toBe(
+      message,
+    );
+  });
+
+  it.each([
+    ['steam_account_not_found', notFound],
+    ['steam_lookup_rate_limited', rateLimited],
+  ])(
+    'reads the global endpoint {steam_account_id: [msg], code} body for %s',
+    (code, message) => {
+      expect(
+        steamAccountIdConflictFromError({ steam_account_id: [message], code }),
+      ).toBe(message);
+    },
+  );
+
+  it('ignores an {error, code} body with an unrelated code', () => {
+    expect(
+      steamAccountIdConflictFromError({ error: 'Nope', code: 'not_allowed' }),
+    ).toBeNull();
+  });
+});
