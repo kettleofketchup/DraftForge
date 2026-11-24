@@ -3,7 +3,9 @@
  * steam_account_id is unique site-wide, so the form warns on blur rather
  * than letting the save fail. The backend returns the same conflict on save
  * as a backstop (409 from the org endpoint, DRF field errors from the global
- * one), which is what steamAccountIdConflictFromError reads.
+ * one), which is what steamAccountIdConflictFromError reads. It also reads
+ * the Steam lookup refusals (unknown account, rate limit, bad format) so they
+ * land on the Friend ID field too.
  */
 
 import { DisplayName } from '~/components/user/avatar';
@@ -15,6 +17,13 @@ export interface SteamAccountIdHolder {
 }
 
 const SUFFIX = 'Saving will fail until it is freed from that account.';
+
+const FRIEND_ID_ERROR_CODES: ReadonlySet<string> = new Set([
+  'steam_account_id_taken',
+  'steam_account_not_found',
+  'steam_lookup_rate_limited',
+  'invalid_friend_id',
+]);
 
 export function shouldLookupSteamAccountId(
   value: number | null | undefined,
@@ -46,7 +55,8 @@ export function steamAccountIdConflictFromError(body: unknown): string | null {
   const data = body as Record<string, unknown>;
 
   if (
-    data.code === 'steam_account_id_taken' &&
+    typeof data.code === 'string' &&
+    FRIEND_ID_ERROR_CODES.has(data.code) &&
     typeof data.error === 'string'
   ) {
     return data.error;

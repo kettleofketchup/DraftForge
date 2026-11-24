@@ -4,6 +4,7 @@
  * API functions for user, auth, profile, and search operations.
  */
 
+import { isAxiosError } from 'axios';
 import type { SteamAccountIdHolder } from '~/components/user/userCard/steamAccountIdConflict';
 import type { GuildMembers, UsersType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
@@ -73,6 +74,26 @@ export async function UpdateProfile(
 ): Promise<UserType> {
   const response = await axios.post(`/profile_update`, data);
   return response.data as UserType;
+}
+
+const PROFILE_FRIEND_ID_CODES: ReadonlySet<string> = new Set([
+  'steam_account_not_found',
+  'invalid_friend_id',
+  'steam_lookup_rate_limited',
+]);
+
+/** Friend ID message from a failed UpdateProfile, for the form field; else null. */
+export function profileFriendIdError(err: unknown): string | null {
+  if (!isAxiosError(err) || !err.response) return null;
+  const data: unknown = err.response.data;
+  if (!data || typeof data !== 'object') return null;
+  const { error, code } = data as { error?: unknown; code?: unknown };
+  if (typeof error !== 'string' || error.length === 0) return null;
+  if (err.response.status === 409) return error;
+  if (typeof code === 'string' && PROFILE_FRIEND_ID_CODES.has(code)) {
+    return error;
+  }
+  return null;
 }
 
 /**

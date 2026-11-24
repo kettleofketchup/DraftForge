@@ -93,6 +93,7 @@ describe('useApproveClaim', () => {
     });
     expect(qc.getQueryData(['user', null])).toEqual({ placeholder: true });
     expect(qc.getQueryData(['user', TARGET])).toEqual({ pk: TARGET });
+    expect(qc.getQueryState(ORG_KEY)?.isInvalidated).toBe(true);
     expect(qc.getQueryState(['user', CLAIMER])?.isInvalidated).toBe(true);
   });
 
