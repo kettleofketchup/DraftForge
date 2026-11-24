@@ -23,7 +23,8 @@ export function PromotionTab({
       <div>
         <h2 className="text-xl font-semibold">Promotion</h2>
         <p className="text-sm text-muted-foreground">
-          Invite recent players to upcoming events over Discord DMs.
+          Invite recent players, active members and new Discord members to
+          upcoming events over Discord DMs.
         </p>
       </div>
       <PromotionDashboard orgId={orgId} access={access} />
