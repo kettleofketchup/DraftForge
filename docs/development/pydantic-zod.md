@@ -69,7 +69,7 @@ gen-thing *args:
 ```
 
 Commit the generated file and add `just py::gen-thing --check` to the `unit` job in
-`.github/workflows/playwright.yml`. That job has both the poetry venv and node.
+`.github/workflows/unit-tests.yml`. That job has both the poetry venv and node.
 
 ## Limits
 
