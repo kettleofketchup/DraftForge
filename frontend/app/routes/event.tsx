@@ -153,6 +153,7 @@ import {
 } from '~/features/org-features';
 import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
+  invalidateEventLists,
   invalidateSignupHistory,
   removeSignupHistoryQueries,
   useEvent,
@@ -1010,6 +1011,8 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      void invalidateEventLists(queryClient);
       invalidateSignupHistory(queryClient, eventId!);
       void invalidateConductQueries(queryClient, orgId);
       // Backend adds the user as an OrgUser when an admin signs them up;

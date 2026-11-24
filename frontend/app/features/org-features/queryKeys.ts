@@ -153,6 +153,19 @@ export async function invalidateOrgContributionQueries(
   ]);
 }
 
+/** Every standing track, the contributions ledger and leadership reviews of an org, for all viewers. */
+export async function invalidateOrgStandingQueries(
+  queryClient: QueryClient,
+  orgId?: number | null,
+): Promise<void> {
+  const scope = orgId == null ? [] : [orgId];
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: [STANDING, ...scope] }),
+    queryClient.invalidateQueries({ queryKey: [CONTRIBUTIONS, ...scope] }),
+    queryClient.invalidateQueries({ queryKey: [LEADERSHIP, ...scope] }),
+  ]);
+}
+
 function startsWith(key: QueryKey, prefix: QueryKey): boolean {
   return (
     prefix.length <= key.length &&
