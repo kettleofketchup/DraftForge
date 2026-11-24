@@ -83,4 +83,12 @@ def reset_org_features(request: Request) -> Response:
             {"detail": "release_gate must be true or false."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    return Response(reset_org_features_data(release_gate=release_gate))
+    audiences = request.data.get("audiences", False)
+    if not isinstance(audiences, bool):
+        return Response(
+            {"detail": "audiences must be true or false."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return Response(
+        reset_org_features_data(release_gate=release_gate, audiences=audiences)
+    )

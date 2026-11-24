@@ -143,7 +143,13 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
             access={access}
             eventId={selectedEvent.id}
             filters={filters}
-            onFiltersChange={setFilters}
+            onFiltersChange={(next) => {
+              if (next.source !== filters.source) {
+                setCandidate(null);
+                setJustSent(null);
+              }
+              setFilters(next);
+            }}
             selectedPk={candidate?.user_pk ?? null}
             onSelect={onSelectCandidate}
             hideUndoFor={justSent}
