@@ -14,7 +14,17 @@ permissions:
 
 jobs:
   label:
-    runs-on: ubuntu-latest
+    # Small job: the home runner for allowlisted same-repo PRs when SELF_HOSTED_RUNNERS
+    # is 'true', to free hosted slots (docs/development/ci-runners.md). Same guard as
+    # playwright.yml `prepare`; scripts/check-runs-on.sh holds the allowlist.
+    runs-on: >-
+      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
+      && 'draftforge-home' || 'ubuntu-latest' }}
+    timeout-minutes: 5
     steps:
       - uses: actions/labeler@v5
         with:

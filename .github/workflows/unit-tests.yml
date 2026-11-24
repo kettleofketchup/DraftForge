@@ -39,10 +39,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Frontend typecheck, split out of `unit`; it needs no toolchain or registry access.
+  # Frontend typecheck, its own job so it can run on the home runner (it needs neither
+  # the toolchain nor registry access). Same guard as playwright.yml `prepare`;
+  # scripts/check-runs-on.sh holds the allowlist (docs/development/ci-runners.md).
   typecheck:
     name: Typecheck (frontend)
-    runs-on: ubuntu-latest
+    runs-on: >-
+      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
+      && 'draftforge-home' || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       contents: read
