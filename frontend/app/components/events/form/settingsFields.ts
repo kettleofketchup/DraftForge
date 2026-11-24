@@ -383,9 +383,10 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       keywords: ['ping'],
     },
     discord_notify_new_events: {
-      label: 'Message interested users',
+      label: 'Post new events',
       description:
-        'DM subscribed users when new events are created or cancelled',
+        'Post each new series event in the announcement channel when it is created',
+      keywords: ['new event', 'channel', 'notify'],
     },
   },
 };

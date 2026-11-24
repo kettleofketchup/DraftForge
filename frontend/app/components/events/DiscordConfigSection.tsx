@@ -158,7 +158,7 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
   control: Control<T>;
   isRepeater: boolean;
   organizationId: number;
-  /** Gates the repeater-only "Message interested users" block. Defaults to
+  /** Gates the repeater-only "Post new events" block. Defaults to
    *  `isRepeater`; a one-off event inherits the series' setting instead of
    *  exposing its own toggle. */
   showNotifyNewEvents?: boolean;
@@ -514,14 +514,14 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
         )}
       </div>
 
-      {/* Notify new events — repeater only */}
+      {/* New-event channel post — repeater only */}
       {showNotifyNewEvents && (
         <div className="rounded-md border border-border p-3">
           <CheckboxField
             control={control}
             name="discord_notify_new_events"
-            label="Message interested users"
-            description="DM subscribed users when new events are created or cancelled"
+            label="Post new events"
+            description="Post each new series event in the announcement channel when it is created"
           />
         </div>
       )}
