@@ -1,0 +1,1 @@
+- Initialize team draft Auto mode before opening the modal so a delayed URL update cannot reset manual round navigation.

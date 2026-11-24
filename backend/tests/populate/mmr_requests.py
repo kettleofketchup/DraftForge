@@ -1,8 +1,8 @@
 """Populate the MMR update request E2E data (tests.data.mmr_requests).
 
-populate_mmr_requests_data creates org/league 60, members 8100-8102 at an
-unverified 4200 org and league MMR, org staff 8103, league staff 8104 and
-outsider 8105. reset_mmr_requests, behind POST /api/tests/mmr-requests/reset/,
+populate_mmr_requests_data creates org/league 60, members 8200-8202 at an
+unverified 4200 org and league MMR, org staff 8203, league staff 8204 and
+outsider 8205. reset_mmr_requests, behind POST /api/tests/mmr-requests/reset/,
 deletes a member's requests (and their screenshots) and restores the baseline.
 mmr_requests_test_data is the lookup the spec reads.
 """

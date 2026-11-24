@@ -4,6 +4,11 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from common.game import GameType
+from org.models_api_tokens import (
+    OrgApiLimits,  # noqa: F401
+    OrgApiToken,  # noqa: F401
+    OrgApiTokenUsage,  # noqa: F401
+)
 from org.models_conduct import (
     AttendanceOutcome,  # noqa: F401
     OrgConductSettings,  # noqa: F401
@@ -182,6 +187,9 @@ class OrgLog(models.Model):
         ("update_leadership_settings", "Update Leadership Settings"),
         ("update_captain_traits", "Update Captain Traits"),
         ("delete_user_leadership", "Delete User Leadership"),
+        ("create_api_token", "Create API Token"),
+        ("revoke_api_token", "Revoke API Token"),
+        ("set_api_limits", "Set API Limits"),
     ]
 
     organization = models.ForeignKey(

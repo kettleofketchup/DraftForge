@@ -147,25 +147,26 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     }
   };
 
-  // Sync URL with modal open/close state
-  // Note: Don't call setLive here - TournamentDetailPage handles live state based on URL
+  // Initialize the local view before the URL navigation can finish.
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       // The Activity iframe must stay on /activity: leaving it drops the
       // Activity credential and lands on website routes that need a cookie login.
       if (embedded) return;
+      if (isOpen) setAutoAdvance(true);
+      setLive(isOpen);
       setOpen(isOpen);
       if (pk) {
         if (isOpen) {
-          // Add /draft to URL when opening - TournamentDetailPage will set live=true
+          // Add /draft to URL when opening.
           navigate(`/tournament/${pk}/teams/draft`, { replace: true });
         } else {
-          // Remove /draft from URL when closing - TournamentDetailPage will set live=false
+          // Remove /draft from URL when closing.
           navigate(`/tournament/${pk}/teams`, { replace: true });
         }
       }
     },
-    [embedded, pk, navigate],
+    [embedded, pk, navigate, setAutoAdvance, setLive],
   );
 
   // Auto-open modal when ?draft=open is in URL (from share URL)
