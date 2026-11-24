@@ -300,7 +300,7 @@ class CheckRunsOnTest(unittest.TestCase):
         )
 
     def test_npm_jobs_using_the_guard_fail(self):
-        # Moved back to hosted runners: `npm ci` is 3-5x slower on the home runner.
+        # These stay on hosted runners: `npm ci` is 3-5x slower on the home runner.
         for name, job in (
             ("frontend-format.yml", "prettier"),
             ("frontend-shadcn-lint.yml", "shadcn-lint"),
