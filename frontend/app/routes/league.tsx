@@ -137,6 +137,18 @@ export default function LeaguePage() {
       ? currentOrg
       : null;
   const canEdit = useIsLeagueAdmin(league, leagueOrg);
+  const currentUserStatus = useUserStore((s) => s.currentUserStatus);
+  const leagueOrgPk = league?.organization?.pk;
+  const lobbyBotsAccessSettled =
+    !!league &&
+    currentUserStatus === 'resolved' &&
+    (!leagueOrgPk || currentOrg?.pk === leagueOrgPk);
+
+  useEffect(() => {
+    if (lobbyBotsAccessSettled && !canEdit && activeTab === 'lobby-bots') {
+      setActiveTab('info');
+    }
+  }, [lobbyBotsAccessSettled, canEdit, activeTab]);
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!league) return [];
@@ -180,8 +192,9 @@ export default function LeaguePage() {
         ? [{ value: 'users', label: `${userCountDisplay} Users` }]
         : []),
       { value: 'matches', label: 'Matches' },
+      ...(canEdit ? [{ value: 'lobby-bots', label: 'Lobby bots' }] : []),
     ],
-    [leagueTournaments.length, userCountDisplay, canViewMembers],
+    [leagueTournaments.length, userCountDisplay, canViewMembers, canEdit],
   );
 
   usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);
@@ -253,6 +266,8 @@ export default function LeaguePage() {
           onTabChange={handleTabChange}
           canViewMembers={canViewMembers}
           memberAccessSettled={memberAccessSettled}
+          canManageLobbyBots={canEdit}
+          lobbyBotsAccessSettled={lobbyBotsAccessSettled}
         />
       </div>
 

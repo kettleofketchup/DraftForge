@@ -30,13 +30,13 @@ export interface EditLeagueOptions {
 /**
  * Tab names for league page navigation.
  */
-export type LeagueTab = 'info' | 'tournaments' | 'matches';
+export type LeagueTab = 'info' | 'tournaments' | 'matches' | 'lobby-bots';
 
 /**
  * Page Object for League pages.
  *
  * Encapsulates all interactions with the league UI including:
- * - Navigation between league tabs (Info, Tournaments, Matches)
+ * - Navigation between league tabs (Info, Tournaments, Matches, Lobby bots)
  * - Edit modal management
  * - League data display
  */
@@ -52,6 +52,8 @@ export class LeaguePage {
   readonly infoTab: Locator;
   readonly tournamentsTab: Locator;
   readonly matchesTab: Locator;
+  readonly lobbyBotsTab: Locator;
+  readonly botAccessPanel: Locator;
 
   // Edit modal elements
   readonly editButton: Locator;
@@ -81,6 +83,8 @@ export class LeaguePage {
       '[data-testid="league-tab-tournaments"]',
     );
     this.matchesTab = page.locator('[data-testid="league-tab-matches"]');
+    this.lobbyBotsTab = page.locator('[data-testid="league-tab-lobby-bots"]');
+    this.botAccessPanel = page.locator('[data-testid="bot-access-panel"]');
 
     // Edit modal elements
     this.editButton = page.locator('[data-testid="edit-league-button"]');
@@ -109,7 +113,7 @@ export class LeaguePage {
    * Navigate to a league page.
    *
    * @param leaguePk - League primary key
-   * @param tab - Optional tab to navigate to ('info' | 'tournaments' | 'matches')
+   * @param tab - Optional tab to navigate to ('info' | 'tournaments' | 'matches' | 'lobby-bots')
    */
   async goto(leaguePk: number, tab?: LeagueTab): Promise<void> {
     const path = tab ? `/leagues/${leaguePk}/${tab}` : `/leagues/${leaguePk}`;
@@ -134,13 +138,14 @@ export class LeaguePage {
   /**
    * Click on a league tab by name.
    *
-   * @param tabName - The tab to click ('info' | 'tournaments' | 'matches')
+   * @param tabName - The tab to click ('info' | 'tournaments' | 'matches' | 'lobby-bots')
    */
   async clickTab(tabName: LeagueTab): Promise<void> {
     const tabLocators: Record<LeagueTab, Locator> = {
       info: this.infoTab,
       tournaments: this.tournamentsTab,
       matches: this.matchesTab,
+      'lobby-bots': this.lobbyBotsTab,
     };
 
     const tab = tabLocators[tabName];
@@ -156,6 +161,16 @@ export class LeaguePage {
   private async waitForTabContent(tabName: LeagueTab): Promise<void> {
     // Wait for URL to update with the tab name
     await this.page.waitForURL(`**/${tabName}*`, { timeout: 10000 });
+    if (tabName === 'lobby-bots') {
+      await this.botAccessPanel.waitFor({ state: 'visible', timeout: 10000 });
+    }
+  }
+
+  /**
+   * Click the Lobby bots tab (league admins only).
+   */
+  async clickLobbyBotsTab(): Promise<void> {
+    await this.clickTab('lobby-bots');
   }
 
   /**
@@ -328,6 +343,7 @@ export class LeaguePage {
       info: this.infoTab,
       tournaments: this.tournamentsTab,
       matches: this.matchesTab,
+      'lobby-bots': this.lobbyBotsTab,
     };
 
     await expect(tabLocators[tabName]).toHaveAttribute('data-state', 'active');
@@ -423,10 +439,16 @@ export async function clickLeagueTab(
     info: 'league-tab-info',
     tournaments: 'league-tab-tournaments',
     matches: 'league-tab-matches',
+    'lobby-bots': 'league-tab-lobby-bots',
   };
 
   await page.locator(`[data-testid="${tabTestIds[tabName]}"]`).click();
   await page.waitForURL(`**/${tabName}*`, { timeout: 10000 });
+  if (tabName === 'lobby-bots') {
+    await page
+      .locator('[data-testid="bot-access-panel"]')
+      .waitFor({ state: 'visible', timeout: 10000 });
+  }
 }
 
 /**
