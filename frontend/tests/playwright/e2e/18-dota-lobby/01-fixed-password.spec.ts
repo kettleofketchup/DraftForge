@@ -71,9 +71,12 @@ test.describe('Dota lobby: fixed series password (e2e)', () => {
     await openBracket(page, tournament.pk);
     const dialog = await openMatchModal(page, game.pk);
     await expect(dialog.locator('[data-testid="lobby-panel"]')).toBeVisible();
+    const before = await getLobbyRow(context, game.pk);
     await dialog.locator('[data-testid="lobby-create-btn"]').click();
 
-    const row = await waitForLobbyRow(context, game.pk);
+    const row = await waitForLobbyRow(context, game.pk, undefined, {
+      previousId: before?.id,
+    });
     expect(row.password).toBe(password);
 
     // The simulated game coordinator lobby got exactly that password.

@@ -80,6 +80,15 @@ class StaffAddSignupTest(TestCase):
             with self.assertRaises(ValueError):
                 process_rsvp(event, self.user, actor=SYSTEM)
 
+    def test_process_rsvp_stale_open_instance_does_not_admit_a_closed_event(
+        self,
+    ) -> None:
+        event = self._make_event(EventState.SIGNUPS_OPEN)
+        Event.objects.filter(pk=event.pk).update(state=EventState.CANCELLED)
+        with self.assertRaises(ValueError):
+            process_rsvp(event, self.user, actor=SYSTEM)
+        self.assertFalse(EventSignup.objects.filter(user=self.user).exists())
+
     @patch("events.services.invalidate_after_commit")
     def test_staff_add_invalidates_cache(self, mock_invalidate):
         event = self._make_event(EventState.ROLL_CALL)
@@ -112,6 +121,20 @@ class StaffAddSignupTest(TestCase):
         )
         with self.assertRaises(ValueError):
             staff_add_signup(event, self.user, actor=SYSTEM)
+
+    def test_staff_add_failure_rolls_back_org_membership(self):
+        event = self._make_event(EventState.ROLL_CALL)
+        self.assertFalse(
+            OrgUser.objects.filter(user=self.user, organization=self.org).exists()
+        )
+        with (
+            patch("events.services._create_signup", side_effect=ValueError("boom")),
+            self.assertRaises(ValueError),
+        ):
+            staff_add_signup(event, self.user, actor=SYSTEM)
+        self.assertFalse(
+            OrgUser.objects.filter(user=self.user, organization=self.org).exists()
+        )
 
     def test_staff_add_re_rsvps_after_cancellation(self):
         """Cancelled signups can be staff-added again (covers _create_signup re-RSVP branch)."""

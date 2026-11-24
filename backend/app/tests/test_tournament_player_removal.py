@@ -70,7 +70,12 @@ class TournamentPlayerRemovalTests(TestCase):
 
         team.refresh_from_db()
         self.assertEqual(team.placement, 3)
-        self.assertNotEqual(team.captain_id, roster[0].pk)
+        self.assertEqual(team.captain_id, roster[0].pk)
+        self.assertEqual(
+            set(team.members.values_list("pk", flat=True)),
+            {user.pk for user in roster},
+        )
+        self.assertFalse(TeamLog.objects.filter(team=team).exists())
         self.assertFalse(self.tournament.users.filter(pk=roster[0].pk).exists())
 
     def test_team_with_games_survives_and_hands_over_captaincy(self) -> None:

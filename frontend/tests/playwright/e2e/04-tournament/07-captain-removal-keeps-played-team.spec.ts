@@ -64,7 +64,7 @@ test.describe('Removing a captain from the players list', () => {
     }
   });
 
-  test('@cicd keeps a played team and hands its captaincy to the deputy', async ({
+  test('@cicd keeps a knocked-out team and its historical captain', async ({
     page,
     context,
     loginAdmin,
@@ -84,7 +84,7 @@ test.describe('Removing a captain from the players list', () => {
     await played.getByTestId('team-card-name').click();
     const modal = page.getByTestId('team-modal');
     await expect(modal.getByTestId('team-modal-captain')).toContainText(
-      `${PREFIX}ko_2`,
+      `${PREFIX}ko_1`,
     );
 
     const team = await context.request.get(
@@ -93,7 +93,7 @@ test.describe('Removing a captain from the players list', () => {
     expect(team.status()).toBe(200);
     const body = await team.json();
     expect(body.placement).toBe(3);
-    expect(body.captain?.username).toBe(`${PREFIX}ko_2`);
+    expect(body.captain?.username).toBe(`${PREFIX}ko_1`);
 
     const tournamentResp = await context.request.get(
       `${API_URL}/tournaments/${tournament.pk}/`,

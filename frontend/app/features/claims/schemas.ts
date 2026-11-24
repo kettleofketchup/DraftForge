@@ -11,7 +11,8 @@ export const ProfileClaimRequestSchema = z.object({
   claimer_username: z.string(),
   claimer_discord_id: z.string().nullable(),
   claimer_avatar: z.string().nullable(),
-  target_user: z.number(),
+  // null once an approved claim merges the target profile away
+  target_user: z.number().nullable(),
   target_nickname: z.string().nullable(),
   target_username: z.string().nullable().optional(),
   target_discordNickname: z.string().nullable().optional(),
