@@ -14,6 +14,7 @@ from events.constants import EventState, RepeatFrequency, SignupAction, SignupSt
 from events.ledger import ActorRole, SignupMeans
 from events.models import Event, EventRepeater, EventSignup, SignupLedgerEntry
 from org.models import Organization
+from tournament.models import Tournament
 
 _SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "cleanup_stale_repeater_events.py"
@@ -120,6 +121,137 @@ class CleanupMovedEventTests(TestCase):
         self.assertEqual(clash_row.event_id, stale.pk)
         self.assertFalse(
             SignupLedgerEntry.objects.filter(subject_user=self.clash).exists()
+        )
+
+    def _user(self, name: str) -> CustomUser:
+        return CustomUser.objects.create(username=f"cme_{name}")
+
+    def _signup(
+        self, event: Event, user: CustomUser, status: str, position: int | None = None
+    ) -> EventSignup:
+        return EventSignup.objects.create(
+            event=event, user=user, status=status, waitlist_position=position
+        )
+
+    def test_migrate_signups_seats_only_while_target_has_room(self) -> None:
+        stale = self._event(
+            "Stale", self.sunday + timedelta(days=1), EventState.SIGNUPS_OPEN
+        )
+        target = self._event("Target", self.sunday, EventState.SIGNUPS_OPEN)
+        target.max_players = 2
+        target.save(update_fields=["max_players"])
+        self._signup(target, self._user("held"), SignupStatus.APPROVED)
+        target_wait = self._signup(
+            target, self._user("twait"), SignupStatus.WAITLISTED, 1
+        )
+        first = self._signup(stale, self._user("first"), SignupStatus.APPROVED)
+        second = self._signup(stale, self._user("second"), SignupStatus.CONFIRMED)
+        third = self._signup(stale, self._user("third"), SignupStatus.RSVP)
+        stale_wait = self._signup(
+            stale, self._user("swait"), SignupStatus.WAITLISTED, 1
+        )
+
+        moved, skipped = cleanup.migrate_signups(
+            stale, target, correlation_id="cleanup-0123456789ab"
+        )
+
+        self.assertEqual((moved, skipped), (4, 0))
+        for row in (first, second, third, stale_wait, target_wait):
+            row.refresh_from_db()
+        self.assertEqual(
+            (first.status, first.waitlist_position), (SignupStatus.APPROVED, None)
+        )
+        self.assertEqual(
+            [
+                (r.pk, r.status, r.waitlist_position)
+                for r in EventSignup.objects.filter(
+                    event=target, status=SignupStatus.WAITLISTED
+                ).order_by("waitlist_position")
+            ],
+            [
+                (target_wait.pk, SignupStatus.WAITLISTED, 1),
+                (second.pk, SignupStatus.WAITLISTED, 2),
+                (third.pk, SignupStatus.WAITLISTED, 3),
+                (stale_wait.pk, SignupStatus.WAITLISTED, 4),
+            ],
+        )
+        dest = SignupLedgerEntry.objects.get(
+            event=target, signup=second, action=SignupAction.MOVED_EVENT
+        )
+        self.assertEqual(dest.before["status"], SignupStatus.CONFIRMED)
+        self.assertIsNone(dest.before["waitlist_position"])
+        self.assertEqual(dest.after["status"], SignupStatus.WAITLISTED)
+        self.assertEqual(dest.after["waitlist_position"], 2)
+        source = SignupLedgerEntry.objects.get(
+            event=stale, signup=second, action=SignupAction.MOVED_EVENT
+        )
+        self.assertEqual(source.after, dest.after)
+        waited = SignupLedgerEntry.objects.get(
+            event=target, signup=stale_wait, action=SignupAction.MOVED_EVENT
+        )
+        self.assertEqual(waited.before["waitlist_position"], 1)
+        self.assertEqual(waited.after["waitlist_position"], 4)
+        self.assertFalse(
+            SignupLedgerEntry.objects.filter(action=SignupAction.PROMOTED).exists()
+        )
+
+    def test_migrate_signups_promotes_moved_waitlist_into_free_seats(self) -> None:
+        stale = self._event(
+            "Stale", self.sunday + timedelta(days=1), EventState.SIGNUPS_OPEN
+        )
+        stale.max_players = 1
+        stale.save(update_fields=["max_players"])
+        target = self._event("Target", self.sunday, EventState.SIGNUPS_OPEN)
+        target.max_players = 3
+        target.save(update_fields=["max_players"])
+        seated = self._signup(stale, self._user("seated"), SignupStatus.APPROVED)
+        later = self._signup(stale, self._user("later"), SignupStatus.WAITLISTED, 2)
+        earlier = self._signup(stale, self._user("earlier"), SignupStatus.WAITLISTED, 1)
+
+        cleanup.migrate_signups(stale, target, correlation_id="cleanup-0123456789ab")
+
+        for row in (seated, later, earlier):
+            row.refresh_from_db()
+        self.assertEqual(seated.status, SignupStatus.APPROVED)
+        self.assertIsNone(earlier.waitlist_position)
+        self.assertNotEqual(earlier.status, SignupStatus.WAITLISTED)
+        self.assertIsNone(later.waitlist_position)
+        self.assertNotEqual(later.status, SignupStatus.WAITLISTED)
+        earlier_move = SignupLedgerEntry.objects.get(
+            event=target, signup=earlier, action=SignupAction.MOVED_EVENT
+        )
+        self.assertEqual(earlier_move.after["status"], SignupStatus.WAITLISTED)
+        self.assertEqual(earlier_move.after["waitlist_position"], 1)
+        promoted = SignupLedgerEntry.objects.filter(
+            event=target, action=SignupAction.PROMOTED
+        )
+        self.assertEqual(promoted.count(), 2)
+        for entry in promoted:
+            self.assertEqual(entry.caused_by_id, earlier_move.pk)
+            self.assertEqual(entry.correlation_id, "cleanup-0123456789ab")
+
+    def test_migrate_tournament_users_skips_overflow(self) -> None:
+        stale = self._event(
+            "Stale", self.sunday + timedelta(days=1), EventState.SIGNUPS_OPEN
+        )
+        target = self._event("Target", self.sunday, EventState.SIGNUPS_OPEN)
+        target.max_players = 1
+        stale.tournament = Tournament.objects.create(name="S", date_played=tz.now())
+        target.tournament = Tournament.objects.create(name="T", date_played=tz.now())
+        stale.save(update_fields=["tournament"])
+        target.save(update_fields=["max_players", "tournament"])
+        fits = self._user("fits")
+        spills = self._user("spills")
+        self._signup(stale, fits, SignupStatus.APPROVED)
+        self._signup(stale, spills, SignupStatus.APPROVED)
+        stale.tournament.users.add(fits, spills)
+
+        cleanup.migrate_signups(stale, target, correlation_id="cleanup-0123456789ab")
+        added = cleanup.migrate_tournament_users(stale, target)
+
+        self.assertEqual(added, 1)
+        self.assertEqual(
+            set(target.tournament.users.values_list("pk", flat=True)), {fits.pk}
         )
 
     def _run_main(self, *argv: str) -> None:

@@ -18,7 +18,10 @@ export function DeleteLeagueDialog({
   league,
   onDeleted,
 }: DeleteLeagueDialogProps) {
-  const deleteMutation = useDeleteLeagueMutation(league.pk ?? 0);
+  const deleteMutation = useDeleteLeagueMutation(
+    league.pk ?? 0,
+    league.organization?.pk ?? undefined,
+  );
 
   async function handleDelete() {
     if (league.pk == null) return;

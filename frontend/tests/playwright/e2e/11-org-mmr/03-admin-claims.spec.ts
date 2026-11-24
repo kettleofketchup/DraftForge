@@ -1,8 +1,6 @@
 /**
  * Tests for Admin Claims Approval Flow
  *
- * Reference: docs/plans/2026-01-31-org-scoped-mmr.md
- *
  * Verifies that organization admins can approve or reject profile claim requests.
  *
  * Test flow:
@@ -33,7 +31,6 @@ interface CreateClaimResponse {
   claim_request: ClaimRequest;
 }
 
-// Helper to create a test claim request
 async function createClaimRequest(context: {
   request: {
     post: (url: string) => Promise<{
@@ -60,39 +57,32 @@ test.describe('Admin Claims Approval', () => {
     context,
     loginOrgAdmin,
   }) => {
-    // Create pending claim request
     const claim = await createClaimRequest(context);
     console.log(
       `Created claim ${claim.id} for org ${claim.organization} (${claim.organization_name})`,
     );
 
-    // Login as org admin
     await loginOrgAdmin();
 
-    // Navigate to organization claims tab
     await page.goto(`/organizations/${claim.organization}`);
     await page.waitForLoadState('networkidle');
     await page.getByTestId('org-tab-claims').click();
 
-    // Verify pending tab is active and claim is visible
     await expect(page.getByTestId('claims-tab-pending')).toBeVisible();
     await page.waitForSelector('[data-testid="claims-list"]', {
       timeout: 10000,
     });
     await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible();
 
-    // Click approve button
     await page.getByTestId(`approve-claim-btn-${claim.id}`).click();
 
-    // Confirm in dialog
     await page.getByTestId('confirm-approve-claim').click();
 
-    // Wait for the claim card to disappear from pending (indicates approval succeeded and refetch happened)
+    // Leaving pending means the approval persisted and the list refetched
     await expect(page.getByTestId(`claim-card-${claim.id}`)).not.toBeVisible({
       timeout: 10000,
     });
 
-    // Switch to approved tab and verify the claim is there
     await page.getByTestId('claims-tab-approved').click();
 
     // Wait for either claims-list or claims-empty to appear (tab content loaded)
@@ -101,10 +91,28 @@ test.describe('Admin Claims Approval', () => {
       { timeout: 10000 },
     );
 
-    // Verify the claim card is now in the approved list
     await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible({
       timeout: 10000,
     });
+    await expect(
+      page
+        .getByTestId(`claim-card-${claim.id}`)
+        .getByTestId('claim-target-merged'),
+    ).toHaveText(`Merged into ${claim.claimer_username}`);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const card = page.getByTestId(`claim-card-${claim.id}`);
+    for (const locator of [card, card.getByTestId('claim-target-merged')]) {
+      await expect(async () => {
+        const box = await locator.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+      }).toPass({ timeout: 5000 });
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(390);
   });
 
   test('org admin can reject a claim with reason', async ({
@@ -112,42 +120,34 @@ test.describe('Admin Claims Approval', () => {
     context,
     loginOrgAdmin,
   }) => {
-    // Create pending claim request
     const claim = await createClaimRequest(context);
     console.log(
       `Created claim ${claim.id} for org ${claim.organization} (${claim.organization_name})`,
     );
 
-    // Login as org admin
     await loginOrgAdmin();
 
-    // Navigate to organization claims tab
     await page.goto(`/organizations/${claim.organization}`);
     await page.waitForLoadState('networkidle');
     await page.getByTestId('org-tab-claims').click();
 
-    // Wait for claims to load
     await page.waitForSelector('[data-testid="claims-list"]', {
       timeout: 10000,
     });
 
-    // Click reject button
     await page.getByTestId(`reject-claim-btn-${claim.id}`).click();
 
-    // Enter rejection reason
     await page
       .getByTestId('rejection-reason-input')
       .fill('Profile already claimed by another user');
 
-    // Confirm rejection
     await page.getByTestId('confirm-reject-claim').click();
 
-    // Wait for the claim card to disappear from pending (indicates rejection succeeded and refetch happened)
+    // Leaving pending means the rejection persisted and the list refetched
     await expect(page.getByTestId(`claim-card-${claim.id}`)).not.toBeVisible({
       timeout: 10000,
     });
 
-    // Switch to rejected tab and verify the claim is there
     await page.getByTestId('claims-tab-rejected').click();
 
     // Wait for either claims-list or claims-empty to appear (tab content loaded)
@@ -156,7 +156,6 @@ test.describe('Admin Claims Approval', () => {
       { timeout: 10000 },
     );
 
-    // Verify the claim card is now in the rejected list
     await expect(page.getByTestId(`claim-card-${claim.id}`)).toBeVisible({
       timeout: 10000,
     });

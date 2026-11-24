@@ -19,6 +19,7 @@ import { DiscordIcon } from '~/components/events/DiscordConfigSection';
 import { BracketTypeField } from '~/components/events/form/fields/BracketTypeField';
 import { TimezoneField } from '~/components/events/form/fields/TimezoneField';
 import { LobbyConfigSection } from '~/components/events/LobbyConfigSection';
+import { useLeagues } from '~/components/league/hooks/useLeagues';
 import type { LeagueType } from '~/components/league/schemas';
 import {
   SettingsDialog,
@@ -174,9 +175,7 @@ export const TournamentEditForm: React.FC<Props> = ({
   const { pathname } = useLocation();
   const currentUser = useUserStore((state) => state.currentUser);
   const getTournaments = useUserStore((state) => state.getTournaments);
-  const leagues = useUserStore((state) => state.leagues);
-  const getLeagues = useUserStore((state) => state.getLeagues);
-  const leaguesOrgId = useUserStore((state) => state.leaguesOrgId);
+  const { leagues } = useLeagues();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const sections = useRef<SettingsDialogHandle<string>>(null);
@@ -187,10 +186,6 @@ export const TournamentEditForm: React.FC<Props> = ({
     : null;
 
   const initialDateTime = extractDateAndTime(tourn?.date_played);
-
-  useEffect(() => {
-    if (leaguesOrgId !== 'all') getLeagues();
-  }, [leaguesOrgId, getLeagues]);
 
   // tourn.league may be a number (id) or an embedded { pk, name, ... } —
   // the form field expects a numeric league id (or null).
