@@ -162,7 +162,6 @@ INSTALLED_APPS = [
     "django_jinja",
     "corsheaders",
     "bracket.apps.BracketConfig",
-    "user.apps.UserConfig",
     "cacheops",
 ]
 
