@@ -422,3 +422,12 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
 - **A retired module moves 1:1 into one home that receives nothing else.** Split a module by kind using surviving modules, never by spreading one retired module across homes. Emptied packages (`app.tasks`, `app.utils`, `app.functions`) are retired with their last leaf, and "gone" means no `.py` file left: a leftover `__pycache__` makes the directory resolve as a namespace package, so retirement tests use `_retired_module_present`, never `find_spec`.
 - **Symbols can move out of a non-source app.** `is_site_admin` left `org.permissions` for `user.permissions`. The guard records it as `("org.permissions", "is_site_admin")` in `USER.moved` (plus the older `app.permissions_org` path), so an import through `org.permissions` is flagged even though `org` is not the slice's source app.
 - **`rebase_migration` only rewrites its own app.** It renames the one file, rewrites its same-app dependency and its app's `max_migration.txt`, and copies cross-app tuples unchanged. After any renumber, fix `app/0116`'s `user` dependency (or `user/0005`'s `app` dependency), the move-migration test's nodes, `USER.move_migration`, both `max_migration.txt` files, the rollback above and the changelog by hand, then check `makemigrations --check` and `migrate --plan` on a fresh `SQLITE_PATH`. Merges of `main` during this slice moved only the `org` leaf, so `user/0005` depends on the `org` leaf at build time (`0023_api_tokens`).
+- **CI group timings, measured back to back on one host (wall time, tests in brackets).**
+
+    | Point | `app` | `migrations` | `migrations-draft` | `migrations-user` | `rest` |
+    |---|---|---|---|---|---|
+    | `main` before slice 6 | 142s (454) | 782s (37) | — | — | 355s (5949) |
+    | After the 6a group split | 111s (454) | — | 269s (18) | 343s (19) | 353s (5949) |
+    | After 6b, `main` merged | 118s (280) | — | 319s (18) | 377s (25) | 395s (6437) |
+
+    The split cut the slowest backend group from 782s to 343s. After 6b, `migrations-user` grew 10% with six new move-migration tests, and `rest` grew 12% with 488 more tests (moved `app` tests and merged `main`). `migrations-draft` grew 19% with the same 18 tests, because its rollbacks now step through `app/0116` and `user/0005`. An earlier run of that group on the same branch took 368s, so host load also plays a part. No group grew more than 20%, so the groups stay as they are.
