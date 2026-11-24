@@ -88,7 +88,6 @@ export {
   addOrgMember,
   addOrgPromoter,
   addOrgStaff,
-  approveClaimRequest,
   createOrganization,
   deleteOrganization,
   fetchOrganization,

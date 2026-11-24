@@ -62,6 +62,7 @@ from .test_herodraft import (
     reset_herodraft,
     warp_herodraft_round,
 )
+from .test_mmr_sync import login_mmr_sync, reset_mmr_sync
 from .test_org_features import login_org_features, org_features_data, reset_org_features
 from .test_signup_history import reset_signup_history, signup_history_data
 from .test_steam import create_test_match
@@ -173,6 +174,12 @@ urlpatterns = [
         "login-org-features/<str:role>/",
         login_org_features,
         name="test-login-org-features",
+    ),
+    # MMR sync API E2E users (tests.data.mmr_sync.MMR_SYNC_ROLE_USERS)
+    path(
+        "login-mmr-sync/<str:role>/",
+        login_mmr_sync,
+        name="test-login-mmr-sync",
     ),
     path(
         "login-as/",
@@ -368,6 +375,7 @@ urlpatterns = [
     # Org locked features E2E data (test_org_features.py)
     path("org-features/data/", org_features_data, name="test-org-features-data"),
     path("org-features/reset/", reset_org_features, name="test-org-features-reset"),
+    path("mmr-sync/reset/", reset_mmr_sync, name="test-mmr-sync-reset"),
     path("game-org-mmr/data/", game_org_mmr_data, name="test-game-org-mmr-data"),
     path(
         "game-org-mmr/approve-setup/",
