@@ -15,11 +15,11 @@ Modules:
     discord       message-log leases, audit logs, Discord events/messages, sync state
     events        event state, event reads, repeaters, due scheduled events
     steam         league sync state, matches, league stats, MMR
-    users         avatars, batched avatar refresh, Discord name sync
     ops_notices   emit/resolve operations notices
 
 The tournament client (tournament/game reads, hero-draft creation) lives in
-``tournament.internal_client`` on the same transport.
+``tournament.internal_client`` on the same transport. User avatar and Discord-name
+clients live in ``user.internal_client``.
 
 Call sites use the re-exports below (``internal_client.get_event(...)``). Tests that
 stub HTTP patch ``app.internal_client.transport.post`` (or ``get``/``patch``); tests
@@ -81,23 +81,12 @@ from app.internal_client.steam import (
     update_sync_state,
 )
 from app.internal_client.transport import InternalAPIUnavailable
-from app.internal_client.users import (
-    bulk_update_member_names,
-    bulk_update_user_avatars,
-    get_users_for_avatar_check,
-    list_discord_guild_ids,
-    list_discord_linked_users,
-    list_discord_name_sync_targets,
-    update_user_avatar,
-)
 
 __all__ = [
     "InternalAPIUnavailable",
     "OpsNoticeTransientError",
     "auto_close_event",
     "batch_upsert_matches",
-    "bulk_update_member_names",
-    "bulk_update_user_avatars",
     "check_message_log_exists",
     "claim_discord_message_log",
     "create_activity_notification_invite",
@@ -126,10 +115,6 @@ __all__ = [
     "get_steam_sync_state",
     "get_sync_discord_state",
     "get_tracked_steam_league_ids",
-    "get_users_for_avatar_check",
-    "list_discord_guild_ids",
-    "list_discord_linked_users",
-    "list_discord_name_sync_targets",
     "recalculate_user_mmr",
     "resolve_ops_notice",
     "search_message_logs",
@@ -144,5 +129,4 @@ __all__ = [
     "update_steam_sync_state",
     "update_sync_state",
     "update_tournament_log",
-    "update_user_avatar",
 ]

@@ -1,15 +1,25 @@
 """One-off (off-schedule) events attached to a series, and series reactivation."""
 
 from datetime import time, timedelta
-from unittest.mock import patch
+from unittest.mock import ANY, MagicMock, patch
 
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from discordbot.models import DiscordMessageLog
-from events.constants import EventState, RepeatFrequency
+from discordbot.models import DiscordEvent, DiscordMessageLog
+from events.constants import EventState, RepeatFrequency, SignupOpenMode
+from events.discord.dispatch import notify_new_event
 from events.models import Event, EventRepeater
 from events.serializers import EventSerializer
+from events.services import (
+    OccurrenceCollision,
+    _get_next_occurrences,
+    _today,
+    create_off_schedule_event,
+    generate_events_for_repeater,
+    sync_future_events,
+)
+from events.tasks import send_new_event_notification
 from events.tests.base import EventTestCase
 from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
 from league.models import League
@@ -48,8 +58,6 @@ class RepeaterCopyFieldsTest(EventTestCase):
             discord_send_draft_link=False,
             discord_send_herodraft_link=False,
         )
-        from events.services import generate_events_for_repeater
-
         created = generate_events_for_repeater(repeater)
         self.assertTrue(created)
         for event in created:
@@ -80,8 +88,6 @@ class SyncFutureEventsShieldTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_realign_does_not_delete_off_schedule_event(self, _n, _c):
-        from events.services import sync_future_events
-
         self.repeater.day_of_week = 3
         self.repeater.save()
         sync_future_events(self.repeater, realign_schedule=True)
@@ -91,8 +97,6 @@ class SyncFutureEventsShieldTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_cascade_does_not_revert_off_schedule_overrides(self, _n, _c):
-        from events.services import sync_future_events
-
         sync_future_events(self.repeater)
         self.extra.refresh_from_db()
         self.assertEqual(self.extra.name, "Holiday Special")
@@ -100,8 +104,6 @@ class SyncFutureEventsShieldTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_realign_skipped_for_inactive_repeater(self, _n, _c):
-        from events.services import sync_future_events
-
         on_schedule = Event.objects.create(
             organization=self.org,
             event_repeater=self.repeater,
@@ -121,8 +123,6 @@ class SyncFutureEventsShieldTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_cascade_still_runs_for_inactive_repeater(self, _n, _c):
-        from events.services import sync_future_events
-
         on_schedule = Event.objects.create(
             organization=self.org,
             event_repeater=self.repeater,
@@ -143,9 +143,6 @@ class SyncFutureEventsShieldTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_realign_delete_tears_down_discord(self, _n, _c, mock_delete):
-        from discordbot.models import DiscordEvent
-        from events.services import sync_future_events
-
         self.org.discord_server_id = "734185035623825559"
         self.org.save(update_fields=["discord_server_id"])
         stale = Event.objects.create(
@@ -193,8 +190,6 @@ class CreateOffScheduleEventTest(EventTestCase):
     def test_creates_off_schedule_event_with_inherited_config(
         self, mock_notify, mock_discord_event, mock_tournament, mock_ensure
     ):
-        from events.services import create_off_schedule_event
-
         when = tz.now() + timedelta(days=2, hours=5)
         event = create_off_schedule_event(
             self.repeater, scheduled_at=when, created_by=self.admin
@@ -213,8 +208,6 @@ class CreateOffScheduleEventTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_applies_overrides(self, *_mocks):
-        from events.services import create_off_schedule_event
-
         event = create_off_schedule_event(
             self.repeater,
             scheduled_at=tz.now() + timedelta(days=2, hours=5),
@@ -231,8 +224,6 @@ class CreateOffScheduleEventTest(EventTestCase):
     def test_dispatches_discord_notifications(
         self, mock_notify_new, mock_notify_create, *_mocks
     ):
-        from events.services import create_off_schedule_event
-
         self.repeater.discord_notify_new_events = True
         self.repeater.discord_create_event = True
         self.repeater.save()
@@ -250,8 +241,6 @@ class CreateOffScheduleEventTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_rejects_collision_with_existing_row(self, *_mocks):
-        from events.services import OccurrenceCollision, create_off_schedule_event
-
         when = tz.now() + timedelta(days=2, hours=5)
         Event.objects.create(
             organization=self.org,
@@ -270,14 +259,6 @@ class CreateOffScheduleEventTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_rejects_collision_with_future_occurrence(self, *_mocks):
-        from events.services import (
-            OccurrenceCollision,
-            _get_next_occurrences,
-            _today,
-            create_off_schedule_event,
-            generate_events_for_repeater,
-        )
-
         occurrences = _get_next_occurrences(
             self.repeater, _today(), _today() + timedelta(days=14)
         )
@@ -542,8 +523,6 @@ class CancelDeletesDiscordEventTest(EventTestCase):
 
     @patch("events.services.delete_discord_scheduled_event")
     def test_cancel_deletes_live_discord_scheduled_event(self, mock_delete):
-        from discordbot.models import DiscordEvent
-
         discord_event = DiscordEvent.objects.create(
             event=self.target,
             guild_id="734185035623825559",
@@ -591,8 +570,6 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
     @patch("discordbot.utils._rate_limited_request")
     def test_second_dispatch_does_not_resend(self, mock_req):
         mock_req.return_value = _ok_response({"id": "msg_new_event"})
-        from events.tasks import send_new_event_notification
-
         send_new_event_notification(self.target.pk)
         second = send_new_event_notification(self.target.pk)
 
@@ -615,24 +592,132 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
             return _ok_response({"id": "msg_new_event"})
 
         mock_req.side_effect = _capture
-        from events.tasks import send_new_event_notification
-
         send_new_event_notification(self.target.pk)
 
         self.assertEqual(pending_at_send.get("count"), 1)
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_disabled_announcement_burns_no_lease(self, mock_req):
+    def test_posts_when_pre_day_announcement_disabled(
+        self, mock_req: MagicMock
+    ) -> None:
         self.target.discord_announcement = False
         self.target.save(update_fields=["discord_announcement"])
-        from events.tasks import send_new_event_notification
+        mock_req.return_value = _ok_response({"id": "msg_new_event"})
 
         send_new_event_notification(self.target.pk)
+        send_new_event_notification(self.target.pk)
+
+        self.assertEqual(mock_req.call_count, 1)
+        rows = DiscordMessageLog.objects.filter(
+            source="new_event", source_id=self.target.pk
+        )
+        self.assertEqual(rows.count(), 1)
+        self.assertTrue(rows.first().success)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_blank_channel_burns_no_lease(self, mock_req: MagicMock) -> None:
+        self.target.discord_announcement_channel_id = ""
+        self.target.save(update_fields=["discord_announcement_channel_id"])
+
+        result = send_new_event_notification(self.target.pk)
 
         mock_req.assert_not_called()
         self.assertEqual(
             DiscordMessageLog.objects.filter(source="new_event").count(), 0
         )
+        self.assertEqual(result, "Skipped: no announcement channel")
+
+
+class NotifyNewEventDispatchTest(EventTestCase):
+    def setUp(self) -> None:
+        self.target = Event.objects.create(
+            organization=self.org,
+            name="Dispatch Me",
+            scheduled_at=tz.now() + timedelta(days=3),
+            state=EventState.UPCOMING,
+            discord_announcement=False,
+            discord_announcement_channel_id="1482767177063858216",
+        )
+
+    @patch("events.tasks.send_new_event_notification")
+    def test_queues_when_pre_day_announcement_disabled(
+        self, mock_task: MagicMock
+    ) -> None:
+        notify_new_event(self.target)
+
+        mock_task.delay.assert_called_once_with(self.target.pk, interaction_id=ANY)
+
+    @patch("events.tasks.send_new_event_notification")
+    def test_skips_when_channel_blank(self, mock_task: MagicMock) -> None:
+        self.target.discord_announcement_channel_id = ""
+        self.target.save(update_fields=["discord_announcement_channel_id"])
+
+        notify_new_event(self.target)
+
+        mock_task.delay.assert_not_called()
+
+
+class NewEventProducerTest(_DiscordTaskTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Sunday Turbo",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(18, 0),
+            starts_at=tz.now().date(),
+            created_by=self.admin,
+            discord_notify_new_events=True,
+            discord_announcement=False,
+            discord_announcement_channel_id="1482767177063858216",
+            discord_create_event=False,
+        )
+
+    def _assert_posted_once(self, event: Event) -> None:
+        rows = DiscordMessageLog.objects.filter(source="new_event", source_id=event.pk)
+        self.assertEqual(rows.count(), 1)
+        self.assertTrue(rows.first().success)
+
+    @patch("discordbot.utils._rate_limited_request")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.ensure_discord_event")
+    def test_generated_event_posts_without_pre_day_announcement(
+        self,
+        _ensure: MagicMock,
+        _tournament: MagicMock,
+        _create: MagicMock,
+        mock_req: MagicMock,
+    ) -> None:
+        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+
+        created = generate_events_for_repeater(self.repeater)
+
+        self.assertTrue(created)
+        for event in created:
+            self._assert_posted_once(event)
+
+    @patch("discordbot.utils._rate_limited_request")
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.create_tournament_for_event")
+    @patch("events.services.ensure_discord_event")
+    def test_off_schedule_event_posts_without_pre_day_announcement(
+        self,
+        _ensure: MagicMock,
+        _tournament: MagicMock,
+        _create: MagicMock,
+        mock_req: MagicMock,
+    ) -> None:
+        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+
+        event = create_off_schedule_event(
+            self.repeater,
+            scheduled_at=tz.now() + timedelta(days=2, hours=5),
+            created_by=self.admin,
+        )
+
+        self._assert_posted_once(event)
 
 
 class RepeaterLeagueOrgValidationTest(EventTestCase):
@@ -672,8 +757,6 @@ class RepeaterLeagueOrgValidationTest(EventTestCase):
 
 class OffSchedulePolicyTest(EventTestCase):
     def setUp(self) -> None:
-        from events.constants import SignupOpenMode
-
         self.repeater = EventRepeater.objects.create(
             organization=self.org,
             name="Policy Series",
@@ -691,8 +774,6 @@ class OffSchedulePolicyTest(EventTestCase):
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
     def test_off_schedule_inherits_and_override_wins(self, *_mocks: object) -> None:
-        from events.services import create_off_schedule_event
-
         when = tz.now() + timedelta(days=3, hours=5)
         inherited = create_off_schedule_event(
             self.repeater, scheduled_at=when, created_by=self.admin

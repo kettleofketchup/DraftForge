@@ -36,7 +36,6 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from app.display_names import user_display_name
 from app.models import CustomUser
 from lobby import broadcast, events, services, states
 from lobby.client import DotaLobbyClient, DotaLobbyError
@@ -51,6 +50,7 @@ from tournament.permissions import (
     can_edit_tournament,
 )
 from tournament.serializers.users import tournament_organization
+from user.display_names import user_display_name
 
 log = get_logger(__name__)
 

@@ -26,7 +26,7 @@ are not searches and stay as they are.
 
 ## `/api/users/search/`
 
-`app/views/admin_team.py: search_users`, behind `useUserSearch` on the frontend.
+`user/views_search.py: search_users`, behind `useUserSearch` on the frontend.
 
 - `q`: at least 2 characters, or 400. A numeric `q` also matches `steamid` and
   `steam_account_id`.

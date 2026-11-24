@@ -5,7 +5,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer, UserSerializer
 from events.models import Event, EventSignup
 from events.services import process_rsvp, staff_add_signup
 from events.tests.actors import SYSTEM
@@ -15,6 +14,7 @@ from league.serializers import LeagueUserSerializer
 from org.mmr import game_mmrs_prefetch
 from org.models import Organization, OrgUser
 from org.serializers import OrgUserSerializer
+from user.serializers import TournamentUserSerializer, UserSerializer
 
 COLUMN_KEYS = {
     "steam_account_verified",

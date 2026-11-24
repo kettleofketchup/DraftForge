@@ -16,7 +16,6 @@ from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from app.models import CustomUser
-from app.user_cache import serialize_user_core
 from draft.models import Draft, DraftEvent, DraftOptions, DraftRound
 from draft.services import team as teamdraft
 from draft.services.team_timeout import skip_turn
@@ -31,6 +30,7 @@ from tournament.serializers.users import (
     collect_tournament_user_pks,
     tournament_organization,
 )
+from user.cache import serialize_user_core
 
 User = get_user_model()
 

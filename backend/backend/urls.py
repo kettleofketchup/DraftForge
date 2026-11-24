@@ -4,12 +4,6 @@ from django.views.generic.base import RedirectView
 from rest_framework import routers
 
 from app import views_main as app_views
-from app.functions.user import profile_update
-from app.views import (
-    UserCreateView,
-    UserView,
-    current_user,
-)
 from app.views.internal import (
     auto_close_event,
     check_message_log_exists,
@@ -30,7 +24,6 @@ from app.views.internal import (
     get_or_create_discord_event,
     get_repeater_subscribers,
     get_sync_discord_state,
-    list_users_for_avatar_check,
     search_message_logs,
     sweep_stale_discord_leases,
     transition_event_state,
@@ -38,11 +31,8 @@ from app.views.internal import (
     update_event_dm,
     update_scheduled_event,
     update_tournament_log,
-    update_user_avatar,
 )
-from app.views.ssr import EventSSRView, UserSSRView
-from app.views.steam_verification import steam_verification
-from app.views.user_search import search_users
+from app.views.ssr import EventSSRView
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from draft.views.team_api import DraftRoundView, DraftView
@@ -113,11 +103,25 @@ from user.internal.avatar import (
     bulk_update_user_avatars,
     list_discord_guild_ids,
     list_discord_linked_users,
+    list_users_for_avatar_check,
+    update_user_avatar,
 )
 from user.internal.discord_names import (
     bulk_update_member_names,
     list_discord_name_sync_targets,
 )
+from user.ssr import UserSSRView
+from user.views_account import (
+    UserCreateView,
+    UserView,
+    bulk_users,
+    current_user,
+    steam_account_id_lookup,
+)
+from user.views_avatar import refresh_all_avatars
+from user.views_profile import profile_update
+from user.views_search import search_users
+from user.views_steam_verification import steam_verification
 
 log = get_logger(__name__)
 
@@ -158,10 +162,10 @@ urlpatterns = [
     path("", include("social_django.urls")),
     # User search (must be before router to avoid conflict with UserView)
     path("api/users/search/", search_users, name="search_users"),
-    path("api/users/bulk/", app_views.bulk_users, name="bulk_users"),
+    path("api/users/bulk/", bulk_users, name="bulk_users"),
     path(
         "api/users/steam-account-id/<int:steam_account_id>/",
-        app_views.steam_account_id_lookup,
+        steam_account_id_lookup,
         name="steam_account_id_lookup",
     ),
     path(
@@ -184,7 +188,7 @@ urlpatterns = [
         create_team_from_captain,
         name="create-team-from-captain",
     ),
-    path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
+    path("api/avatars/refresh/", refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
     path("api/jokes/tangoes/", get_tangoes, name="get-tangoes"),
     path("api/jokes/tangoes/buy/", buy_tango, name="buy-tango"),

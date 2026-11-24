@@ -9,7 +9,6 @@ from django.urls import reverse
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
-from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser
 from events.admin import SignupLedgerEntryAdmin
 from events.constants import (
@@ -23,6 +22,7 @@ from events.exceptions import LedgerAppendOnlyError
 from events.models import Event, EventSignup, SignupLedgerEntry
 from events.services import teardown_event
 from events.tests.base import EventTestCase
+from user.discord_accounts import merge_discord_accounts
 
 
 class SignupLedgerModelTestCase(EventTestCase):
