@@ -44,12 +44,9 @@ dir=${1:-.github/workflows}
 # docs/development/ci-runners.md in step.
 allowed=(
     "playwright.yml:prepare=$prepare_label"
-    "unit-tests.yml:typecheck=$small_label"
     "changelog.yml:changelog=$small_label"
     "shellcheck.yml:shellcheck=$small_label"
     "shellcheck.yml:runs-on-guard=$small_label"
-    "frontend-format.yml:prettier=$small_label"
-    "frontend-shadcn-lint.yml:shadcn-lint=$small_label"
     "pr-labeler.yml:label=$small_label"
 )
 # The workflow whose env.HOME_PREPARE mirrors prepare's runs-on.

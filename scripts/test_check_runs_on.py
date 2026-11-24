@@ -47,12 +47,9 @@ HOME_PREPARE = (
 # Exactly the allowlist in check-runs-on.sh, as (workflow file, job id) -> label.
 LABELS = {
     ("playwright.yml", "prepare"): PREPARE,
-    ("unit-tests.yml", "typecheck"): SMALL,
     ("changelog.yml", "changelog"): SMALL,
     ("shellcheck.yml", "shellcheck"): SMALL,
     ("shellcheck.yml", "runs-on-guard"): SMALL,
-    ("frontend-format.yml", "prettier"): SMALL,
-    ("frontend-shadcn-lint.yml", "shadcn-lint"): SMALL,
     ("pr-labeler.yml", "label"): SMALL,
 }
 ALLOWED = list(LABELS)
@@ -302,6 +299,21 @@ class CheckRunsOnTest(unittest.TestCase):
             result, "playwright.yml: draftforge-home at jobs test runs-on"
         )
 
+    def test_npm_jobs_using_the_guard_fail(self):
+        # Moved back to hosted runners: `npm ci` is 3-5x slower on the home runner.
+        for name, job in (
+            ("frontend-format.yml", "prettier"),
+            ("frontend-shadcn-lint.yml", "shadcn-lint"),
+            ("unit-tests.yml", "typecheck"),
+        ):
+            with self.subTest(name=name, job=job):
+                self.assertNotIn((name, job), LABELS)
+                text = f"name: {name}\n{PR_TRIGGER}jobs:\n" + home_job(job)
+                result = self.check_file(name, text)
+                self.assert_fails(
+                    result, f"{name}: draftforge-home at jobs {job} runs-on"
+                )
+
     def test_issue_labeler_using_the_guard_fails(self):
         text = ISSUE_LABELER.replace(
             "    runs-on: ubuntu-latest\n", RUNS_ON + "    timeout-minutes: 5\n"
@@ -359,11 +371,13 @@ class CheckRunsOnTest(unittest.TestCase):
         self.assert_fails(result, "job lint runs-on '${{ matrix.os }}'")
         expr = "    runs-on: ${{ matrix.os }}\n"
         result = self.check(
-            unit_tests=replace_job_runs_on(
-                fixture()["unit-tests.yml"], "typecheck", expr
+            shellcheck=replace_job_runs_on(
+                fixture()["shellcheck.yml"], "shellcheck", expr
             )
         )
-        self.assert_fails(result, "job typecheck runs-on is not the guarded expression")
+        self.assert_fails(
+            result, "job shellcheck runs-on is not the guarded expression"
+        )
 
     def test_runner_group_fails(self):
         result = self.check(
@@ -375,11 +389,13 @@ class CheckRunsOnTest(unittest.TestCase):
         self.assert_fails(result, "job lint runs-on is a runner group")
         group = "    runs-on:\n      group: home\n"
         result = self.check(
-            unit_tests=replace_job_runs_on(
-                fixture()["unit-tests.yml"], "typecheck", group
+            shellcheck=replace_job_runs_on(
+                fixture()["shellcheck.yml"], "shellcheck", group
             )
         )
-        self.assert_fails(result, "job typecheck runs-on is not the guarded expression")
+        self.assert_fails(
+            result, "job shellcheck runs-on is not the guarded expression"
+        )
 
     def test_hosted_label_list_passes(self):
         result = self.check(

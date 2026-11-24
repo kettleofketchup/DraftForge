@@ -24,7 +24,8 @@ The cluster side (ARC runners, BuildKit, Zot) lives in the home GitOps repo:
 | Job | Where | Reason |
 |---|---|---|
 | `playwright/prepare` | `ubuntu-latest`; `draftforge-home-prepare` for allowlisted same-repo PRs when `SELF_HOSTED_RUNNERS` is `true` | Builds missing stack images and the test DB once per hash; every test job waits for it |
-| `unit-tests/typecheck`, `changelog`, `shellcheck/shellcheck`, `shellcheck/runs-on-guard`, `frontend-format/prettier`, `frontend-shadcn-lint/shadcn-lint`, `pr-labeler/label` | `ubuntu-latest`; `draftforge-home` under the same guard and switch as `prepare` | Short and image-free; moving them frees hosted slots for the test jobs ([below](#small-jobs-on-the-home-runner)) |
+| `changelog`, `shellcheck/shellcheck`, `shellcheck/runs-on-guard`, `pr-labeler/label` | `ubuntu-latest`; `draftforge-home` under the same guard and switch as `prepare` | Short, image-free and npm-free; moving them frees hosted slots for the test jobs ([below](#small-jobs-on-the-home-runner)) |
+| `unit-tests/typecheck`, `frontend-format/prettier`, `frontend-shadcn-lint/shadcn-lint` | GitHub | Each runs `npm ci`, which makes it 3-5x slower on the 1-CPU home runner ([below](#npm-jobs-stay-hosted)) |
 | 15 stack jobs (chromium ×4, mobile ×2, herodraft ×2, layout, events ×2, org-features, backend ×3) and `unit-tests/unit` | GitHub | Execution-bound; the home cluster is far too small to run them |
 | `preview-images/build` | GitHub | A 2-runner pool would saturate on every push and `npm run build` is uncached; it reads `main`'s GHCR `:buildcache` read-only instead |
 | `preview-images/report` (`pull_request`), `preview-queue` (`pull_request_target`, `workflow_run`) | GitHub | Write permissions |
@@ -40,13 +41,13 @@ The home cluster runs two ARC scale sets, one per label:
 
 | Label | Scale set | Jobs | Hook accepts |
 |---|---|---|---|
-| `draftforge-home-prepare` | 1 warm runner, at most 2 | `playwright.yml` `prepare` only | The job `prepare` only |
-| `draftforge-home` | The 4-runner pool | The [small jobs](#small-jobs-on-the-home-runner) | The small jobs |
+| `draftforge-home-prepare` | The prepare lane: 1 warm runner, at most 2 | `playwright.yml` `prepare` only | The job `prepare` only |
+| `draftforge-home` | The small lane: at most 6 runners | The light [small jobs](#small-jobs-on-the-home-runner) | The small jobs |
 
 Both labels sit behind the same guard and the same kill switch; only the label differs.
 `prepare` has a lane of its own because every Playwright and backend test job waits for
 it (`needs: prepare`), while nothing waits for the small jobs. On one shared pool a
-burst of small jobs (measured: about 18 on one push) filled all 4 runners and `prepare`
+burst of small jobs (measured: about 18 on one push) filled all 4 runners it had then and `prepare`
 queued about 2.5 minutes behind them, delaying every test job by as much. On its own
 lane `prepare` normally starts on the warm runner at once; the second runner covers two
 PRs pushing at the same time.
@@ -170,20 +171,36 @@ Playwright and backend jobs:
 
 | Workflow | Job | Check name |
 |---|---|---|
-| `unit-tests.yml` | `typecheck` | `Typecheck (frontend)` |
 | `changelog.yml` | `changelog` | `changelog` |
 | `shellcheck.yml` | `shellcheck` | `shellcheck (just recipes)` |
 | `shellcheck.yml` | `runs-on-guard` | `runs-on guard (home runner label)` |
-| `frontend-format.yml` | `prettier` | `prettier (frontend)` |
-| `frontend-shadcn-lint.yml` | `shadcn-lint` | `shadcn-lint (design system)` |
 | `pr-labeler.yml` | `label` | `label` |
 
 Each has `prepare`'s `runs-on` expression verbatim except for the label
 (`'draftforge-home'`, see the guard above), so the kill switch, the author allowlist and the same-repo rule apply unchanged; pushes to `main`,
 forks, other authors and an unset `SELF_HOSTED_RUNNERS` all resolve to `ubuntu-latest`.
 `issue-labeler` stays hosted: it runs on `issues` events, which the runner's
-job-started hook refuses. `typecheck` was split out of `unit-tests.yml` `unit` for this;
-`unit` needs the toolchain and a registry login, so it stays hosted.
+job-started hook refuses. `unit-tests.yml` `unit` needs the toolchain and a registry
+login, so it stays hosted too.
+
+### npm jobs stay hosted
+
+`unit-tests.yml` `typecheck`, `frontend-format.yml` `prettier` and
+`frontend-shadcn-lint.yml` `shadcn-lint` ran on `draftforge-home` for a while and were
+moved back to `ubuntu-latest` (a literal label; the guard rejects them on a home label).
+Each runs `npm ci` on `frontend/`, and on a 1-CPU home runner that dominates the job.
+Measured on the home pool:
+
+| Job | Home | Hosted |
+|---|---|---|
+| `prettier` | about 198 s | about 46 s |
+| `shadcn-lint` | 119-137 s | about 35 s |
+| `typecheck` | 234-249 s | |
+
+Holding a home runner for 2-4 minutes each, these three backed the small lane up to 30
+queued jobs on a burst of PR pushes, which delayed the short jobs they shared it with.
+Only jobs that stay short on 1 CPU belong on `draftforge-home`. `typecheck` stays a job
+of its own, separate from `unit`, so the two run in parallel on hosted runners.
 
 The home runner is the stock `ghcr.io/actions/actions-runner` image (Ubuntu 24.04),
 non-root, with no usable `sudo` and no Docker daemon, 1 CPU and 3 GiB per pod. It has
@@ -194,10 +211,7 @@ unpacks its `.tar.xz` with Python's `tarfile` instead of `tar -xJ`, and `runs-on
 installs a pinned `yq`. `setup-python`'s interpreters are built for
 `/opt/hostedtoolcache` and find `libpython` on the home runner only through the
 `LD_LIBRARY_PATH` the action exports, so a test that runs a child Python with a scrubbed
-environment must keep that variable (`scripts/test_shellcheck_just.py` does). The
-`setup-node` npm cache is saved with gzip on the home runner
-(no `zstd`), so it does not share entries with the hosted runs; a miss only costs the
-download.
+environment must keep that variable (`scripts/test_shellcheck_just.py` does).
 
 **If the `draftforge-home` pool is down** while `SELF_HOSTED_RUNNERS` is `true`, these
 jobs queue like `prepare` does on its own lane: GitHub does not fall back to a hosted runner, and their checks never
