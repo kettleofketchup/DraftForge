@@ -19,11 +19,14 @@ from __future__ import annotations
 from common.game import GameType
 from league.models import League
 from lobby.bot_access.base import BotAccessProvider, UnsupportedBotAccess
+from lobby.bot_access.dota import DotaBotAccess
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
-BOT_ACCESS_PROVIDERS: dict[GameType, BotAccessProvider] = {}
+BOT_ACCESS_PROVIDERS: dict[GameType, BotAccessProvider] = {
+    GameType.DOTA2: DotaBotAccess()
+}
 
 _UNSUPPORTED = UnsupportedBotAccess()
 
