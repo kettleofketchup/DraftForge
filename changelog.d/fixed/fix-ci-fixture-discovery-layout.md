@@ -1,2 +1,0 @@
-- Keep activity test participants and Steam teams within existing DTX members so tournament discovery fixtures retain their isolated organization memberships.
-- Give each league-stats layout viewport its own test budget without weakening geometry assertions or increasing timeouts.

@@ -270,6 +270,10 @@ def _roster_sync_payload(
 NO_READY_CHECK_MESSAGE = "There is no ready check for this event."
 SELF_NOT_IN_CHECK_MESSAGE = "You are not in the ready check for this event."
 MEMBER_NOT_IN_CHECK_MESSAGE = "That member is not in the ready check for this event."
+START_MENTION_NO_SIGNUP_POST_DESCRIPTION = (
+    'Needs a signup post: enable "Post event signup embed" with a channel, '
+    "or a pre-day announcement with a channel"
+)
 
 
 def _ready_check_data(check_pk: int | None) -> dict[str, Any] | None:
@@ -2137,6 +2141,7 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         return entry
 
     has_channel = bool(event.discord_announcement_channel_id)
+    # Mirrored in frontend/app/components/events/startMentionPrerequisite.ts
     has_signup_post = (event.discord_announcement and has_channel) or (
         event.discord_post_signups and bool(event.discord_post_signups_channel_id)
     )
@@ -2233,8 +2238,12 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             check_interval="Every 30s",
             misconfigured=event.discord_start_mention and not has_signup_post,
             description=(
-                f"Mentions signed-up members on the signup post "
-                f"{event.discord_start_mention_minutes}m before event"
+                START_MENTION_NO_SIGNUP_POST_DESCRIPTION
+                if event.discord_start_mention and not has_signup_post
+                else (
+                    f"Mentions signed-up members on the signup post "
+                    f"{event.discord_start_mention_minutes}m before event"
+                )
             ),
         ),
         _task(
