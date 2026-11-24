@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { SecondaryButton } from '~/components/ui/buttons';
 import { DataTable } from '~/components/ui/data-table';
+import { useMediaQuery } from '~/hooks/useMediaQuery';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 
@@ -104,13 +105,15 @@ export function BotAccessPanel({ leagueId, enabled }: BotAccessPanelProps) {
   }, []);
 
   const copy = getBotAccessProvider(snapshot?.provider ?? '');
+  const stacked = useMediaQuery('(max-width: 639px)');
   const columns = useMemo(
     () =>
       makeBotAccessColumns({
         onCopy: (url) => void onCopy(url),
         identityLabel: copy.identityLabel,
+        stacked,
       }),
-    [onCopy, copy.identityLabel],
+    [onCopy, copy.identityLabel, stacked],
   );
   const rows = useMemo(
     () => withRowRefresh(snapshot?.bots ?? [], refresh.data),

@@ -600,3 +600,30 @@ describe('BotAccessPanel refresh', () => {
     expect(screen.getByTestId('bot-access-row-1')).toBeTruthy();
   });
 });
+
+describe('BotAccessPanel on phones', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('stacks status, access and profile link in one column', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 639px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    vi.mocked(getBotAccess).mockResolvedValue(
+      makeSnapshot({
+        bots: [makeRow({ status: 'available', access: 'missing' })],
+      }),
+    );
+    renderPanel();
+    const row = await screen.findByTestId('bot-access-row-1');
+    expect(row.querySelectorAll('td')).toHaveLength(1);
+    expect(within(row).getByText('Bot 1')).toBeTruthy();
+    expect(within(row).getByText('Available')).toBeTruthy();
+    expect(within(row).getByText(/Missing/)).toBeTruthy();
+    expect(within(row).getByTestId('bot-access-profile-link-1')).toBeTruthy();
+    expect(within(row).getByTestId('bot-access-copy-1')).toBeTruthy();
+    expect(screen.queryByText('League access')).toBeNull();
+  });
+});

@@ -73,16 +73,118 @@ function displayUrl(url: string): string {
   return url.replace(/^https:\/\//, '');
 }
 
+function AccessCell({ row: r }: { row: BotAccessRow }) {
+  const ago = checkedAgo(r.access_checked_at);
+  const refreshNote = r.refresh ? ROW_REFRESH_NOTE[r.refresh] : undefined;
+  return (
+    <div className="flex flex-col gap-0.5 text-sm">
+      <span className={cn('font-medium', ACCESS_CLASS[r.access])}>
+        {ACCESS_LABEL[r.access]}
+        {ago ? (
+          <span className="font-normal text-muted-foreground"> · {ago}</span>
+        ) : null}
+      </span>
+      {r.access_note ? (
+        <span className="text-xs text-muted-foreground">
+          {ACCESS_NOTE[r.access_note]}
+        </span>
+      ) : null}
+      {refreshNote ? (
+        <span className="text-xs text-muted-foreground">{refreshNote}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function IdentityCell({
+  row: r,
+  onCopy,
+}: {
+  row: BotAccessRow;
+  onCopy: (url: string) => void;
+}) {
+  if (!r.identity) {
+    return (
+      <span className="text-sm text-muted-foreground">
+        Not available until the bot logs on
+      </span>
+    );
+  }
+  const url = r.identity.profile_url;
+  if (!url || !isAllowedExternalLink(url)) {
+    return <span className="wrap-anywhere">{r.identity.value}</span>;
+  }
+  const emphasize = r.access === 'missing' || r.access === 'unknown';
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid={`bot-access-profile-link-${r.position}`}
+        className={cn(
+          'min-w-0 wrap-anywhere hover:underline',
+          emphasize ? 'font-medium text-foreground' : 'text-muted-foreground',
+        )}
+      >
+        {displayUrl(url)}
+      </a>
+      <SecondaryButton
+        type="button"
+        size="sm"
+        className="min-h-11 shrink-0 sm:min-h-8"
+        aria-label={`Copy link for Bot ${r.position}`}
+        data-testid={`bot-access-copy-${r.position}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onCopy(url);
+        }}
+      >
+        <Copy className="size-4" aria-hidden="true" />
+        <span className="hidden sm:inline">Copy</span>
+      </SecondaryButton>
+    </div>
+  );
+}
+
 export interface MakeBotAccessColumnsOptions {
   onCopy: (url: string) => void;
   identityLabel: string;
+  /** One full-width column with every field stacked, for phones. */
+  stacked?: boolean;
 }
 
-/** Column defs for the bot access table. Status stacks under the bot on phones. */
+/** Column defs for the bot access table. */
 export function makeBotAccessColumns({
   onCopy,
   identityLabel,
+  stacked = false,
 }: MakeBotAccessColumnsOptions): AppColumnDef<BotAccessRow>[] {
+  if (stacked) {
+    return [
+      {
+        id: 'bot',
+        accessorFn: (r) => r.position,
+        enableSorting: false,
+        header: 'Bot',
+        cell: ({ row }) => (
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">Bot {row.original.position}</span>
+              <StatusBadge status={row.original.status} />
+            </div>
+            <AccessCell row={row.original} />
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs text-muted-foreground">
+                {identityLabel}
+              </span>
+              <IdentityCell row={row.original} onCopy={onCopy} />
+            </div>
+          </div>
+        ),
+      },
+    ];
+  }
   return [
     {
       id: 'bot',
@@ -90,12 +192,7 @@ export function makeBotAccessColumns({
       enableSorting: false,
       header: 'Bot',
       cell: ({ row }) => (
-        <div className="flex flex-col gap-1">
-          <span className="font-medium">Bot {row.original.position}</span>
-          <span className="sm:hidden">
-            <StatusBadge status={row.original.status} />
-          </span>
-        </div>
+        <span className="font-medium">Bot {row.original.position}</span>
       ),
       meta: { headClassName: 'w-24', cellClassName: 'w-24' },
     },
@@ -105,98 +202,22 @@ export function makeBotAccessColumns({
       enableSorting: false,
       header: 'Status',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
-      meta: {
-        headClassName: 'hidden w-32 sm:table-cell',
-        cellClassName: 'hidden w-32 sm:table-cell',
-      },
+      meta: { headClassName: 'w-32', cellClassName: 'w-32' },
     },
     {
       id: 'access',
       accessorFn: (r) => r.access,
       enableSorting: false,
       header: 'League access',
-      cell: ({ row }) => {
-        const r = row.original;
-        const ago = checkedAgo(r.access_checked_at);
-        const refreshNote = r.refresh ? ROW_REFRESH_NOTE[r.refresh] : undefined;
-        return (
-          <div className="flex flex-col gap-0.5 text-sm">
-            <span className={cn('font-medium', ACCESS_CLASS[r.access])}>
-              {ACCESS_LABEL[r.access]}
-              {ago ? (
-                <span className="font-normal text-muted-foreground">
-                  {' '}
-                  · {ago}
-                </span>
-              ) : null}
-            </span>
-            {r.access_note ? (
-              <span className="text-xs text-muted-foreground">
-                {ACCESS_NOTE[r.access_note]}
-              </span>
-            ) : null}
-            {refreshNote ? (
-              <span className="text-xs text-muted-foreground">
-                {refreshNote}
-              </span>
-            ) : null}
-          </div>
-        );
-      },
-      meta: { headClassName: 'w-40 sm:w-52', cellClassName: 'w-40 sm:w-52' },
+      cell: ({ row }) => <AccessCell row={row.original} />,
+      meta: { headClassName: 'w-52', cellClassName: 'w-52' },
     },
     {
       id: 'identity',
       accessorFn: (r) => r.identity?.value ?? '',
       enableSorting: false,
       header: identityLabel,
-      cell: ({ row }) => {
-        const r = row.original;
-        if (!r.identity) {
-          return (
-            <span className="text-sm text-muted-foreground">
-              Not available until the bot logs on
-            </span>
-          );
-        }
-        const url = r.identity.profile_url;
-        if (!url || !isAllowedExternalLink(url)) {
-          return <span className="wrap-anywhere">{r.identity.value}</span>;
-        }
-        const emphasize = r.access === 'missing' || r.access === 'unknown';
-        return (
-          <div className="flex min-w-0 items-center gap-2">
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid={`bot-access-profile-link-${r.position}`}
-              className={cn(
-                'min-w-0 wrap-anywhere hover:underline',
-                emphasize
-                  ? 'font-medium text-foreground'
-                  : 'text-muted-foreground',
-              )}
-            >
-              {displayUrl(url)}
-            </a>
-            <SecondaryButton
-              type="button"
-              size="sm"
-              className="min-h-11 shrink-0 sm:min-h-8"
-              aria-label={`Copy link for Bot ${r.position}`}
-              data-testid={`bot-access-copy-${r.position}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCopy(url);
-              }}
-            >
-              <Copy className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Copy</span>
-            </SecondaryButton>
-          </div>
-        );
-      },
+      cell: ({ row }) => <IdentityCell row={row.original} onCopy={onCopy} />,
     },
   ];
 }
