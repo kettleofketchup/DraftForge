@@ -74,7 +74,9 @@ from tests.helpers.knocked_out_roster_fixture import (
     populate_knocked_out_roster_tournament,
 )
 from tests.helpers.team_management_fixture import (
+    CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
+    populate_captain_takeover_tournament,
     populate_team_management_tournament,
 )
 from tests.helpers.tournament_config import TEST_KEY_TO_NAME, TEST_TOURNAMENTS
@@ -1019,6 +1021,7 @@ def reset_tournament_by_key(request, key: str):
         "bracket_placement_single": populate_bracket_placement_single,
         "bracket_placement_double": populate_bracket_placement_double,
         "team_management": populate_team_management_tournament,
+        "captain_takeover": populate_captain_takeover_tournament,
         "captain_removal": populate_captain_removal_tournament,
         "knocked_out_roster": populate_knocked_out_roster_tournament,
     }
@@ -1040,6 +1043,7 @@ def reset_tournament_by_key(request, key: str):
         "bracket_placement_single": BRACKET_PLACEMENT_SINGLE_TOURNAMENT.name,
         "bracket_placement_double": BRACKET_PLACEMENT_DOUBLE_TOURNAMENT.name,
         "team_management": TEAM_MANAGEMENT_TOURNAMENT_NAME,
+        "captain_takeover": CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
         "captain_removal": CAPTAIN_REMOVAL_TOURNAMENT_NAME,
         "knocked_out_roster": KNOCKED_OUT_ROSTER_TOURNAMENT_NAME,
     }

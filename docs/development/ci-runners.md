@@ -21,7 +21,7 @@ The cluster side (ARC runners, BuildKit, Zot) lives in the home GitOps repo:
 | Job | Where | Reason |
 |---|---|---|
 | `playwright/prepare` | `ubuntu-latest`; the home runner for allowlisted same-repo PRs when `SELF_HOSTED_RUNNERS` is `true` | Builds missing stack images and the test DB once per hash; every test job waits for it |
-| 15 stack jobs (chromium ×4, mobile ×2, herodraft ×2, layout, events ×2, org-features, backend ×3) and `unit` | GitHub | Execution-bound; the home cluster is far too small to run them |
+| 15 stack jobs (chromium ×4, mobile ×2, herodraft ×2, layout, events ×2, org-features, backend ×3) and `unit-tests/unit` | GitHub | Execution-bound; the home cluster is far too small to run them |
 | `preview-images/build` | GitHub | A 2-runner pool would saturate on every push and `npm run build` is uncached; it reads `main`'s GHCR `:buildcache` read-only instead |
 | `preview-images/report` (`pull_request`), `preview-queue` (`pull_request_target`, `workflow_run`) | GitHub | Write permissions |
 | `build-docker-images` | GitHub | Pushes prod `:latest` and GHCR `:buildcache`; trusted builds never touch the shared BuildKit |
