@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getEventSignups: vi.fn(),
   confirmSignup: vi.fn(),
   rejectSignup: vi.fn(),
+  signupForEvent: vi.fn(),
 }));
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
@@ -17,8 +18,10 @@ vi.mock('~/components/api/api', async (importOriginal) => ({
 }));
 
 import {
+  signupHistoryKey,
   useOptimisticEventSignups,
   useSignupActionMutations,
+  useSignupMutation,
 } from '../useEvent';
 
 const EVENT_ID = 42;
@@ -155,5 +158,79 @@ describe('signup actions update rows before the server answers', () => {
 
     await act(async () => holds.resolve(signup(2, 'confirmed')));
     await waitFor(() => expect(api.getEventSignups).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('signup mutations refresh the signup history', () => {
+  const historyKeys = {
+    all: signupHistoryKey(EVENT_ID, {}),
+    member: signupHistoryKey(EVENT_ID, { user: 5, action: 'withdrew' }),
+    otherEvent: signupHistoryKey(EVENT_ID + 1, {}),
+  };
+
+  function seedHistory(client: QueryClient) {
+    for (const key of Object.values(historyKeys)) {
+      client.setQueryData(key, { pages: [], pageParams: [] });
+    }
+    return (key: readonly unknown[]) =>
+      client.getQueryState(key)?.isInvalidated ?? false;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.getEventSignups.mockResolvedValue([signup(1, 'approved')]);
+  });
+
+  it('invalidates every filter of this event after a staff action settles', async () => {
+    const { client, hook } = setup();
+    const invalid = seedHistory(client);
+    api.confirmSignup.mockResolvedValueOnce(signup(1, 'confirmed'));
+
+    await act(async () => {
+      await hook.result.current.actions.confirm.mutateAsync(1);
+    });
+
+    await waitFor(() => expect(invalid(historyKeys.all)).toBe(true));
+    expect(invalid(historyKeys.member)).toBe(true);
+    expect(invalid(historyKeys.otherEvent)).toBe(false);
+  });
+
+  it('invalidates every filter of this event after a failed staff action', async () => {
+    const { client, hook } = setup();
+    const invalid = seedHistory(client);
+    api.rejectSignup.mockRejectedValueOnce(new Error('boom'));
+
+    await act(async () => {
+      await hook.result.current.actions.reject
+        .mutateAsync(1)
+        .catch(() => undefined);
+    });
+
+    await waitFor(() => expect(invalid(historyKeys.all)).toBe(true));
+    expect(invalid(historyKeys.member)).toBe(true);
+    expect(invalid(historyKeys.otherEvent)).toBe(false);
+  });
+
+  it('invalidates every filter of this event after a signup succeeds', async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const invalid = seedHistory(client);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const hook = renderHook(() => useSignupMutation(EVENT_ID), { wrapper });
+    api.signupForEvent.mockResolvedValueOnce(signup(9, 'rsvp'));
+
+    await act(async () => {
+      await hook.result.current.mutateAsync({} as never);
+    });
+
+    expect(invalid(historyKeys.all)).toBe(true);
+    expect(invalid(historyKeys.member)).toBe(true);
+    expect(invalid(historyKeys.otherEvent)).toBe(false);
   });
 });
