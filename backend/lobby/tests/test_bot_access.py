@@ -55,7 +55,10 @@ class BotAccessContractTests(SimpleTestCase):
 
     def test_unsupported_snapshot(self) -> None:
         provider = UnsupportedBotAccess()
-        for snap in (provider.snapshot("1"), provider.refresh("1")):
+        for snap in (
+            provider.snapshot("1", full_roster=True),
+            provider.refresh("1", full_roster=True),
+        ):
             self.assertIs(snap.supported, False)
             self.assertEqual(snap.service.status, "unsupported")
             self.assertEqual(snap.bots, [])
@@ -248,7 +251,7 @@ class DotaBotAccessSnapshotTests(SimpleTestCase):
             self.client.get_league.side_effect = view
         elif view is not None:
             self.client.get_league.return_value = view
-        return self.provider.snapshot(LEAGUE)
+        return self.provider.snapshot(LEAGUE, full_roster=True)
 
     def only_row(self, snap: BotAccessSnapshot) -> BotAccessRow:
         self.assertEqual(snap.service.status, "ok")
@@ -259,7 +262,7 @@ class DotaBotAccessSnapshotTests(SimpleTestCase):
 
     @override_settings(DOTA_LOBBY_ENABLED=False)
     def test_disabled(self) -> None:
-        snap = self.provider.snapshot(LEAGUE)
+        snap = self.provider.snapshot(LEAGUE, full_roster=True)
         self.assertEqual(snap.service.status, "disabled")
         self.assertEqual(snap.bots, [])
         self.assertEqual(snap.provider, "dota2")
@@ -268,14 +271,14 @@ class DotaBotAccessSnapshotTests(SimpleTestCase):
 
     def test_not_configured(self) -> None:
         self.factory.side_effect = DotaLobbyNotConfigured()
-        snap = self.provider.snapshot(LEAGUE)
+        snap = self.provider.snapshot(LEAGUE, full_roster=True)
         self.assertEqual(snap.service.status, "not_configured")
         self.assertEqual(snap.bots, [])
 
     def test_list_bots_unreachable_is_unavailable(self) -> None:
         self.client.list_bots.side_effect = DotaLobbyUnavailable("ConnectionError")
         with capture_logs() as logs:
-            snap = self.provider.snapshot(LEAGUE)
+            snap = self.provider.snapshot(LEAGUE, full_roster=True)
         self.assertEqual(snap.service.status, "unavailable")
         self.assertEqual(snap.service.code, "unreachable")
         self.assertIs(snap.service.retryable, True)
@@ -293,13 +296,13 @@ class DotaBotAccessSnapshotTests(SimpleTestCase):
         self.client.list_bots.side_effect = DotaLobbyError(
             "unavailable", status=503, retryable=True
         )
-        snap = self.provider.snapshot(LEAGUE)
+        snap = self.provider.snapshot(LEAGUE, full_roster=True)
         self.assertEqual(snap.service.status, "unavailable")
         self.assertEqual(snap.service.code, "unavailable")
 
     def test_list_bots_non_retryable_is_error(self) -> None:
         self.client.list_bots.side_effect = DotaLobbyError("unauthorized", status=401)
-        snap = self.provider.snapshot(LEAGUE)
+        snap = self.provider.snapshot(LEAGUE, full_roster=True)
         self.assertEqual(snap.service.status, "error")
         self.assertEqual(snap.service.code, "unauthorized")
         self.assertIs(snap.service.retryable, False)
@@ -635,7 +638,7 @@ class DotaBotAccessSnapshotTests(SimpleTestCase):
     def test_invalid_league_id_not_linked(self) -> None:
         for value in ("0", "-3", "abc"):
             with self.subTest(value=value):
-                snap = self.provider.snapshot(value)
+                snap = self.provider.snapshot(value, full_roster=True)
                 self.assertEqual(snap.service.status, "league_not_linked")
                 self.assertIsNone(snap.league_link)
         self.client.list_bots.assert_not_called()

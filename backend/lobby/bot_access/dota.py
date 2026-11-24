@@ -133,14 +133,18 @@ class DotaBotAccess:
             return None
         return str(league.steam_league_id)
 
-    def snapshot(self, external_league_id: str) -> BotAccessSnapshot:
+    def snapshot(
+        self, external_league_id: str, *, full_roster: bool
+    ) -> BotAccessSnapshot:
         ready = self._prepare(external_league_id)
         if isinstance(ready, BotAccessSnapshot):
             return ready
         client, league_id = ready
-        return self._snapshot(client, league_id, None)
+        return self._snapshot(client, league_id, None, full_roster)
 
-    def refresh(self, external_league_id: str) -> BotAccessSnapshot:
+    def refresh(
+        self, external_league_id: str, *, full_roster: bool
+    ) -> BotAccessSnapshot:
         ready = self._prepare(external_league_id)
         if isinstance(ready, BotAccessSnapshot):
             return ready
@@ -166,7 +170,7 @@ class DotaBotAccess:
             failed=counts["failed"],
             not_ready=counts["not_ready"],
         )
-        snap = self._snapshot(client, league_id, refresh_by_name)
+        snap = self._snapshot(client, league_id, refresh_by_name, full_roster)
         snap.refresh_outcome = outcome
         return snap
 
@@ -189,6 +193,7 @@ class DotaBotAccess:
         client: DotaLobbyClient,
         league_id: int,
         refresh_by_name: dict[str, RowRefresh] | None,
+        full_roster: bool,
     ) -> BotAccessSnapshot:
         external_id = str(league_id)
         try:
@@ -232,6 +237,8 @@ class DotaBotAccess:
         rows: list[tuple[tuple[bool, str, str], BotAccessRow]] = []
         for bot in bots:
             key = _key(bot.name)
+            if not full_roster and not is_holder[key]:
+                continue
             if view is None:
                 if all_unknown or league_id not in bot.leagues:
                     result = _Access("unknown")
@@ -301,6 +308,7 @@ class DotaBotAccess:
             bots=ordered,
             held_count=held,
             league_link=league_admin_link(league_id),
+            roster="all" if full_roster else "holders",
             checked_at=timezone.now(),
         )
 

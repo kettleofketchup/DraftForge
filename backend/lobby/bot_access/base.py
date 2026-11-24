@@ -17,9 +17,13 @@ class BotAccessProvider(Protocol):
 
     def external_league_id(self, league: League) -> str | None: ...
 
-    def snapshot(self, external_league_id: str) -> BotAccessSnapshot: ...
+    def snapshot(
+        self, external_league_id: str, *, full_roster: bool
+    ) -> BotAccessSnapshot: ...
 
-    def refresh(self, external_league_id: str) -> BotAccessSnapshot: ...
+    def refresh(
+        self, external_league_id: str, *, full_roster: bool
+    ) -> BotAccessSnapshot: ...
 
 
 def empty_snapshot(
@@ -50,8 +54,12 @@ class UnsupportedBotAccess:
     def external_league_id(self, league: League) -> str | None:
         return None
 
-    def snapshot(self, external_league_id: str) -> BotAccessSnapshot:
+    def snapshot(
+        self, external_league_id: str, *, full_roster: bool
+    ) -> BotAccessSnapshot:
         return empty_snapshot(self, external_league_id, "unsupported")
 
-    def refresh(self, external_league_id: str) -> BotAccessSnapshot:
+    def refresh(
+        self, external_league_id: str, *, full_roster: bool
+    ) -> BotAccessSnapshot:
         return empty_snapshot(self, external_league_id, "unsupported")

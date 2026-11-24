@@ -3,7 +3,8 @@
 Adding a game (see also ``events/discord/providers/registry.py``):
 
 1. Implement a ``BotAccessProvider`` in ``lobby/bot_access/<game>.py`` and
-   register it in ``BOT_ACCESS_PROVIDERS``.
+   register it in ``BOT_ACCESS_PROVIDERS``. With ``full_roster=False``,
+   return only the bots that hold the league and set ``roster="holders"``.
 2. Extend ``BotIdentity.kind`` values and ``PlatformLink.kind`` in
    ``lobby/bot_access/schemas.py`` if the game identifies bots or links
    leagues differently, then regenerate the Zod schemas.

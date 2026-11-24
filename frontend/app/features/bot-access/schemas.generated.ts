@@ -61,6 +61,7 @@ export const BotAccessSnapshotSchema = z.object({
     z.enum(['ok', 'unavailable', 'timed_out', 'not_supported_upstream']),
     z.null(),
   ]),
+  roster: z.enum(['all', 'holders']),
   checked_at: z.string().datetime({ offset: true }),
 });
 export type BotAccessSnapshot = z.infer<typeof BotAccessSnapshotSchema>;

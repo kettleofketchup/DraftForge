@@ -2,7 +2,8 @@
 
 `GET api/leagues/<league_id>/bot-access/` and `POST .../refresh/` return a
 `BotAccessSnapshot` to league admins. Anyone else, and an unknown league,
-gets 404. Throttles run after the permission check so denied users never
+gets 404. League admin is self-service, so only site admins get the full bot
+roster; other admins see just the bots that already hold the league. Throttles run after the permission check so denied users never
 see 429. Upstream failures are 200 with `service.status`.
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import math
 
+from django.contrib.auth.models import AnonymousUser
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions
@@ -22,6 +24,7 @@ from rest_framework.throttling import (
 )
 from rest_framework.views import APIView
 
+from app.models import CustomUser
 from league.models import League
 from league.permissions import has_league_admin_access
 from lobby.bot_access.base import BotAccessProvider, empty_snapshot
@@ -50,6 +53,10 @@ class BotAccessRefreshGlobalThrottle(SimpleRateThrottle):
 
     def get_cache_key(self, request: Request, view: APIView) -> str:
         return self.cache_format % {"scope": self.scope, "ident": "all"}
+
+
+def can_view_full_roster(user: CustomUser | AnonymousUser) -> bool:
+    return bool(user.is_staff or user.is_superuser)
 
 
 def _no_store(response: Response) -> Response:
@@ -92,7 +99,7 @@ class _BotAccessBase(APIView):
         return league
 
     def _run(
-        self, provider: BotAccessProvider, external_league_id: str
+        self, provider: BotAccessProvider, external_league_id: str, full_roster: bool
     ) -> BotAccessSnapshot:
         raise NotImplementedError
 
@@ -109,7 +116,9 @@ class _BotAccessBase(APIView):
             if external_league_id is None:
                 snap = empty_snapshot(provider, None, "league_not_linked")
             else:
-                snap = self._run(provider, external_league_id)
+                snap = self._run(
+                    provider, external_league_id, can_view_full_roster(request.user)
+                )
         return _no_store(Response(snap.model_dump(mode="json")))
 
 
@@ -117,9 +126,9 @@ class BotAccessView(_BotAccessBase):
     access_throttles = (BotAccessReadThrottle,)
 
     def _run(
-        self, provider: BotAccessProvider, external_league_id: str
+        self, provider: BotAccessProvider, external_league_id: str, full_roster: bool
     ) -> BotAccessSnapshot:
-        return provider.snapshot(external_league_id)
+        return provider.snapshot(external_league_id, full_roster=full_roster)
 
     def get(self, request: Request, league_id: int) -> Response:
         return self._respond(request, league_id)
@@ -129,9 +138,9 @@ class BotAccessRefreshView(_BotAccessBase):
     access_throttles = (BotAccessRefreshThrottle, BotAccessRefreshGlobalThrottle)
 
     def _run(
-        self, provider: BotAccessProvider, external_league_id: str
+        self, provider: BotAccessProvider, external_league_id: str, full_roster: bool
     ) -> BotAccessSnapshot:
-        return provider.refresh(external_league_id)
+        return provider.refresh(external_league_id, full_roster=full_roster)
 
     def post(self, request: Request, league_id: int) -> Response:
         return self._respond(request, league_id)

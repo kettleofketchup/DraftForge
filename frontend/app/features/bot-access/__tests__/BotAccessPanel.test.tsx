@@ -136,6 +136,43 @@ describe('BotAccessPanel service states', () => {
     );
   });
 
+  it('labels a holders-only roster and hides the fleet size', async () => {
+    vi.mocked(getBotAccess).mockResolvedValue(
+      makeSnapshot({ roster: 'holders', bots: [makeRow()], held_count: 1 }),
+    );
+    renderPanel();
+
+    const summary = (await screen.findByTestId('bot-access-summary'))
+      .textContent;
+    expect(summary).toContain('1 bot can host lobbies in Steam league 12345.');
+    expect(summary).not.toMatch(/ of /);
+    expect(screen.getByTestId('bot-access-roster-note').textContent).toContain(
+      'Ask a site admin',
+    );
+    expect(screen.getByTestId('bot-access-row-1')).toBeTruthy();
+    expect(screen.queryByTestId('bot-access-row-2')).toBeNull();
+  });
+
+  it('shows the holders-only empty message', async () => {
+    vi.mocked(getBotAccess).mockResolvedValue(
+      makeSnapshot({ roster: 'holders', bots: [], held_count: 0 }),
+    );
+    renderPanel();
+    expect(
+      (await screen.findByTestId('bot-access-summary')).textContent,
+    ).toContain('0 bots can host lobbies');
+    expect(
+      screen.getByText('No lobby bots have access to this league yet.'),
+    ).toBeTruthy();
+  });
+
+  it('omits the roster note for a full roster', async () => {
+    vi.mocked(getBotAccess).mockResolvedValue(makeSnapshot());
+    renderPanel();
+    await screen.findByTestId('bot-access-summary');
+    expect(screen.queryByTestId('bot-access-roster-note')).toBeNull();
+  });
+
   it('renders the not-linked message with no table or refresh', async () => {
     vi.mocked(getBotAccess).mockResolvedValue(
       serviceSnapshot('league_not_linked'),
@@ -372,7 +409,9 @@ describe('BotAccessPanel rows', () => {
     renderPanel();
     await screen.findByTestId('bot-access-table');
     expect(screen.getByText('Profile')).toBeTruthy();
-    expect(screen.getByTestId('bot-access-summary')).toBeTruthy();
+    expect(screen.getByTestId('bot-access-summary').textContent).toContain(
+      '1 of 2 bots have access to this league.',
+    );
     expect(screen.getByTestId('bot-access-profile-link-1')).toBeTruthy();
     expect(screen.queryByText(/Steam/)).toBeNull();
     expect(screen.getByTestId('bot-access-panel').textContent).not.toMatch(

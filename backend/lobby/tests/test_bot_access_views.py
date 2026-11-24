@@ -18,7 +18,15 @@ from lobby.bot_access.views import (
     BotAccessRefreshThrottle,
 )
 from lobby.client import DotaLobbyClient, DotaLobbyError, DotaLobbyUnavailable
-from lobby.tests.test_bot_access import LEAGUE_ID, SID1, SID2, bot, bot_leagues
+from lobby.tests.test_bot_access import (
+    LEAGUE_ID,
+    SID1,
+    SID2,
+    T1,
+    bot,
+    bot_leagues,
+    holder,
+)
 from lobby.tests.test_bot_access import league as league_view
 from org.models import Organization, OrgUser
 
@@ -113,11 +121,13 @@ class BotAccessViewTestCase(TestCase):
 
 
 class BotAccessPermissionTests(BotAccessViewTestCase):
-    def assert_ok(self, user: CustomUser) -> None:
+    def assert_ok(self, user: CustomUser, *, full_roster: bool = False) -> None:
         resp = self.get(user)
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(resp.json()["service"]["status"], "ok")
-        self.provider.snapshot.assert_called_with(str(LEAGUE_ID))
+        self.provider.snapshot.assert_called_with(
+            str(LEAGUE_ID), full_roster=full_roster
+        )
 
     def assert_hidden(self, user: CustomUser) -> None:
         resp = self.get(user)
@@ -125,7 +135,11 @@ class BotAccessPermissionTests(BotAccessViewTestCase):
         self.provider.snapshot.assert_not_called()
 
     def test_site_staff_200(self) -> None:
-        self.assert_ok(self.site_staff)
+        self.assert_ok(self.site_staff, full_roster=True)
+
+    def test_superuser_gets_full_roster(self) -> None:
+        root = CustomUser.objects.create_superuser(username="root", password="x")
+        self.assert_ok(root, full_roster=True)
 
     def test_org_admin_200(self) -> None:
         self.assert_ok(self.org_admin)
@@ -160,7 +174,7 @@ class BotAccessPermissionTests(BotAccessViewTestCase):
     def test_refresh_league_admin_200(self) -> None:
         resp = self.post(self.league_admin)
         self.assertEqual(resp.status_code, 200, resp.content)
-        self.provider.refresh.assert_called_once_with(str(LEAGUE_ID))
+        self.provider.refresh.assert_called_once_with(str(LEAGUE_ID), full_roster=False)
         self.provider.snapshot.assert_not_called()
 
     def test_refresh_league_staff_404(self) -> None:
@@ -217,32 +231,64 @@ class BotAccessBehaviourTests(BotAccessViewTestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.json()["service"]["status"], "unavailable")
 
-    @override_settings(DOTA_LOBBY_ENABLED=True)
-    def test_self_service_admin_sees_withheld_status(self) -> None:
-        creator = CustomUser.objects.create_user(username="selfserve", password="x")
-        org = Organization.objects.create(name="Mine", owner=creator)
-        org.admins.add(creator)
-        mine = League.objects.create(
-            organization=org, name="Mine", steam_league_id=LEAGUE_ID + 1
-        )
+    def use_two_bot_fleet(self) -> MagicMock:
         client = MagicMock(spec=DotaLobbyClient)
         client.timeout = 15
         client.list_bots.return_value = [
             bot("sim_bot_1", steam_id=SID1, leagues=[LEAGUE_ID]),
             bot("sim_bot_2", steam_id=SID2, state="gc_ready", lobby="L1"),
         ]
-        client.get_league.side_effect = DotaLobbyError("not_found", status=404)
-        client.get_bot_leagues.return_value = bot_leagues()
+        client.get_league.return_value = league_view([holder("sim_bot_1")])
+        client.get_bot_leagues.return_value = bot_leagues(T1)
         self.get_bot_access.return_value = DotaBotAccess(
             client_factory=MagicMock(return_value=client)
         )
+        return client
+
+    @override_settings(DOTA_LOBBY_ENABLED=True)
+    def test_self_service_admin_sees_no_fleet(self) -> None:
+        creator = CustomUser.objects.create_user(username="selfserve", password="x")
+        org = Organization.objects.create(name="Mine", owner=creator)
+        org.admins.add(creator)
+        mine = League.objects.create(
+            organization=org, name="Mine", steam_league_id=LEAGUE_ID + 1
+        )
+        client = self.use_two_bot_fleet()
+        client.get_league.side_effect = DotaLobbyError("not_found", status=404)
         resp = self.get(creator, league_id=mine.pk)
         self.assertEqual(resp.status_code, 200, resp.content)
-        rows = resp.json()["bots"]
-        self.assertEqual(len(rows), 2)
-        for row in rows:
+        body = resp.json()
+        self.assertEqual(body["roster"], "holders")
+        self.assertEqual(body["bots"], [])
+        self.assertNotIn(SID1, resp.content.decode())
+        self.assertNotIn(SID2, resp.content.decode())
+        client.get_bot_leagues.assert_not_called()
+
+    @override_settings(DOTA_LOBBY_ENABLED=True)
+    def test_league_admin_sees_only_holders(self) -> None:
+        self.use_two_bot_fleet()
+        for resp in (self.get(self.league_admin), self.post(self.league_admin)):
+            self.assertEqual(resp.status_code, 200, resp.content)
+            body = resp.json()
+            self.assertEqual(body["roster"], "holders")
+            self.assertEqual(body["held_count"], 1)
+            self.assertEqual(len(body["bots"]), 1)
+            row = body["bots"][0]
             self.assertEqual(set(row), ROW_KEYS)
-            self.assertIsNone(row["status"])
+            self.assertEqual(row["identity"]["value"], SID1)
+            self.assertEqual(row["access"], "verified")
+            self.assertNotIn(SID2, resp.content.decode())
+
+    @override_settings(DOTA_LOBBY_ENABLED=True)
+    def test_site_staff_sees_full_roster(self) -> None:
+        self.use_two_bot_fleet()
+        resp = self.get(self.site_staff)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertEqual(body["roster"], "all")
+        self.assertEqual([r["identity"]["value"] for r in body["bots"]], [SID1, SID2])
+        self.assertEqual([r["access"] for r in body["bots"]], ["verified", "missing"])
+        self.assertIsNone(body["bots"][1]["status"])
 
     @override_settings(DOTA_LOBBY_ENABLED=True)
     def test_no_leak(self) -> None:
@@ -259,7 +305,7 @@ class BotAccessBehaviourTests(BotAccessViewTestCase):
         self.get_bot_access.return_value = DotaBotAccess(
             client_factory=MagicMock(return_value=client)
         )
-        for resp in (self.get(self.league_admin), self.post(self.league_admin)):
+        for resp in (self.get(self.site_staff), self.post(self.site_staff)):
             self.assertEqual(resp.status_code, 200)
             text = resp.content.decode()
             for secret in (

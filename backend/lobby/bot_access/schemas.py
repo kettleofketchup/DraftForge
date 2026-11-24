@@ -22,6 +22,7 @@ ServiceStatus = Literal[
 ]
 RowRefresh = Literal["ok", "failed", "not_ready"]
 RefreshOutcome = Literal["ok", "unavailable", "timed_out", "not_supported_upstream"]
+Roster = Literal["all", "holders"]
 
 HTTPS_PATTERN = r"^https://"
 
@@ -67,6 +68,7 @@ class BotAccessSnapshot(Response):
     held_count: int
     league_link: PlatformLink | None = None
     refresh_outcome: RefreshOutcome | None = None
+    roster: Roster = "all"
     checked_at: datetime
 
 

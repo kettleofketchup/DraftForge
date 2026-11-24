@@ -3,6 +3,7 @@ import { ExternalLink } from 'lucide-react';
 import { PrimaryButton } from '~/components/ui/buttons';
 
 import { isAllowedExternalLink, type BotAccessSnapshot } from '../schemas';
+import { botCount } from './BaseBotAccessHelp';
 
 export const DOTA2_NOT_LINKED_MESSAGE =
   'This league has no Steam league ID. Add one in Edit League to check bot access.';
@@ -16,8 +17,8 @@ export function Dota2BotAccessHelp({
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p data-testid="bot-access-summary" className="font-medium">
-        {snapshot.held_count} of {snapshot.bots.length} bots can host lobbies in
-        Steam league {snapshot.external_league_id}.
+        {botCount(snapshot)} can host lobbies in Steam league{' '}
+        {snapshot.external_league_id}.
       </p>
       <p className="text-muted-foreground">
         To add a bot: in the League Administrators section of the league&apos;s

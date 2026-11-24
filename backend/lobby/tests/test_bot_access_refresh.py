@@ -59,7 +59,7 @@ class DotaBotAccessRefreshTests(SimpleTestCase):
         self.provider = DotaBotAccess(client_factory=self.factory, clock=lambda: 0.0)
 
     def refresh(self) -> BotAccessSnapshot:
-        return self.provider.refresh(LEAGUE)
+        return self.provider.refresh(LEAGUE, full_roster=True)
 
     def test_refresh_ok_merges_rows(self) -> None:
         self.client.refresh_leagues.return_value = results(
@@ -166,6 +166,6 @@ class DotaBotAccessRefreshTests(SimpleTestCase):
         self.client.refresh_leagues.assert_not_called()
 
     def test_refresh_invalid_league_not_linked(self) -> None:
-        snap = self.provider.refresh("abc")
+        snap = self.provider.refresh("abc", full_roster=True)
         self.assertEqual(snap.service.status, "league_not_linked")
         self.factory.assert_not_called()

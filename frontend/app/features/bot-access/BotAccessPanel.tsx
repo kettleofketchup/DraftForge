@@ -26,6 +26,9 @@ const SERVICE_MESSAGE: Partial<Record<ServiceStatus, string>> = {
   unsupported: "Lobby bot management isn't available for this game yet.",
 };
 
+const HOLDERS_ONLY_NOTE =
+  'Only bots that already have access to this league are listed. Ask a site admin for the profile links of the other lobby bots.';
+
 const REFRESHABLE: ReadonlySet<ServiceStatus> = new Set([
   'ok',
   'unavailable',
@@ -164,6 +167,14 @@ export function BotAccessPanel({ leagueId, enabled }: BotAccessPanelProps) {
     body = (
       <div className="flex flex-col gap-4">
         <copy.Help snapshot={snapshot} />
+        {snapshot.roster === 'holders' ? (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="bot-access-roster-note"
+          >
+            {HOLDERS_ONLY_NOTE}
+          </p>
+        ) : null}
         {outcomeNote ? (
           <p
             role="status"
@@ -178,7 +189,11 @@ export function BotAccessPanel({ leagueId, enabled }: BotAccessPanelProps) {
           data={rows}
           getRowId={(r) => String(r.position)}
           getRowTestId={(r) => `bot-access-row-${r.position}`}
-          emptyMessage="No lobby bots are configured."
+          emptyMessage={
+            snapshot.roster === 'holders'
+              ? 'No lobby bots have access to this league yet.'
+              : 'No lobby bots are configured.'
+          }
           data-testid="bot-access-table"
         />
       </div>

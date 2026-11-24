@@ -46,6 +46,7 @@ export function makeSnapshot(
       url: 'https://www.dota2.com/league/12345/admins',
     },
     refresh_outcome: null,
+    roster: 'all',
     checked_at: '2026-11-24T12:00:00Z',
     ...overrides,
   };

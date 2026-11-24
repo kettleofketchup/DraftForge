@@ -2,15 +2,16 @@
  * The Lobby bots tab lists the simulated bots and their league access.
  *
  * sim_bot_1..3 administer the Lobby Test League (steam league 17940) and
- * sim_bot_4 administers none (docker/dota-lobby/simulator.yaml), so the
- * table shows three verified rows and one missing row. Bots sort by SteamID,
- * which puts sim_bot_4 last.
+ * sim_bot_4 administers none (docker/dota-lobby/simulator.yaml). A site admin
+ * sees three verified rows and one missing row; bots sort by SteamID, which
+ * puts sim_bot_4 last. An org admin sees only the three holders.
  */
 
 import {
   expect,
   hasSimulator,
   LeaguePage,
+  loginAdmin,
   loginDotaLobby,
   resetDotaLobbyData,
   SIMULATOR_SKIP_REASON,
@@ -28,7 +29,7 @@ test.describe('Dota lobby: league bot access (e2e)', () => {
     data = await resetDotaLobbyData(context);
   });
 
-  test('@cicd an org admin deep-linking to the tab sees every bot and its access', async ({
+  test('@cicd an org admin deep-linking to the tab sees only the holders', async ({
     context,
     page,
   }) => {
@@ -39,6 +40,36 @@ test.describe('Dota lobby: league bot access (e2e)', () => {
     const table = page.locator('[data-testid="bot-access-table"]');
     await expect(table).toBeVisible({ timeout: 20_000 });
     await leaguePage.assertTabActive('lobby-bots');
+
+    for (const position of [1, 2, 3]) {
+      await expect(
+        page.locator(`[data-testid="bot-access-row-${position}"]`),
+      ).toContainText('Verified');
+    }
+    await expect(page.locator('[data-testid="bot-access-row-4"]')).toHaveCount(
+      0,
+    );
+    await expect(
+      page.locator('[data-testid="bot-access-summary"]'),
+    ).toContainText('3 bots can host lobbies');
+    await expect(
+      page.locator('[data-testid="bot-access-roster-note"]'),
+    ).toBeVisible();
+  });
+
+  test('@cicd a site admin sees every bot and its access', async ({
+    context,
+    page,
+  }) => {
+    await loginAdmin(context);
+    const leaguePage = new LeaguePage(page);
+    await leaguePage.goto(data.league.pk, 'lobby-bots');
+
+    const table = page.locator('[data-testid="bot-access-table"]');
+    await expect(table).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.locator('[data-testid="bot-access-roster-note"]'),
+    ).toHaveCount(0);
 
     for (const position of [1, 2, 3]) {
       await expect(
@@ -90,8 +121,11 @@ test.describe('Dota lobby: league bot access (e2e)', () => {
       page.locator('[data-testid="bot-access-row-1"]'),
     ).toContainText('Verified');
     await expect(
-      page.locator('[data-testid="bot-access-row-4"]'),
-    ).toContainText('Missing');
+      page.locator('[data-testid="bot-access-row-3"]'),
+    ).toContainText('Verified');
+    await expect(page.locator('[data-testid="bot-access-row-4"]')).toHaveCount(
+      0,
+    );
     await expect(
       page.locator('[data-testid="bot-access-refresh-outcome"]'),
     ).toHaveCount(0);

@@ -13,16 +13,25 @@ missing bot gets access.
 
 ## Who sees the tab
 
-| Role | Sees the tab |
-|------|--------------|
-| League admins | Yes |
-| Admins of the organization that owns the league | Yes |
-| Site staff | Yes |
-| League staff, org staff, members, everyone else | No |
+| Role | Sees the tab | Bots listed |
+|------|--------------|-------------|
+| Site admins (staff or superuser) | Yes | Every lobby bot |
+| League admins | Yes | Only bots that already hold the league |
+| Admins of the organization that owns the league | Yes | Only bots that already hold the league |
+| League staff, org staff, members, everyone else | No | — |
 
 Opening `/leagues/<league id>/lobby-bots` without access shows the league's info tab
 instead. The API answers `404` to signed-in users who may not see the tab, so it does not
 reveal whether a league exists.
+
+!!! warning "Why league admins don't see the whole fleet"
+    Any signed-in user can create an organization and a league, which makes them a
+    league admin, and can enter any Steam league ID no other league has claimed. If
+    league admins saw every bot, anyone could list our whole bot fleet and its Steam
+    accounts. So only site admins get the full list. Other admins see the bots that
+    already hold their Steam league, with a note: "Only bots that already have access
+    to this league are listed. Ask a site admin for the profile links of the other
+    lobby bots."
 
 The tab needs the league's **Steam League ID** (Edit League). Without one it says "This
 league has no Steam league ID. Add one in Edit League to check bot access." When hosted
@@ -85,7 +94,9 @@ There is no one-click link. DraftForge can't add a bot for you; the league owner
 on Valve's site:
 
 1. On the Lobby bots tab, copy the missing bot's Steam profile link
-   (`https://steamcommunity.com/profiles/<steam id>`).
+   (`https://steamcommunity.com/profiles/<steam id>`). Only site admins see bots that
+   don't hold the league yet, so league and organization admins get this link from a
+   site admin.
 2. Press **Open league admins page**. It opens
    `https://www.dota2.com/league/<league id>/admins`, where `<league id>` is the league's
    Steam League ID. You need to be signed in to Steam with an account that manages the
@@ -137,7 +148,9 @@ fails they still answer `200`, with the problem in `service.status` (`unavailabl
 request gets `429` with `Retry-After` and `{"error": ..., "code": "throttled"}`.
 
 Rows carry a position, status, access state and note, the check time and the bot's public
-identity (`kind` and profile URL). Account names, error text and the lobby service address
+identity (`kind` and profile URL). `roster` is `all` for site admins and `holders` for
+everyone else, whose rows are limited to bots that hold the league; `held_count` is then
+the only count returned. Account names, error text and the lobby service address
 are never returned.
 
 ---
@@ -153,6 +166,8 @@ To add a game, follow the checklist in the docstring of
 
 1. Implement a `BotAccessProvider` (`backend/lobby/bot_access/base.py`) in
    `backend/lobby/bot_access/<game>.py` and register it in `BOT_ACCESS_PROVIDERS`.
+   `snapshot` and `refresh` take `full_roster`; when it is false, return only the bots
+   that hold the league and set `roster="holders"`.
 2. Add identity or link kinds in `backend/lobby/bot_access/schemas.py` if needed, then
    regenerate the frontend schemas with `just py::gen-bot-access-api`.
 3. Add the game's copy under `frontend/app/features/bot-access/providers/`, keyed on the
