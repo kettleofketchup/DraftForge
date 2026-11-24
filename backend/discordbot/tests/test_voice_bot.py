@@ -61,6 +61,7 @@ def _guild(
     channels: dict[int, MagicMock], bots: frozenset[int] = frozenset()
 ) -> MagicMock:
     guild = MagicMock()
+    guild.unavailable = False
     guild.get_channel.side_effect = channels.get
 
     def get_member(uid: int) -> MagicMock:
@@ -303,7 +304,7 @@ class VoiceRefreshTests(VoiceFeedTestBase):
         with capture_logs() as logs:
             await feed.refresh_watched(force=True)
 
-        self.assertEqual(feed.watched, {WATCHED: GUILD})
+        self.assertEqual(feed.watched, {WATCHED: {GUILD}})
         warnings = [e for e in logs if e["event"] == "voice_watched_unavailable"]
         self.assertEqual(len(warnings), 1)
         self.assertEqual(warnings[0]["log_level"], "warning")
@@ -392,6 +393,86 @@ class VoiceSnapshotTests(VoiceFeedTestBase):
             self.snapshot.call_args.kwargs["channels"],
             [{"channel_id": str(WATCHED), "member_ids": ["5"]}],
         )
+
+    async def test_unavailable_guild_reports_cached_channels_missing(self) -> None:
+        guild = _guild({WATCHED: _channel(GUILD, [5])})
+        guild.unavailable = True
+        feed = self.make_feed(_client({GUILD: guild}))
+        feed.mark_connected()
+
+        await feed.post_snapshots()
+
+        self.snapshot.assert_called_once_with(
+            guild_id=str(GUILD), channels=[], missing_channel_ids=[str(WATCHED)]
+        )
+
+    async def test_disconnect_during_refresh_stops_snapshot(self) -> None:
+        feed = self.make_feed(_client({GUILD: _guild({WATCHED: _channel(GUILD, [5])})}))
+        feed.mark_connected()
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        refresh = feed.refresh_watched
+
+        async def blocked_refresh() -> None:
+            entered.set()
+            await release.wait()
+            await refresh()
+
+        with patch.object(feed, "refresh_watched", side_effect=blocked_refresh):
+            task = asyncio.create_task(feed.post_snapshots())
+            await asyncio.wait_for(entered.wait(), timeout=5)
+            feed.mark_disconnected()
+            release.set()
+            await asyncio.wait_for(task, timeout=5)
+        self.snapshot.assert_not_called()
+
+    async def test_disconnect_during_post_stops_later_guild_snapshots(self) -> None:
+        self.get_watched.return_value = _watched((GUILD, WATCHED), (OTHER_GUILD, 300))
+        first = _guild({WATCHED: _channel(GUILD, [5])})
+        second = _guild({300: _channel(OTHER_GUILD, [6])})
+        feed = self.make_feed(_client({GUILD: first, OTHER_GUILD: second}))
+        feed.mark_connected()
+        entered = threading.Event()
+        release = threading.Event()
+
+        def blocked_post(**kwargs: Any) -> dict[str, Any]:
+            entered.set()
+            if not release.wait(timeout=5):
+                raise TimeoutError("snapshot was not released")
+            return OK
+
+        self.snapshot.side_effect = blocked_post
+        task = asyncio.create_task(feed.post_snapshots())
+        try:
+            self.assertTrue(await asyncio.to_thread(entered.wait, 5))
+            feed.mark_disconnected()
+        finally:
+            release.set()
+        await asyncio.wait_for(task, timeout=5)
+        self.assertEqual(self.snapshot.call_count, 1)
+        self.assertEqual(self.snapshot.call_args.kwargs["guild_id"], str(GUILD))
+
+    async def test_wrong_guild_watch_does_not_shadow_valid_channel(self) -> None:
+        self.get_watched.return_value = _watched(
+            (GUILD, WATCHED), (OTHER_GUILD, WATCHED)
+        )
+        first = _guild({WATCHED: _channel(GUILD, [5])})
+        second = _guild({})
+        feed = self.make_feed(_client({GUILD: first, OTHER_GUILD: second}))
+        feed.mark_connected()
+
+        await feed.post_snapshots()
+
+        calls = {
+            call.kwargs["guild_id"]: call.kwargs
+            for call in self.snapshot.call_args_list
+        }
+        self.assertEqual(set(calls), {str(GUILD), str(OTHER_GUILD)})
+        self.assertEqual(
+            calls[str(GUILD)]["channels"],
+            [{"channel_id": str(WATCHED), "member_ids": ["5"]}],
+        )
+        self.assertEqual(calls[str(OTHER_GUILD)]["missing_channel_ids"], [str(WATCHED)])
 
     async def test_unknown_guild_reports_all_channels_missing(self) -> None:
         self.get_watched.return_value = _watched((GUILD, 100), (GUILD, 101))

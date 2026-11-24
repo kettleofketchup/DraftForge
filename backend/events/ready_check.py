@@ -203,6 +203,8 @@ def trusted_present_user_ids(event: Event, now: datetime) -> set[int]:
             event=event,
             present=True,
             source=VoicePresenceSource.FEED,
+            guild_id=event.organization.discord_server_id or "",
+            channel_id=event.event_voice_channel_id,
             last_seen_at__gte=now - PRESENCE_FRESH,
         ).values_list("user_id", flat=True)
     )

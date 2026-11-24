@@ -191,6 +191,13 @@ def voice_feed_age_seconds(
     return max(0.0, time.time() - stamp)
 
 
+def _matches_channel(row: EventVoicePresence, event: Event) -> bool:
+    return (
+        row.guild_id == (event.organization.discord_server_id or "")
+        and row.channel_id == event.event_voice_channel_id
+    )
+
+
 def _apply_presence(
     event: Event, user: CustomUser, present: bool, now: datetime, *, from_gateway: bool
 ) -> Transition:
@@ -210,7 +217,7 @@ def _apply_presence(
             row.save(update_fields=["last_seen_at", "updated_at"])
         return Transition.PINNED
     # A manual pin is not feed evidence, so a gateway report applies in full.
-    was_present = row.present and not manual
+    was_present = row.present and not manual and _matches_channel(row, event)
     row.source = VoicePresenceSource.FEED
     if present and not was_present:
         row.present = True
@@ -221,7 +228,7 @@ def _apply_presence(
         row.guild_id = event.organization.discord_server_id or ""
         row.channel_id = event.event_voice_channel_id
         transition = Transition.JOINED
-    elif not present and (was_present or manual):
+    elif not present and (row.present or manual):
         row.present = False
         row.last_left_at = now
         transition = Transition.LEFT
@@ -354,6 +361,8 @@ def _trusted_rows(event: Event, now: datetime) -> QuerySet[EventVoicePresence]:
         event=event,
         present=True,
         source=VoicePresenceSource.FEED,
+        guild_id=event.organization.discord_server_id or "",
+        channel_id=event.event_voice_channel_id,
         last_seen_at__gte=now - PRESENCE_FRESH,
     )
 
@@ -398,12 +407,16 @@ def _recent(at: datetime | None, cutoff: datetime) -> bool:
 
 
 def _snapshot_target(
-    row: EventVoicePresence | None, listed: bool, cutoff: datetime
+    row: EventVoicePresence | None, listed: bool, cutoff: datetime, event: Event
 ) -> bool | None:
     """Presence the snapshot should apply to a row, or None to leave it alone."""
     if row is None:
         return True if listed else None
-    if row.source == VoicePresenceSource.MANUAL or row.present == listed:
+    if row.source == VoicePresenceSource.MANUAL:
+        return None
+    if not _matches_channel(row, event):
+        return listed if listed or row.present else None
+    if row.present == listed:
         return None
     if _recent(row.last_joined_at, cutoff) or _recent(row.last_left_at, cutoff):
         return None
@@ -436,7 +449,7 @@ def _snapshot_event(
     for user_id in signed | rows.keys():
         row = rows.get(user_id)
         listed = user_id in signed
-        target = _snapshot_target(row, listed, cutoff)
+        target = _snapshot_target(row, listed, cutoff, event)
         if target is not None:
             changes[user_id] = target
         elif row is not None and listed and row.present:
@@ -455,7 +468,7 @@ def _snapshot_event(
         }
         for user_id in sorted(changes):
             listed = changes[user_id]
-            if _snapshot_target(fresh.get(user_id), listed, cutoff) is None:
+            if _snapshot_target(fresh.get(user_id), listed, cutoff, locked) is None:
                 continue
             user = users.get(user_id) or CustomUser.objects.nocache().get(pk=user_id)
             transition = _apply_presence(locked, user, listed, now, from_gateway=False)

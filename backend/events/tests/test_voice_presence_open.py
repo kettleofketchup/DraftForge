@@ -50,6 +50,7 @@ class VoicePresenceOpenTests(ReadyCheckServiceTestCase):
         return EventVoicePresence.objects.create(
             event=event or self.rc_event,
             user=user,
+            guild_id=(event or self.rc_event).organization.discord_server_id or "",
             channel_id=VOICE_CHANNEL,
             present=True,
             source=source,
@@ -82,6 +83,24 @@ class VoicePresenceOpenTests(ReadyCheckServiceTestCase):
         (row,) = self._rows(SignupAction.CONFIRMED)
         self.assertEqual(row.caused_by_id, cause.pk)
         self.assertEqual(row.correlation_id, f"rc{check.pk}:confirm")
+
+    def test_previous_channel_presence_does_not_confirm_at_open(self) -> None:
+        self._voice_on()
+        signup = self._signup(SignupStatus.APPROVED)
+        row = self._present(signup.user)
+        row.channel_id = "100000000000000999"
+        row.save()
+        check = self._open().check
+        self.assertEqual(self._entry(check, signup).state, ReadyCheckEntryState.PENDING)
+
+    def test_previous_guild_presence_does_not_confirm_at_open(self) -> None:
+        self._voice_on()
+        signup = self._signup(SignupStatus.APPROVED)
+        row = self._present(signup.user)
+        row.guild_id = "200000000000000999"
+        row.save()
+        check = self._open().check
+        self.assertEqual(self._entry(check, signup).state, ReadyCheckEntryState.PENDING)
 
     def test_present_member_confirmed_at_open(self) -> None:
         self._voice_on()
@@ -179,6 +198,7 @@ class VoicePresenceOpenTests(ReadyCheckServiceTestCase):
         self.assertEqual(notify.call_count, 3)
 
     def test_trusted_present_user_ids_filters(self) -> None:
+        self._voice_on()
         now = tz.now()
         fresh = self.make_user()
         stale = self.make_user()

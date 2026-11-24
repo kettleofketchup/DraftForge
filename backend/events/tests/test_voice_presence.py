@@ -568,6 +568,41 @@ class VoiceSnapshotTestCase(VoiceStateTestCase):
 
 
 class VoiceSnapshotTests(VoiceSnapshotTestCase):
+    def test_snapshot_rebinds_present_row_after_channel_change(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        self._feed_row(event, user, present=True, age=timedelta(seconds=5))
+        event.event_voice_channel_id = OTHER_CHANNEL
+        event.save()
+
+        outcome = self._snap({OTHER_CHANNEL: [user]})
+
+        row = self._row(event, user)
+        self.assertTrue(row.present)
+        self.assertEqual(row.channel_id, OTHER_CHANNEL)
+        self.assertEqual(row.guild_id, GUILD)
+        self.assertEqual(outcome.joined, 1)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.CONFIRMED
+        )
+
+    def test_snapshot_new_empty_channel_clears_previous_presence(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        self._feed_row(event, user, present=True, age=timedelta(seconds=5))
+        event.event_voice_channel_id = OTHER_CHANNEL
+        event.save()
+
+        outcome = self._snap({OTHER_CHANNEL: []})
+
+        self.assertFalse(self._row(event, user).present)
+        self.assertEqual(outcome.confirmed, 0)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.PENDING
+        )
+
     def test_snapshot_marks_members_present(self) -> None:
         event = self._event()
         user = self._member(event)
@@ -582,6 +617,20 @@ class VoiceSnapshotTests(VoiceSnapshotTestCase):
         self.assertEqual(outcome.unknown_users, 1)
         self.assertEqual(outcome.not_signed_up, 1)
         self.assertFalse(EventVoicePresence.objects.filter(user=stranger).exists())
+
+    def test_gateway_join_rebinds_present_row_after_channel_change(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        user = self._member(event)
+        check = self._open(event).check
+        self._feed_row(event, user, present=True, age=timedelta(seconds=1))
+        Event.objects.filter(pk=event.pk).update(event_voice_channel_id=OTHER_CHANNEL)
+        outcome = self._state(None, OTHER_CHANNEL, user)
+        row = self._row(event, user)
+        self.assertEqual(row.channel_id, OTHER_CHANNEL)
+        self.assertEqual(outcome.joined, 1)
+        self.assertEqual(
+            check.entries.get(user=user).state, ReadyCheckEntryState.CONFIRMED
+        )
 
     def test_snapshot_clears_stale_presence(self) -> None:
         event = self._event()
@@ -803,6 +852,31 @@ class VoiceReconcileTests(VoiceSnapshotTestCase):
     def _reconcile(self, event: Event) -> int:
         with self.captureOnCommitCallbacks(execute=True), transaction.atomic():
             return _reconcile_pending(lock_event(event), tz.now())
+
+    def test_reconcile_ignores_previous_channel_and_guild(self) -> None:
+        event = self._event(voice_presence_confirms=True)
+        channel_user = self._member(event)
+        guild_user = self._member(event)
+        check = self._open(event).check
+        channel_row = self._feed_row(
+            event, channel_user, present=True, age=timedelta(seconds=40)
+        )
+        guild_row = self._feed_row(
+            event, guild_user, present=True, age=timedelta(seconds=40)
+        )
+        EventVoicePresence.objects.filter(pk=channel_row.pk).update(
+            channel_id=OTHER_CHANNEL
+        )
+        EventVoicePresence.objects.filter(pk=guild_row.pk).update(
+            guild_id="200000000000000999"
+        )
+
+        self.assertFalse(_reconcile_has_work(event, tz.now()))
+        self.assertEqual(self._reconcile(event), 0)
+        self.assertEqual(
+            set(check.entries.values_list("state", flat=True)),
+            {ReadyCheckEntryState.PENDING},
+        )
 
     def test_reconcile_confirms_present_pending_member(self) -> None:
         event = self._event(voice_presence_confirms=True)

@@ -46,7 +46,7 @@ class VoiceFeed:
         self.client = client
         self.ttl_seconds = ttl_seconds
         self.clock = clock
-        self.watched: dict[int, int] = {}
+        self.watched: dict[int, set[int]] = {}
         self.watched_at: float | None = None
         self.gateway_connected: bool = False
         self.queue: asyncio.Queue[VoiceJob] = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
@@ -79,10 +79,11 @@ class VoiceFeed:
                     count=len(self.watched),
                 )
                 return
-            watched = {
-                int(row["channel_id"]): int(row["guild_id"])
-                for row in result.get("channels", [])
-            }
+            watched: dict[int, set[int]] = {}
+            for row in result.get("channels", []):
+                watched.setdefault(int(row["channel_id"]), set()).add(
+                    int(row["guild_id"])
+                )
             if watched != self.watched:
                 self.watched = watched
                 log.info(
@@ -186,7 +187,7 @@ class VoiceFeed:
         self, guild_id: int, channel_ids: list[int]
     ) -> tuple[list[dict[str, Any]], list[str]]:
         guild = self.client.get_guild(guild_id)
-        if guild is None:
+        if guild is None or guild.unavailable:
             return [], [str(cid) for cid in channel_ids]
         channels: list[dict[str, Any]] = []
         missing: list[str] = []
@@ -207,21 +208,29 @@ class VoiceFeed:
             channels.append({"channel_id": str(cid), "member_ids": member_ids})
         return channels, missing
 
+    def _can_snapshot(self) -> bool:
+        if self.gateway_connected:
+            return True
+        if not self._skip_logged:
+            self._skip_logged = True
+            log.info(
+                "voice_snapshot_skipped_disconnected",
+                system="discord",
+                subsystem="voice",
+            )
+        return False
+
     async def post_snapshots(self) -> None:
-        if not self.gateway_connected:
-            if not self._skip_logged:
-                self._skip_logged = True
-                log.info(
-                    "voice_snapshot_skipped_disconnected",
-                    system="discord",
-                    subsystem="voice",
-                )
+        if not self._can_snapshot():
             return
         await self.refresh_watched()
         by_guild: dict[int, list[int]] = defaultdict(list)
-        for cid, gid in self.watched.items():
-            by_guild[gid].append(cid)
+        for cid, guild_ids in self.watched.items():
+            for gid in guild_ids:
+                by_guild[gid].append(cid)
         for gid in sorted(by_guild):
+            if not self._can_snapshot():
+                return
             channels, missing = self._guild_channels(gid, sorted(by_guild[gid]))
             result = await sync_to_async(post_voice_snapshot, thread_sensitive=False)(
                 guild_id=str(gid), channels=channels, missing_channel_ids=missing
