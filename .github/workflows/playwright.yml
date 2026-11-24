@@ -91,7 +91,7 @@ jobs:
 
       # Probe first, with the bare runner's python3 and the registry API (no docker, no
       # just), so a run with nothing to build ends here. build=false only when every item
-      # is present; a probe that fails leaves it unset, and the steps below run as before.
+      # is present; a probe that fails leaves it unset, so the steps below still run.
       - name: Check which images and test DB need building
         id: probe
         continue-on-error: true
@@ -135,8 +135,8 @@ jobs:
           buildx: 'false'
           python: 'true'
 
-      # Probes again with docker before building, so what gets built and pushed is
-      # decided exactly as it was before the probe above existed.
+      # Probes again with docker before building: the probe above only decides whether
+      # this runs, and ci::prepare-images alone decides what gets built and pushed.
       - name: Build and push missing images and test DB
         if: steps.probe.outputs.build != 'false'
         env:
