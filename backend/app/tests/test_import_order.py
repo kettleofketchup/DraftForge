@@ -24,7 +24,7 @@ class ImportOrderTests(SimpleTestCase):
         )
 
     def test_serializers_first(self) -> None:
-        result = self._import_first("app.serializers")
+        result = self._import_first("user.serializers")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_broadcast_first(self) -> None:
@@ -36,5 +36,5 @@ class ImportOrderTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_serializers_never_import_team_management(self) -> None:
-        path = BACKEND_DIR / "app" / "serializers.py"
+        path = BACKEND_DIR / "user" / "serializers.py"
         self.assertNotIn("team_management", path.read_text())

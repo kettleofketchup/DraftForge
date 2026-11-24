@@ -29,7 +29,7 @@ from typing import Annotated, Any, Literal, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas import TournamentUserSchema
+from user.schemas import TournamentUserSchema
 
 # Error ``message`` returned by ``handle_signup_modal_submit`` when the modal
 # was built for a different game than the event's current one. The bot's
