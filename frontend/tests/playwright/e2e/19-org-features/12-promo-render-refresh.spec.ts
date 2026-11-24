@@ -13,7 +13,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** The first candidate's Message button, for the row the DMs go to. */
+/** Once the event is selected, return the recipient pk behind the first candidate's Message button. */
 async function firstRecipient(page: Page, eventPk: number): Promise<number> {
   await expect(page.getByTestId(`promo-event-${eventPk}`)).toHaveAttribute(
     'aria-pressed',
