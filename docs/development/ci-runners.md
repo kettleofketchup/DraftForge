@@ -168,7 +168,11 @@ non-root, with no usable `sudo` and no Docker daemon, 1 CPU and 3 GiB per pod. I
 it has no `xz`, `yq`, `gh`, `node` or `zstd`. So these jobs get every tool from a setup
 action or a checksummed download that also works on hosted runners: `shellcheck`
 unpacks its `.tar.xz` with Python's `tarfile` instead of `tar -xJ`, and `runs-on-guard`
-installs a pinned `yq`. The `setup-node` npm cache is saved with gzip on the home runner
+installs a pinned `yq`. `setup-python`'s interpreters are built for
+`/opt/hostedtoolcache` and find `libpython` on the home runner only through the
+`LD_LIBRARY_PATH` the action exports, so a test that runs a child Python with a scrubbed
+environment must keep that variable (`scripts/test_shellcheck_just.py` does). The
+`setup-node` npm cache is saved with gzip on the home runner
 (no `zstd`), so it does not share entries with the hosted runs; a miss only costs the
 download.
 
