@@ -1,6 +1,10 @@
 from django.urls import path
 
-from org.integration.views import ContactReceiptsView, EventRecipientsView
+from org.integration.views import (
+    ContactReceiptsView,
+    ContributionTotalsView,
+    EventRecipientsView,
+)
 
 urlpatterns = [
     path(
@@ -12,5 +16,10 @@ urlpatterns = [
         "v1/contact-receipts/",
         ContactReceiptsView.as_view(),
         name="org-integration-contact-receipts",
+    ),
+    path(
+        "v1/contributions/",
+        ContributionTotalsView.as_view(),
+        name="org-integration-contributions",
     ),
 ]

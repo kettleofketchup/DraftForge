@@ -50,6 +50,7 @@ _DEFAULT_MESSAGES: dict[str, str] = {
         "A concurrent import stored one of these contacts first; retry the batch."
     ),
     "subject_source_unavailable": "A subject source is unavailable; retry later.",
+    "ledger_unavailable": "The contribution ledger is unavailable; retry later.",
     "request_too_large": "Request body too large.",
     "unsupported_media_type": "Content type must be application/json.",
     "rate_limited": "Request limit exceeded.",
