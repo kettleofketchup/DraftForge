@@ -65,8 +65,10 @@ export function useApproveClaim(orgId: number) {
   return useMutation({
     mutationFn: (claim: ApproveClaimInput) => approveClaimRequest(claim.id),
     onSuccess: async (_message, claim) => {
-      useUserCacheStore.getState().remove(claim.target_user);
-      queryClient.removeQueries({ queryKey: ['user', claim.target_user] });
+      if (claim.target_user != null) {
+        useUserCacheStore.getState().remove(claim.target_user);
+        queryClient.removeQueries({ queryKey: ['user', claim.target_user] });
+      }
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: claimKeys.all(orgId, viewerPk),
