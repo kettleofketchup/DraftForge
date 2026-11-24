@@ -32,9 +32,9 @@ concurrency:
 jobs:
   shellcheck:
     name: shellcheck (just recipes)
-    # Small job: the home runner for allowlisted same-repo PRs when SELF_HOSTED_RUNNERS
-    # is 'true', to free hosted slots (docs/development/ci-runners.md). Same guard as
-    # playwright.yml `prepare`; scripts/check-runs-on.sh holds the allowlist.
+    # Small job, on the home runner to free hosted slots: same-repo PRs from
+    # HOME_RUNNER_AUTHORS when SELF_HOSTED_RUNNERS is 'true' (docs/development/ci-runners.md).
+    # Same guard as playwright.yml `prepare`; scripts/check-runs-on.sh allowlists this job.
     runs-on: >-
       ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
       && github.event_name == 'pull_request'
@@ -76,9 +76,9 @@ jobs:
   # Only the jobs allowlisted in scripts/check-runs-on.sh may use the draftforge-home runner.
   runs-on-guard:
     name: runs-on guard (home runner label)
-    # Small job: the home runner for allowlisted same-repo PRs when SELF_HOSTED_RUNNERS
-    # is 'true', to free hosted slots (docs/development/ci-runners.md). Same guard as
-    # playwright.yml `prepare`; scripts/check-runs-on.sh holds the allowlist.
+    # Small job, on the home runner to free hosted slots: same-repo PRs from
+    # HOME_RUNNER_AUTHORS when SELF_HOSTED_RUNNERS is 'true' (docs/development/ci-runners.md).
+    # Same guard as playwright.yml `prepare`; scripts/check-runs-on.sh allowlists this job.
     runs-on: >-
       ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
       && github.event_name == 'pull_request'

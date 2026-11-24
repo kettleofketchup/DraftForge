@@ -13,9 +13,9 @@
 #       ${{ (<guard>) && 'draftforge-home' || 'ubuntu-latest' }}
 #     where <guard> is the five clauses below joined by ` && ` (whitespace collapsed),
 #     or that job lacks `timeout-minutes`, or the allowlisted job no longer exists;
-#   - the workflow holding playwright.yml `prepare`, or any workflow that sets
-#     `env.HOME_PREPARE`, does not set it to exactly ${{ <guard> }}, so the test jobs'
-#     idea of where prepare ran cannot drift from its runs-on;
+#   - playwright.yml, or any workflow that sets `env.HOME_PREPARE`, does not set it to
+#     exactly ${{ <guard> }}, so the test jobs' idea of where prepare ran cannot drift
+#     from its runs-on;
 #   - the label appears anywhere other than an allowlisted job's runs-on;
 #   - a job calls a reusable workflow from another repository (its runs-on is not
 #     checked here);
