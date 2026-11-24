@@ -8,7 +8,11 @@ moves, and only to the account that owns that Discord ID:
   folded into ``keep``. Receipts linked to ``drop`` move to ``keep`` when
   ``keep`` owns their Discord ID (with ``keep``'s membership in that org);
   otherwise they are quarantined, unlinked, so the generic merge cannot
-  hand the tick to a different Discord owner.
+  hand the tick to a different Discord owner. Outbox rows that are not yet
+  applied or canceled and name ``drop`` as sender or recipient are pointed at
+  ``keep``, following the sends the merge moves, so the delete hook that
+  runs for ``drop`` finds nothing of the merged account's to cancel. Their
+  frozen payloads keep the identity recorded at send time.
 - ``cancel_or_redact_promotion_identity(user)`` runs before an account is
   deleted, from a ``pre_delete`` receiver in ``org.signals`` so no delete
   path can skip it. Its receipts are quarantined as ``account_deleted`` and
@@ -46,6 +50,7 @@ _UNSENT_STATES = (
     OutboxState.PAUSED,
     OutboxState.RECONCILIATION_REQUIRED,
 )
+_OPEN_STATES = (*_UNSENT_STATES, OutboxState.IN_FLIGHT)
 _ASSOCIATION_FIELDS = [
     "user",
     "org_user",
@@ -86,7 +91,10 @@ def reconcile_promotion_identity(keep: CustomUser, drop: CustomUser) -> None:
             quarantined += 1
         receipt.association_updated_at = now
         receipt.save(update_fields=_ASSOCIATION_FIELDS)
-    if moved or quarantined:
+    senders, recipients = PromotionContactOutbox.objects.filter(
+        state__in=_OPEN_STATES
+    ).reassign_account(drop.pk, keep.pk)
+    if moved or quarantined or senders or recipients:
         log.info(
             "promo_receipts_reconciled_for_merge",
             system="org",
@@ -95,6 +103,8 @@ def reconcile_promotion_identity(keep: CustomUser, drop: CustomUser) -> None:
             drop_user_id=drop.pk,
             moved=moved,
             quarantined=quarantined,
+            outbox_senders_moved=senders,
+            outbox_recipients_moved=recipients,
         )
 
 

@@ -39,9 +39,11 @@ from tournament.models import Tournament
 # lookup, insert); user and membership deletes null the external-receipt links.
 # A send also takes the event mutation lock (SQLite: an early event write,
 # then the event read) and checks for an imported SFG contact. A merge looks
-# up the dropped account's receipts. Every user delete, including the
-# dropped account in a merge, runs the pre_delete hook that quarantines its receipts
-# and cancels its unsent outbox rows (one UPDATE each).
+# up the dropped account's receipts and points its open outbox rows at the
+# kept account (one UPDATE for senders, one for recipients). Every user
+# delete, including the dropped account in a merge, runs the pre_delete hook
+# that quarantines its receipts and cancels its unsent outbox rows (one
+# UPDATE each); after a merge that hook finds none of the merged rows.
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
 CLOSE_AUTO_CANCEL_QUERIES = 42
 CLOSE_ADMIN_CANCEL_QUERIES = 12
@@ -52,8 +54,8 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 206
-MERGE_CLAIM_QUERIES = 187
+MERGE_DISCORD_QUERIES = 208
+MERGE_CLAIM_QUERIES = 189
 DELETE_API_QUERIES = 112
 DELETE_ADMIN_QUERIES = 163
 DELETE_ADMIN_CONFIRM_QUERIES = 53

@@ -2,7 +2,9 @@
 
 A merge into the account that owns the receipt's Discord ID keeps the tick.
 A merge or relink that would hand the receipt to a different Discord owner
-quarantines it instead: the evidence stays, the tick goes. Deleting an
+quarantines it instead: the evidence stays, the tick goes. A merge also
+moves the dropped account's open outbox rows to the kept account, so the
+dropped account's delete cannot cancel a DM still owed to SFG. Deleting an
 account quarantines its receipts and cancels its unsent outbox rows, and a
 later replay of the same SFG contact cannot recreate the account or its
 membership.
@@ -78,6 +80,72 @@ class MergeTests(_ImportBase):
         self.assertEqual(self.receipt(8021).user_id, self.recipient.pk)
         self.assertEqual(self.receipt(8021).association_state, AssociationState.LINKED)
         self.assertIsNone(self.receipt(8022).user_id)
+
+    def _take_over_discord(self, drop: CustomUser, name: str) -> CustomUser:
+        """A fresh ``keep`` that now owns ``drop``'s Discord ID, as a merge expects."""
+        keep = self._user(name)
+        discord_id = drop.discordId
+        CustomUser.objects.filter(pk=drop.pk).update(discordId=None)
+        CustomUser.objects.filter(pk=keep.pk).update(discordId=discord_id)
+        keep.refresh_from_db()
+        drop.refresh_from_db()
+        return keep
+
+    def _send(self, sender: CustomUser, recipient: CustomUser) -> PromoSend:
+        return record_promo_send(
+            sender=sender,
+            event=self.event,
+            recipient=recipient,
+            template=None,
+            text="Hi",
+        )
+
+    @override_settings(DISCORD_BOT_TOKEN="test-bot-token")
+    def test_merging_the_recipient_keeps_the_outbox_row_pending(self) -> None:
+        drop = self.non_member_player("ob_rcpt_drop")
+        send = self._send(self.users["promoter"], drop)
+        before = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        self.assertEqual(before.state, OutboxState.PENDING)
+        keep = self._take_over_discord(drop, "ob_rcpt_keep")
+
+        merge_discord_accounts(keep, drop)
+
+        row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        self.assertEqual(PromoSend.objects.get(pk=send.pk).recipient_id, keep.pk)
+        self.assertEqual(row.state, OutboxState.PENDING)
+        self.assertEqual(row.last_reason, "")
+        self.assertEqual(row.recipient_user_id, keep.pk)
+        self.assertEqual(row.payload, before.payload)
+        self.assertEqual(row.payload_hash, before.payload_hash)
+
+    @override_settings(DISCORD_BOT_TOKEN="test-bot-token")
+    def test_merging_the_sender_keeps_the_outbox_row_pending(self) -> None:
+        drop = self.users["promoter"]
+        send = self._send(drop, self.recipient)
+        before = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        self.assertEqual(before.state, OutboxState.PENDING)
+        keep = self._take_over_discord(drop, "ob_sender_keep")
+
+        merge_discord_accounts(keep, drop)
+
+        row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        self.assertEqual(PromoSend.objects.get(pk=send.pk).sender_id, keep.pk)
+        self.assertEqual(row.state, OutboxState.PENDING)
+        self.assertEqual(row.sender_user_id, keep.pk)
+        self.assertEqual(row.payload, before.payload)
+
+    @override_settings(DISCORD_BOT_TOKEN="test-bot-token")
+    def test_reconcile_leaves_terminal_outbox_rows_alone(self) -> None:
+        drop = self.non_member_player("ob_term_drop")
+        send = self._send(self.users["promoter"], drop)
+        PromotionContactOutbox.objects.filter(local_send_id=send.pk).update(
+            state=OutboxState.APPLIED
+        )
+        keep = self._user("ob_term_keep")
+        reconcile_promotion_identity(keep, drop)
+        row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        self.assertEqual(row.recipient_user_id, drop.pk)
+        self.assertEqual(row.state, OutboxState.APPLIED)
 
     def test_relink_to_new_owner_does_not_transfer_tick(self) -> None:
         old_owner = self.non_member_player("relink_old")

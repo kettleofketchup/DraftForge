@@ -56,6 +56,29 @@ class _GuardedQuerySet(models.QuerySet):
         return super().bulk_update(objs, fields, *args, **kw)
 
 
+class _OutboxQuerySet(_GuardedQuerySet):
+    def reassign_account(self, drop_pk: int, keep_pk: int) -> tuple[int, int]:
+        """Point these rows' sender and recipient IDs at ``keep_pk`` where
+        they name ``drop_pk``. Returns (senders moved, recipients moved).
+
+        The only sanctioned write to those IDs: an account merge folds the
+        dropped account's sends into the kept one, and the outbox row must
+        follow its send so the drop's delete hook cannot cancel it. Payloads
+        are not touched.
+        """
+        now = timezone.now()
+        # models.QuerySet.update skips the frozen-field guard on purpose.
+        senders = models.QuerySet.update(
+            self.filter(sender_user_id=drop_pk), sender_user_id=keep_pk, updated_at=now
+        )
+        recipients = models.QuerySet.update(
+            self.filter(recipient_user_id=drop_pk),
+            recipient_user_id=keep_pk,
+            updated_at=now,
+        )
+        return senders, recipients
+
+
 class ReceiptSource(models.TextChoices):
     SFG = "sfg", "SFG"
 
@@ -242,7 +265,7 @@ class PromotionContactOutbox(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
-    objects = _GuardedQuerySet.as_manager()
+    objects = _OutboxQuerySet.as_manager()
 
     class Meta:
         constraints = [
