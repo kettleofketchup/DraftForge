@@ -8,7 +8,8 @@ import {
 } from '~/components/ui/data-table';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
-import type { ApiToken } from './schemas';
+import { cn } from '~/lib/utils';
+import { operationLabel, type ApiToken } from './schemas';
 
 export type ApiTokenColumnId =
   | 'name'
@@ -37,6 +38,34 @@ export function relativeTime(iso: string | null): string {
   return iso
     ? formatDistanceToNow(new Date(iso), { addSuffix: true })
     : 'Never';
+}
+
+/** A token's granted operations, by their human labels. */
+function OperationList({
+  operations,
+  className,
+  'data-testid': testId,
+}: {
+  operations: string[];
+  className?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <ul
+      className={cn(
+        'flex flex-col gap-0.5 text-xs text-muted-foreground',
+        className,
+      )}
+      aria-label="Granted operations"
+      data-testid={testId}
+    >
+      {operations.map((op) => (
+        <li key={op} className="break-words" title={op}>
+          {operationLabel(op)}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 const time = (iso: string | null): number =>
@@ -76,6 +105,7 @@ export function makeApiTokenColumns({
               {t.user ? DisplayName(t.user) : 'Deleted user'} · last used{' '}
               {relativeTime(t.last_used_at).toLowerCase()}
             </span>
+            <OperationList operations={t.operations} className="sm:hidden" />
           </div>
         );
       },
@@ -90,12 +120,18 @@ export function makeApiTokenColumns({
       enableSorting: false,
       header: 'Token',
       cell: ({ row }) => (
-        <code
-          className="font-mono text-xs"
-          data-testid={`${testIdPrefix}-prefix-${row.original.id}`}
-        >
-          {maskedToken(row.original.prefix)}
-        </code>
+        <div className="flex flex-col gap-1">
+          <code
+            className="font-mono text-xs"
+            data-testid={`${testIdPrefix}-prefix-${row.original.id}`}
+          >
+            {maskedToken(row.original.prefix)}
+          </code>
+          <OperationList
+            operations={row.original.operations}
+            data-testid={`${testIdPrefix}-operations-${row.original.id}`}
+          />
+        </div>
       ),
       meta: {
         headClassName: 'hidden w-44 sm:table-cell',

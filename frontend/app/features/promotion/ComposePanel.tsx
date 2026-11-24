@@ -26,7 +26,12 @@ import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { formatDiscordTimestamps } from './discordPreview';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import {
+  describeSfgWriteback,
+  reportPromoError,
+  undoToastDescription,
+  usePreviewOptions,
+} from './feedback';
 import { useRenderPromo, useSendPromo, useUndoPromoSend } from './queries';
 import {
   DISCORD_DM_LIMIT,
@@ -47,6 +52,20 @@ export interface ComposePanelProps {
   candidate: LinkedCandidate;
   templates: PromoTemplate[];
   onSent?: (send: PromoSendResult | null) => void;
+  /** Mark sent was pressed; the list may drop this player before onSent. */
+  onSending?: () => void;
+  /** The org records promotion contacts in SFG, so writeback state is shown. */
+  syncConfigured?: boolean;
+  /** The recipient turned out to be already contacted; close this panel. */
+  onStale?: () => void;
+}
+
+const CONTACT_ALREADY_RECORDED = 'contact_already_recorded';
+
+function errorCode(err: unknown): string | undefined {
+  const data = (err as { response?: { data?: { code?: unknown } } })?.response
+    ?.data;
+  return typeof data?.code === 'string' ? data.code : undefined;
 }
 
 export function ComposePanel({
@@ -56,6 +75,9 @@ export function ComposePanel({
   candidate,
   templates,
   onSent,
+  onSending,
+  syncConfigured = false,
+  onStale,
 }: ComposePanelProps) {
   const [templateId, setTemplateId] = useState<number | null>(
     templates[0]?.id ?? null,
@@ -98,7 +120,8 @@ export function ComposePanel({
   const canSubmit =
     promoSendSchema.safeParse({ text }).success &&
     !send.isPending &&
-    sent == null;
+    sent == null &&
+    candidate.external_contact == null;
 
   const copy = async (): Promise<void> => {
     try {
@@ -110,6 +133,7 @@ export function ComposePanel({
   };
 
   const onSubmit = (values: PromoSendForm): void => {
+    onSending?.();
     send.mutate(
       {
         template_id: templateId,
@@ -128,6 +152,13 @@ export function ComposePanel({
             eventId: event.id,
             recipientId: candidate.user_pk,
           });
+          if (errorCode(err) === CONTACT_ALREADY_RECORDED) {
+            toast.info(
+              `A contact with ${DisplayName(candidate)} is already recorded in SFG`,
+            );
+            onStale?.();
+            return;
+          }
           toast.error(message || 'Could not record the message');
         },
       },
@@ -136,10 +167,12 @@ export function ComposePanel({
 
   const onUndo = (sendId: number): void => {
     undo.mutate(sendId, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         setSent(null);
         onSent?.(null);
-        toast.success('Send undone');
+        toast.success('Send undone', {
+          description: undoToastDescription(result, syncConfigured),
+        });
       },
       onError: (err) => {
         const message = reportPromoError(log, 'promo_undo_failed', err, {
@@ -160,6 +193,7 @@ export function ComposePanel({
       });
     }
   }, [rendered.error, orgId, event.id, candidate.user_pk]);
+  const writebackText = describeSfgWriteback(sent?.sfg_writeback);
   const renderError = rendered.isError
     ? (extractApiError(rendered.error) ?? 'Could not fill in this template.')
     : null;
@@ -341,6 +375,15 @@ export function ComposePanel({
                 data-testid="promo-earned-hint"
               >
                 You earned {sent.points_awarded} points.
+              </span>
+            )}
+            {syncConfigured && writebackText && (
+              <span
+                className="mt-1 block text-xs text-muted-foreground"
+                data-state={sent.sfg_writeback.state}
+                data-testid="promo-sfg-writeback"
+              >
+                {writebackText}
               </span>
             )}
           </span>

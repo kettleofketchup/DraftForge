@@ -146,7 +146,10 @@ test.describe('Org features: promoter flow @cicd', () => {
           r.url().includes(`/promotion/sends/${send.id}/`),
       );
       await staffPage.getByTestId(`promo-undo-${send.id}`).click();
-      expect((await undoResponse).status()).toBe(204);
+      // Undo reports the DM's SFG receipt, which outlives the local send.
+      const undone = await undoResponse;
+      expect(undone.status()).toBe(200);
+      expect(await undone.json()).toHaveProperty('sfg_writeback');
       await expect(
         staffPage.getByTestId(`promo-last-messaged-${recipientPk}`),
       ).toHaveCount(0);

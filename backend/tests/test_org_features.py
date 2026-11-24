@@ -89,6 +89,16 @@ def reset_org_features(request: Request) -> Response:
             {"detail": "audiences must be true or false."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    sfg_contacts = request.data.get("sfg_contacts", False)
+    if not isinstance(sfg_contacts, bool):
+        return Response(
+            {"detail": "sfg_contacts must be true or false."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return Response(
-        reset_org_features_data(release_gate=release_gate, audiences=audiences)
+        reset_org_features_data(
+            release_gate=release_gate,
+            audiences=audiences,
+            sfg_contacts=sfg_contacts,
+        )
     )

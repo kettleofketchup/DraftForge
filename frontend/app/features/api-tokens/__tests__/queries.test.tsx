@@ -33,6 +33,7 @@ const access = makeOrgFeatureAccess({
   viewerPk: 9,
   mmrSyncEnabled: true,
   canUseMmrSync: true,
+  canUseApiTokens: true,
 });
 
 function setup() {
@@ -61,6 +62,24 @@ describe('useApiTokens', () => {
     expect(listApiTokens).not.toHaveBeenCalled();
   });
 
+  it('fetches for an admin with only promotion unlocked', async () => {
+    vi.mocked(listApiTokens).mockResolvedValue([]);
+    const { wrapper } = setup();
+    renderHook(
+      () =>
+        useApiTokens(
+          ORG,
+          makeOrgFeatureAccess({
+            viewerPk: 9,
+            promotionEnabled: true,
+            canUseApiTokens: true,
+          }),
+        ),
+      { wrapper },
+    );
+    await waitFor(() => expect(listApiTokens).toHaveBeenCalledWith(ORG));
+  });
+
   it('fetches with access', async () => {
     vi.mocked(listApiTokens).mockResolvedValue([apiToken()]);
     const { wrapper } = setup();
@@ -81,8 +100,9 @@ describe('mutations', () => {
     const { result } = renderHook(() => useCreateApiToken(ORG, access), {
       wrapper,
     });
-    await act(() => result.current.mutateAsync('bot'));
-    expect(createApiToken).toHaveBeenCalledWith(ORG, 'bot');
+    const input = { name: 'bot', operations: ['promotion:read'] };
+    await act(() => result.current.mutateAsync(input));
+    expect(createApiToken).toHaveBeenCalledWith(ORG, input);
     expect(invalid(key)).toBe(true);
   });
 

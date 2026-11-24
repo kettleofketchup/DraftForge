@@ -51,6 +51,11 @@ export interface OrgFeaturesTestData {
   templates: { pk: number; name: string; org_pk: number }[];
   tournaments: OrgFeaturesRef[];
   audiences?: Record<string, { pk: number | null; discord_id: string }>;
+  /** Synthetic imported SFG contacts (resetOrgFeatures({ sfgContacts: true })). */
+  sfg_contacts?: Record<
+    'external' | 'local_and_external' | 'discord_only' | 'non_member',
+    { pk: number | null; discord_id: string; source_contact_id: string }
+  >;
   conduct: {
     ranked_org_user_pks: number[];
     new_member_org_user_pk: number;
@@ -87,6 +92,8 @@ export interface ResetOrgFeaturesOptions {
   /** Turn the leadership staff release gate on, leaving closed snapshots pending. */
   releaseGate?: boolean;
   audiences?: boolean;
+  /** Seed the audiences plus synthetic imported SFG contacts on a bound event. */
+  sfgContacts?: boolean;
 }
 
 /** Rebuild ledger, promo sends, point values, events, templates, switches and roles. */
@@ -99,6 +106,7 @@ export async function resetOrgFeatures(
       data: {
         release_gate: options.releaseGate ?? false,
         audiences: options.audiences ?? false,
+        sfg_contacts: options.sfgContacts ?? false,
       },
     }),
     'org-features reset',

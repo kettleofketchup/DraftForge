@@ -9,7 +9,14 @@ import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgF
 import { createI18nInstance } from '~/i18n/config';
 import { renderPromo, sendPromo } from '../api';
 import { ComposePanel } from '../ComposePanel';
-import type { LinkedCandidate, PromoEvent, PromoTemplate } from '../schemas';
+import type {
+  LinkedCandidate,
+  PromoEvent,
+  PromoSendResult,
+  PromoTemplate,
+  SfgWriteback,
+} from '../schemas';
+import { SFG_CONTACT } from './fixtures';
 
 vi.mock('../api', () => ({
   renderPromo: vi.fn(),
@@ -47,6 +54,8 @@ const candidate: LinkedCandidate = {
   avatarUrl: null,
   recent_count: 2,
   last_messaged: null,
+  contact_recorded: false,
+  external_contact: null,
   earning_send_exists: false,
   signed_up: false,
 };
@@ -72,17 +81,38 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPanel(panelAccess: OrgFeatureAccess = access): void {
+interface PanelOptions {
+  syncConfigured?: boolean;
+  onStale?: () => void;
+  target?: LinkedCandidate;
+}
+
+function renderPanel(
+  panelAccess: OrgFeatureAccess = access,
+  { syncConfigured, onStale, target = candidate }: PanelOptions = {},
+): void {
   render(
     <ComposePanel
       orgId={1}
       access={panelAccess}
       event={event}
-      candidate={candidate}
+      candidate={target}
       templates={templates}
+      syncConfigured={syncConfigured}
+      onStale={onStale}
     />,
     { wrapper: Wrapper },
   );
+}
+
+function sendResult(state: SfgWriteback['state']): PromoSendResult {
+  return {
+    id: 77,
+    earns_points: true,
+    points_awarded: 1,
+    sent_at: '2026-11-14T00:00:00Z',
+    sfg_writeback: { state, reason: null, delivery_id: 'd-77' },
+  };
 }
 
 async function loadedText(): Promise<HTMLTextAreaElement> {
@@ -157,12 +187,7 @@ describe('ComposePanel', () => {
       warnings: [],
       will_earn: true,
     });
-    vi.mocked(sendPromo).mockResolvedValue({
-      id: 77,
-      earns_points: true,
-      points_awarded: 1,
-      sent_at: '2026-11-14T00:00:00Z',
-    });
+    vi.mocked(sendPromo).mockResolvedValue(sendResult('pending'));
     renderPanel();
     await loadedText();
     fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
@@ -207,5 +232,99 @@ describe('ComposePanel', () => {
       'href',
       'https://discord.com/users/1234',
     );
+  });
+});
+
+describe('ComposePanel SFG writeback feedback', () => {
+  async function sendWith(
+    state: SfgWriteback['state'],
+    syncConfigured: boolean,
+  ): Promise<void> {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    vi.mocked(sendPromo).mockResolvedValue(sendResult(state));
+    renderPanel(access, { syncConfigured });
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    await screen.findByTestId('promo-sent-banner');
+  }
+
+  it.each([
+    ['pending', /Waiting to be recorded in SFG/],
+    ['paused', /SFG recording is paused/],
+    [
+      'reconciliation_required',
+      /needs review before it can be recorded in SFG/,
+    ],
+    ['retry', /will try recording it in SFG again/],
+  ] as const)(
+    'reports a %s writeback separately from the recorded send, never as synced',
+    async (state, text) => {
+      await sendWith(state, true);
+      expect(screen.getByTestId('promo-sent-banner')).toHaveTextContent(
+        'Sent to',
+      );
+      const note = screen.getByTestId('promo-sfg-writeback');
+      expect(note).toHaveAttribute('data-state', state);
+      expect(note).toHaveTextContent(text);
+      expect(note).not.toHaveTextContent(/synced/i);
+      expect(note).not.toHaveTextContent(/^Recorded in SFG/);
+    },
+  );
+
+  it('reports a positive SFG receipt as recorded in SFG', async () => {
+    await sendWith('applied', true);
+    expect(screen.getByTestId('promo-sfg-writeback')).toHaveTextContent(
+      'Recorded in SFG',
+    );
+  });
+
+  it('shows no writeback line for an org without the integration', async () => {
+    await sendWith('pending', false);
+    expect(screen.queryByTestId('promo-sfg-writeback')).toBeNull();
+  });
+
+  it('disables Mark sent for a recipient whose contact is already recorded in SFG', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    renderPanel(access, {
+      target: {
+        ...candidate,
+        contact_recorded: true,
+        external_contact: SFG_CONTACT,
+      },
+    });
+    await loadedText();
+    expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled();
+    expect(screen.getByTestId('promo-copy-btn')).toBeEnabled();
+  });
+
+  it('drops the recipient when the server says the contact was already recorded', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    vi.mocked(sendPromo).mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          code: 'contact_already_recorded',
+          detail: 'a contact with this player is already recorded in SFG',
+        },
+      },
+    });
+    const onStale = vi.fn();
+    renderPanel(access, { syncConfigured: true, onStale });
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    await waitFor(() => expect(onStale).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('promo-sent-banner')).toBeNull();
   });
 });

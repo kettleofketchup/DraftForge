@@ -1,6 +1,7 @@
-import { Copy, Undo2 } from 'lucide-react';
+import { Copy, Info, Undo2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { Alert, AlertDescription, AlertTitle } from '~/components/ui/alert';
 import { Badge } from '~/components/ui/badge';
 import {
   BrandSelect,
@@ -20,9 +21,11 @@ import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
+import { ContactRecordedStatus } from './ContactRecordedStatus';
 import {
   relativeFromIso,
   reportPromoError,
+  undoToastDescription,
   usePreviewOptions,
 } from './feedback';
 import {
@@ -37,6 +40,7 @@ import {
   type CandidateFilters,
   type CandidateRow,
   type CandidateSource,
+  type ContactSync,
   type LinkedCandidate,
 } from './schemas';
 
@@ -65,6 +69,36 @@ function rowTestId(row: CandidateRow): string {
     : `discord-${row.discordId ?? ''}`;
 }
 const SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * SFG contact history arrives by import, so it can lag or miss contacts. The
+ * notice says so; it never blocks messaging an otherwise eligible player.
+ */
+function ContactSyncNotice({ sync }: { sync: ContactSync }) {
+  const previewOptions = usePreviewOptions();
+  const imported = sync.last_receipt_imported_at;
+  return (
+    <Alert
+      role="note"
+      className="border-warning/40 bg-warning/10"
+      data-testid="promo-contact-sync-warning"
+    >
+      <Info className="size-4" aria-hidden="true" />
+      <AlertTitle>History may be incomplete</AlertTitle>
+      <AlertDescription className="text-muted-foreground">
+        Contacts recorded in SFG are ticked here once imported, and SFG may hold
+        contacts that have not arrived yet. Players without a tick can still be
+        messaged.
+        {imported && (
+          <span className="block" data-testid="promo-contact-sync-imported">
+            Last SFG receipt imported{' '}
+            {relativeFromIso(imported, previewOptions)}.
+          </span>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 export interface CandidateListProps {
   orgId: number;
@@ -117,9 +151,14 @@ export function CandidateList({
     }
   };
 
+  const syncConfigured = data?.contact_sync.configured ?? false;
+
   const onUndo = (sendId: number): void => {
     undo.mutate(sendId, {
-      onSuccess: () => toast.success('Send undone'),
+      onSuccess: (result) =>
+        toast.success('Send undone', {
+          description: undoToastDescription(result, syncConfigured),
+        }),
       onError: (err) => {
         const message = reportPromoError(log, 'promo_undo_failed', err, {
           orgId,
@@ -131,6 +170,7 @@ export function CandidateList({
   };
 
   const onMessage = (row: CandidateRow): void => {
+    if (row.external_contact) return;
     if (isLinked(row)) {
       onSelect(row);
       return;
@@ -138,6 +178,10 @@ export function CandidateList({
     if (!row.discordId) return;
     resolve.mutate(row.discordId, {
       onSuccess: (resolved) => {
+        if (resolved.external_contact) {
+          toast.info('A contact with this player is already recorded in SFG');
+          return;
+        }
         if (isLinked(resolved)) onSelect(resolved);
       },
       onError: (err) => {
@@ -285,6 +329,9 @@ export function CandidateList({
         />
       </div>
 
+      {data?.contact_sync.configured && (
+        <ContactSyncNotice sync={data.contact_sync} />
+      )}
       {isLoading && (
         <p className="text-sm text-muted-foreground">Loading players...</p>
       )}
@@ -308,6 +355,7 @@ export function CandidateList({
       <ul className="flex flex-col gap-2">
         {data?.rows.map((row) => {
           const last = row.last_messaged;
+          const external = row.external_contact;
           const selected = row.user_pk != null && row.user_pk === selectedPk;
           const testId = rowTestId(row);
           const info = detail(row);
@@ -354,12 +402,11 @@ export function CandidateList({
                     </span>
                   )}
                   {info && <span>{info}</span>}
-                  {last && (
-                    <span data-testid={`promo-last-messaged-${row.user_pk}`}>
-                      Messaged by {last.by ?? 'someone'},{' '}
-                      {relativeFromIso(last.sent_at, previewOptions)}
-                    </span>
-                  )}
+                  <ContactRecordedStatus
+                    externalContact={external}
+                    localLastMessaged={last}
+                    testId={testId}
+                  />
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -379,12 +426,26 @@ export function CandidateList({
                   type="button"
                   size="sm"
                   onClick={() => onMessage(row)}
-                  disabled={!isLinked(row) && resolve.isPending}
+                  disabled={
+                    external != null || (!isLinked(row) && resolve.isPending)
+                  }
                   aria-pressed={selected}
+                  aria-describedby={
+                    external ? `promo-message-blocked-${testId}` : undefined
+                  }
                   data-testid={`promo-select-${testId}`}
                 >
                   {selected ? 'Selected' : 'Message'}
                 </SecondaryButton>
+                {external && (
+                  <span
+                    id={`promo-message-blocked-${testId}`}
+                    className="sr-only"
+                  >
+                    Contact recorded in SFG, so messaging is off for this
+                    player.
+                  </span>
+                )}
               </div>
             </li>
           );

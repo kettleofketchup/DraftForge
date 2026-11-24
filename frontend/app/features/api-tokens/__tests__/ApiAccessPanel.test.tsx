@@ -63,6 +63,20 @@ const access = makeOrgFeatureAccess({
   viewerPk: 9,
   mmrSyncEnabled: true,
   canUseMmrSync: true,
+  canUseApiTokens: true,
+});
+const fullAccess = makeOrgFeatureAccess({
+  viewerPk: 9,
+  mmrSyncEnabled: true,
+  canUseMmrSync: true,
+  promotionEnabled: true,
+  contributionsEnabled: true,
+  canUseApiTokens: true,
+});
+const promotionOnly = makeOrgFeatureAccess({
+  viewerPk: 9,
+  promotionEnabled: true,
+  canUseApiTokens: true,
 });
 
 function setViewer(siteAdmin: boolean) {
@@ -224,8 +238,135 @@ describe('ApiAccessPanel', () => {
     fireEvent.click(screen.getByTestId('api-token-create-submit'));
     const secret = await screen.findByTestId('api-token-secret');
     expect(secret.textContent).toBe('dfk_abcd1234_secretsecret');
-    expect(createApiToken).toHaveBeenCalledWith(ORG, 'MMR bot');
+    expect(createApiToken).toHaveBeenCalledWith(ORG, {
+      name: 'MMR bot',
+      operations: ['mmr:read', 'mmr:write'],
+    });
     expect(screen.getByTestId('api-token-once-note')).toBeTruthy();
+  });
+
+  it('defaults the operations picker to the MMR pair', async () => {
+    renderPanel(fullAccess);
+    fireEvent.click(await screen.findByTestId('api-token-create'));
+    const op = (value: string) =>
+      screen.getByTestId(`api-token-op-${value}`) as HTMLButtonElement;
+    expect(op('mmr:read').getAttribute('aria-checked')).toBe('true');
+    expect(op('mmr:write').getAttribute('aria-checked')).toBe('true');
+    expect(op('promotion:read').getAttribute('aria-checked')).toBe('false');
+    expect(op('promotion:import').getAttribute('aria-checked')).toBe('false');
+    expect(op('contributions:read').getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByText('Import SFG contact history')).toBeTruthy();
+  });
+
+  it('creates a promotion-only token while MMR sync is locked', async () => {
+    vi.mocked(createApiToken).mockResolvedValue(
+      createdApiToken({ operations: ['promotion:import', 'promotion:read'] }),
+    );
+    renderPanel(promotionOnly);
+    const create = (await screen.findByTestId(
+      'api-token-create',
+    )) as HTMLButtonElement;
+    expect(create.disabled).toBe(false);
+    expect(screen.queryByTestId('api-access-locked')).toBeNull();
+    fireEvent.click(create);
+    const mmr = screen.getByTestId(
+      'api-token-op-mmr:read',
+    ) as HTMLButtonElement;
+    expect(mmr.disabled).toBe(true);
+    expect(mmr.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByTestId('api-token-op-mmr:read-locked').textContent).toBe(
+      'MMR sync API is locked for this organization.',
+    );
+    expect(
+      (
+        screen.getByTestId(
+          'api-token-op-contributions:read',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByTestId('api-token-op-promotion:read'));
+    fireEvent.click(screen.getByTestId('api-token-op-promotion:import'));
+    fireEvent.change(screen.getByTestId('api-token-name'), {
+      target: { value: 'SFG adaptor' },
+    });
+    fireEvent.click(screen.getByTestId('api-token-create-submit'));
+    await screen.findByTestId('api-token-secret');
+    expect(createApiToken).toHaveBeenCalledWith(ORG, {
+      name: 'SFG adaptor',
+      operations: ['promotion:read', 'promotion:import'],
+    });
+  });
+
+  it('needs at least one operation before calling the API', async () => {
+    renderPanel(promotionOnly);
+    fireEvent.click(await screen.findByTestId('api-token-create'));
+    fireEvent.change(screen.getByTestId('api-token-name'), {
+      target: { value: 'SFG adaptor' },
+    });
+    fireEvent.click(screen.getByTestId('api-token-create-submit'));
+    expect(await screen.findByText('Pick at least one operation')).toBeTruthy();
+    expect(createApiToken).not.toHaveBeenCalled();
+  });
+
+  it('shows a backend operations error on the picker', async () => {
+    vi.mocked(createApiToken).mockRejectedValue({
+      response: {
+        status: 400,
+        data: { operations: ['Give a nonempty list of operations from: x.'] },
+      },
+    });
+    renderPanel(fullAccess);
+    fireEvent.click(await screen.findByTestId('api-token-create'));
+    fireEvent.change(screen.getByTestId('api-token-name'), {
+      target: { value: 'bot' },
+    });
+    fireEvent.click(screen.getByTestId('api-token-create-submit'));
+    expect(
+      (await screen.findByTestId('api-token-operations-error')).textContent,
+    ).toBe('Give a nonempty list of operations from: x.');
+    expect(screen.queryByTestId('api-token-secret')).toBeNull();
+  });
+
+  it('shows a backend feature-locked error on the picker', async () => {
+    vi.mocked(createApiToken).mockRejectedValue({
+      response: {
+        status: 403,
+        data: { detail: 'This feature is locked for this organization.' },
+      },
+    });
+    renderPanel(fullAccess);
+    fireEvent.click(await screen.findByTestId('api-token-create'));
+    fireEvent.change(screen.getByTestId('api-token-name'), {
+      target: { value: 'bot' },
+    });
+    fireEvent.click(screen.getByTestId('api-token-create-submit'));
+    expect(
+      (await screen.findByTestId('api-token-operations-error')).textContent,
+    ).toBe('This feature is locked for this organization.');
+  });
+
+  it("lists each token's granted operations", async () => {
+    vi.mocked(listApiTokens).mockResolvedValue([
+      apiToken(),
+      apiToken({
+        id: 3,
+        name: 'SFG adaptor',
+        operations: [
+          'contributions:read',
+          'promotion:import',
+          'promotion:read',
+        ],
+      }),
+    ]);
+    renderPanel(fullAccess);
+    const mmr = await screen.findByTestId('api-token-operations-1');
+    expect(mmr.textContent).toContain('Read member MMRs');
+    expect(mmr.textContent).toContain('Update member MMRs');
+    const sfg = screen.getByTestId('api-token-operations-3');
+    expect(sfg.textContent).toContain('Read promotion recipients');
+    expect(sfg.textContent).toContain('Import SFG contact history');
+    expect(sfg.textContent).toContain('Read contribution totals');
+    expect(sfg.textContent).not.toContain('MMR');
   });
 
   it('shows a create error on the name field', async () => {
@@ -248,6 +389,7 @@ describe('ApiAccessPanel', () => {
         viewerPk: 9,
         mmrSyncEnabled: false,
         canUseMmrSync: true,
+        canUseApiTokens: true,
       }),
     );
     const button = (await screen.findByTestId(

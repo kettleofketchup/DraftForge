@@ -7,7 +7,7 @@ import { cn } from '~/lib/utils';
 import { CandidateList } from './CandidateList';
 import { ComposePanel } from './ComposePanel';
 import { usePreviewOptions } from './feedback';
-import { usePromoEvents, usePromoTemplates } from './queries';
+import { useCandidates, usePromoEvents, usePromoTemplates } from './queries';
 import {
   DEFAULT_CANDIDATE_FILTERS,
   type CandidateFilters,
@@ -75,14 +75,59 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
     }
   }, [eventId, events.data, resetEvent]);
 
+  // The same query CandidateList renders, so this adds no request.
+  const candidates = useCandidates(orgId, access, eventId, filters);
+  const filtersKey = JSON.stringify(filters);
+  const [picked, setPicked] = useState<{
+    key: string;
+    at: number;
+    sent: boolean;
+  } | null>(null);
+
+  // A selected player goes stale when a later refetch of the list they were
+  // picked from shows a recorded SFG contact or, with messaged players hidden,
+  // no longer lists them. Once this panel has marked a send, a missing row is
+  // its own send (or the list catching up after its undo), not staleness.
+  const { data: rows, dataUpdatedAt, isPlaceholderData } = candidates;
+  useEffect(() => {
+    if (candidate == null || justSent != null || picked == null) return;
+    if (!rows || isPlaceholderData || picked.key !== filtersKey) return;
+    if (dataUpdatedAt <= picked.at) return;
+    const row = rows.rows.find((r) => r.user_pk === candidate.user_pk);
+    const hidden = row == null && filters.hideMessaged && !picked.sent;
+    if (row?.external_contact || hidden) {
+      setCandidate(null);
+      setPicked(null);
+    }
+  }, [
+    candidate,
+    justSent,
+    picked,
+    rows,
+    dataUpdatedAt,
+    isPlaceholderData,
+    filtersKey,
+    filters.hideMessaged,
+  ]);
+
   const selectEvent = (event: PromoEvent): void => resetEvent(event.id);
   const onSent = useCallback((send: PromoSendResult | null) => {
     setJustSent(send?.id ?? null);
   }, []);
+  // Set before the request: the send's own list refetch can land first.
+  const onSending = useCallback(() => {
+    setPicked((p) => (p ? { ...p, sent: true } : p));
+  }, []);
   const onSelectCandidate = (row: LinkedCandidate): void => {
     setCandidate(row);
     setJustSent(null);
+    setPicked({ key: filtersKey, at: dataUpdatedAt, sent: false });
   };
+  const onStale = useCallback(() => {
+    setCandidate(null);
+    setJustSent(null);
+    setPicked(null);
+  }, []);
 
   const selectedEvent = events.data?.find((e) => e.id === eventId) ?? null;
 
@@ -163,6 +208,9 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
               candidate={candidate}
               templates={templates.data ?? []}
               onSent={onSent}
+              onSending={onSending}
+              syncConfigured={candidates.data?.contact_sync.configured ?? false}
+              onStale={onStale}
             />
           ) : (
             <p
