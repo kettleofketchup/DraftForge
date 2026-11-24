@@ -75,7 +75,8 @@ reset-test:
     docker cp "$CONTAINER_NAME:/data/test.db.sqlite3" {{quote(test_db)}}
     docker rm "$CONTAINER_NAME"
     echo "Restored {{test_db}}"
-    {{just}} db::start-test-db-users $stopped
+    read -ra stopped_services <<< "$stopped"
+    {{just}} db::start-test-db-users "${stopped_services[@]}"
 
 # Stop this worktree's slot services that hold the test DB open, then delete it with its WAL sidecars; prints the stopped services
 [private]

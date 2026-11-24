@@ -24,7 +24,8 @@ fresh:
     touch {{quote(test_db)}}
     {{just}} db::migrate::test
     {{just}} db::manage test populate_all --force
-    {{just}} db::start-test-db-users $stopped
+    read -ra stopped_services <<< "$stopped"
+    {{just}} db::start-test-db-users "${stopped_services[@]}"
 
 [group('db::populate')]
 users *flags:
