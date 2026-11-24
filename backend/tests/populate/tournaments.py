@@ -3,10 +3,10 @@ Tournament population functions for test database.
 """
 
 import random
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 from django.db import transaction
-from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser, PositionsModel
@@ -35,19 +35,19 @@ def create_dynamic_tournament(
     config: DynamicTournamentConfig,
     force: bool = False,
     *,
-    users: QuerySet[CustomUser] | None = None,
+    candidate_users: Iterable[CustomUser] | None = None,
 ) -> Tournament | None:
     """Create a tournament from a DynamicTournamentConfig.
 
     Args:
         config: The DynamicTournamentConfig with tournament settings
         force: If True, recreate tournament even if it exists
+        candidate_users: Optional pool for participants and Steam team members
 
     Returns:
         Tournament: The created or existing Tournament instance
     """
 
-    # Check if tournament already exists
     existing = Tournament.objects.filter(name=config.name).first()
     if existing and not force:
         print(
@@ -59,7 +59,6 @@ def create_dynamic_tournament(
         print(f"Deleting existing tournament '{config.name}' for recreation...")
         existing.delete()
 
-    # Get the league by name
     league = League.objects.filter(name=config.league_name).first()
     if not league:
         print(
@@ -67,12 +66,10 @@ def create_dynamic_tournament(
         )
         return None
 
-    users = CustomUser.objects.all() if users is None else users
-    # Get users with Steam IDs for team membership
-    users_with_steam = list(
-        users.filter(steam_account_id__isnull=False).exclude(steam_account_id=0)
+    all_users = list(
+        CustomUser.objects.all() if candidate_users is None else candidate_users
     )
-    all_users = list(users)
+    users_with_steam = [user for user in all_users if user.steam_account_id]
 
     if len(all_users) < config.user_count:
         print(
@@ -80,12 +77,11 @@ def create_dynamic_tournament(
         )
         return None
 
-    # Generate random date (within last 3 months to next 3 months)
+    # Choose a date within 90 days before or after today.
     base_date = date.today()
     random_days = random.randint(-90, 90)
     tournament_date = base_date + timedelta(days=random_days)
 
-    # Set state based on date
     if tournament_date < base_date:
         state = "past"
     elif tournament_date > base_date:
@@ -94,7 +90,6 @@ def create_dynamic_tournament(
         state = "in_progress"
 
     with transaction.atomic():
-        # Create tournament with specific pk if provided
         tournament = Tournament.objects.create(
             pk=config.pk,
             name=config.name,
@@ -105,13 +100,11 @@ def create_dynamic_tournament(
             steam_league_id=league.steam_league_id,
         )
 
-        # Select random users for this tournament
         selected_users = random.sample(
             all_users, min(config.user_count, len(all_users))
         )
         tournament.users.set(selected_users)
 
-        # Create OrgUser and LeagueUser records
         org = league.organization
         if org:
             for user in selected_users:
@@ -164,10 +157,10 @@ def create_dynamic_tournament(
 
 
 def create_dyn_tournaments(force: bool = False):
-    """Create all dynamic tournaments from data/tournaments.py.
+    """Create dynamic tournaments without dedicated populate steps.
 
-    Imports all objects from tests.data.tournaments and creates any
-    that are DynamicTournamentConfig instances.
+    Find DynamicTournamentConfig instances in tests.data.tournaments,
+    excluding configurations listed in OWN_STEP_CONFIG_PKS.
 
     Args:
         force: If True, recreate tournaments even if they exist
@@ -200,7 +193,6 @@ def populate_tournaments(force=False):
         force (bool): If True, create tournaments even if some already exist.
     """
 
-    # Check if tournaments already exist
     existing_tournaments = Tournament.objects.count()
     if existing_tournaments >= 6 and not force:
         print(
@@ -208,7 +200,6 @@ def populate_tournaments(force=False):
         )
         return
 
-    # Ensure we have enough users
     total_users = CustomUser.objects.count()
     if total_users < 40:
         print(
@@ -217,7 +208,6 @@ def populate_tournaments(force=False):
         print("Run populate_users first to create users.")
         return
 
-    # Get the DTX and Test leagues
     dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
     test_league = League.objects.filter(steam_league_id=TEST_STEAM_LEAGUE_ID).first()
 
@@ -225,7 +215,6 @@ def populate_tournaments(force=False):
         print("Leagues not found. Run populate_organizations_and_leagues first.")
         return
 
-    # Create all dynamic tournaments from Pydantic configs
     create_dyn_tournaments(force=force)
 
     print(f"Total tournaments in database: {Tournament.objects.count()}")
@@ -262,13 +251,11 @@ def populate_real_tournament_38(force=False):
     tournament_config = REAL_TOURNAMENT_38
     team_configs = REAL_TOURNAMENT_38_TEAMS
 
-    # Get the DTX league
     dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
     if not dtx_league:
         print("DTX League not found. Run populate_organizations_and_leagues first.")
         return None
 
-    # Check if tournament already exists
     existing_tournament = Tournament.objects.filter(name=tournament_config.name).first()
 
     if existing_tournament and not force:
@@ -295,12 +282,10 @@ def populate_real_tournament_38(force=False):
         # Get 32-bit Friend ID (Dotabuff)
         steam_account_id = test_user.get_steam_account_id()
 
-        # If explicit pk is set, use pk-based lookup first
         user = None
         if explicit_pk:
             user = CustomUser.objects.filter(pk=explicit_pk).first()
 
-        # Fall back to discord_id lookup
         if not user:
             user = CustomUser.objects.filter(discordId=discord_id).first()
 
@@ -308,7 +293,6 @@ def populate_real_tournament_38(force=False):
             # Try to find by steam_account_id (in case discord changed but steam is same)
             user = CustomUser.objects.filter(steam_account_id=steam_account_id).first()
             if user:
-                # Update discord_id to match production
                 user.discordId = discord_id
                 user.save()
                 print(f"    Updated user discord_id: {username}")
@@ -317,7 +301,6 @@ def populate_real_tournament_38(force=False):
             # Try to find by username (mock users might have same username)
             user = CustomUser.objects.filter(username=username).first()
             if user:
-                # Update to match production data
                 user.discordId = discord_id
                 if steam_account_id:
                     user.steam_account_id = steam_account_id
@@ -325,7 +308,6 @@ def populate_real_tournament_38(force=False):
                 print(f"    Updated user from username match: {username}")
 
         if not user:
-            # Create new user with real position data
             positions = PositionsModel.objects.create(
                 carry=pos_data.carry if pos_data else 3,
                 mid=pos_data.mid if pos_data else 3,
@@ -346,12 +328,10 @@ def populate_real_tournament_38(force=False):
                 f"    Created user: {username} (mmr: {mmr}, steam: {steam_id or 'N/A'})"
             )
         else:
-            # Update existing user data
             if user.steam_account_id != steam_account_id and steam_account_id:
                 user.steam_account_id = steam_account_id
             if user.username != username:
                 user.username = username
-            # Update positions if we have real data
             if pos_data and user.positions:
                 user.positions.carry = pos_data.carry
                 user.positions.mid = pos_data.mid
@@ -364,7 +344,6 @@ def populate_real_tournament_38(force=False):
         apply_committed_avatars([user])
         return user
 
-    # Parse date from config
     if tournament_config.date_played:
         date_played = timezone.make_aware(
             datetime.strptime(tournament_config.date_played, "%Y-%m-%d")
@@ -372,7 +351,6 @@ def populate_real_tournament_38(force=False):
     else:
         date_played = timezone.now()
 
-    # Create tournament using Pydantic config
     tournament = Tournament.objects.create(
         name=tournament_config.name,
         date_played=date_played,
@@ -388,7 +366,6 @@ def populate_real_tournament_38(force=False):
     print("  Creating users and teams...")
     # Use team configs from Pydantic models (already in draft order)
     for team_config in team_configs:
-        # Create captain (data comes from TestUser Pydantic models)
         captain = create_or_get_user(team_config.captain)
         all_users.append(captain)
 
@@ -400,7 +377,6 @@ def populate_real_tournament_38(force=False):
             if db_member not in all_users:
                 all_users.append(db_member)
 
-        # Create team with captain
         team = Team.objects.create(
             tournament=tournament,
             name=team_config.name,
@@ -411,10 +387,8 @@ def populate_real_tournament_38(force=False):
         teams.append(team)
         print(f"    Created team: {team_config.name} (captain: {captain.username})")
 
-    # Add all users to tournament
     tournament.users.set(all_users)
 
-    # Create OrgUser and LeagueUser records for tournament users
     org = dtx_league.organization
     if org:
         for user in all_users:
@@ -438,7 +412,6 @@ def populate_real_tournament_38(force=False):
     # teams[2] = ethan0688_'s Team, teams[3] = vrm.mtl's Team
 
     bracket_structure = [
-        # Winners Round 1 - COMPLETED
         {
             "round": 1,
             "bracket_type": "winners",
@@ -487,7 +460,6 @@ def populate_real_tournament_38(force=False):
             "winner": None,
             "status": "pending",
         },  # gglive vs (WF loser TBD)
-        # Grand Final - PENDING
         {
             "round": 1,
             "bracket_type": "grand_finals",
@@ -515,7 +487,6 @@ def populate_real_tournament_38(force=False):
         )
         games.append(game)
 
-    # Set up bracket links (winner/loser advancement)
     if len(games) >= 6:
         # Winners R1 M1 -> Winners Final (radiant) + Losers R1 (radiant)
         games[0].next_game = games[3]
@@ -556,7 +527,6 @@ def populate_real_tournament_38(force=False):
         f"Note: Steam matches should auto-sync from DTX League (steam_league_id={DTX_STEAM_LEAGUE_ID})"
     )
 
-    # Flush Redis cache
     flush_redis_cache()
 
     return tournament
