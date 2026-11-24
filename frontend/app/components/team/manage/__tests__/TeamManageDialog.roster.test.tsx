@@ -2,6 +2,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { TournamentType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import { CAPTAIN_CHANGE_WARNING } from '../teamActionCopy';
@@ -313,6 +314,148 @@ describe('TeamManageDialog layout', () => {
     const scroll = within(dialog).getByTestId('team-manage-roster-scroll');
     expect(scroll).toHaveClass('flex-1', 'min-h-0', '-mx-6', 'px-6');
     expect(within(scroll).getByTestId('team-roster-table')).toBeTruthy();
+  });
+});
+
+describe('TeamManageDialog team status', () => {
+  it('shows "In tournament" for a team without a placement', async () => {
+    renderDialog();
+    const badge = await screen.findByTestId('team-status-badge');
+    expect(badge).toHaveAttribute('data-status', 'live');
+    expect(badge).toHaveTextContent('In tournament');
+    expect(
+      within(screen.getByTestId('team-manage-title-row')).getByText(
+        `Manage ${managedTeam.name}`,
+      ),
+    ).toBeTruthy();
+  });
+
+  it('shows the placement for an eliminated team', async () => {
+    routeGets(axiosMock, {
+      team: { ...managedTeam, placement: 3 },
+      org: { pk: 7, admin_ids: [] },
+    });
+    renderDialog();
+    const badge = await screen.findByTestId('team-status-badge');
+    expect(badge).toHaveAttribute('data-status', 'eliminated');
+    expect(badge).toHaveTextContent('Eliminated · 3rd');
+  });
+
+  it('offers Set placement to managers only', async () => {
+    renderDialog();
+    expect(await screen.findByTestId('team-placement-trigger')).toBeTruthy();
+  });
+
+  it('hides Set placement when the viewer cannot manage the team', async () => {
+    routeGets(axiosMock, {
+      team: { ...managedTeam, can_manage_team: false },
+      org: { pk: 7, admin_ids: [] },
+    });
+    renderDialog();
+    await screen.findByTestId('team-status-badge');
+    expect(screen.queryByTestId('team-placement-trigger')).toBeNull();
+  });
+});
+
+describe('TeamManageDialog replace captain', () => {
+  const PATH = `/teams/${TEAM_ID}/replace-captain/`;
+
+  async function pickFromToolbar(pk: number) {
+    fireEvent.click(await screen.findByTestId('team-replace-captain-trigger'));
+    fireEvent.click(await screen.findByTestId(`team-captain-team-row-${pk}`));
+    await screen.findByTestId('team-action-dialog');
+  }
+
+  it('posts replace-captain with the outgoing captain marked a dropout', async () => {
+    axiosMock.post.mockResolvedValueOnce({ data: managedTeam });
+    renderDialog();
+    await pickFromToolbar(4);
+    expect(screen.getByTestId('team-action-dialog')).toHaveTextContent(
+      'Replace captain?',
+    );
+    expect(screen.getByTestId('team-action-outgoing-dropout')).toBeChecked();
+    await typeReasonAndConfirm(REASON);
+    await waitFor(() => expect(axiosMock.post).toHaveBeenCalledTimes(1));
+    expect(axiosMock.post).toHaveBeenCalledWith(PATH, {
+      reason: REASON,
+      acknowledged_codes: [],
+      user_id: 4,
+      mark_outgoing_dropout: true,
+    });
+    await waitFor(() =>
+      expect(logger.info).toHaveBeenCalledWith('Team action succeeded', {
+        teamId: TEAM_ID,
+        kind: 'replace_captain',
+      }),
+    );
+    expectReasonNeverLogged();
+  });
+
+  it('sends false when the dropout box is unchecked', async () => {
+    axiosMock.post.mockResolvedValueOnce({ data: managedTeam });
+    renderDialog();
+    await pickFromToolbar(4);
+    fireEvent.click(screen.getByTestId('team-action-outgoing-dropout'));
+    await typeReasonAndConfirm(REASON);
+    await waitFor(() => expect(axiosMock.post).toHaveBeenCalledTimes(1));
+    expect(axiosMock.post).toHaveBeenCalledWith(PATH, {
+      reason: REASON,
+      acknowledged_codes: [],
+      user_id: 4,
+      mark_outgoing_dropout: false,
+    });
+  });
+
+  it('shows an on_other_team refusal inline', async () => {
+    const detail =
+      'This player is on Others in this tournament. Remove them there first. If that team is out of the tournament, set its placement first.';
+    axiosMock.post.mockRejectedValueOnce(
+      axiosError(400, { code: 'on_other_team', detail }),
+    );
+    renderDialog();
+    await pickFromToolbar(4);
+    await typeReasonAndConfirm(REASON);
+    expect(await screen.findByTestId('team-manage-error')).toHaveTextContent(
+      detail,
+    );
+    expect(logger.warn).toHaveBeenCalledWith('Team action refused', {
+      teamId: TEAM_ID,
+      kind: 'replace_captain',
+      code: 'on_other_team',
+    });
+  });
+
+  it("lists eliminated teams' players from the tournament users", async () => {
+    useUserStore.setState({
+      tournament: {
+        pk: TOURNAMENT_PK,
+        users: [{ pk: 21, username: 'spooney' }],
+      } as unknown as TournamentType,
+    });
+    renderDialog();
+    fireEvent.click(await screen.findByTestId('team-replace-captain-trigger'));
+    expect(
+      await screen.findByTestId('team-captain-free-row-21'),
+    ).toHaveTextContent('Fallen · Eliminated · 3rd');
+    useUserStore.setState({ tournament: {} as TournamentType });
+  });
+
+  it('the captain row action opens the captain picker', async () => {
+    renderDialog();
+    const captain = managedTeam.captain!.pk;
+    const row = await screen.findByTestId(`team-member-row-${captain}`);
+    fireEvent.pointerDown(
+      within(row).getByRole('button', { name: /^Actions for / }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' },
+    );
+    fireEvent.click(
+      await screen.findByTestId(`team-roster-replace-captain-${captain}`),
+    );
+    expect(await screen.findByTestId('team-captain-search')).toBeTruthy();
+    fireEvent.click(await screen.findByTestId('team-captain-team-row-4'));
+    expect(await screen.findByTestId('team-action-dialog')).toHaveTextContent(
+      'Replace captain?',
+    );
   });
 });
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { subInSchema, teamActionSchema } from '../teamActionSchema';
+import {
+  replaceCaptainSchema,
+  subInSchema,
+  teamActionSchema,
+} from '../teamActionSchema';
 
 describe('teamActionSchema', () => {
   it('rejects a reason shorter than 3 characters after trimming', () => {
@@ -38,5 +42,29 @@ describe('subInSchema', () => {
     expect(
       subInSchema.safeParse({ reason: 'abc', replacing_id: 0 }).success,
     ).toBe(false);
+  });
+});
+
+describe('replaceCaptainSchema', () => {
+  it('defaults mark_outgoing_dropout to true', () => {
+    expect(replaceCaptainSchema.parse({ reason: 'abc' })).toEqual({
+      reason: 'abc',
+      mark_outgoing_dropout: true,
+    });
+  });
+
+  it('keeps an explicit false', () => {
+    expect(
+      replaceCaptainSchema.parse({
+        reason: 'abc',
+        mark_outgoing_dropout: false,
+      }),
+    ).toEqual({ reason: 'abc', mark_outgoing_dropout: false });
+  });
+
+  it('still requires a reason', () => {
+    expect(replaceCaptainSchema.safeParse({ reason: 'ab' }).success).toBe(
+      false,
+    );
   });
 });

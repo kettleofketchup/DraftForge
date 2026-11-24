@@ -78,3 +78,13 @@ describe('discord_profile_reminder copy', () => {
     expect(PROFILE_REMINDER_DESCRIPTION).not.toMatch(/mention|ping/i);
   });
 });
+
+describe('discord_signup_reminder metadata', () => {
+  const meta = EVENT_SECTION_FIELDS.discord.discord_signup_reminder;
+  it('names series subscribers as recipients', () => {
+    expect(meta.description).toBe(
+      "DM series subscribers who haven't signed up yet, before the event starts",
+    );
+    expect(meta.description).not.toMatch(/\bDM users\b/i);
+  });
+});

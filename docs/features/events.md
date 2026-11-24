@@ -36,7 +36,7 @@ The signup-modal field set is selected by `game_type`. Most rank/skill fields ar
 
 - **Profile fields** (Dota-only): `positions` (carry/mid/offlane/soft_support/hard_support priorities 0–5), `rank_status` (active / previous / never), `rank_medal` (e.g. "Legend 4"), `battle_cup_tier` (1–8), `rank_screenshot`, `battlecup_screenshot`.
 - **Profile fields** (Deadlock-only): `rank` (free-text), `rank_date`.
-- **Player field** (shared): `steam_account_id`, the Steam Friend ID. It is stored once per player on `CustomUser.steam_account_id`, not on a game profile. A signup fills it when it is empty, accepts the same value again, and refuses a different value ("Your Friend ID is already set to X; contact an admin to change it"). Changing it is a profile or admin edit.
+- **Player field** (shared): `steam_account_id`, the Steam Friend ID. It is stored once per player on `CustomUser.steam_account_id`, not on a game profile. A signup fills it when it is empty, accepts the same value again, and refuses a different value ("Your Friend ID is already set to X; contact an admin to change it"). Changing it is a profile or admin edit. A self-set ID must belong to a real Steam account and stays unverified until staff check it; see [Steam Friend ID verification](steam-friend-id.md).
 - **Event-config flags** (Dota-only): `allow_active_mmr`, `allow_previous_rank`, `allow_battlecup_rating`, `min_mmr`, `require_mmr_verified`, `discord_require_rank_screenshot`, `discord_require_battlecup_screenshot`.
 
 !!! note "Deadlock web parity"
@@ -103,7 +103,7 @@ Deleting a series (`events.services.teardown_event_repeater`) also deletes its `
 | Mark as interested | Players who sign up are marked interested on Discord |
 | Signup channel | Post an embed to a channel for reaction-based signups |
 | Pre-day announcement | Post a reminder in a channel before the event |
-| Signup reminder | DM subscribers who haven't signed up (recurring series only) |
+| Signup reminder | DM series subscribers who haven't signed up (recurring series only) |
 | Profile reminder | Post a reminder in the announcement channel asking signed-up members to complete the profile details the event requires (such as Friend ID). Needs an announcement channel; without one, the Discord Tasks panel shows it as misconfigured |
 | Attendance reminder | Post a reminder in the announcement channel N hours before the event. Replies aren't tracked; use the [ready check](events/roll-call.md) to require confirmation |
 | Scheduled-event cleanup | Cancelling or deleting an event deletes its Discord scheduled event (`events.tasks.delete_discord_scheduled_event`), so nothing is left orphaned in the guild |
@@ -156,7 +156,9 @@ Users can subscribe to event repeaters (mail icon on repeater cards). Two distin
 | When | What is sent | Gated by |
 |---|---|---|
 | An event is created from the series | A **channel embed** announcing the new event | `EventRepeater.discord_notify_new_events`, then the event's `discord_announcement` **and** `discord_announcement_channel_id` |
-| `discord_signup_reminder_hours` before the event | A **DM to each subscriber** who hasn't signed up yet | `discord_signup_reminder` (series only) |
+| `discord_signup_reminder_hours` before the event | A **DM to each series subscriber** who hasn't signed up yet | `discord_signup_reminder` (series only); sent only while signups are open and the event has a Discord scheduled event |
+
+Subscribers without a linked Discord account get no DM, and a cancelled signup counts as not signed up.
 
 Subscribing is what earns you the pre-event signup-reminder DM. The new-event announcement is a channel post, not a DM, and it is silently skipped when no announcement channel is configured.
 

@@ -5,10 +5,10 @@ Stdlib only (the `shellcheck` CI job runs it on the bare runner):
     python3 -m unittest scripts/test_shellcheck_just.py
 """
 
+import os
 import subprocess
 import sys
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 
@@ -47,6 +47,14 @@ bashism:
 """
 
 
+# A near-empty environment, but keep LD_LIBRARY_PATH: on a self-hosted runner
+# setup-python's interpreter lives outside its built-in /opt/hostedtoolcache RUNPATH and
+# only starts with the LD_LIBRARY_PATH the action exports.
+CHILD_ENV = {
+    key: os.environ[key] for key in ("PATH", "LD_LIBRARY_PATH") if key in os.environ
+}
+
+
 class ShellcheckJustTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -58,7 +66,7 @@ class ShellcheckJustTest(unittest.TestCase):
             [sys.executable, "-I", str(SCRIPT), "--root", str(root)],
             capture_output=True,
             text=True,
-            env={"PATH": __import__("os").environ["PATH"]},
+            env=CHILD_ENV,
         )
         cls.out = cls.result.stdout
 

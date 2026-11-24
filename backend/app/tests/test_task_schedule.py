@@ -130,6 +130,32 @@ class TaskScheduleEndpointTest(TestCase):
                     task["status"], "disabled", f"{task['task']} should be disabled"
                 )
 
+    def test_signup_reminder_description_names_series_subscribers(self) -> None:
+        resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
+        row = next(t for t in resp.json() if t["task"] == "signup_reminder")
+        self.assertEqual(
+            row["description"],
+            "DMs series subscribers who haven't signed up, 6h before event",
+        )
+
+    def test_signup_reminder_description_when_misconfigured(self) -> None:
+        event = Event.objects.create(
+            organization=self.org,
+            event_repeater=None,
+            name="Misconfigured Reminder Test",
+            state="signups_open",
+            scheduled_at=timezone.now() + timedelta(hours=24),
+            discord_signup_reminder=True,
+            discord_signup_reminder_hours=12,
+        )
+        resp = self.client.get(f"/api/events/{event.pk}/task-schedule/")
+        row = next(t for t in resp.json() if t["task"] == "signup_reminder")
+        self.assertEqual(row["status"], "misconfigured")
+        self.assertEqual(
+            row["description"],
+            "DMs series subscribers who haven't signed up, 12h before event",
+        )
+
     def test_fired_tasks_detected(self) -> None:
         # signup_reminder fired status is driven by DiscordEventDM rows
         # (subscriber DMs sent), not DiscordMessageLog.
