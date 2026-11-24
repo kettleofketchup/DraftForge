@@ -1,6 +1,8 @@
+import { TriangleAlert } from 'lucide-react';
 import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import type { z } from 'zod';
 import { IntegerInput } from '~/components/patterns/IntegerInput';
+import { Alert, AlertDescription } from '~/components/ui/alert';
 import {
   FormControl,
   FormDescription,
@@ -21,6 +23,11 @@ import { Textarea } from '~/components/ui/textarea';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
 import type { discordConfigSchema } from './schemas';
+import {
+  START_MENTION_PREREQUISITE_NOTE,
+  startMentionPrerequisite,
+  startMentionPrerequisiteMessage,
+} from './startMentionPrerequisite';
 
 /** Field set covered by this section. Includes discordConfigSchema's input
  *  plus the repeater-only `discord_notify_new_events` flag — that field lives
@@ -180,7 +187,9 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     profileReminder,
     confirmAttendance,
     postSignups,
+    postSignupsChannelId,
     announcement,
+    announcementChannelId,
     startMention,
   ] = useWatch({
     control,
@@ -190,10 +199,20 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
       'discord_profile_reminder',
       'discord_confirm_attendance',
       'discord_post_signups',
+      'discord_post_signups_channel_id',
       'discord_announcement',
+      'discord_announcement_channel_id',
       'discord_start_mention',
     ],
   });
+
+  const prerequisite = startMentionPrerequisite({
+    postSignups,
+    signupChannelId: postSignupsChannelId,
+    announcement,
+    announcementChannelId,
+  });
+  const prerequisiteMessage = startMentionPrerequisiteMessage(prerequisite);
 
   return (
     <div className="space-y-3">
@@ -344,6 +363,31 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
         />
         {startMention && (
           <>
+            <div className="ml-7 space-y-2">
+              <p
+                data-testid="discord-start-mention-prerequisite-note"
+                className="text-sm text-muted-foreground"
+              >
+                {START_MENTION_PREREQUISITE_NOTE}
+              </p>
+              {prerequisite.kind === 'missing' && (
+                <Alert
+                  data-testid="discord-start-mention-prerequisite-warning"
+                  className="border-warning/30 bg-warning/10 text-warning [&>svg]:text-warning"
+                >
+                  <TriangleAlert />
+                  <AlertDescription>{prerequisiteMessage}</AlertDescription>
+                </Alert>
+              )}
+              {prerequisite.kind === 'announcement_fallback' && (
+                <p
+                  data-testid="discord-start-mention-prerequisite-fallback"
+                  className="text-sm text-muted-foreground"
+                >
+                  {prerequisiteMessage}
+                </p>
+              )}
+            </div>
             <HoursSelect
               control={control}
               name="discord_start_mention_minutes"
