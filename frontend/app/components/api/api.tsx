@@ -154,6 +154,7 @@ export {
   getEventDiscordState,
   getEventRepeater,
   getEventRepeaters,
+  getEventSignupHistory,
   getEventSignups,
   getEvents,
   getOrgEventDefaults,
