@@ -21,6 +21,8 @@ const renderTabs = () =>
       onTabChange={vi.fn()}
       canViewMembers
       memberAccessSettled
+      canManageLobbyBots={false}
+      lobbyBotsAccessSettled
     />,
   );
 
