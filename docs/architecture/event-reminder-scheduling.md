@@ -145,7 +145,7 @@ Deletes performed by realign go through `services.teardown_event`, not a bare qu
 
 ## Single events vs recurring series
 
-`discord_signup_reminder` DMs every subscriber of the series — a concept that doesn't exist for one-off events *(events created with no series)*. Two layers reject the invalid combination:
+`discord_signup_reminder` DMs the series' subscribers who haven't signed up — a concept that doesn't exist for one-off events *(events created with no series)*. Two layers reject the invalid combination:
 
 - **Backend** — `EventSerializer.validate` rejects `discord_signup_reminder=True` when `event_repeater` is `None` (`backend/events/serializers.py:336`).
 - **Frontend** — `eventSchema.superRefine` mirrors the rule client-side, and `DiscordConfigSection` hides the toggle when `isRepeater={false}` (`frontend/app/components/events/schemas.ts`, `DiscordConfigSection.tsx`).

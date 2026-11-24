@@ -36,6 +36,7 @@ const event: PromoEvent = {
   ends_at: null,
   state: 'upcoming',
   signups_open_at: null,
+  game_type: 1,
 };
 
 const candidate: LinkedCandidate = {
@@ -45,6 +46,7 @@ const candidate: LinkedCandidate = {
   discordUsername: 'ana_dc',
   discordId: '1234',
   avatarUrl: null,
+  mmr: 3200,
   recent_count: 2,
   last_messaged: null,
   earning_send_exists: false,

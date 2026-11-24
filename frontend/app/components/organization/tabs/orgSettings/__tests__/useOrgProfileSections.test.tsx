@@ -14,6 +14,7 @@ import { updateOrganization } from '~/components/api/api';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { SettingsDialogHandle } from '~/components/patterns/SettingsDialog';
 import type { SettingsFormUnit } from '~/components/patterns/settingsSaveBar';
+import { promotionKeys } from '~/features/org-features/queryKeys';
 import { useOrgProfileSections } from '../useOrgProfileSections';
 
 vi.mock('~/components/api/api', () => ({ updateOrganization: vi.fn() }));
@@ -52,8 +53,7 @@ function Harness(): ReactNode {
   return <div>{sections.find((s) => s.value === 'general')?.content}</div>;
 }
 
-function renderHarness() {
-  const qc = new QueryClient();
+function renderHarness(qc = new QueryClient()) {
   return render(
     <QueryClientProvider client={qc}>
       <Harness />
@@ -93,6 +93,31 @@ describe('useOrgProfileSections unit', () => {
       expect.objectContaining({ name: 'New' }),
     );
     expect(unit.isDirty).toBe(false);
+  });
+
+  it('unit.save refreshes this org’s rendered promo DMs for every viewer', async () => {
+    vi.mocked(updateOrganization).mockResolvedValue(ORG);
+    const qc = new QueryClient();
+    const renderKey = (orgId: number, viewerPk: number) => [
+      ...promotionKeys.all(orgId, viewerPk),
+      'render',
+      1,
+      2,
+      3,
+    ];
+    const keys = [renderKey(7, 11), renderKey(7, 12), renderKey(8, 11)];
+    for (const key of keys) qc.setQueryData(key, { text: 'old' });
+    renderHarness(qc);
+    fireEvent.change(screen.getByTestId('org-name-input'), {
+      target: { value: 'New' },
+    });
+    await act(async () => {
+      await unit.save();
+    });
+    const invalid = keys.map(
+      (key) => qc.getQueryState(key)?.isInvalidated ?? false,
+    );
+    expect(invalid).toEqual([true, true, false]);
   });
 
   it('unit.save resolves false, stays dirty and toasts when the request fails', async () => {

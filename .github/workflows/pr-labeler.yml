@@ -3,6 +3,8 @@ name: Label PRs by changed files
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    # The bases shellcheck.yml's runs-on guard checks; this job can run on the home runner.
+    branches: [main, 'fix/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,7 +16,17 @@ permissions:
 
 jobs:
   label:
-    runs-on: ubuntu-latest
+    # Small job, on the home runner to free hosted slots: same-repo PRs from
+    # HOME_RUNNER_AUTHORS when SELF_HOSTED_RUNNERS is 'true' (docs/development/ci-runners.md).
+    # Same guard as playwright.yml `prepare`; scripts/check-runs-on.sh allowlists this job.
+    runs-on: >-
+      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
+      && 'draftforge-home' || 'ubuntu-latest' }}
+    timeout-minutes: 5
     steps:
       - uses: actions/labeler@v5
         with:

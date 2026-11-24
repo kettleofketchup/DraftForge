@@ -26,6 +26,10 @@ export interface UserEntry {
   /** Flat rendered-once positions; read via selectPositions/usePlayerPositions for gameType-awareness. */
   positions?: PositionsType;
   steam_account_id?: number | null;
+  steam_account_verified?: boolean;
+  steam_account_verified_at?: string | null;
+  steam_account_verified_org_name?: string | null;
+  steam_account_exists_checked?: boolean;
   discordId?: string | null;
   discordNickname?: string | null;
   nickname?: string | null;
