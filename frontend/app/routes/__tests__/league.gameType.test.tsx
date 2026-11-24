@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -36,11 +37,13 @@ describe('LeaguePage game context', () => {
       getTournaments: vi.fn(async () => {}),
     } as never);
     const { unmount } = render(
-      <MemoryRouter initialEntries={['/leagues/3']}>
-        <Routes>
-          <Route path="leagues/:leagueId/:tab?" element={<LeaguePage />} />
-        </Routes>
-      </MemoryRouter>,
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/leagues/3']}>
+          <Routes>
+            <Route path="leagues/:leagueId/:tab?" element={<LeaguePage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
     expect(useGameTypeStore.getState().currentGameType).toBe(LEAGUE_MMR_GAME);
     unmount();

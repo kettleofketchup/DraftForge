@@ -1,0 +1,1 @@
+- Event staff can see who changed each sign-up, when and how, in a new History tab and from each signup row (#497).

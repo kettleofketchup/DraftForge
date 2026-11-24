@@ -1,0 +1,1 @@
+- Someone added to a league who wasn't in its organization yet now shows up on the organization's Users tab and in its member count right away, without a page reload
