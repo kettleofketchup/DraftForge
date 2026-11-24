@@ -241,6 +241,7 @@ def _create_signup(
     *,
     actor: SignupActor,
     for_staff_placement: bool = False,
+    reason: str = "",
 ) -> EventSignup:
     """Internal: create a signup with no state check.
 
@@ -317,7 +318,14 @@ def _create_signup(
             **eligibility,
             **carry,
         )
-        _record_leaf(signup, event=locked, actor=actor, action=action, before=before)
+        _record_leaf(
+            signup,
+            event=locked,
+            actor=actor,
+            action=action,
+            before=before,
+            reason=reason,
+        )
         invalidate_after_commit(event)
         log.info(
             "signup_post_commit_hooks_scheduled",
@@ -340,7 +348,9 @@ def _create_signup(
         **carry,
     )
     _roster_add_if_joins(signup)
-    _record_leaf(signup, event=locked, actor=actor, action=action, before=before)
+    _record_leaf(
+        signup, event=locked, actor=actor, action=action, before=before, reason=reason
+    )
     invalidate_after_commit(event)
     log.info(
         "signup_post_commit_hooks_scheduled",
@@ -646,6 +656,7 @@ def staff_add_signup(
     event_team: EventTeam | None = None,
     *,
     actor: SignupActor,
+    reason: str = "",
 ) -> EventSignup:
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
@@ -655,7 +666,12 @@ def staff_add_signup(
     if event.organization_id:
         resolve_or_create_org_user(user, event.organization)
     signup = _create_signup(
-        event, user, event_team=event_team, actor=actor, for_staff_placement=True
+        event,
+        user,
+        event_team=event_team,
+        actor=actor,
+        for_staff_placement=True,
+        reason=reason,
     )
     if event.state == EventState.ROLL_CALL:
         lock_event(event)

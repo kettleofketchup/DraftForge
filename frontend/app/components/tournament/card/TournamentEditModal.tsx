@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { updateTournament } from '~/components/api/api';
+import { useLeagues } from '~/components/league/hooks/useLeagues';
 import type { LeagueType } from '~/components/league/schemas';
 import { Button } from '~/components/ui/button';
 import { Calendar } from '~/components/ui/calendar';
@@ -123,15 +124,7 @@ export function TournamentEditModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const setTournament = useUserStore((state) => state.setTournament);
-  const leagues = useUserStore((state) => state.leagues);
-  const getLeagues = useUserStore((state) => state.getLeagues);
-
-  // Fetch leagues if not loaded
-  useEffect(() => {
-    if (!leagues || leagues.length === 0) {
-      getLeagues();
-    }
-  }, [leagues, getLeagues]);
+  const { leagues } = useLeagues();
 
   // Get current league ID from tournament
   const getCurrentLeagueId = (): number | null => {

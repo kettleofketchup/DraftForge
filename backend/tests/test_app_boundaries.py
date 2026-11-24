@@ -533,6 +533,7 @@ _TOURNAMENT_RETIRED_DEFS = {
     ),
     "app.tests.test_team_signals": (
         "EmptyTeamAuditTests",
+        "KnockedOutRosterCascadeTests",
         "SuccessionAuditTests",
         "SuccessorAfterRemovalTests",
         "SystemRowSignalTests",
