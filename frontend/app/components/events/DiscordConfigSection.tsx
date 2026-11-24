@@ -20,6 +20,7 @@ import {
 import { Textarea } from '~/components/ui/textarea';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
+import { PROFILE_REMINDER_DESCRIPTION } from './form/settingsFields';
 import type { discordConfigSchema } from './schemas';
 
 /** Field set covered by this section. Includes discordConfigSchema's input
@@ -308,7 +309,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           control={control}
           name="discord_profile_reminder"
           label="Profile update reminder"
-          description="DM signed-up users to complete their profile (Steam ID, MMR) before the event"
+          description={PROFILE_REMINDER_DESCRIPTION}
         />
         {profileReminder && (
           <HoursSelect

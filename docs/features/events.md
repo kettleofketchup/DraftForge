@@ -104,7 +104,7 @@ Deleting a series (`events.services.teardown_event_repeater`) also deletes its `
 | Signup channel | Post an embed to a channel for reaction-based signups |
 | Pre-day announcement | Post a reminder in a channel before the event |
 | Signup reminder | DM subscribers who haven't signed up (recurring series only) |
-| Profile reminder | DM users to complete their profile (Steam ID, MMR) |
+| Profile reminder | Post a reminder in the announcement channel asking signed-up members to complete the profile details the event requires (such as Friend ID). Needs an announcement channel; without one, the Discord Tasks panel shows it as misconfigured |
 | Attendance reminder | Post a reminder in the announcement channel N hours before the event. Replies aren't tracked; use the [ready check](events/roll-call.md) to require confirmation |
 | Scheduled-event cleanup | Cancelling or deleting an event deletes its Discord scheduled event (`events.tasks.delete_discord_scheduled_event`), so nothing is left orphaned in the guild |
 
