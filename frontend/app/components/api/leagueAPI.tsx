@@ -4,10 +4,12 @@
  * API functions for league-related operations.
  */
 
-import type {
-  LeagueMatchType,
-  LeagueType,
-  LeaguesType,
+import { z } from 'zod';
+import {
+  LeagueListItemSchema,
+  type LeagueMatchType,
+  type LeagueType,
+  type LeaguesType,
 } from '~/components/league/schemas';
 import type { UserType } from '~/index';
 import axios from './axios';
@@ -17,9 +19,10 @@ import type { AddMemberPayload, AddUserResponse } from './types';
 export async function getLeagues(
   organizationId?: number,
 ): Promise<LeaguesType> {
-  const params = organizationId ? `?organization=${organizationId}` : '';
-  const response = await axios.get<LeaguesType>(`/leagues/${params}`);
-  return response.data;
+  const response = await axios.get('/leagues/', {
+    params: organizationId ? { organization: organizationId } : undefined,
+  });
+  return z.array(LeagueListItemSchema).parse(response.data);
 }
 
 export async function fetchLeague(pk: number): Promise<LeagueType> {

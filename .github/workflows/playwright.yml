@@ -519,6 +519,9 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Typecheck frontend
+        run: npm --prefix frontend run typecheck
+
       - name: Run frontend Vitest
         env:
           CI: 'true'
