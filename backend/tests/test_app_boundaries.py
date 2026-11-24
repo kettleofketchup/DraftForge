@@ -162,7 +162,6 @@ _ORG_PERMISSION_NAMES = (
     "is_org_owner",
     "has_org_admin_access",
     "has_org_staff_access",
-    "is_site_admin",
     "is_org_role_holder",
     "has_org_promoter_access",
     "can_view_org_members",
@@ -857,7 +856,30 @@ TOURNAMENT = MovedSlice(
     cached_labels=frozenset({"tournament", "team", "game"}),
 )
 
-MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE, TOURNAMENT)
+USER = MovedSlice(
+    name="user",
+    source_app="app",
+    new_app="user",
+    moved=frozenset(
+        {
+            ("org.permissions", "is_site_admin"),
+            ("app.permissions_org", "is_site_admin"),
+        }
+    ),
+    retired_modules=frozenset(),
+    model_labels=frozenset(),
+    move_migration=("app", "0116_move_user_models_to_user"),
+    cached_labels=frozenset(),
+)
+
+MOVED_SLICES: tuple[MovedSlice, ...] = (
+    HERO_DRAFT,
+    TEAM_DRAFT,
+    ORG,
+    LEAGUE,
+    TOURNAMENT,
+    USER,
+)
 
 # Slices cut before the rule that a retired module's defs go into `moved`;
 # their modules were renamed or split on the way out.
@@ -969,6 +991,25 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"League"}),
             "home_stats caches on and counts League as a cross-domain home-page "
             "aggregate",
+        ),
+    },
+    "user": {
+        "app/models.py": BackEdge(
+            frozenset({"BaseUserProfile", "DotaUserProfile"}),
+            "CustomUser profile accessors",
+            type_only=frozenset({"DotaUserProfile"}),
+        ),
+        "app/user_cache.py": BackEdge(
+            frozenset({"BaseUserProfile", "DotaUserProfile", "with_user_profiles"}),
+            "user-only code still in app until Task 7",
+        ),
+        "app/views_main.py": BackEdge(
+            frozenset({"BaseUserProfile", "DotaUserProfile", "with_user_profiles"}),
+            "user-only code still in app until Task 8",
+        ),
+        "app/views/user_search.py": BackEdge(
+            frozenset({"with_user_profiles"}),
+            "user-only code still in app until Task 8",
         ),
     },
     "tournament": {
@@ -1402,6 +1443,24 @@ class GuardSelfTests(SimpleTestCase):
         self.assertClean("from dst.models import Moved\n", "dst/views.py")
         self.assertClean("from src.models import Other\n", "src/views.py")
 
+    def test_import_via_non_source_old_module_flagged(self) -> None:
+        moved_slice = replace(
+            FIXTURE_SLICE,
+            moved=frozenset({("org.permissions", "f")}),
+        )
+        self.assertNotEqual(
+            find_violations(
+                "from org.permissions import f\n", "x/y.py", slices=(moved_slice,)
+            ),
+            [],
+        )
+        self.assertEqual(
+            find_violations(
+                "from user.permissions import f\n", "x/y.py", slices=(moved_slice,)
+            ),
+            [],
+        )
+
     def test_relative_import_through_old_module(self) -> None:
         self.assertFlagged("from .models import Moved\n", "src/views.py")
         self.assertFlagged("from ..models import Moved\n", "src/views/foo.py")
@@ -1722,6 +1781,9 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("draft/models/hero.py", rels)
         self.assertIn("draft/models/team.py", rels)
         self.assertIn("org/permissions.py", rels)
+        self.assertIn("user/permissions.py", rels)
+        self.assertIn("backend/settings.py", rels)
+        self.assertIn("config/celery_light.py", rels)
         self.assertIn("org/models.py", rels)
         self.assertIn("league/permissions.py", rels)
         self.assertIn("league/models.py", rels)
