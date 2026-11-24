@@ -1,6 +1,6 @@
 name: Unit tests
 
-# Split from playwright.yml so editing this job does not start the Playwright stack jobs.
+# Separate from playwright.yml so editing either workflow does not run the other.
 # paths-ignore skips a run only when EVERY changed file matches.
 on:
   push:
