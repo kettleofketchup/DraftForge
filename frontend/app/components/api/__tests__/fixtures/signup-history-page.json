@@ -1,0 +1,96 @@
+{
+  "count": 3,
+  "next": "http://testserver/api/events/2/signup-history/?cursor=MjAyNi0xMS0yMFQxODowMjowMCswMDowMHwy&page_size=2",
+  "previous": null,
+  "results": [
+    {
+      "id": 3,
+      "occurred_at": "2026-11-20T18:03:00Z",
+      "action": "promoted",
+      "subject": {
+        "user_id": 8,
+        "username": "hist_cara",
+        "nickname": "Cara",
+        "discordNickname": "cara",
+        "guildNickname": "Cara (guild)",
+        "avatarUrl": "https://cdn.discordapp.com/avatars/100000000000009003/abc123.png",
+        "discord_id": "100000000000009003"
+      },
+      "actor": {
+        "user_id": null,
+        "username": null,
+        "nickname": null,
+        "discordNickname": null,
+        "guildNickname": null,
+        "avatarUrl": null,
+        "role": "system"
+      },
+      "means": "system",
+      "on_behalf": false,
+      "reason": "",
+      "before": {
+        "status": "waitlisted",
+        "commitment": "main",
+        "rsvp_class": "standard",
+        "signed_up_at": "2026-11-19T18:00:00Z",
+        "line_seq": 3,
+        "waitlist_position": 1,
+        "event_team_id": null,
+        "extra": {}
+      },
+      "after": {
+        "status": "approved",
+        "commitment": "main",
+        "rsvp_class": "standard",
+        "signed_up_at": "2026-11-19T18:00:00Z",
+        "line_seq": 3,
+        "waitlist_position": null,
+        "event_team_id": null,
+        "extra": {}
+      },
+      "rules_overridden": [],
+      "caused_by": 1
+    },
+    {
+      "id": 2,
+      "occurred_at": "2026-11-20T18:02:00Z",
+      "action": "staff_added",
+      "subject": {
+        "user_id": 8,
+        "username": "hist_cara",
+        "nickname": "Cara",
+        "discordNickname": "cara",
+        "guildNickname": "Cara (guild)",
+        "avatarUrl": "https://cdn.discordapp.com/avatars/100000000000009003/abc123.png",
+        "discord_id": "100000000000009003"
+      },
+      "actor": {
+        "user_id": 1,
+        "username": "event_admin",
+        "nickname": "EventAdmin",
+        "discordNickname": null,
+        "guildNickname": null,
+        "avatarUrl": "https://cdn.discordapp.com/embed/avatars/5.png",
+        "role": "staff"
+      },
+      "means": "web",
+      "on_behalf": true,
+      "reason": "Vouched for by staff",
+      "before": null,
+      "after": {
+        "status": "waitlisted",
+        "commitment": "main",
+        "rsvp_class": "standard",
+        "signed_up_at": "2026-11-19T18:00:00Z",
+        "line_seq": 3,
+        "waitlist_position": 1,
+        "event_team_id": null,
+        "extra": {
+          "staff_power": true
+        }
+      },
+      "rules_overridden": [],
+      "caused_by": null
+    }
+  ]
+}

@@ -43,7 +43,8 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
   Specs that need the simulator skip when nothing answers; both recipes set
   `DOTA_LOBBY_SIMULATOR_REQUIRED=1` when this slot's simulator is running, so one
   that never becomes available (bots not ready, test league not verified within
-  60 s) fails the run instead of skipping it
+  60 s) fails the run instead of skipping it. CI sets it unconditionally on its
+  dota-lobby step, so a missing simulator fails there too
 - `org-features-sequential` sets `workers: 1`: every file resets the same seeded
   locked features orgs, ledger and promo sends via `/api/tests/org-features/reset/`.
   `just test::pw::cicd-org-features` runs its @cicd specs
