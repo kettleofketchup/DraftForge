@@ -1,6 +1,10 @@
 from unittest.mock import patch
 
+from django.core.cache import cache
+from django.test import override_settings
+
 from app.models import CustomUser, GameType
+from events.discord import handle_signup_modal_submit
 from events.discord._shared import _direct_signup
 from events.discord.providers.deadlock import DeadlockHandler
 from events.discord.providers.dota import DotaHandler
@@ -9,6 +13,7 @@ from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
 from org.models import OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+from steam.services.account_lookup import SteamLookupRateLimited
 
 
 class FriendIdModalTests(EventTestCase):
@@ -193,3 +198,56 @@ class DotaModalDirectSignupTests(EventTestCase):
         self.assertEqual(reply["status"], SignupStatus.APPROVED)
         u.refresh_from_db()
         self.assertEqual(u.steam_account_id, 626262)
+
+
+@override_settings(
+    STEAM_ACCOUNT_LOOKUP_ENABLED=True,
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+)
+class ModalSubmitSteamLookupTests(EventTestCase):
+    ENSURE = "events.eligibility.steam.ensure_steam_account_exists"
+    CASES = (
+        (GameType.DOTA2, {"rank_status": "active"}),
+        (GameType.DEADLOCK, {"deadlock_rank": "Ritualist"}),
+    )
+
+    def setUp(self) -> None:
+        cache.clear()
+
+    def _submit(self, game_type: int, extra: dict, fid: str) -> tuple[dict, CustomUser]:
+        ev = self.make_event(game_type=game_type, require_steam_id=True)
+        user = self.make_user()
+        user.discordId = f"55500{user.pk}"
+        user.save()
+        result = handle_signup_modal_submit(
+            event_id=ev.pk,
+            discord_user_id=user.discordId,
+            game_type=game_type,
+            values={"friend_id": fid, **extra},
+        )
+        self.assertFalse(EventSignup.objects.filter(event=ev, user=user).exists())
+        user.refresh_from_db()
+        return result, user
+
+    def test_modal_submit_not_found_message(self) -> None:
+        for game_type, extra in self.CASES:
+            with self.subTest(game_type=game_type):
+                with patch(self.ENSURE, return_value=False):
+                    result, user = self._submit(game_type, extra, "646464")
+                self.assertEqual(result["action"], "error")
+                self.assertIn(
+                    "No Steam account has Friend ID 646464", result["message"]
+                )
+                self.assertIsNone(user.steam_account_id)
+
+    def test_modal_submit_rate_limited_message(self) -> None:
+        for game_type, extra in self.CASES:
+            with self.subTest(game_type=game_type):
+                with patch(self.ENSURE, side_effect=SteamLookupRateLimited()):
+                    result, user = self._submit(game_type, extra, "656565")
+                self.assertEqual(result["action"], "error")
+                self.assertEqual(
+                    result["message"],
+                    "Too many Friend ID checks. Try again in an hour.",
+                )
+                self.assertIsNone(user.steam_account_id)

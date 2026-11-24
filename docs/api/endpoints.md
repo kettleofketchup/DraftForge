@@ -40,6 +40,7 @@ Returns user details and sets session cookies.
 | GET | `/api/users/{id}/` | Get user details |
 | PUT | `/api/users/{id}/` | Update user |
 | GET | `/api/current_user` | Signed-in user's profile and role IDs |
+| GET, POST | `/api/users/{id}/steam-verification/` | Read or set Friend ID verification (see below) |
 
 ### Current User
 
@@ -50,6 +51,50 @@ the frontend gates on: `admin_organization_ids`, `staff_organization_ids`,
 | Field | Type | Description |
 |-------|------|-------------|
 | `member_organization_ids` | int[] | Sorted, deduplicated union of the organizations the user is a member of (`OrgUser`), admins or staffs, and the organizations of leagues the user admins or staffs. The `/tournaments` page uses it to fill the "Your organizations" tier |
+
+### Steam Friend ID verification
+
+`/api/users/{id}/steam-verification/` reads and sets whether staff have verified a user's
+Steam Friend ID. See [Steam Friend ID verification](../features/steam-friend-id.md) for
+who may verify and what to check first. Requires a signed-in user.
+
+**GET** returns 200 when the viewer is site staff, or event staff of an event the user
+signed up to themselves; otherwise 403.
+
+```json
+{
+  "steam_account_id": 123456789,
+  "steam_account_verified": false,
+  "steam_account_verified_at": null,
+  "steam_account_verified_org_name": null,
+  "steam_account_exists_checked": true,
+  "steam_profile_url": "https://steamcommunity.com/profiles/76561198083722517",
+  "dotabuff_url": "https://www.dotabuff.com/players/123456789",
+  "can_verify": true
+}
+```
+
+The two URLs are `null` when the user has no Friend ID. `can_verify` is always `false` on
+the viewer's own row.
+
+**POST** sets or clears verification. The body must carry the Friend ID the client
+displayed:
+
+```json
+{"verified": true, "steam_account_id": 123456789}
+```
+
+| Status | Body | When |
+|--------|------|------|
+| 200 | Same as GET | Applied. Verifying an already verified ID keeps the original date and org |
+| 400 | `{"error": "...", "detail": [...]}` | Invalid body (unknown keys, missing fields, `steam_account_id` < 1) |
+| 400 | `{"error": "User has no Friend ID", "code": "no_steam_account_id"}` | The user has no Friend ID |
+| 403 | DRF default | The caller may not verify this user, including any caller acting on themselves |
+| 404 | DRF default | Unknown user |
+| 409 | `{"error": "The Friend ID changed since you loaded it", "code": "id_changed", "steam_account_id": 987654321}` | The stored ID differs from `steam_account_id` in the body |
+
+The Zod binding is generated from `backend/app/steam_verification_schemas.py` with
+`just py::gen-steam-verification` (CI runs it with `--check`).
 
 ## Tournaments
 

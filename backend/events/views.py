@@ -58,6 +58,7 @@ from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
     has_registered_steam_id,
+    precheck_friend_id,
     recheck_signup,
 )
 from events.history import (
@@ -1195,6 +1196,11 @@ class EventViewSet(viewsets.ModelViewSet):
             return _signup_refusal(event, request.user, intent, msg)
 
         try:
+            precheck_friend_id(patch.steam_account_id, request.user)
+        except DjangoValidationError as exc:
+            return _signup_refusal(event, request.user, intent, exc.messages[0])
+
+        try:
             with transaction.atomic():
                 org_user = resolve_or_create_org_user(request.user, event.organization)
                 apply_signup_input(org_user=org_user, event=event, patch=patch)
@@ -1722,6 +1728,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                 "event__tournament__league__organization", "event_team"
             ),
             "user",
+            steam_verified_org=True,
         )
         event_id = self.request.query_params.get("event")
         if event_id:
