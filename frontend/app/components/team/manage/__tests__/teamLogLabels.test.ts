@@ -16,6 +16,8 @@ describe('teamLogActionLabel', () => {
     ['empty_team_kept', 'Empty team kept'],
     ['team_deleted', 'Team deleted'],
     ['materialize', 'Materialized'],
+    ['replace_captain', 'Replace captain'],
+    ['set_placement', 'Set placement'],
   ])('%s -> %s', (action, label) => {
     expect(teamLogActionLabel(action)).toBe(label);
   });

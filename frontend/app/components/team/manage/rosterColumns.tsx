@@ -93,12 +93,19 @@ export interface RosterActionContext {
   team: ManagedTeam;
   testIdPrefix: string;
   onRequestAction: (request: PendingTeamAction) => void;
+  /** Opens the replace-captain picker; without it the captain row has no entry. */
+  onReplaceCaptain?: () => void;
 }
 
 /** The actions a staff member can take on one roster row. */
 export function rosterRowActions(
   row: RosterRow,
-  { team, testIdPrefix, onRequestAction }: RosterActionContext,
+  {
+    team,
+    testIdPrefix,
+    onRequestAction,
+    onReplaceCaptain,
+  }: RosterActionContext,
 ): DataTableRowAction[] {
   const { user, status } = row;
   const action = (
@@ -133,6 +140,14 @@ export function rosterRowActions(
 
   const lastMember = team.members.length === 1;
   const actions: DataTableRowAction[] = [];
+  if (row.isCaptain && onReplaceCaptain) {
+    actions.push({
+      key: 'replace-captain',
+      label: 'Replace captain…',
+      onSelect: onReplaceCaptain,
+      testId: `${testIdPrefix}-replace-captain-${user.pk}`,
+    });
+  }
   if (!row.isCaptain) {
     actions.push(
       action('make-captain', 'Make captain', () =>
@@ -176,10 +191,11 @@ export function makeRosterColumns({
   team,
   testIdPrefix,
   onRequestAction,
+  onReplaceCaptain,
   columns = DEFAULT_ROSTER_COLUMNS,
   pending = false,
 }: MakeRosterColumnsOptions): AppColumnDef<RosterRow>[] {
-  const ctx = { team, testIdPrefix, onRequestAction };
+  const ctx = { team, testIdPrefix, onRequestAction, onReplaceCaptain };
   const all: Record<RosterColumnId, AppColumnDef<RosterRow>> = {
     player: {
       id: 'player',
