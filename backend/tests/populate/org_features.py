@@ -84,6 +84,10 @@ from tests.data.org_features import (
     ORG_FEATURES_USERS,
     PRIVATE_FEATURES_ORG,
 )
+from tests.populate.promotion_audiences import (
+    restore_promotion_audience_settings,
+    seed_promotion_audiences,
+)
 from tests.populate.utils import (
     delete_events,
     delete_ledger_for_users,
@@ -196,6 +200,7 @@ def _reset_roles(orgs: dict[int, Organization], users: dict[int, CustomUser]) ->
         org.discord_link = (
             FEATURES_ORG_DISCORD_LINK if org_pk == FEATURES_ORG.pk else ""
         )
+        org.discord_server_id = None
         org.save(
             update_fields=[
                 "owner",
@@ -203,6 +208,7 @@ def _reset_roles(orgs: dict[int, Organization], users: dict[int, CustomUser]) ->
                 "timezone",
                 "members_private",
                 "discord_link",
+                "discord_server_id",
             ]
         )
         org.admins.set([users[u.pk] for u in admins])
@@ -472,12 +478,15 @@ def _rebuild() -> list[Organization]:
     return list(orgs.values())
 
 
-def reset_org_features_data(*, release_gate: bool = False) -> dict[str, Any]:
+def reset_org_features_data(
+    *, release_gate: bool = False, audiences: bool = False
+) -> dict[str, Any]:
     """Put the locked features data back to the seeded state; returns the lookup.
 
     release_gate turns the leadership staff release gate on without stamping,
     so the closed captain snapshots stay pending release.
     """
+    restore_promotion_audience_settings()
     orgs = _rebuild()
     if release_gate:
         OrgLeadershipSettings.objects.create(
@@ -499,7 +508,12 @@ def reset_org_features_data(*, release_gate: bool = False) -> dict[str, Any]:
         invalidate_model(model)
     for org in orgs:
         invalidate_obj(org)
-    return org_features_test_data()
+    data = org_features_test_data()
+    if audiences:
+        org = next(org for org in orgs if org.pk == FEATURES_ORG.pk)
+        event = Event.objects.get(pk=data["events"]["upcoming"]["pk"])
+        data["audiences"] = seed_promotion_audiences(org, event)
+    return data
 
 
 def _event_payload(org: Organization, name: str) -> dict[str, Any]:
