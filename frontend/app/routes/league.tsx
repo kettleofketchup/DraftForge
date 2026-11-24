@@ -5,6 +5,7 @@ import { fetchLeague } from '~/components/api/api';
 import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { LeagueSSR } from '~/lib/ssr-types';
+import { useOrgStore } from '~/store/orgStore';
 import type { Route } from './+types/league';
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -58,7 +59,6 @@ import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useIsLeagueAdmin, useIsLeagueStaff } from '~/hooks/usePermissions';
 import { useLeagueStore } from '~/store/leagueStore';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
