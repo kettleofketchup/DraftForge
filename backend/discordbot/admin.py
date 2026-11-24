@@ -1,9 +1,14 @@
 # backend/discordbot/admin.py
+from datetime import timedelta
+
 from django.contrib import admin
+from django.db.models import QuerySet
 from django.http import HttpRequest
+from django.utils import timezone
 
 from .models import (
     RSVP,
+    DiscordDM,
     DiscordEvent,
     DiscordEventDM,
     DiscordEventLog,
@@ -11,6 +16,7 @@ from .models import (
     DiscordEventMsgSignup,
     DiscordMessageLog,
     DiscordTournamentLog,
+    DMStatus,
     DraftActivityChannel,
     DraftActivityInstance,
     EventTemplate,
@@ -105,6 +111,8 @@ class DiscordEventDMAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["dm_type", "delivered", "responded"]
+    raw_id_fields = ["ledger_entry"]
+    readonly_fields = ["ledger_entry"]
 
 
 @admin.register(DraftActivityChannel)
@@ -121,4 +129,70 @@ class DraftActivityInstanceAdmin(admin.ModelAdmin):
     readonly_fields = ["instance_id", "guild_id", "channel_id", "draft", "team_draft"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+
+STUCK_SENDING_AFTER = timedelta(minutes=15)
+
+
+class StuckSendingFilter(admin.SimpleListFilter):
+    title = "stuck sending (>15 min)"
+    parameter_name = "stuck_sending"
+
+    def lookups(
+        self, request: HttpRequest, model_admin: admin.ModelAdmin
+    ) -> list[tuple[str, str]]:
+        return [("yes", "Stuck sending")]
+
+    def queryset(
+        self, request: HttpRequest, queryset: QuerySet[DiscordDM]
+    ) -> QuerySet[DiscordDM]:
+        if self.value() != "yes":
+            return queryset
+        return queryset.filter(
+            status=DMStatus.PENDING,
+            send_started_at__lt=timezone.now() - STUCK_SENDING_AFTER,
+        )
+
+
+@admin.register(DiscordDM)
+class DiscordDMAdmin(admin.ModelAdmin):
+    list_display = [
+        "kind",
+        "status",
+        "recipient",
+        "discord_user_id",
+        "organization",
+        "created_at",
+        "sent_at",
+        "click_count",
+        "error_code",
+    ]
+    list_filter = [
+        "kind",
+        "status",
+        "retryable",
+        "organization",
+        "backfilled_from",
+        StuckSendingFilter,
+    ]
+    search_fields = [
+        "idempotency_key",
+        "discord_user_id",
+        "discord_message_id",
+        "recipient__username",
+    ]
+    raw_id_fields = ["recipient", "organization", "tournament_log"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(
+        self, request: HttpRequest, obj: DiscordDM | None = None
+    ) -> bool:
+        return False
+
+    def has_delete_permission(
+        self, request: HttpRequest, obj: DiscordDM | None = None
+    ) -> bool:
         return False

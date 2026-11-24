@@ -1,5 +1,8 @@
+from typing import NoReturn
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class EventTemplate(models.Model):
@@ -282,6 +285,13 @@ class DiscordEventDM(models.Model):
     response_text = models.TextField(blank=True, default="")
     responded_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    ledger_entry = models.OneToOneField(
+        "discordbot.DiscordDM",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="event_dm",
+    )
 
     class Meta:
         verbose_name = "Discord Event DM"
@@ -507,3 +517,126 @@ class DraftActivityInstance(models.Model):
                 name="draftactivityinstance_one_draft",
             )
         ]
+
+
+class LedgerImmutableError(Exception):
+    pass
+
+
+class DMKind(models.TextChoices):
+    SIGNUP_REMINDER = "signup_reminder"
+    TOURNAMENT_DRAFT_LINK = "tournament_draft_link"
+    TOURNAMENT_HERODRAFT_LINK = "tournament_herodraft_link"
+    LOBBY_INFO = "lobby_info"
+    SIGNUP_CONFIRMATION = "signup_confirmation"
+    LEADERSHIP_REVIEW = "leadership_review"
+    TEST_NOTIFICATION = "test_notification"
+
+
+class DMStatus(models.TextChoices):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+    SKIPPED_TEST_MODE = "skipped_test_mode"
+    SKIPPED_NO_DISCORD = "skipped_no_discord"
+    SKIPPED_DISABLED = "skipped_disabled"
+
+
+class DMSubject(models.TextChoices):
+    EVENT = "event"
+    TOURNAMENT = "tournament"
+    GAME_LOBBY = "game_lobby"
+    CAPTAIN_SNAPSHOT = "captain_snapshot"
+
+
+class DiscordDMQuerySet(models.QuerySet["DiscordDM"]):
+    def delete(self) -> NoReturn:
+        raise LedgerImmutableError("DiscordDM rows are never deleted")
+
+
+DiscordDMManager = models.Manager.from_queryset(DiscordDMQuerySet)
+
+
+class DiscordDM(models.Model):
+    """Ledger row for one Discord DM the platform sent or decided not to send."""
+
+    kind = models.CharField(max_length=32, choices=DMKind.choices)
+    idempotency_key = models.CharField(max_length=200, unique=True)
+    status = models.CharField(
+        max_length=24, choices=DMStatus.choices, default=DMStatus.PENDING
+    )
+    attempts = models.PositiveSmallIntegerField(default=1)
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="discord_dms",
+    )
+    discord_user_id = models.CharField(max_length=32, blank=True)
+    organization = models.ForeignKey(
+        "org.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="discord_dms",
+    )
+    subject_type = models.CharField(
+        max_length=32, choices=DMSubject.choices, blank=True
+    )
+    subject_id = models.BigIntegerField(null=True, blank=True)
+    tournament_log = models.ForeignKey(
+        DiscordTournamentLog,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dms",
+    )
+    context = models.JSONField(default=dict, blank=True)
+    has_components = models.BooleanField(default=False)
+
+    discord_channel_id = models.CharField(max_length=64, blank=True)
+    discord_message_id = models.CharField(max_length=64, null=True, blank=True)
+    http_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    error_code = models.IntegerField(null=True, blank=True)
+    error = models.CharField(max_length=300, blank=True)
+    retryable = models.BooleanField(default=False)
+    claim_token = models.CharField(max_length=64, blank=True)
+
+    created_at = models.DateTimeField(default=timezone.now)
+    claimed_at = models.DateTimeField(default=timezone.now)
+    send_started_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    first_clicked_at = models.DateTimeField(null=True, blank=True)
+    last_clicked_at = models.DateTimeField(null=True, blank=True)
+    click_count = models.PositiveIntegerField(default=0)
+    backfilled_from = models.CharField(max_length=32, blank=True)
+
+    objects = DiscordDMManager()
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Discord DM"
+        verbose_name_plural = "Discord DMs"
+        indexes = [
+            models.Index(fields=["recipient", "-created_at"]),
+            models.Index(fields=["organization", "kind", "-created_at"]),
+            models.Index(fields=["subject_type", "subject_id"]),
+            models.Index(fields=["status", "claimed_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["discord_message_id"],
+                condition=models.Q(discord_message_id__isnull=False),
+                name="uniq_discord_dm_message_id",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"DM({self.kind}) {self.idempotency_key} ({self.status})"
+
+    def delete(self, *args: object, **kwargs: object) -> NoReturn:
+        raise LedgerImmutableError("DiscordDM rows are never deleted")
