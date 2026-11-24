@@ -3,10 +3,12 @@ by a signup (#717). Positions and MMR are not touched by the signup itself."""
 
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone as tz
+from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from common.game import GameType
@@ -21,6 +23,7 @@ from org.membership import resolve_or_create_org_user
 from org.mmr import org_mmr_for, set_org_mmr
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
+from steam.services.account_lookup import SteamLookupRateLimited
 from user.models import PositionsModel
 
 
@@ -248,3 +251,49 @@ class SignupInputFriendIdTest(EventTestCase):
         )
         signup = process_rsvp(ev, user, actor=SYSTEM)
         self.assertEqual(signup.status, SignupStatus.APPROVED)
+
+
+@override_settings(
+    STEAM_ACCOUNT_LOOKUP_ENABLED=True,
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}},
+)
+class WebSignupFriendIdLookupTest(EventTestCase):
+    def setUp(self) -> None:
+        cache.clear()
+
+    def test_web_signup_not_found_refused(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        user = self.make_user()
+        client = APIClient()
+        client.force_authenticate(user)
+        with patch(
+            "events.eligibility.steam.ensure_steam_account_exists", return_value=False
+        ):
+            resp = client.post(
+                f"/api/events/{ev.pk}/signup/",
+                {"intent": "rsvp", "profile": {"steam_account_id": "424242"}},
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("No Steam account has Friend ID 424242", resp.data["error"])
+        self.assertFalse(EventSignup.objects.filter(event=ev, user=user).exists())
+        user.refresh_from_db()
+        self.assertIsNone(user.steam_account_id)
+
+    def test_web_signup_rate_limited_refused(self) -> None:
+        ev = self.make_event(require_steam_id=True)
+        user = self.make_user()
+        client = APIClient()
+        client.force_authenticate(user)
+        with patch(
+            "events.eligibility.steam.ensure_steam_account_exists",
+            side_effect=SteamLookupRateLimited(),
+        ):
+            resp = client.post(
+                f"/api/events/{ev.pk}/signup/",
+                {"intent": "rsvp", "profile": {"steam_account_id": "424243"}},
+                format="json",
+            )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Too many Friend ID checks", resp.data["error"])
+        self.assertFalse(EventSignup.objects.filter(event=ev, user=user).exists())

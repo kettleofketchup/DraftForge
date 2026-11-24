@@ -39,6 +39,7 @@ import { isUserEntry } from '~/store/userCacheTypes';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { hasAnyPosition } from './positions/hasAnyPosition';
+import { SteamVerificationBadge } from './SteamVerificationBadge';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
 import {
@@ -61,6 +62,10 @@ interface Props {
   leagueId?: number;
   /** Optional organization ID for context-specific stats in mini profile */
   organizationId?: number;
+  /** Admin view: badge the Friend ID with its verification state. */
+  showSteamVerification?: boolean;
+  /** Badge click; defaults to opening the player modal. */
+  onSteamBadgeClick?: (pk: number) => void;
 }
 
 export const UserCard: React.FC<Props> = memo(
@@ -72,6 +77,8 @@ export const UserCard: React.FC<Props> = memo(
     animationIndex = 0,
     leagueId,
     organizationId,
+    showSteamVerification = false,
+    onSteamBadgeClick,
   }) => {
     // The page's game only; null (org and global pages) shows every game.
     const gameType = useGameType() ?? undefined;
@@ -431,8 +438,28 @@ export const UserCard: React.FC<Props> = memo(
                   <ItemTitle className="!text-xs text-muted-foreground">
                     Friend ID
                   </ItemTitle>
-                  <span className="text-sm truncate">
-                    {user.steam_account_id}
+                  <span className="flex items-center gap-1 min-w-0">
+                    <span className="text-sm truncate">
+                      {user.steam_account_id}
+                    </span>
+                    {showSteamVerification && user.pk != null && (
+                      <SteamVerificationBadge
+                        userPk={user.pk}
+                        steamAccountId={user.steam_account_id}
+                        verified={user.steam_account_verified ?? false}
+                        verifiedAt={user.steam_account_verified_at}
+                        existsChecked={
+                          user.steam_account_exists_checked ?? false
+                        }
+                        canVerify={false}
+                        staffView
+                        onClick={() =>
+                          onSteamBadgeClick
+                            ? onSteamBadgeClick(user.pk!)
+                            : handleViewProfile()
+                        }
+                      />
+                    )}
                   </span>
                 </ItemContent>
               </Item>

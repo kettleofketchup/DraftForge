@@ -121,6 +121,7 @@ from user.views_account import (
 from user.views_avatar import refresh_all_avatars
 from user.views_profile import profile_update
 from user.views_search import search_users
+from user.views_steam_verification import steam_verification
 
 log = get_logger(__name__)
 
@@ -166,6 +167,11 @@ urlpatterns = [
         "api/users/steam-account-id/<int:steam_account_id>/",
         steam_account_id_lookup,
         name="steam_account_id_lookup",
+    ),
+    path(
+        "api/users/<int:pk>/steam-verification/",
+        steam_verification,
+        name="user_steam_verification",
     ),
     # User profile (see backend/user/urls.py)
     path("api/users/", include("user.urls")),

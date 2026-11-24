@@ -172,15 +172,21 @@ class OrganizationView(viewsets.ModelViewSet):
             CustomUser,
             BaseUserProfile,
             DotaUserProfile,
+            Organization,
             extra=cache_key,
             timeout=60 * 10,
         )
         def get_data() -> Any:
             org_users = with_user_profiles(
-                OrgUser.objects.filter(organization=org), "user", dota=True
+                OrgUser.objects.filter(organization=org),
+                "user",
+                dota=True,
+                steam_verified_org=True,
             ).prefetch_related(game_mmrs_prefetch(fresh=False))
             serializer = OrgUserSerializer(
-                org_users, many=True, context={"include_game_mmrs": True}
+                org_users,
+                many=True,
+                context={"include_game_mmrs": True, "include_steam_verified_org": True},
             )
             return serializer.data
 

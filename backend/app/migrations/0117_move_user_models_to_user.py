@@ -35,7 +35,7 @@ def relabel_reverse(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app", "0115_move_tournament_models_to_tournament"),
+        ("app", "0116_customuser_steam_account_verified"),
         ("contenttypes", "0002_remove_content_type_name"),
         ("user", "0005_move_user_models_from_app"),
     ]

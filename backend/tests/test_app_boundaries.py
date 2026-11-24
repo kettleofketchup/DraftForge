@@ -878,12 +878,23 @@ _USER_SPLIT_DEFS = {
         "current_user",
         "bulk_users",
         "steam_account_id_lookup",
+        "_admin_friend_id_refusal",
         "refresh_avatar",
         "refresh_user_avatar_admin",
         "refresh_all_avatars",
     ),
-    "app.functions.user": ("ProfileUpdateSerializer", "profile_update"),
+    "app.functions.user": (
+        "ProfileUpdateSerializer",
+        "profile_update",
+        "_friend_id_error",
+    ),
     "app.views.user_search": ("search_users",),
+    "app.views.steam_verification": (
+        "_load",
+        "_payload",
+        "_current_id",
+        "steam_verification",
+    ),
     "app.serializers_ssr": ("UserSerializerSSR",),
     "app.views.ssr": ("UserSSRView",),
     "app.views.internal": ("list_users_for_avatar_check", "update_user_avatar"),
@@ -897,6 +908,11 @@ _USER_SPLIT_DEFS = {
         "SteamAccountIdConflictTests",
         "SteamAccountIdLookupTests",
         "SteamAccountIdConflictLabelTests",
+        "_org_user_url",
+        "_reload",
+        "OrgUserPatchVerificationTests",
+        "UserPatchVerificationTests",
+        "AdminLookupBudgetTest",
     ),
     "app.tests.test_views_main_auth": ("RefreshAllAvatarsRateLimitTest",),
     "app.tests.test_internal_avatar_and_sweep": (
@@ -987,6 +1003,12 @@ USER = MovedSlice(
             ("app.steam_accounts", "steam_account_id_holder"),
             ("app.steam_accounts", "steam_account_id_identity"),
             ("app.steam_accounts", "steam_account_id_conflict_payload"),
+            ("app.steam_accounts", "_require_id"),
+            ("app.steam_accounts", "_apply_verification"),
+            ("app.steam_accounts", "log_steam_verification_change"),
+            ("app.steam_accounts", "mark_steam_account_verified"),
+            ("app.steam_accounts", "clear_steam_account_verification"),
+            ("app.steam_accounts", "steam_verification_payload"),
             ("app.discord_accounts", "_GameProfileSnapshot"),
             ("app.discord_accounts", "_positions_set"),
             ("app.discord_accounts", "_snapshot_game_profiles"),
@@ -1021,6 +1043,7 @@ USER = MovedSlice(
         {
             "app.functions.user",
             "app.views.user_search",
+            "app.views.steam_verification",
             "app.functions",
             "app.tests.test_search_users",
             "app.tests.test_user_delete_route",
@@ -1060,7 +1083,7 @@ USER = MovedSlice(
         }
     ),
     model_labels=frozenset({"positionsmodel", "profileclaimrequest"}),
-    move_migration=("app", "0116_move_user_models_to_user"),
+    move_migration=("app", "0117_move_user_models_to_user"),
     cached_labels=frozenset(),
 )
 
@@ -1085,6 +1108,7 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.functions.user": "user.views_profile",
     "app.views.user_search": "user.views_search",
+    "app.views.steam_verification": "user.views_steam_verification",
     "app.functions": None,
     "app.tests.test_search_users": "user.tests.test_search_users",
     "app.tests.test_user_delete_route": "user.tests.test_user_delete_route",
@@ -1167,7 +1191,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
-ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {}
+ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
+    ("app/tests/test_redis_namespace.py", "_reload"): (
+        "Reloads backend.settings; unrelated to the moved user re-fetch helper."
+    ),
+    ("app/tests/test_settings_env_overrides.py", "_reload"): (
+        "Reloads backend.settings; unrelated to the moved user re-fetch helper."
+    ),
+}
 
 GUARD_FILE = "tests/test_app_boundaries.py"
 

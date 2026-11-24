@@ -281,6 +281,12 @@ describe('EventFormDialog search', () => {
     expect(hit('Pre-day announcement')).toBeInTheDocument();
   });
 
+  it('finds the signup reminder by searching for subscribers', () => {
+    render(<Harness />);
+    type('subscribers');
+    expect(hit('Send signup reminder')).toBeInTheDocument();
+  });
+
   it('matches registry keywords for rendered fields', () => {
     render(<Harness />);
     type('team size');

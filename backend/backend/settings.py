@@ -333,6 +333,10 @@ REDIS_KEY_SCOPE: str = os.environ.get("REDIS_KEY_SCOPE", "")
 # Discord signup-post debounce and lock (config/signup_post.py), shared with
 # config/settings_celery.py. Off under the test runner unless a test opts in.
 SIGNUP_POST = SignupPostConfig.from_env(disabled_default=RUNNING_TESTS)
+# Friend ID existence check against Steam (steam/services/account_lookup.py).
+STEAM_ACCOUNT_LOOKUP_ENABLED: bool = env_bool(
+    "STEAM_ACCOUNT_LOOKUP_ENABLED", default=not RUNNING_TESTS and NODE_ENV != "test"
+)
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):

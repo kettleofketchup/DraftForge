@@ -17,11 +17,11 @@ USER_MODELS = ("positionsmodel", "profileclaimrequest")
 MOVED_TABLES = ("app_positionsmodel", "app_profileclaimrequest")
 REFERRING_TABLES = ("user_dotauserprofile",)
 BEFORE_MOVE: list[tuple[str, str]] = [
-    ("app", "0115_move_tournament_models_to_tournament"),
+    ("app", "0116_customuser_steam_account_verified"),
     ("user", "0004_backfill_game_profiles"),
 ]
 MOVE_MIGRATIONS: list[tuple[str, str]] = [
-    ("app", "0116_move_user_models_to_user"),
+    ("app", "0117_move_user_models_to_user"),
     ("user", "0005_move_user_models_from_app"),
 ]
 APP = "app"

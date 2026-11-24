@@ -53,6 +53,7 @@ export {
   fetchUsersBulk,
   get_dtx_members,
   logout,
+  profileFriendIdError,
   refreshAvatars,
   searchUsers,
   updateUser,
