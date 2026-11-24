@@ -1,9 +1,12 @@
+import re
+
 from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.loader import MigrationLoader
 from django.test import TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from structlog.testing import capture_logs
 
 from app.models import CustomUser
@@ -23,14 +26,17 @@ MOVE_MIGRATIONS: list[tuple[str, str]] = [
 ]
 APP = "app"
 USER = "user"
+# A SQLite table rebuild keeps sqlite_master's sql text but moves rootpage
+# and runs CREATE/INSERT INTO "new__..."/DROP/ALTER statements.
+DDL_STATEMENT = re.compile(r"^\s*(CREATE|ALTER|DROP)\b|\bnew__", re.IGNORECASE)
 
 
-def _schema_rows() -> list[tuple[str, str, str, str | None]]:
+def _schema_rows() -> list[tuple[str, str, str, int, str | None]]:
     tables = MOVED_TABLES + REFERRING_TABLES
     with connection.cursor() as cursor:
         placeholders = ",".join("%s" for _ in tables)
         cursor.execute(
-            "SELECT type, name, tbl_name, sql FROM sqlite_master "
+            "SELECT type, name, tbl_name, rootpage, sql FROM sqlite_master "
             f"WHERE tbl_name IN ({placeholders}) ORDER BY tbl_name, type, name",
             list(tables),
         )
@@ -228,10 +234,19 @@ class UserMoveMigrationTests(TransactionTestCase):
         )
 
         for _ in range(2):
-            self._back()
+            with CaptureQueriesContext(connection) as back_queries:
+                self._back()
             self.assertEqual(_schema_rows(), schema_before)
-            self._forward()
+            with CaptureQueriesContext(connection) as forward_queries:
+                self._forward()
             self.assertEqual(_schema_rows(), schema_before)
+            ddl = [
+                query["sql"]
+                for query in back_queries.captured_queries
+                + forward_queries.captured_queries
+                if DDL_STATEMENT.search(query["sql"])
+            ]
+            self.assertEqual(ddl, [])
 
     def test_one_leaf_per_app(self) -> None:
         leaves = MigrationLoader(None, ignore_no_migrations=True).graph.leaf_nodes()
