@@ -41,6 +41,16 @@ const ManagedTeamTournamentSchema = z.object({
   tournament_type: z.string(),
 });
 
+// TeamView._other_teams in backend/app/views_main.py; placement null = live.
+export const OtherTeamSummarySchema = z.object({
+  pk: z.number(),
+  name: z.string(),
+  placement: z.number().nullable(),
+  member_pks: z.array(z.number()),
+  dropin_pks: z.array(z.number()),
+});
+export type OtherTeamSummary = z.infer<typeof OtherTeamSummarySchema>;
+
 export const ManagedTeamSchema = z.object({
   pk: z.number(),
   name: z.string(),
@@ -60,6 +70,7 @@ export const ManagedTeamSchema = z.object({
   organization_pk: z.number().nullable().optional(),
   league_pk: z.number().nullable().optional(),
   other_team_user_pks: z.array(z.number()).optional(),
+  other_teams: z.array(OtherTeamSummarySchema).optional(),
 });
 export type ManagedTeam = z.infer<typeof ManagedTeamSchema>;
 
@@ -111,6 +122,10 @@ export type TeamSubInBody = {
   replacing_id?: number | null;
 } & TeamActionBody;
 export type TeamRenameBody = { name: string } & TeamActionBody;
+export type TeamReplaceCaptainBody = {
+  user_id: number;
+  mark_outgoing_dropout: boolean;
+} & TeamActionBody;
 
 async function postTeamAction(
   teamId: number,
@@ -142,6 +157,11 @@ export const removeTeamStandin = (teamId: number, body: TeamUserActionBody) =>
 export const subInTeamStandin = (teamId: number, body: TeamSubInBody) =>
   postTeamAction(teamId, 'sub-in', body);
 
+export const replaceTeamCaptain = (
+  teamId: number,
+  body: TeamReplaceCaptainBody,
+) => postTeamAction(teamId, 'replace-captain', body);
+
 export const renameTeam = (teamId: number, body: TeamRenameBody) =>
   postTeamAction(teamId, 'rename', body);
 
@@ -161,7 +181,12 @@ export type TeamAction =
         | 'remove_standin';
       user: RosterUser;
     }
-  | { kind: 'sub_in'; standin: RosterUser; replacing: RosterUser | null };
+  | { kind: 'sub_in'; standin: RosterUser; replacing: RosterUser | null }
+  | {
+      kind: 'replace_captain';
+      user: RosterUser;
+      markOutgoingDropout?: boolean;
+    };
 export type TeamActionKind = TeamAction['kind'];
 
 export function runTeamAction(
@@ -190,6 +215,12 @@ export function runTeamAction(
         ...body,
         standin_id: action.standin.pk,
         replacing_id: action.replacing?.pk ?? null,
+      });
+    case 'replace_captain':
+      return replaceTeamCaptain(teamId, {
+        ...body,
+        user_id: action.user.pk,
+        mark_outgoing_dropout: action.markOutgoingDropout ?? true,
       });
   }
 }

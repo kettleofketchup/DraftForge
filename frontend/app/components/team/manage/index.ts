@@ -3,6 +3,12 @@ export {
   type AddStandinPickerProps,
 } from './AddStandinPicker';
 export {
+  candidateLabels,
+  teamCandidateRows,
+  type CandidateStatus,
+  type TeamCandidateRow,
+} from './candidateStatus';
+export {
   LeadershipProblemBadge,
   leadershipProblemSentence,
   type LeadershipProblemBadgeProps,
@@ -40,3 +46,8 @@ export {
   type TeamLeadershipAlertProps,
 } from './TeamLeadershipAlert';
 export { TeamRosterPanel, type TeamRosterPanelProps } from './TeamRosterPanel';
+export {
+  UserCandidatePicker,
+  type CandidatePickerMode,
+  type UserCandidatePickerProps,
+} from './UserCandidatePicker';

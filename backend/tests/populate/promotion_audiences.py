@@ -9,9 +9,10 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from app.models import CustomUser, PositionsModel
+from common.game import GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
-from org.models import Organization, OrgUser, PromoSend
+from org.models import Organization, OrgUser, OrgUserGameMmr, PromoSend
 from tests.data.org_features import OF_PROMOTER, ORG_FEATURES_DISCORD_BASE
 
 GUILD_ID: Final[str] = "730000000000009901"
@@ -44,6 +45,16 @@ MEMBERS: Final[tuple[tuple[str, int, bool, bool], ...]] = (
     ("unlinked", 1, False, False),
     ("bot", 1, False, True),
 )
+
+# Org MMR per game; "week" has only a Deadlock rating so the Dota 2 event shows Unknown.
+MEMBER_MMRS: Final[dict[str, dict[int, int]]] = {
+    "fresh": {GameType.DOTA2: 4500},
+    "week": {GameType.DEADLOCK: 5200},
+    "month": {GameType.DOTA2: 3000},
+    "quarter": {GameType.DOTA2: 6200},
+    "signed": {GameType.DOTA2: 3500},
+    "messaged": {GameType.DOTA2: 2500},
+}
 
 
 def seed_promotion_audiences(org: Organization, event: Event) -> dict[str, Any]:
@@ -81,11 +92,16 @@ def seed_promotion_audiences(org: Organization, event: Event) -> dict[str, Any]:
             user.discordUsername = f"handle_{key}"
             user.discordNickname = f"Global {key}"
             user.save()
-            OrgUser.objects.update_or_create(
+            org_user, _ = OrgUser.objects.update_or_create(
                 organization=org,
                 user=user,
                 defaults={"guild_nickname": f"Guild {key}"},
             )
+            OrgUserGameMmr.objects.filter(org_user=org_user).delete()
+            for game, mmr in MEMBER_MMRS.get(key, {}).items():
+                OrgUserGameMmr.objects.create(
+                    org_user=org_user, game_type=game, mmr=mmr
+                )
             signup = EventSignup.objects.create(
                 event=activity,
                 user=user,
@@ -107,7 +123,11 @@ def seed_promotion_audiences(org: Organization, event: Event) -> dict[str, Any]:
                 "joined_at": (now - timedelta(days=age)).isoformat(),
             }
         )
-        refs[key] = {"pk": user.pk if user else None, "discord_id": discord_id}
+        refs[key] = {
+            "pk": user.pk if user else None,
+            "discord_id": discord_id,
+            "mmr": MEMBER_MMRS.get(key, {}).get(GameType.DOTA2),
+        }
         if key in ("signed", "declined"):
             EventSignup.objects.create(
                 event=event,
