@@ -1,11 +1,13 @@
 # Organization Locked Features
 
-Four locked features can be unlocked per organization: **Promotion** (a dashboard for
+Five locked features can be unlocked per organization: **Promotion** (a dashboard for
 inviting past players to upcoming events over Discord DMs), **Contributions** (a
 points ledger and leaderboard for the people who host, help and promote),
 **Conduct** (attendance records, show rates and turnout forecasts; see
-[Organization Conduct](organization-conduct.md)) and **Leadership** (captain points
-and teammate ratings; see [Organization Leadership](organization-leadership.md)).
+[Organization Conduct](organization-conduct.md)), **Leadership** (captain points
+and teammate ratings; see [Organization Leadership](organization-leadership.md)) and
+**MMR sync API** (app tokens for pushing member MMRs from an external service; see
+[MMR sync API](org-mmr-sync-api.md)).
 This page is the guide for org owners and admins. The API is listed in
 [API Endpoints: Organization locked features](../api/endpoints.md#organization-locked-features),
 and the permission rules in [Roles & Permission Matrix](../dev/auth/roles.md#promoter-and-locked-features).
