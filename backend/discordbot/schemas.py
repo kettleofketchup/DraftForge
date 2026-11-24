@@ -15,9 +15,15 @@ transport layer.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 DiscordId = Annotated[str, StringConstraints(pattern=r"^[0-9]{1,20}$")]
 
@@ -308,4 +314,85 @@ class VoicePresenceResponse(BaseModel):
     confirmed: int = 0
     unknown_users: int = 0
     not_signed_up: int = 0
+    model_config = {"extra": "ignore"}
+
+
+# --- DM ledger (discordbot/internal_dm_views.py) -----------------------------
+# Imported before the app registry is ready, so the DiscordDM enums are mirrored
+# as Literals; test_internal_dm_views checks they match.
+
+DMKindValue = Literal[
+    "signup_reminder",
+    "tournament_draft_link",
+    "tournament_herodraft_link",
+    "lobby_info",
+    "signup_confirmation",
+    "leadership_review",
+    "test_notification",
+]
+DMStatusValue = Literal[
+    "pending",
+    "sent",
+    "failed",
+    "unknown",
+    "skipped_test_mode",
+    "skipped_no_discord",
+    "skipped_disabled",
+]
+DMSubjectValue = Literal["event", "tournament", "game_lobby", "captain_snapshot"]
+DMErrorClassValue = Literal[
+    "pre_send", "rate_limit_timeout", "before_send_failed", "permanent"
+]
+LedgerToken = Annotated[str, StringConstraints(min_length=1, max_length=64)]
+
+
+class DMClaimBody(BaseModel):
+    kind: DMKindValue
+    idempotency_key: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+    claim_token: LedgerToken
+    discord_user_id: DiscordId | Literal[""] = ""
+    recipient_user_id: int | None = None
+    organization_id: int | None = None
+    subject_type: DMSubjectValue | None = None
+    subject_id: int | None = None
+    tournament_log_id: int | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+    has_components: bool = False
+    initial_status: DMStatusValue | None = None
+    model_config = {"extra": "ignore"}
+
+    @model_validator(mode="after")
+    def _subject_pair(self) -> DMClaimBody:
+        if (self.subject_type is None) != (self.subject_id is None):
+            raise ValueError("subject_type and subject_id go together")
+        return self
+
+
+class DMSendingBody(BaseModel):
+    claim_token: LedgerToken
+    model_config = {"extra": "ignore"}
+
+
+class DMFinalizeBody(BaseModel):
+    claim_token: LedgerToken
+    status: DMStatusValue
+    error_class: DMErrorClassValue | None = None
+    discord_channel_id: DiscordId | Literal[""] = ""
+    discord_message_id: DiscordId | None = None
+    http_status: Annotated[int, Field(ge=100, le=599)] | None = None
+    error_code: int | None = None
+    error: str = ""
+    model_config = {"extra": "ignore"}
+
+
+class DMClickBody(BaseModel):
+    discord_message_id: DiscordId
+    discord_user_id: DiscordId
+    model_config = {"extra": "ignore"}
+
+
+class DMLedgerRowResponse(BaseModel):
+    id: int
+    status: DMStatusValue
+    attempts: int = 0
     model_config = {"extra": "ignore"}
