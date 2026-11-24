@@ -5,13 +5,14 @@ from unittest.mock import MagicMock, patch
 from django.core.management import call_command
 from django.test import TestCase
 
-from app.models import CustomUser, GameType, Team, Tournament
+from app.models import CustomUser, GameType
 from app.tests.test_prod_import_commands import fake_response, prod_user
 from draft.models import Draft
 from league.models import League
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 from tournament.management.commands import import_prod_tournament, sync_prod_tournaments
+from tournament.models import Team, Tournament
 
 TOURNAMENT_GET = "tournament.management.commands.import_prod_tournament.requests.get"
 TOURNAMENTS_GET = "tournament.management.commands.sync_prod_tournaments.requests.get"

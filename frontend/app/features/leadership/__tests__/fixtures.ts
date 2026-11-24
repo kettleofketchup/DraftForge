@@ -3,6 +3,7 @@ import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgF
 import type { TrackInfo } from '~/features/standing/schemas';
 import type {
   EventAggregate,
+  EventCaptainReviews,
   EventReviews,
   LeadershipSettings,
   LeadershipSettingsValues,
@@ -140,24 +141,37 @@ export function moderationReview(
   };
 }
 
+export function moderationCaptain(
+  overrides: Partial<EventCaptainReviews> = {},
+): EventCaptainReviews {
+  return {
+    org_user_id: 7,
+    captain: CAPTAIN,
+    team_name: 'Team alice',
+    window_closes_at: '2026-11-04T19:00:00Z',
+    voided_at: null,
+    released: true,
+    release_state: 'released',
+    released_at: null,
+    released_by: null,
+    auto_release_at: null,
+    live_reviews: 3,
+    release_floor: 3,
+    can_release: false,
+    own_snapshot: false,
+    reviews: [moderationReview()],
+    aggregate: null,
+    ...overrides,
+  };
+}
+
 export function eventReviews(
   overrides: Partial<EventReviews> = {},
 ): EventReviews {
   return {
     event: { pk: 5, name: 'Inhouse night' },
-    captains: [
-      {
-        org_user_id: 7,
-        captain: CAPTAIN,
-        team_name: 'Team alice',
-        window_closes_at: '2026-11-04T19:00:00Z',
-        voided_at: null,
-        released: true,
-        own_snapshot: false,
-        reviews: [moderationReview()],
-        aggregate: null,
-      },
-    ],
+    require_staff_release: false,
+    captains: [moderationCaptain()],
     ...overrides,
   };
 }
@@ -172,6 +186,8 @@ export const SETTINGS_DEFAULTS: LeadershipSettingsValues = {
   half_life_days: 180,
   max_age_days: 730,
   leaderboard_public: false,
+  require_staff_release: false,
+  auto_release_after_hours: null,
 };
 
 export function leadershipSettings(
@@ -189,6 +205,7 @@ export function leadershipSettings(
       prior_strength: [0, 20],
       half_life_days: [7, 730],
       max_age_days: [30, 1825],
+      auto_release_after_hours: [1, 720],
     },
     points: [
       { kind: 'captained', label: 'Captained a team', default: 5 },
@@ -197,6 +214,7 @@ export function leadershipSettings(
       { kind: 'placement_3', label: 'Team placed 3rd', default: 3 },
       { kind: 'draft_completed', label: 'Draft completed', default: 2 },
     ].map((k) => ({ ...k, points: k.default, overridden: false })),
+    moderator_count: 1,
     ...overrides,
   };
 }
@@ -220,6 +238,7 @@ export function leadershipTrackInfo(
     can_view_own: true,
     board_open: true,
     can_manage: false,
+    can_moderate: false,
     ...overrides,
   };
 }

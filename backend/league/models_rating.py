@@ -78,7 +78,7 @@ class LeagueMatch(models.Model):
         related_name="matches",
     )
     game = models.OneToOneField(
-        "app.Game",
+        "tournament.Game",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

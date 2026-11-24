@@ -10,7 +10,7 @@ from datetime import time, timedelta
 from cacheops import invalidate_obj
 from django.utils import timezone as tz
 
-from app.models import CustomUser, GameType, PositionsModel, Team, Tournament
+from app.models import CustomUser, GameType, PositionsModel
 from discordbot.models import DiscordEvent
 from events.constants import (
     EventState,
@@ -45,6 +45,7 @@ from tests.data import (
 )
 from tests.data.users import EVENT_LEAGUE_STAFF_USER
 from tests.populate.utils import ensure_league_user, ensure_org_user
+from tournament.models import Team, Tournament
 
 
 def populate_events_data(force: bool = False) -> None:

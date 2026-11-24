@@ -13,14 +13,7 @@ from django.db.models.functions import Now
 from django.utils import timezone as tz
 
 from app.cache_utils import invalidate_after_commit
-from app.models import (
-    TOURNAMNET_TYPE_CHOICES,
-    DotaLobbyLaunch,
-    DotaLobbyMode,
-    DraftStyles,
-    GameMode,
-    GameType,
-)
+from common.game import GameType
 from draft.models import TimeoutAction
 from events import line
 from events.constants import (  # noqa: F401 — re-exported for backward compat
@@ -52,6 +45,13 @@ from events.ready_check_constants import (
 )
 from lobby import passwords as lobby_passwords
 from telemetry.logging import get_logger
+from tournament.choices import (
+    TOURNAMENT_TYPE_CHOICES,
+    DotaLobbyLaunch,
+    DotaLobbyMode,
+    DraftStyles,
+    GameMode,
+)
 
 log = get_logger(__name__)
 
@@ -84,7 +84,7 @@ class TournamentTemplateMixin(models.Model):
     )
     tournament_type = models.CharField(
         max_length=30,
-        choices=TOURNAMNET_TYPE_CHOICES,
+        choices=TOURNAMENT_TYPE_CHOICES,
         default="double_elimination",
     )
     game_type = models.IntegerField(choices=GameType.choices, default=GameType.DOTA2)
@@ -531,7 +531,7 @@ class Event(
         ),
     )
     tournament = models.ForeignKey(
-        "app.Tournament",
+        "tournament.Tournament",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

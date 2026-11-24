@@ -1,9 +1,11 @@
 from django.db.models import OuterRef, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce
 
-from app.models import CustomUser, LeadershipProblem, Team
+from app.models import CustomUser
 from org.mmr import game_for_tournament
 from org.models import OrgUser, OrgUserGameMmr
+from tournament.models import Team
+from tournament.models.team import LeadershipProblem
 
 
 def teams_with_leadership_problems(

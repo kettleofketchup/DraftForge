@@ -6,11 +6,12 @@ from django.test import TestCase
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel, Tournament
+from app.models import CustomUser, PositionsModel
 from common.game import GameType
 from league.models import League
 from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
+from tournament.models import Tournament
 
 _discord_ids = itertools.count(930_000_000_000_000_000)
 

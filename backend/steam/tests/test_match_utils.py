@@ -3,13 +3,14 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser
 from steam.functions.match_utils import (
     find_live_game_by_players,
     find_matches_by_players,
     find_matches_by_team,
 )
 from steam.models import Match, PlayerMatchStats
+from tournament.models import Team, Tournament
 
 
 class FindMatchesByPlayersTest(TestCase):

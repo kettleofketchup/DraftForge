@@ -24,7 +24,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, ProfileClaimRequest, Tournament
+from app.models import CustomUser, ProfileClaimRequest
 from app.serializers import UserSerializer
 from common.game import GameType
 from common.utils import isTestEnvironment
@@ -65,6 +65,10 @@ from tests.data.users import (
     STAFF_USER,
     USER_CLAIMER,
 )
+from tests.helpers.knocked_out_roster_fixture import (
+    KNOCKED_OUT_ROSTER_TOURNAMENT_NAME,
+    populate_knocked_out_roster_tournament,
+)
 from tests.helpers.team_management_fixture import (
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
     populate_team_management_tournament,
@@ -79,6 +83,7 @@ from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
 from tests.test_events_discord import discord_auth_failure
 from tests.test_teamdraft import clear_teamdraft_redis
+from tournament.models import Tournament
 from tournament.serializers.tournament import TournamentSerializer
 
 log = logging.getLogger(__name__)
@@ -1010,6 +1015,7 @@ def reset_tournament_by_key(request, key: str):
         "bracket_placement_single": populate_bracket_placement_single,
         "bracket_placement_double": populate_bracket_placement_double,
         "team_management": populate_team_management_tournament,
+        "knocked_out_roster": populate_knocked_out_roster_tournament,
     }
 
     def clear_existing_draft_redis(name: str) -> None:
@@ -1029,6 +1035,7 @@ def reset_tournament_by_key(request, key: str):
         "bracket_placement_single": BRACKET_PLACEMENT_SINGLE_TOURNAMENT.name,
         "bracket_placement_double": BRACKET_PLACEMENT_DOUBLE_TOURNAMENT.name,
         "team_management": TEAM_MANAGEMENT_TOURNAMENT_NAME,
+        "knocked_out_roster": KNOCKED_OUT_ROSTER_TOURNAMENT_NAME,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)

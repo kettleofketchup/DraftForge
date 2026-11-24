@@ -6,9 +6,10 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser
 from league.models import League
 from org.models import Organization
+from tournament.models import Game, Team, Tournament
 
 
 def patch_tick_start(test: TestCase) -> MagicMock:

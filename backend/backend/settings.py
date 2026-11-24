@@ -128,7 +128,6 @@ REDIS_KEY_NAMESPACE: str = test_process_namespace() if RUNNING_TESTS else ""
 # All other DMs return a fake success. Prevents spamming real users during testing.
 TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")
 
-# Configure logging - default to INFO, allow override via LOG_LEVEL env var
 _log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, _log_level, logging.INFO),
@@ -321,8 +320,9 @@ DATABASES = {
         },
     }
 }
-if os.environ.get("SQLITE_PATH"):
-    DATABASES["default"]["NAME"] = Path(os.environ["SQLITE_PATH"])
+# Relative paths resolve under backend/, so the host and the container agree.
+if sqlite_path := os.environ.get("SQLITE_PATH"):
+    DATABASES["default"]["NAME"] = BASE_DIR_PATH / sqlite_path
 
 
 IN_DOCKER = is_docker()
@@ -367,8 +367,8 @@ CACHEOPS_REDIS = {
 CACHEOPS = {
     "org.organization": {"ops": "all", "timeout": 60 * 60},
     "league.league": {"ops": "all", "timeout": 60 * 60},
-    "app.tournament": {"ops": "all", "timeout": 60 * 60},
-    "app.team": {"ops": "all", "timeout": 60 * 60},
+    "tournament.tournament": {"ops": "all", "timeout": 60 * 60},
+    "tournament.team": {"ops": "all", "timeout": 60 * 60},
     "app.customuser": {"ops": "all", "timeout": 60 * 60},
     # BaseUserProfile owns nickname/avatar. Every @cached_as
     # site that ships nickname/avatar must list BaseUserProfile so PATCH
@@ -383,7 +383,7 @@ CACHEOPS = {
     "user.deadlockuserprofile": {"ops": "all", "timeout": 60 * 60},
     "draft.draft": {"ops": "all", "timeout": 60 * 60},
     "draft.draftoptions": {"ops": "all", "timeout": 60 * 60},
-    "app.game": {"ops": "all", "timeout": 60 * 60},
+    "tournament.game": {"ops": "all", "timeout": 60 * 60},
     "draft.herodraft": {"ops": "all", "timeout": 60 * 60},
     "draft.draftteam": {"ops": "all", "timeout": 60 * 60},
     "draft.draftround": {"ops": "all", "timeout": 60 * 60},

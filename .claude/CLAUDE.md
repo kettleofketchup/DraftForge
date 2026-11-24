@@ -128,7 +128,7 @@ just test::pw::headless
 **docker-compose.prod.yaml** (Production)
 - Uses built production images
 - No source mounting
-- SQLite database persisted at `./backend/db.sqlite3`
+- SQLite database directory `./backend/data/` mounted at `/app/backend/data` (`SQLITE_PATH=data/prod.db.sqlite3`, WAL sidecars persist with it)
 
 **docker-compose.release.yaml**
 - For release builds

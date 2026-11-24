@@ -205,13 +205,17 @@ class UpdateUserLeagueMmrTests(LeagueFixtures, TestCase):
         league_user = LeagueUser.objects.get(user=self.player, league=self.league)
         self.assertEqual(league_user.mmr, 3620)
 
-    def test_update_user_league_mmr_deadlock_only_member_gets_zero(self) -> None:
+    def test_update_user_league_mmr_deadlock_only_member_keeps_league_mmr(
+        self,
+    ) -> None:
+        before = LeagueUser.objects.get(user=self.player, league=self.league).mmr
+        self.assertNotEqual(before, 0)
         ensure_org_user(self.player, self.org, mmr=0)
 
         update_user_league_mmr(self.player, organization=self.org, league=self.league)
 
         league_user = LeagueUser.objects.get(user=self.player, league=self.league)
-        self.assertEqual(league_user.mmr, 0)
+        self.assertEqual(league_user.mmr, before)
 
 
 class OrgUserCreationSitesTests(TestCase):

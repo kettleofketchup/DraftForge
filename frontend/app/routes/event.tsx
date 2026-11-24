@@ -55,23 +55,12 @@ import {
   Users,
   UserX,
 } from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AddMemberPayload } from '~/components/api/api';
-import {
-  adminAddSignup,
-  subscribeToRepeater,
-  unsubscribeFromRepeater,
-} from '~/components/api/api';
-import api from '~/components/api/axios';
+import { adminAddSignup } from '~/components/api/api';
 import { EventStateBadge } from '~/components/events';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
@@ -82,9 +71,23 @@ import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluate
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { MySignupActions } from '~/components/events/MySignupActions';
+import { SignupHistorySection } from '~/components/events/SignupHistorySection';
+import {
+  historySubjectFor,
+  SignupHistoryButton,
+  SignupHistorySheet,
+} from '~/components/events/SignupHistorySheet';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
-import type { EventSignupType, EventType } from '~/components/events/schemas';
+import {
+  eventTabOptions,
+  resolveEventTab,
+} from '~/components/events/eventTabs';
+import type {
+  EventSignupType,
+  EventType,
+  HistorySubject,
+} from '~/components/events/schemas';
 import { EventState, rollCallLabel } from '~/components/events/schemas';
 import {
   canRestoreSignup,
@@ -104,6 +107,10 @@ import {
 } from '~/components/game/constants';
 import { EventLobbyPassword } from '~/components/lobby/EventLobbyPassword';
 import { useOrganization } from '~/components/organization';
+import {
+  orgUsersQueryKey,
+  useOrgUsersQuery,
+} from '~/components/organization/hooks/useOrgUsersQuery';
 import { Badge } from '~/components/ui/badge';
 import {
   DestructiveButton,
@@ -146,10 +153,14 @@ import {
 } from '~/features/org-features';
 import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
+  invalidateSignupHistory,
+  removeSignupHistoryQueries,
   useEvent,
   useEventActionMutation,
+  useEventRepeater,
   useEventSignups,
   useEventSignupUsers,
+  useRepeaterSubscriptionMutation,
   useSignupActionMutations,
   useSignupMutation,
 } from '~/hooks/useEvent';
@@ -160,7 +171,6 @@ import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserDotaProfile } from '~/hooks/useUserProfile';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
@@ -215,10 +225,11 @@ export default function EventPage() {
   // selectOrgMmr; viewers without member access fall back to signup.org_user_mmr.
   const eventOrgPk = event?.organization ?? null;
   const onMemberViewerChange = useCallback(() => {
+    if (id) removeSignupHistoryQueries(queryClient, id);
     if (!eventOrgPk) return;
-    if (useOrgStore.getState().orgUsersOrgId === eventOrgPk) {
-      useOrgStore.getState().clearOrgUsers();
-    }
+    // Remove, not reset: this runs before useQuery applies enabled=false, so a
+    // reset would refetch the members list as the new (possibly anonymous) viewer.
+    queryClient.removeQueries({ queryKey: orgUsersQueryKey(eventOrgPk) });
     useUserCacheStore.getState().dropScoped({ orgId: eventOrgPk });
     removeFeatureQueries(queryClient, eventOrgPk);
     queryClient.invalidateQueries({ queryKey: ['event', id] });
@@ -227,12 +238,9 @@ export default function EventPage() {
   }, [eventOrgPk, id, queryClient, refetchEventOrg]);
   const { canView: canViewOrgMembers, settled: orgMemberAccessSettled } =
     useMemberAccess(eventOrg, onMemberViewerChange);
-  const orgUsersOrgId = useOrgStore((s) => s.orgUsersOrgId);
-  useEffect(() => {
-    if (eventOrgPk && orgMemberAccessSettled && canViewOrgMembers) {
-      useOrgStore.getState().getOrgUsers(eventOrgPk);
-    }
-  }, [eventOrgPk, orgMemberAccessSettled, canViewOrgMembers, orgUsersOrgId]);
+  useOrgUsersQuery(eventOrgPk, {
+    enabled: orgMemberAccessSettled && !!canViewOrgMembers,
+  });
   const signupMutation = useSignupMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
@@ -292,35 +300,13 @@ export default function EventPage() {
 
   // Repeater subscription state
   const repeaterId = event?.event_repeater;
-  const { data: repeaterData } = useQuery({
-    queryKey: ['repeater', repeaterId],
-    queryFn: () =>
-      api.get(`/events/repeaters/${repeaterId}/`).then((r) => r.data),
-    enabled: !!repeaterId && !!currentUser,
-  });
+  const { data: repeaterData } = useEventRepeater(
+    repeaterId && currentUser ? repeaterId : null,
+  );
   const isSubscribed = repeaterData?.is_subscribed ?? false;
 
-  const subscribeMutation = useMutation({
-    mutationFn: () => subscribeToRepeater(repeaterId!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
-      queryClient.invalidateQueries({
-        queryKey: ['repeater-subscribers', repeaterId],
-      });
-      toast.success('Subscribed to event series notifications');
-    },
-  });
-
-  const unsubscribeMutation = useMutation({
-    mutationFn: () => unsubscribeFromRepeater(repeaterId!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
-      queryClient.invalidateQueries({
-        queryKey: ['repeater-subscribers', repeaterId],
-      });
-      toast.success('Unsubscribed from event series notifications');
-    },
-  });
+  const { subscribe: subscribeMutation, unsubscribe: unsubscribeMutation } =
+    useRepeaterSubscriptionMutation();
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!event) return [];
@@ -376,31 +362,33 @@ export default function EventPage() {
 
   // Mobile tab nav goes through usePageNav → centered navbar dropdown.
   const pageNavOptions = useMemo(
-    () => [
-      { value: 'details', label: 'Details' },
-      { value: 'signups', label: `${activeSignups.length} Signups` },
-      ...(tentativeSignups.length > 0
-        ? [
-            {
-              value: 'tentative',
-              label: `${tentativeSignups.length} Tentative`,
-            },
-          ]
-        : []),
-      { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
-      ...(removedSignups.length > 0
-        ? [{ value: 'removed', label: `${removedSignups.length} Removed` }]
-        : []),
-      { value: 'discord', label: 'Discord' },
-    ],
+    () =>
+      eventTabOptions(isAdmin, {
+        active: activeSignups.length,
+        tentative: tentativeSignups.length,
+        waitlisted: waitlistedSignups.length,
+        removed: removedSignups.length,
+      }),
     [
+      isAdmin,
       activeSignups.length,
       tentativeSignups.length,
       waitlistedSignups.length,
       removedSignups.length,
     ],
   );
-  usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
+  const shownTab = event ? resolveEventTab(activeTab, isAdmin) : activeTab;
+  usePageNav(event ? pageNavOptions : null, shownTab, handleTabChange);
+
+  const [historyFor, setHistoryFor] = useState<HistorySubject | null>(null);
+  const historyMemberOptions = useMemo(() => {
+    const byUser = new Map<number, EventSignupType>();
+    for (const s of signups ?? []) byUser.set(s.user, s);
+    return [...byUser.values()].map((s) => ({
+      user_id: s.user,
+      user: historySubjectFor(s),
+    }));
+  }, [signups]);
 
   if (isLoading) {
     return (
@@ -587,7 +575,14 @@ export default function EventPage() {
                 (isSubscribed ? (
                   <SecondaryButton
                     size="sm"
-                    onClick={() => unsubscribeMutation.mutate()}
+                    onClick={() =>
+                      unsubscribeMutation.mutate(event.event_repeater!, {
+                        onSuccess: () =>
+                          toast.success(
+                            'Unsubscribed from event series notifications',
+                          ),
+                      })
+                    }
                     disabled={unsubscribeMutation.isPending}
                   >
                     <BellOff className="h-4 w-4 mr-1" />
@@ -596,7 +591,14 @@ export default function EventPage() {
                 ) : (
                   <PrimaryButton
                     size="sm"
-                    onClick={() => subscribeMutation.mutate()}
+                    onClick={() =>
+                      subscribeMutation.mutate(event.event_repeater!, {
+                        onSuccess: () =>
+                          toast.success(
+                            'Subscribed to event series notifications',
+                          ),
+                      })
+                    }
                     disabled={subscribeMutation.isPending}
                   >
                     <Bell className="h-4 w-4 mr-1" />
@@ -622,7 +624,7 @@ export default function EventPage() {
       <EventLeadershipBanner event={event} access={eventOrgAccess} />
 
       <div>
-        <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <Tabs value={shownTab} onValueChange={handleTabChange}>
           {/* Below md the PageNavBar dropdown drives tab switching. */}
           <TabsList className="hidden md:inline-flex flex-wrap">
             <TabsTrigger value="details" data-testid="event-tab-details">
@@ -647,6 +649,11 @@ export default function EventPage() {
             <TabsTrigger value="discord" data-testid="event-tab-discord">
               Discord
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="history" data-testid="event-tab-history">
+                History
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="details">
@@ -686,6 +693,7 @@ export default function EventPage() {
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -696,6 +704,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -706,6 +715,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -716,6 +726,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              onShowHistory={setHistoryFor}
             />
           </TabsContent>
 
@@ -726,8 +737,29 @@ export default function EventPage() {
               eventTimezone={event.timezone}
             />
           </TabsContent>
+
+          {isAdmin && currentUser && (
+            <TabsContent value="history">
+              <SignupHistorySection
+                eventId={event.id}
+                isAdmin={isAdmin}
+                eventTimezone={event.timezone}
+                memberOptions={historyMemberOptions}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
+
+      <SignupHistorySheet
+        eventId={event.id}
+        eventTimezone={event.timezone}
+        isAdmin={isAdmin && !!currentUser}
+        user={historyFor}
+        onOpenChange={(open) => {
+          if (!open) setHistoryFor(null);
+        }}
+      />
 
       <EditEventModal
         event={event}
@@ -927,8 +959,10 @@ function SignupsTab({
   state,
   autoApprove = true,
   conductMemberFor,
+  onShowHistory,
 }: {
   conductMemberFor?: ConductMemberLookup;
+  onShowHistory?: (user: HistorySubject) => void;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
@@ -972,10 +1006,15 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-      // Backend adds the user as an OrgUser when an admin signs them up; reset
-      // the org-users cache so the org page reflects the new membership.
+      invalidateSignupHistory(queryClient, eventId!);
       void invalidateConductQueries(queryClient, orgId);
-      if (orgId) useOrgStore.getState().clearOrgUsers();
+      // Backend adds the user as an OrgUser when an admin signs them up;
+      // refetch the org members so the org page shows the new membership.
+      if (orgId) {
+        void queryClient.invalidateQueries({
+          queryKey: orgUsersQueryKey(orgId),
+        });
+      }
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
       const added = resp.user_data;
@@ -1038,7 +1077,7 @@ function SignupsTab({
           const handleWaitlist = () => signupActions.demote.mutate(signup.id);
 
           const adminActions = isAdmin ? (
-            <div className="flex gap-1">
+            <div className="flex gap-1 [&_button]:min-h-11 sm:[&_button]:min-h-8">
               {(signup.status === 'rsvp' ||
                 signup.status === 'pending_approval') && (
                 <>
@@ -1167,6 +1206,12 @@ function SignupsTab({
                   </TooltipContent>
                 </Tooltip>
               )}
+              {onShowHistory && (
+                <SignupHistoryButton
+                  user={historySubjectFor(signup, user)}
+                  onClick={() => onShowHistory(historySubjectFor(signup, user))}
+                />
+              )}
               {!isRemovedSignup(signup.status) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1287,7 +1332,11 @@ function SignupsTab({
             {
               onSuccess: () => {
                 setApprovalSignup(null);
-                if (orgId) useOrgStore.getState().clearOrgUsers();
+                if (orgId) {
+                  void queryClient.invalidateQueries({
+                    queryKey: orgUsersQueryKey(orgId),
+                  });
+                }
                 if (previousMmr != null && previousMmr !== mmr) {
                   const delta = mmr - previousMmr;
                   toast.success(

@@ -1,0 +1,1 @@
+- Creating a league now shows it on the organization and leagues pages right away, and edited league names and Steam IDs update in league lists without a reload.

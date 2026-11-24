@@ -6,9 +6,9 @@ from typing import Any
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 from app.consumer_db import consumer_db
-from app.models import Tournament
 from draft.services.team_state import recent_draft_events
 from telemetry.websocket import TelemetryConsumerMixin
+from tournament.models import Tournament
 
 
 class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):

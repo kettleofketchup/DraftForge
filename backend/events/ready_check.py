@@ -11,7 +11,7 @@ from django.dispatch import Signal
 from django.utils import timezone as tz
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, Team
+from app.models import CustomUser
 from events.capacity import lock_event
 from events.constants import (
     EventState,
@@ -75,6 +75,7 @@ from events.services import (
     sync_event_roster,
 )
 from telemetry.logging import get_logger
+from tournament.models import Team
 
 __all__ = [
     "CloseResult",

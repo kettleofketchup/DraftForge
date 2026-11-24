@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 
-vi.mock('~/components/api/axios', () => ({ default: { get } }));
+vi.mock('~/components/api/axios', () => ({ default: { get, post } }));
 
-import { getClaimRequests } from '../api';
+import { approveClaimRequest, getClaimRequests } from '../api';
 
 const row = {
   id: 1,
@@ -32,6 +32,7 @@ const row = {
 
 beforeEach(() => {
   get.mockReset();
+  post.mockReset();
 });
 
 describe('getClaimRequests', () => {
@@ -47,10 +48,44 @@ describe('getClaimRequests', () => {
     expect(claims).toEqual([row]);
   });
 
+  it('parses an approved claim whose target profile was merged away', async () => {
+    const approved = {
+      ...row,
+      status: 'approved',
+      target_user: null,
+      target_nickname: null,
+      target_steamid: null,
+      target_mmr: null,
+      target_game_mmrs: null,
+      reviewed_by: 5,
+      reviewed_by_username: 'admin',
+      reviewed_at: '2026-01-02T00:00:00Z',
+    };
+    get.mockResolvedValue({ data: [approved] });
+    const claims = await getClaimRequests({
+      organizationId: 4,
+      status: 'approved',
+    });
+    expect(claims).toEqual([approved]);
+  });
+
   it('rejects a malformed body', async () => {
     get.mockResolvedValue({ data: [{ ...row, status: 'unknown' }] });
     await expect(
       getClaimRequests({ organizationId: 4 }),
     ).rejects.toBeInstanceOf(ZodError);
+  });
+});
+
+describe('approveClaimRequest', () => {
+  it('posts the approval and returns the message', async () => {
+    post.mockResolvedValue({ data: { message: 'Profile merged' } });
+    await expect(approveClaimRequest(9)).resolves.toBe('Profile merged');
+    expect(post).toHaveBeenCalledWith('/claim-requests/9/approve/');
+  });
+
+  it('rejects a malformed body', async () => {
+    post.mockResolvedValue({ data: {} });
+    await expect(approveClaimRequest(9)).rejects.toBeInstanceOf(ZodError);
   });
 });
