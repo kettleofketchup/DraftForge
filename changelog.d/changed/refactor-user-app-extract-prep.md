@@ -12,11 +12,11 @@
   `app.tasks.avatar_refresh.refresh_all_discord_data`,
   `app.tasks.discord_name_sync.sync_active_org_discord_names` and
   `app.tasks.discord_name_sync.sync_org_discord_names` now use the corresponding
-  `user.tasks.*` names. Both beat schedules follow the new names. During deployment,
-  new web messages can reach an old worker and queued old names can reach a new
-  worker; either direction drops unregistered tasks. After `just dev::release`,
-  check worker logs for "unregistered task" naming `sync_org_discord_names` during
-  that window and run `manage.py sync_discord_names --org <id>` for each affected
+  `user.tasks.*` names. Both beat schedules follow the new names. `just dev::release`
+  stops the worker before the backend, so `app.tasks.*` messages queued before or
+  during `down` stay in Redis and the new worker drops them as unregistered. After
+  `just dev::release`, check the new worker log for "unregistered task" naming
+  `sync_org_discord_names` and run `manage.py sync_discord_names --org <id>` for each affected
   org. Avatar refreshes and active-org name sync recur on their schedules; inactive
   orgs need the manual recovery.
 - Moved modules' logger names now use `user.*`, and moved views' `drf_error_response`

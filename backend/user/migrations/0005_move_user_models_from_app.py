@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
         ("user", "0004_backfill_game_profiles"),
         ("app", "0115_move_tournament_models_to_tournament"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ("org", "0023_api_tokens"),
+        ("org", "0022_retarget_tournament_models"),
     ]
 
     operations = [

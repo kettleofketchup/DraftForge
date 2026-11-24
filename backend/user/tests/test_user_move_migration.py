@@ -255,3 +255,13 @@ class UserMoveMigrationTests(TransactionTestCase):
                 [node for node in leaves if node[0] == app_label],
                 [(app_label, name)],
             )
+
+    def test_move_adds_no_org_ancestors(self) -> None:
+        # Rolling back an unrelated org migration must not unapply the move.
+        graph = MigrationLoader(None, ignore_no_migrations=True).graph
+        user_move = ("user", "0005_move_user_models_from_app")
+        app_before = ("app", "0115_move_tournament_models_to_tournament")
+        self.assertEqual(
+            {n for n in graph.forwards_plan(user_move) if n[0] == "org"},
+            {n for n in graph.forwards_plan(app_before) if n[0] == "org"},
+        )
