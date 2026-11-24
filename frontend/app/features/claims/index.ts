@@ -1,6 +1,7 @@
 export { getClaimRequests } from './api';
 export { PendingClaimsBadge } from './PendingClaimsBadge';
 export {
+  useApproveClaim,
   useClaimRequests,
   useInvalidateClaims,
   usePendingClaimsCount,

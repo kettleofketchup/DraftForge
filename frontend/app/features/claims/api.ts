@@ -15,3 +15,10 @@ export async function getClaimRequests(options: {
   });
   return z.array(ProfileClaimRequestSchema).parse(response.data);
 }
+
+const ClaimActionResponseSchema = z.object({ message: z.string() });
+
+export async function approveClaimRequest(claimId: number): Promise<string> {
+  const response = await api.post(`/claim-requests/${claimId}/approve/`);
+  return ClaimActionResponseSchema.parse(response.data).message;
+}
