@@ -91,6 +91,7 @@ nav:
       - Draft System: features/draft.md
       - Hero Draft: features/herodraft.md
       - Bracket: features/bracket.md
+      - Team Management: features/team-management.md
       - CSV Import: features/csv-import.md
       - Events:
           - Overview: features/events.md

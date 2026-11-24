@@ -7,7 +7,10 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from tournament.models import Game, Team, Tournament
+from tournament.models import Game, Team, TeamLog, Tournament
+from tournament.models.team_log import TeamLogAction, TeamLogVia
+from tournament.services.team_management import live_conflicts, replace_captain
+from tournament.tests.test_team_management import TeamManagementFixture, eliminate
 from tournament.views.bracket import calculate_placement
 
 
@@ -475,6 +478,49 @@ class ManualPlacementOverrideTest(TestCase):
         self.team.refresh_from_db()
         self.assertIsNone(self.team.placement)
 
+    def test_set_placement_writes_team_log_with_reason(self) -> None:
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 4, "reason": "  lost the lower final  "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        row = TeamLog.objects.get(team=self.team)
+        self.assertEqual(row.action, TeamLogAction.SET_PLACEMENT)
+        self.assertEqual(row.actor, self.admin)
+        self.assertEqual(row.via, TeamLogVia.WEB)
+        self.assertEqual(row.reason, "lost the lower final")
+        self.assertEqual(
+            row.details,
+            {"before": {"placement": None}, "after": {"placement": 4}},
+        )
+
+    def test_unchanged_placement_writes_no_team_log(self) -> None:
+        self.team.placement = 2
+        self.team.save()
+
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 2, "reason": "same"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(TeamLog.objects.filter(team=self.team).exists())
+
+    def test_non_text_reason_rejected(self) -> None:
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 3, "reason": 5},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "invalid_reason")
+        self.team.refresh_from_db()
+        self.assertIsNone(self.team.placement)
+
     def test_invalid_placement_rejected(self):
         """Invalid placement values are rejected."""
         response = self.client.patch(
@@ -761,3 +807,173 @@ class AdvanceWinnerPersistenceTest(TestCase):
         self.teams[1].refresh_from_db()
         self.assertIsNone(self.teams[0].placement)
         self.assertIsNone(self.teams[1].placement)
+
+
+class PlacementClearGuardTests(TeamManagementFixture, TestCase):
+    """A placement clear that would put a player on two live teams is refused."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.admin = CustomUser.objects.create_superuser(
+            username="guard_admin", password="admin123", email="guard@test.com"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+        self.downstream = Game.objects.create(
+            tournament=self.tournament, bracket_type="losers", round=2, position=0
+        )
+        self.losers_game = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="losers",
+            round=1,
+            position=0,
+            radiant_team=self.team,
+            dire_team=self.other,
+            next_game=self.downstream,
+            next_game_slot="radiant",
+            elimination_type="double",
+        )
+
+    def _advance(self, game: Game, winner: str | None) -> Response:
+        return self.client.post(
+            f"/api/bracket/games/{game.pk}/advance-winner/",
+            {"winner": winner},
+            format="json",
+        )
+
+    def _placement(self, team: Team, placement: int | None) -> Response:
+        return self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{team.pk}/placement/",
+            {"placement": placement},
+            format="json",
+        )
+
+    def _take_over(self, team: Team, user: CustomUser) -> None:
+        replace_captain(team, user, actor=self.actor, via=TeamLogVia.WEB, reason="r")
+
+    def _assert_conflict(
+        self, response: Response, team: Team, users: list[CustomUser]
+    ) -> None:
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["code"], "roster_conflict")
+        self.assertEqual(response.data["details"]["team_id"], team.pk)
+        self.assertEqual(
+            response.data["details"]["user_ids"], sorted(u.pk for u in users)
+        )
+        for user in users:
+            self.assertIn(user.username, response.data["error"])
+
+    def test_unset_losers_game_after_takeover_409_and_no_side_effects(self) -> None:
+        self.assertEqual(self._advance(self.losers_game, "radiant").status_code, 200)
+        eliminated = self.refresh(self.other)
+        self.assertEqual(eliminated.placement, 4)
+        self._take_over(self.team, self.o1)
+
+        response = self._advance(self.losers_game, None)
+
+        self._assert_conflict(response, self.other, [self.o1])
+        self.assertIn(self.team.name, response.data["error"])
+        self.assertEqual(self.refresh(self.other).placement, 4)
+        self.downstream.refresh_from_db()
+        self.assertEqual(self.downstream.radiant_team_id, self.team.pk)
+        self.losers_game.refresh_from_db()
+        self.assertEqual(self.losers_game.status, "completed")
+        self.assertEqual(self.losers_game.winning_team_id, self.team.pk)
+
+    def test_set_placement_null_after_takeover_409(self) -> None:
+        eliminate(self.other, 4)
+        self._take_over(self.team, self.o1)
+
+        response = self._placement(self.other, None)
+
+        self._assert_conflict(response, self.other, [self.o1])
+        self.assertEqual(self.refresh(self.other).placement, 4)
+
+    def test_set_placement_other_number_still_ok(self) -> None:
+        eliminate(self.other, 4)
+        self._take_over(self.team, self.o1)
+
+        response = self._placement(self.other, 3)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.refresh(self.other).placement, 3)
+
+    def test_no_overlap_unset_and_clear_still_work(self) -> None:
+        self._advance(self.losers_game, "radiant")
+        self.assertEqual(self.refresh(self.other).placement, 4)
+
+        response = self._advance(self.losers_game, None)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(self.refresh(self.other).placement)
+        self.downstream.refresh_from_db()
+        self.assertIsNone(self.downstream.radiant_team_id)
+
+        eliminate(self.other, 5)
+        response = self._placement(self.other, None)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(self.refresh(self.other).placement)
+
+    def test_grand_final_unset_checks_both_teams(self) -> None:
+        grand_finals = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="grand_finals",
+            round=1,
+            position=0,
+            radiant_team=self.team,
+            dire_team=self.other,
+        )
+        self.assertEqual(self._advance(grand_finals, "radiant").status_code, 200)
+        self.assertEqual(self.refresh(self.team).placement, 1)
+        self.assertEqual(self.refresh(self.other).placement, 2)
+        t1 = self.make_user("guard_t1")
+        self.tournament.users.add(t1)
+        third = Team.objects.create(
+            tournament=self.tournament, name="Third", captain=t1
+        )
+        third.members.add(t1)
+        self._take_over(third, self.m1)
+
+        response = self._advance(grand_finals, None)
+
+        self._assert_conflict(response, self.team, [self.m1])
+        self.assertEqual(self.refresh(self.team).placement, 1)
+        self.assertEqual(self.refresh(self.other).placement, 2)
+        grand_finals.refresh_from_db()
+        self.assertEqual(grand_finals.status, "completed")
+
+    def test_grand_final_unset_catches_player_on_both_finalists(self) -> None:
+        eliminate(self.team, 1)
+        eliminate(self.other, 2)
+        self.team.members.add(self.o1)
+        grand_finals = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="grand_finals",
+            round=1,
+            position=0,
+            radiant_team=self.team,
+            dire_team=self.other,
+            winning_team=self.team,
+            status="completed",
+        )
+
+        response = self._advance(grand_finals, None)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["details"]["user_ids"], [self.o1.pk])
+        self.assertEqual(self.refresh(self.team).placement, 1)
+        self.assertEqual(self.refresh(self.other).placement, 2)
+
+    def test_live_conflicts_ignores_left_members(self) -> None:
+        eliminate(self.other, 4)
+        self.team.left_members.add(self.o1)
+        self.assertEqual(live_conflicts(self.refresh(self.other)), [])
+
+        u = self.make_user("guard_left")
+        self.other.left_members.add(u)
+        self.team.members.add(u)
+        self.assertEqual(live_conflicts(self.refresh(self.other)), [])
+
+    def test_live_conflicts_counts_dropins(self) -> None:
+        eliminate(self.other, 4)
+        self.team.dropin_members.add(self.o1)
+        self.assertEqual(live_conflicts(self.refresh(self.other)), [self.o1])

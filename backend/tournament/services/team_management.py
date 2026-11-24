@@ -8,7 +8,7 @@ from functools import partial
 from typing import Any, Literal
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
@@ -92,15 +92,85 @@ def standin_cap(team: Team) -> int:
     return cap if cap is not None else DEFAULT_MAX_STANDINS
 
 
+def _live_other_teams(team: Team) -> QuerySet[Team]:
+    return (
+        Team.objects.nocache()
+        .filter(tournament_id=team.tournament_id, placement__isnull=True)
+        .exclude(pk=team.pk)
+    )
+
+
 def other_team_user_ids(team: Team) -> set[int]:
+    """Users on another live (unplaced) team in the tournament."""
     if team.tournament_id is None:
         return set()
-    others = Team.objects.filter(tournament_id=team.tournament_id).exclude(pk=team.pk)
+    others = _live_other_teams(team)
     return set(
         CustomUser.objects.nocache()
         .filter(Q(teams_as_member__in=others) | Q(teams_as_dropin__in=others))
         .values_list("pk", flat=True)
         .distinct()
+    )
+
+
+def _live_after_reopen(team: Team, reopening: Collection[Team]) -> QuerySet[Team]:
+    reopened = [t.pk for t in reopening if t.pk != team.pk]
+    return (
+        Team.objects.nocache()
+        .filter(tournament_id=team.tournament_id)
+        .filter(Q(placement__isnull=True) | Q(pk__in=reopened))
+        .exclude(pk=team.pk)
+    )
+
+
+def live_conflicts(team: Team, *, reopening: Collection[Team] = ()) -> list[CustomUser]:
+    """Members/stand-ins of `team` also on another live team (or one in `reopening`)."""
+    if team.tournament_id is None:
+        return []
+    others = _live_after_reopen(team, reopening)
+    return list(
+        CustomUser.objects.nocache()
+        .filter(Q(teams_as_member=team) | Q(teams_as_dropin=team))
+        .filter(Q(teams_as_member__in=others) | Q(teams_as_dropin__in=others))
+        .distinct()
+        .order_by("pk")
+    )
+
+
+def roster_conflict_body(
+    team: Team, users: Sequence[CustomUser], *, reopening: Collection[Team] = ()
+) -> dict[str, Any]:
+    """409 `roster_conflict` payload for reopening `team` while `users` play elsewhere."""
+    names = ", ".join(user.username for user in users)
+    teams = ", ".join(
+        _live_after_reopen(team, reopening)
+        .filter(Q(members__in=users) | Q(dropin_members__in=users))
+        .distinct()
+        .order_by("name", "pk")
+        .values_list("name", flat=True)
+    )
+    return {
+        "code": "roster_conflict",
+        "error": (
+            f"{names} also play for {teams or 'another team'}. "
+            "Resolve that before reopening this team."
+        ),
+        "details": {"team_id": team.pk, "user_ids": [user.pk for user in users]},
+    }
+
+
+def _on_other_team_error(team: Team, user: CustomUser) -> TeamManagementError:
+    other = (
+        _live_other_teams(team)
+        .filter(Q(members=user) | Q(dropin_members=user))
+        .order_by("pk")
+        .first()
+    )
+    where = f"on {other.name}" if other is not None else "on another team"
+    return TeamManagementError(
+        "on_other_team",
+        f"This player is {where} in this tournament. Remove them there first. "
+        "If that team is out of the tournament, set its placement first.",
     )
 
 
@@ -580,6 +650,19 @@ def remove_standin(
     )
 
 
+def _eligibility_violations(team: Team, user: CustomUser) -> list[Violation]:
+    event = source_event(team.tournament)
+    if event is None:
+        return []
+    codes = unmet_codes(event, user)
+    return [
+        Violation(
+            code=code, rule="staff-override", message=label, category="eligibility"
+        )
+        for code, label in zip(codes, unmet_labels(codes), strict=True)
+    ]
+
+
 def _standin_violations(team: Team, user: CustomUser) -> list[Violation]:
     violations: list[Violation] = []
     cap = standin_cap(team)
@@ -593,15 +676,7 @@ def _standin_violations(team: Team, user: CustomUser) -> list[Violation]:
                 category="team",
             )
         )
-    event = source_event(team.tournament)
-    if event is not None:
-        codes = unmet_codes(event, user)
-        violations.extend(
-            Violation(
-                code=code, rule="staff-override", message=label, category="eligibility"
-            )
-            for code, label in zip(codes, unmet_labels(codes), strict=True)
-        )
+    violations.extend(_eligibility_violations(team, user))
     return violations
 
 
@@ -625,11 +700,7 @@ def add_standin(
                 "This player is already on this team as a member, stand-in or dropout.",
             )
         if user.pk in other_team_user_ids(locked):
-            raise TeamManagementError(
-                "on_other_team",
-                "This player is on another team in this tournament. "
-                "Remove them there first.",
-            )
+            raise _on_other_team_error(locked, user)
         return _standin_violations(locked, user)
 
     def mutate(locked: Team) -> dict[str, Any]:
@@ -667,11 +738,7 @@ def restore_member(
                 "Only players who dropped out of this team can be restored.",
             )
         if user.pk in other_team_user_ids(locked):
-            raise TeamManagementError(
-                "on_other_team",
-                "This player is on another team in this tournament. "
-                "Remove them there first.",
-            )
+            raise _on_other_team_error(locked, user)
         return []
 
     def mutate(locked: Team) -> dict[str, Any]:
@@ -709,11 +776,7 @@ def set_captain(
     def validate(locked: Team) -> list[Violation]:
         if is_reseat(locked):
             if user.pk in other_team_user_ids(locked):
-                raise TeamManagementError(
-                    "on_other_team",
-                    "This player is on another team in this tournament. "
-                    "Remove them there first.",
-                )
+                raise _on_other_team_error(locked, user)
             return []
         if user.pk == locked.captain_id:
             raise TeamManagementError(
@@ -742,6 +805,90 @@ def set_captain(
     return _apply(
         team,
         TeamLogAction.SET_CAPTAIN,
+        actor=actor,
+        via=via,
+        reason=reason,
+        acknowledged_codes=acknowledged_codes,
+        target_user=lambda locked: user,
+        affected_users=lambda locked: [user, locked.captain],
+        validate=validate,
+        mutate=mutate,
+        touched=("captain",),
+    )
+
+
+CaptainSource = Literal["member", "standin", "dropout", "outside"]
+
+
+def _captain_source(team: Team, user: CustomUser) -> CaptainSource:
+    if _is_member(team, user):
+        return "member"
+    if _is_standin(team, user):
+        return "standin"
+    if _is_dropout(team, user):
+        return "dropout"
+    return "outside"
+
+
+def replace_captain(
+    team: Team,
+    user: CustomUser,
+    *,
+    mark_outgoing_dropout: bool = True,
+    actor: CustomUser | None,
+    via: TeamLogVia,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> TeamChange:
+    def validate(locked: Team) -> list[Violation]:
+        source = _captain_source(locked, user)
+        if user.pk == locked.captain_id and source == "member":
+            raise TeamManagementError(
+                "already_captain", "This player is already the captain."
+            )
+        if user.pk in other_team_user_ids(locked):
+            raise _on_other_team_error(locked, user)
+        if source == "outside":
+            return _eligibility_violations(locked, user)
+        return []
+
+    def mutate(locked: Team) -> dict[str, Any]:
+        old = locked.captain
+        source = _captain_source(locked, user)
+        extras: dict[str, Any] = {}
+        if source != "member":
+            locked.members.add(user)
+            locked.dropin_members.remove(user)
+            locked.left_members.remove(user)
+        if locked.deputy_captain_id == user.pk:
+            locked.deputy_captain = None
+            locked.save(update_fields=["deputy_captain"])
+        if old is not None and old.pk == user.pk:
+            extras.update(_ensure_tournament_user(locked, user))
+        else:
+            extras.update(_change_captain(locked, user, actor=actor))
+
+        outgoing: Literal["none", "kept", "dropped", "not_member"]
+        if old is None or old.pk == user.pk:
+            outgoing = "none"
+        elif not _is_member(locked, old):
+            outgoing = "not_member"
+        elif mark_outgoing_dropout:
+            locked.left_members.add(old)
+            locked.members.remove(old)
+            outgoing = "dropped"
+        else:
+            outgoing = "kept"
+        return {
+            **extras,
+            "replacing_user_id": old.pk if old is not None else None,
+            "new_captain_source": source,
+            "outgoing": outgoing,
+        }
+
+    return _apply(
+        team,
+        TeamLogAction.REPLACE_CAPTAIN,
         actor=actor,
         via=via,
         reason=reason,

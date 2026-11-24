@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { UserSchema } from '~/components/user/schemas';
 
-// Lightweight org schema for league list view
+// Lightweight org schema nested in league detail and tournament payloads
 export const LeagueOrganizationSchema = z.object({
   pk: z.number(),
   name: z.string(),
@@ -47,9 +47,33 @@ export const LeagueWithUsersSchema = LeagueSchema.extend({
   staff: z.array(UserSchema).optional(),
 });
 
+// backend/app/serializers.py OrganizationsSerializer, nested in LeaguesSerializer
+export const LeagueListOrganizationSchema = z.object({
+  pk: z.number(),
+  name: z.string(),
+  logo: z.string(),
+  league_count: z.number().optional(),
+  users_count: z.number().optional(),
+  created_at: z.string(),
+});
+
+// backend/app/serializers.py LeaguesSerializer (LeagueView list action)
+export const LeagueListItemSchema = z.object({
+  pk: z.number(),
+  organization: LeagueListOrganizationSchema.nullable(),
+  organization_name: z.string().nullable(),
+  steam_league_id: z.number().nullable(),
+  name: z.string(),
+  tournament_count: z.number(),
+  users_count: z.number(),
+  admin_ids: z.array(z.number()),
+  staff_ids: z.array(z.number()),
+});
+
 export type LeagueType = z.infer<typeof LeagueWithUsersSchema>;
 export type CreateLeagueInput = z.infer<typeof CreateLeagueSchema>;
-export type LeaguesType = LeagueType[];
+export type LeagueListItem = z.infer<typeof LeagueListItemSchema>;
+export type LeaguesType = LeagueListItem[];
 
 // LeagueMatch schema - uses gameid to link to Steam matches
 export const LeagueMatchSchema = z.object({

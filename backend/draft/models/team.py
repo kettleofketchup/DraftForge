@@ -10,7 +10,12 @@ from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
 from org.mmr import game_for_tournament, org_mmr_map
 from telemetry.logging import get_logger
-from tournament.models import Team, Tournament
+from tournament.models import (
+    ORIGINAL_CAPTAINCY_FIRST,
+    Team,
+    Tournament,
+    with_captain_acquired_at,
+)
 
 User = settings.AUTH_USER_MODEL
 
@@ -842,11 +847,16 @@ class DraftRound(models.Model):
         prefetched = getattr(tournament, "_prefetched_objects_cache", {}).get("teams")
         if prefetched is not None:
             matches = [t for t in prefetched if t.captain_id == self.captain_id]
-            return min(matches, key=lambda t: t.pk) if matches else None
+            if len(matches) <= 1:
+                return matches[0] if matches else None
 
-        return Team.objects.filter(
-            tournament=self.draft.tournament, captain=self.captain
-        ).first()
+        return (
+            with_captain_acquired_at(
+                Team.objects.filter(tournament=tournament, captain=self.captain)
+            )
+            .order_by(*ORIGINAL_CAPTAINCY_FIRST)
+            .first()
+        )
 
     def pick_player(self, user: CustomUser) -> None:
         if self.choice:

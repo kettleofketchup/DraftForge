@@ -7,6 +7,7 @@ import type {
   TeamHistoryPage,
   TeamLog,
 } from '~/components/api/teamManagementAPI';
+import { ordinal } from '~/components/team/teamStatus';
 import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { DataTable, type AppColumnDef } from '~/components/ui/data-table';
@@ -38,6 +39,7 @@ const SnapshotSchema = z.object({
   member_ids: z.array(z.number()).optional(),
   dropin_ids: z.array(z.number()).optional(),
   left_ids: z.array(z.number()).optional(),
+  placement: z.number().nullable().optional(),
 });
 type Snapshot = z.infer<typeof SnapshotSchema>;
 
@@ -55,6 +57,9 @@ const COUNT_FIELDS = [
   ['stand-ins', 'dropin_ids'],
   ['dropouts', 'left_ids'],
 ] as const;
+
+const placementLabel = (placement: number | null): string =>
+  placement == null ? 'in tournament' : ordinal(placement);
 
 const userLabel = (user: UserLike | UnresolvedLogUser): string =>
   isUnresolvedLogUser(user) ? user.fallbackLabel : DisplayName(user);
@@ -74,6 +79,15 @@ export function teamLogChanges(
   const lines: string[] = [];
   if (a.name !== undefined && b.name !== undefined && a.name !== b.name) {
     lines.push(`name: ${a.name} -> ${b.name}`);
+  }
+  if (
+    a.placement !== undefined &&
+    b.placement !== undefined &&
+    a.placement !== b.placement
+  ) {
+    lines.push(
+      `placement: ${placementLabel(a.placement)} -> ${placementLabel(b.placement)}`,
+    );
   }
   for (const [label, key] of PERSON_FIELDS) {
     if (key in a && key in b && a[key] !== b[key]) {

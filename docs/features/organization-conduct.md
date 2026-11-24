@@ -104,9 +104,11 @@ pending-approval, Maybe (tentative), rejected and staff-cancelled signups are ne
 expected and never get an outcome.
 
 Each outcome also records where it came from (its **source**): the default, a staff
-edit, the system's late-cancel capture, or, once those features exist, a ready check,
-the start cull or voice presence. Ready check and voice data only ever fill in
-outcomes; staff can always correct them.
+edit, the system's late-cancel capture, a ready check or voice presence. The start
+cull will also supply outcomes once it ships. Ready check and voice data only ever
+fill in outcomes; staff can always correct them. Voice attendance requires feed
+evidence: a recorded first join, or a present row whose source is `feed`. A manual
+presence override alone never grants voice attendance credit.
 
 Nothing is recorded while Conduct is locked, and tracking starts with the next event
 after it is unlocked. Past events are not backfilled: there is no record of who showed

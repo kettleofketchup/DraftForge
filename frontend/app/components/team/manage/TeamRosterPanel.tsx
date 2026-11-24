@@ -32,7 +32,9 @@ export interface TeamRosterPanelProps {
   pending: boolean;
   error: string | null;
   onRequestAction: (request: PendingTeamAction) => void;
+  /** Toolbar pickers beside the roster table (add stand-in, replace captain). */
   addStandinSlot?: ReactNode;
+  onReplaceCaptain?: () => void;
 }
 
 const NO_DEPUTY = 'none';
@@ -95,6 +97,7 @@ export function TeamRosterPanel({
   error,
   onRequestAction,
   addStandinSlot,
+  onReplaceCaptain,
 }: TeamRosterPanelProps) {
   const captainRef = useRef<HTMLButtonElement>(null);
   const deputyRef = useRef<HTMLButtonElement>(null);
@@ -199,6 +202,7 @@ export function TeamRosterPanel({
         team={team}
         pending={pending}
         onRequestAction={onRequestAction}
+        onReplaceCaptain={onReplaceCaptain}
         toolbarActions={addStandinSlot}
       />
     </div>
