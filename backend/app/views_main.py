@@ -6,6 +6,7 @@ from cacheops import cached_as
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpRequest, HttpResponseRedirect
 from django.shortcuts import redirect
@@ -20,10 +21,15 @@ from rest_framework.permissions import (
 )
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 from social_django.utils import load_strategy
 
 from app.tasks.avatar_refresh import refresh_avatars_batched
 from draft.models import DraftRound, DraftTeam
+from events.eligibility import (
+    admin_precheck_steam_account_id,
+    friend_id_error_status,
+)
 from league.models import League
 from org.membership import member_organization_ids
 from org.models import Organization, OrgUser
@@ -193,6 +199,19 @@ class UserView(viewsets.ModelViewSet):
     def patch(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         return self.partial_update(request, *args, **kwargs)
 
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        refusal = _admin_friend_id_refusal(request, instance, serializer)
+        if refusal is not None:
+            return refusal
+        self.perform_update(serializer)
+        if getattr(instance, "_prefetched_objects_cache", None):
+            instance._prefetched_objects_cache = {}
+        return Response(serializer.data)
+
     def get_permissions(self) -> list[BasePermission]:
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
@@ -312,9 +331,38 @@ class UserView(viewsets.ModelViewSet):
         )
 
 
+def _admin_friend_id_refusal(
+    request: Request, target: CustomUser, serializer: BaseSerializer
+) -> Response | None:
+    """Steam pre-check on the validated ID, before the serializer's atomic block."""
+    if "steam_account_id" not in serializer.validated_data:
+        return None
+    new_id = serializer.validated_data["steam_account_id"]
+    try:
+        admin_precheck_steam_account_id(target, new_id, actor=request.user)
+    except ValidationError as exc:
+        return Response(
+            {"steam_account_id": [exc.messages[0]], "code": exc.code},
+            status=friend_id_error_status(exc.code),
+        )
+    return None
+
+
 class UserCreateView(generics.CreateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsStaff]
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refusal = _admin_friend_id_refusal(request, CustomUser(), serializer)
+        if refusal is not None:
+            return refusal
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
 
 
 @api_view(["GET"])

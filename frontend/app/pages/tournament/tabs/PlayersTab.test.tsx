@@ -13,10 +13,16 @@ import { PlayersTab } from './PlayersTab';
 const captured = vi.hoisted(
   () => [] as Array<{ organizationId?: number; leagueId?: number }>,
 );
+const steamFlags = vi.hoisted(() => [] as Array<boolean | undefined>);
 
 vi.mock('~/components/user', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  UserList: (props: { organizationId?: number; leagueId?: number }) => {
+  UserList: (props: {
+    organizationId?: number;
+    leagueId?: number;
+    showSteamVerification?: boolean;
+  }) => {
+    steamFlags.push(props.showSteamVerification);
     captured.push({
       organizationId: props.organizationId,
       leagueId: props.leagueId,
@@ -44,6 +50,7 @@ function renderTab() {
 describe('PlayersTab org/league context', () => {
   beforeEach(() => {
     captured.length = 0;
+    steamFlags.length = 0;
     useOrgStore.setState({
       currentOrg: { pk: 9, name: 'Stale' } as OrganizationType,
     });
@@ -71,6 +78,29 @@ describe('PlayersTab org/league context', () => {
       organizationId: undefined,
       leagueId: undefined,
     });
+  });
+
+  it('badges Friend IDs only for staff viewers', () => {
+    const tournament = {
+      pk: 1,
+      organization_pk: null,
+      league_pk: null,
+      users: [],
+    };
+    useUserStore.setState({
+      tournament,
+      currentUser: { pk: 1, username: 'member' },
+    } as never);
+    renderTab();
+    expect(steamFlags.at(-1)).toBe(false);
+
+    steamFlags.length = 0;
+    useUserStore.setState({
+      tournament,
+      currentUser: { pk: 1, username: 'staff', is_staff: true },
+    } as never);
+    renderTab();
+    expect(steamFlags.at(-1)).toBe(true);
   });
 });
 

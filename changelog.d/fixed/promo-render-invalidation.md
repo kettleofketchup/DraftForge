@@ -1,0 +1,1 @@
+- Promotion DMs now pick up a new organization name or Discord link and an edited event name or time straight away, instead of showing the old text until the page is reloaded.

@@ -153,6 +153,27 @@ export async function invalidateOrgContributionQueries(
   ]);
 }
 
+/** Every standing track, the contributions ledger and leadership reviews of an org, for all viewers. */
+export async function invalidateOrgStandingQueries(
+  queryClient: QueryClient,
+  orgId?: number | null,
+): Promise<void> {
+  const scope = orgId == null ? [] : [orgId];
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: [STANDING, ...scope] }),
+    queryClient.invalidateQueries({ queryKey: [CONTRIBUTIONS, ...scope] }),
+    queryClient.invalidateQueries({ queryKey: [LEADERSHIP, ...scope] }),
+  ]);
+}
+
+/** Every promotion query of an org (templates, events, candidates, rendered DMs), for all viewers. */
+export async function invalidatePromotionQueries(
+  queryClient: QueryClient,
+  orgId: number,
+): Promise<void> {
+  await queryClient.invalidateQueries({ queryKey: [PROMOTION, orgId] });
+}
+
 function startsWith(key: QueryKey, prefix: QueryKey): boolean {
   return (
     prefix.length <= key.length &&

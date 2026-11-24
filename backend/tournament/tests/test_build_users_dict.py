@@ -15,6 +15,11 @@ from tournament.serializers.users import _serialize_users_with_mmr, build_users_
 # Hardcoded pre-change ground-truth key sets (from reading OrgUserSerializer /
 # TournamentUserSerializer). The shape-parity assertions below ALSO diff against
 # the untouched _serialize_users_with_mmr at runtime, so any drift fails loudly.
+STEAM_VERIFICATION_KEYS = {
+    "steam_account_verified",
+    "steam_account_verified_at",
+    "steam_account_exists_checked",
+}
 ORG_ENTRY_KEYS = {
     "orgUserPk",
     "pk",
@@ -30,6 +35,7 @@ ORG_ENTRY_KEYS = {
     "mmr",
     "mmr_game_type",
     "league_mmr",
+    *STEAM_VERIFICATION_KEYS,
 }
 NONORG_ENTRY_KEYS = {
     "pk",
@@ -41,6 +47,7 @@ NONORG_ENTRY_KEYS = {
     "positions",
     "steam_account_id",
     "avatarUrl",
+    *STEAM_VERIFICATION_KEYS,
 }
 
 

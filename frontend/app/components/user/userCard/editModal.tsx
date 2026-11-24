@@ -146,15 +146,15 @@ export function UserEditModal({
         toast.success(`${DisplayName(user)} updated`);
         setOpen(false);
       } catch (err) {
-        const conflict = steamAccountIdConflictFromError(
+        const friendIdError = steamAccountIdConflictFromError(
           (err as { response?: { data?: unknown } })?.response?.data,
         );
-        if (conflict) {
+        if (friendIdError) {
           form.setError('steam_account_id', {
             type: 'server',
-            message: conflict,
+            message: friendIdError,
           });
-          toast.error(conflict);
+          toast.error(friendIdError);
           return;
         }
         const message =
