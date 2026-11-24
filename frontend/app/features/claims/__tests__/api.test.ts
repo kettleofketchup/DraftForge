@@ -47,6 +47,27 @@ describe('getClaimRequests', () => {
     expect(claims).toEqual([row]);
   });
 
+  it('parses an approved claim whose target profile was merged away', async () => {
+    const approved = {
+      ...row,
+      status: 'approved',
+      target_user: null,
+      target_nickname: null,
+      target_steamid: null,
+      target_mmr: null,
+      target_game_mmrs: null,
+      reviewed_by: 5,
+      reviewed_by_username: 'admin',
+      reviewed_at: '2026-01-02T00:00:00Z',
+    };
+    get.mockResolvedValue({ data: [approved] });
+    const claims = await getClaimRequests({
+      organizationId: 4,
+      status: 'approved',
+    });
+    expect(claims).toEqual([approved]);
+  });
+
   it('rejects a malformed body', async () => {
     get.mockResolvedValue({ data: [{ ...row, status: 'unknown' }] });
     await expect(

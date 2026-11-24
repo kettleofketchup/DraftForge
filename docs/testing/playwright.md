@@ -392,11 +392,31 @@ await page.waitForSelector('[data-testid="loaded"]');
 
 ## Debugging
 
+### Where results go
+
+Every local `just test::pw::*` run writes to a directory of its own,
+`frontend/test-results/runs/<UTC stamp>-<pid>/`, so two runs in one worktree can
+overlap without one wiping the other's output:
+
+| Path | Contents |
+|------|----------|
+| `artifacts/` | Playwright's `outputDir`: per-test screenshots, traces, `error-context.md` |
+| `report/` | HTML report |
+| `run-logs/` | health-probe JSONL (and backend logs from `test::pw::headless-with-logs`) |
+
+`frontend/test-results/latest` links to the newest run, and the recipe prints the
+run's path when it starts. The 20 newest runs are kept (`DF_PW_KEEP_RUNS` changes
+that). Set `DF_PW_RUN_DIR` to choose the directory yourself. CI, and a bare
+`npx playwright test`, keep the flat `frontend/test-results/` and
+`frontend/playwright-report/` that the workflow uploads.
+
 ### View Test Report
 
 ```bash
-# Open HTML report after test run
+# Open the newest run's HTML report
 just test::pw::report
+# Or a given run's
+just test::pw::report test-results/runs/<id>/report
 ```
 
 ### Trace Viewer
@@ -404,7 +424,7 @@ just test::pw::report
 Failed tests automatically capture traces. View them:
 
 ```bash
-npx playwright show-trace frontend/test-results/path-to-trace.zip
+npx playwright show-trace frontend/test-results/latest/artifacts/<test>/trace.zip
 ```
 
 ### Debug Mode

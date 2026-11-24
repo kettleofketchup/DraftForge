@@ -1,14 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import {
-  createEvent,
-  createEventRepeater,
-  getOrgEventDefaults,
-} from '~/components/api/api';
+import { getOrgEventDefaults } from '~/components/api/api';
 import {
   lobbyPasswordPayload,
   refineLobbyPassword,
@@ -26,6 +22,10 @@ import {
   FormItem,
   FormLabel,
 } from '~/components/ui/form';
+import {
+  useCreateEventMutation,
+  useCreateEventRepeaterMutation,
+} from '~/hooks/useEvent';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection } from './DiscordConfigSection';
 import {
@@ -83,7 +83,8 @@ export function CreateEventModal({
   onOpenChange,
   organizationId,
 }: CreateEventModalProps) {
-  const queryClient = useQueryClient();
+  const createEventMutation = useCreateEventMutation();
+  const createRepeater = useCreateEventRepeaterMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
 
@@ -228,7 +229,7 @@ export function CreateEventModal({
         : rawScheduledAt;
 
       if (is_recurring) {
-        await createEventRepeater({
+        await createRepeater.mutateAsync({
           ...shared,
           tournament_league: shared.tournament_league ?? null,
           discord_notify_new_events: discord_notify_new_events ?? false,
@@ -246,16 +247,16 @@ export function CreateEventModal({
         // rejects discord_signup_reminder=true on single events) doesn't
         // 400 a submission whose default carried over from a repeater-
         // oriented org config.
-        await createEvent(
-          {
+        await createEventMutation.mutateAsync({
+          payload: {
             ...shared,
             tournament_league: shared.tournament_league ?? null,
             scheduled_at,
             ends_at: rawEndsAt ? localToUTC(rawEndsAt, data.timezone) : null,
             discord_signup_reminder: false,
           },
-          data.signup_open_mode === 'immediate',
-        );
+          openSignups: data.signup_open_mode === 'immediate',
+        });
 
         const modeMessages = {
           immediate: 'Event created with signups open',
@@ -265,7 +266,6 @@ export function CreateEventModal({
         toast.success(modeMessages[data.signup_open_mode]);
       }
 
-      queryClient.invalidateQueries({ queryKey: ['events'] });
       onOpenChange(false);
       form.reset();
       setDefaultsApplied(false);

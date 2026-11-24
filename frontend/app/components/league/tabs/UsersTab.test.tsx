@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { render, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GAME_TYPE } from '~/components/game/constants';
@@ -11,12 +12,33 @@ import { useUserCacheStore } from '~/store/userCacheStore';
 const captured = vi.hoisted(
   () => [] as Array<{ organizationId?: number; leagueId?: number }>,
 );
-const { getLeagueUsers } = vi.hoisted(() => ({ getLeagueUsers: vi.fn() }));
+const { getLeagueUsers, addLeagueMember } = vi.hoisted(() => ({
+  getLeagueUsers: vi.fn(),
+  addLeagueMember: vi.fn(),
+}));
+const capturedOnAdd = vi.hoisted(() => ({
+  current: null as null | ((payload: { user_id: number }) => Promise<unknown>),
+}));
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getLeagueUsers,
+  addLeagueMember,
   fetchLeague: vi.fn(),
+}));
+
+vi.mock('~/hooks/usePermissions', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useIsLeagueAdmin: () => true,
+}));
+
+vi.mock('~/components/user/AddUserModal', () => ({
+  AddUserModal: (props: {
+    onAdd: (payload: { user_id: number }) => Promise<unknown>;
+  }) => {
+    capturedOnAdd.current = props.onAdd;
+    return null;
+  },
 }));
 
 vi.mock('~/components/user', async (importOriginal) => ({
@@ -35,12 +57,18 @@ const { UsersTab } = await import('./UsersTab');
 const LEAGUE_PK = 3;
 const ORG_PK = 8;
 
-function renderTab() {
+function renderTab(
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  }),
+) {
   window.history.pushState({}, '', `/leagues/${LEAGUE_PK}/users`);
   return render(
-    <MemoryRouter initialEntries={[`/leagues/${LEAGUE_PK}/users`]}>
-      <UsersTab leaguePk={LEAGUE_PK} />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[`/leagues/${LEAGUE_PK}/users`]}>
+        <UsersTab leaguePk={LEAGUE_PK} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -86,6 +114,25 @@ describe('UsersTab org/league context', () => {
       const entry = useUserCacheStore.getState().getById(1);
       expect(entry?.orgData[ORG_PK]?.mmrs[GAME_TYPE.DOTA2]).toBe(5100);
       expect(entry?.leagueData[LEAGUE_PK]?.mmr).toBe(4800);
+    });
+  });
+
+  it('refreshes the parent org after adding a league member', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    addLeagueMember.mockResolvedValue({ pk: 77, username: 'new_member' });
+    renderTab(queryClient);
+    await waitFor(() => expect(capturedOnAdd.current).not.toBeNull());
+
+    await act(async () => {
+      await capturedOnAdd.current!({ user_id: 77 });
+    });
+
+    expect(addLeagueMember).toHaveBeenCalledWith(LEAGUE_PK, { user_id: 77 });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ['organization', ORG_PK],
     });
   });
 });
