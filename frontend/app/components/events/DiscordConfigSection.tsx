@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
+import { announcementChannelUsers } from './announcementChannelUsers';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
 import type { discordConfigSchema } from './schemas';
@@ -182,6 +183,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     postSignups,
     announcement,
     startMention,
+    notifyNewEvents,
   ] = useWatch({
     control,
     name: [
@@ -192,8 +194,18 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
       'discord_post_signups',
       'discord_announcement',
       'discord_start_mention',
+      'discord_notify_new_events',
     ],
   });
+
+  const channelUsers = announcementChannelUsers({
+    announcement,
+    confirmAttendance,
+    profileReminder,
+    notifyNewEvents,
+    showNotifyNewEvents,
+  });
+  const usesAnnouncementChannel = channelUsers.length > 0;
 
   return (
     <div className="space-y-3">
@@ -449,26 +461,6 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           <div className="ml-7 space-y-3">
             <FormField
               control={control}
-              name="discord_announcement_channel_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Announcement channel</FormLabel>
-                  <FormControl>
-                    <DiscordChannelPicker
-                      organizationId={organizationId}
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Channel where the announcement will be posted
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
               name="discord_announcement_hours"
               render={({ field }) => (
                 <FormItem>
@@ -522,6 +514,46 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
             name="discord_notify_new_events"
             label="Message interested users"
             description="DM subscribed users when new events are created or cancelled"
+          />
+        </div>
+      )}
+
+      {usesAnnouncementChannel && (
+        <div
+          className="rounded-md border border-border p-3"
+          data-testid="discord-announcement-channel-block"
+        >
+          <FormField
+            control={control}
+            name="discord_announcement_channel_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Announcement channel</FormLabel>
+                <FormControl>
+                  <DiscordChannelPicker
+                    organizationId={organizationId}
+                    value={field.value}
+                    onChange={field.onChange}
+                    data-testid="discord-announcement-channel-select"
+                  />
+                </FormControl>
+                <FormDescription>
+                  Shared by the pre-day announcement, attendance reminder,
+                  profile reminder and series new-event posts (&quot;Message
+                  interested users&quot;).
+                </FormDescription>
+                <p className="text-sm text-muted-foreground">
+                  {`Used by: ${channelUsers.join(', ')}`}
+                </p>
+                {showNotifyNewEvents && notifyNewEvents && !announcement && (
+                  <p className="text-sm text-muted-foreground">
+                    Message interested users posts new events here only when
+                    Pre-day announcement is also on.
+                  </p>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
           />
         </div>
       )}
