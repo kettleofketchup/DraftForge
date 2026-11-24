@@ -4,6 +4,7 @@ export const FEATURE_KEYS = [
   'conduct',
   'contributions',
   'leadership',
+  'mmr_sync',
   'promotion',
 ] as const;
 export const FeatureKeySchema = z.enum(FEATURE_KEYS);
