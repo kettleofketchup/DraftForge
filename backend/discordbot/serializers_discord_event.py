@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
-from app.display_names import first_name
 from app.models import CustomUser
 from org.display_names import org_nicknames_public
+from user.display_names import first_name
 from user.querysets import with_user_profiles
 
 from .models import (

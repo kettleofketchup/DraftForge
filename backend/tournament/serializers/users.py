@@ -6,13 +6,14 @@ from django.db.models import Prefetch, QuerySet
 from rest_framework.utils.serializer_helpers import ReturnList
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer
 from league.models import LeagueUser
 from org.mmr import game_for_tournament, game_mmrs_prefetch
 from org.models import Organization, OrgUser
 from org.serializers import OrgUserSerializer
 from tournament.models import Team, Tournament
+from user.cache import serialize_users_core
 from user.querysets import with_user_profiles
+from user.serializers import TournamentUserSerializer
 
 
 def tournament_organization(
@@ -278,9 +279,6 @@ def build_users_dict_with_org(
     non-org entries carry core only. ``fresh=True`` reads the organization and
     MMR overlay past cacheops too.
     """
-    # local: app.user_cache imports user.models, which is not in MODEL_APPS (celery path via draft.services.team_state)
-    from app.user_cache import serialize_users_core
-
     seen_pks = collect_tournament_user_pks(tournament)
     org = tournament_organization(tournament, fresh=fresh)
     mmr_map = collect_org_mmr(tournament, org, seen_pks, fresh=fresh)

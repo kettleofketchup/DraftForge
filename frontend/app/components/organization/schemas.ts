@@ -72,7 +72,7 @@ export type CreateOrganizationInput = z.infer<typeof CreateOrganizationSchema>;
 export type EditOrganizationInput = z.infer<typeof EditOrganizationSchema>;
 export type OrganizationsType = OrganizationType[];
 
-// backend/app/serializers.py PositionsSerializer
+// backend/user/serializers.py PositionsSerializer
 const OrgMemberPositionsSchema = z.object({
   pk: z.number(),
   carry: z.number(),

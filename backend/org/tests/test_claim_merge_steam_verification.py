@@ -5,8 +5,8 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, PositionsModel, ProfileClaimRequest
-from app.steam_accounts import mark_steam_account_verified
 from org.models import Organization, OrgUser
+from user.steam_accounts import mark_steam_account_verified
 
 _discord_ids = itertools.count(940_000_000_000_000_000)
 STUB_STEAMID = 76561198000400001

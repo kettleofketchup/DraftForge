@@ -327,7 +327,7 @@ feature suites.
 | Backend league permission helpers | `backend/league/permissions.py`                                                       |
 | Backend tournament/game checks    | `backend/tournament/permissions.py`                                                   |
 | Backend event staff check         | `backend/events/permissions.py`                                                       |
-| User serializer (role memberships)| `backend/app/serializers.py` (`UserSerializer`)                                       |
+| User serializer (role memberships)| `backend/user/serializers.py` (`UserSerializer`)                                       |
 | Playwright role fixture           | `frontend/tests/playwright/fixtures/role-contexts.ts`                                 |
 | Login endpoints                   | `backend/tests/test_auth.py`, `backend/tests/urls.py`                                 |
 | Test users                        | `backend/tests/data/users.py`                                                         |

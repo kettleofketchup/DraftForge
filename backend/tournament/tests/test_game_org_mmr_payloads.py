@@ -10,8 +10,6 @@ from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, PositionsModel, ProfileClaimRequest
-from app.schemas import TournamentUserSchema
-from app.serializers import UserSerializer
 from common.game import GameType
 from draft.models import Draft
 from draft.services.team_state import build_draft_state
@@ -24,6 +22,8 @@ from tests.populate.utils import ensure_org_user
 from tournament.functions import serialize_tournament
 from tournament.models import Team, Tournament
 from tournament.tests.test_game_org_mmr_drafts import GameOrgMmrFixtures
+from user.schemas import TournamentUserSchema
+from user.serializers import UserSerializer
 
 _discord_ids = itertools.count(910_000_000_000_000_000)
 

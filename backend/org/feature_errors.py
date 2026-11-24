@@ -8,8 +8,8 @@ from org.permissions import (
     has_org_admin_access,
     has_org_staff_access,
     is_org_role_holder,
-    is_site_admin,
 )
+from user.permissions import is_site_admin
 
 FEATURE_LOCKED = "feature_locked"
 NOT_PERMITTED = "not_permitted"

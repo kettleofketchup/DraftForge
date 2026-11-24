@@ -14,9 +14,7 @@ from rest_framework.test import APIClient
 
 from app import export_steam_verification_schema
 from app.models import CustomUser
-from app.steam_accounts import mark_steam_account_verified
 from app.steam_verification_schemas import SteamVerificationOut
-from app.user_cache import serialize_user_core
 from events.models import Event, EventSignup
 from events.services import process_rsvp, staff_add_signup
 from events.tests.actors import SYSTEM
@@ -24,6 +22,8 @@ from events.tests.base import EventTestCase
 from org.membership import resolve_or_create_org_user
 from org.models import Organization
 from tournament.models import Tournament
+from user.cache import serialize_user_core
+from user.steam_accounts import mark_steam_account_verified
 from user.tests.test_cacheops_integration import _redis_reachable
 
 SCRIPT = Path(export_steam_verification_schema.__file__)
@@ -318,7 +318,7 @@ class SteamVerificationEndpointTests(EventTestCase):
 
     def test_verify_logs_actor(self) -> None:
         su = self._superuser()
-        with patch("app.steam_accounts.log") as log:
+        with patch("user.steam_accounts.log") as log:
             self._post(su)
             self._post(su, verified=False)
         events = [c.kwargs for c in log.info.call_args_list]
