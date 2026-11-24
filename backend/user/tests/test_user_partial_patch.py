@@ -21,7 +21,7 @@ from tests.populate.utils import ensure_org_user
 
 
 class PartialUserPatchTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.admin = CustomUser.objects.create_superuser(
             username="patch-admin", password="pw"
         )
@@ -40,7 +40,9 @@ class PartialUserPatchTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.admin)
 
-    def test_partial_positions_patch_via_org_endpoint_does_not_zero_other_slots(self):
+    def test_partial_positions_patch_via_org_endpoint_does_not_zero_other_slots(
+        self,
+    ) -> None:
         """PATCH {positions: {carry: 1}} must leave mid/offlane/soft_support/hard_support unchanged."""
         url = f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/"
         resp = self.client.patch(url, {"positions": {"carry": 1}}, format="json")
@@ -54,7 +56,7 @@ class PartialUserPatchTests(TestCase):
 
     def test_partial_positions_patch_via_global_endpoint_passes_serializer_validation(
         self,
-    ):
+    ) -> None:
         """PATCH /users/:pk/ {positions: {carry: 3}} must return 200, not trip required-field validation."""
         url = f"/api/users/{self.target.pk}/"
         resp = self.client.patch(url, {"positions": {"carry": 3}}, format="json")
@@ -63,13 +65,13 @@ class PartialUserPatchTests(TestCase):
         self.assertEqual(self.target_positions.carry, 3)
         self.assertEqual(self.target_positions.mid, 2)
 
-    def test_org_endpoint_rejects_empty_patch(self):
+    def test_org_endpoint_rejects_empty_patch(self) -> None:
         """Pin existing behavior: empty PATCH body returns 400. Frontend has a client-side guard."""
         url = f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/"
         resp = self.client.patch(url, {}, format="json")
         self.assertEqual(resp.status_code, 400)
 
-    def test_partial_mmr_patch_via_org_endpoint_does_not_clear_nickname(self):
+    def test_partial_mmr_patch_via_org_endpoint_does_not_clear_nickname(self) -> None:
         """PATCH {game_mmrs: {"1": 6500}} must leave nickname unchanged, so concurrent
         edits of different fields don't clobber each other."""
         url = f"/api/organizations/{self.org.pk}/users/{self.org_user.pk}/"

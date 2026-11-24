@@ -18,7 +18,7 @@ LOCMEM = {
 
 @override_settings(CACHES=LOCMEM)
 class SearchUsersTest(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         cache.clear()
         self.client = APIClient()
         self.staff = CustomUser.objects.create_user(
@@ -74,7 +74,7 @@ class SearchUsersTest(TestCase):
         )
         self.steam_user.refresh_from_db()  # pick up save()'s derived steamid
 
-    def test_search_by_steamid(self):
+    def test_search_by_steamid(self) -> None:
         resp = self.client.get(
             "/api/users/search/", {"q": str(self.steam_user.steamid)}
         )
@@ -82,13 +82,13 @@ class SearchUsersTest(TestCase):
         pks = [u["pk"] for u in resp.data]
         self.assertIn(self.steam_user.pk, pks)
 
-    def test_search_by_steam_account_id(self):
+    def test_search_by_steam_account_id(self) -> None:
         resp = self.client.get("/api/users/search/", {"q": "39735273"})
         self.assertEqual(resp.status_code, 200)
         pks = [u["pk"] for u in resp.data]
         self.assertIn(self.steam_user.pk, pks)
 
-    def test_membership_annotation_league(self):
+    def test_membership_annotation_league(self) -> None:
         resp = self.client.get(
             "/api/users/search/",
             {"q": "leagueuser", "org_id": self.org.pk, "league_id": self.league.pk},
@@ -98,7 +98,7 @@ class SearchUsersTest(TestCase):
         self.assertEqual(user_data["membership"], "league")
         self.assertEqual(user_data["membership_label"], "Test League")
 
-    def test_membership_annotation_org(self):
+    def test_membership_annotation_org(self) -> None:
         resp = self.client.get(
             "/api/users/search/",
             {"q": "orgonlyuser", "org_id": self.org.pk, "league_id": self.league.pk},
@@ -108,7 +108,7 @@ class SearchUsersTest(TestCase):
         self.assertEqual(user_data["membership"], "org")
         self.assertEqual(user_data["membership_label"], "Test Org")
 
-    def test_membership_annotation_other_org(self):
+    def test_membership_annotation_other_org(self) -> None:
         resp = self.client.get(
             "/api/users/search/",
             {"q": "otherorguser", "org_id": self.org.pk},
@@ -118,7 +118,7 @@ class SearchUsersTest(TestCase):
         self.assertEqual(user_data["membership"], "other_org")
         self.assertEqual(user_data["membership_label"], "Other Org")
 
-    def test_membership_annotation_global(self):
+    def test_membership_annotation_global(self) -> None:
         resp = self.client.get(
             "/api/users/search/",
             {"q": "globaluser", "org_id": self.org.pk},
@@ -127,18 +127,18 @@ class SearchUsersTest(TestCase):
         user_data = resp.data[0]
         self.assertIsNone(user_data["membership"])
 
-    def test_no_context_params_still_works(self):
+    def test_no_context_params_still_works(self) -> None:
         resp = self.client.get("/api/users/search/", {"q": "leagueuser"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.data), 1)
         self.assertNotIn("membership", resp.data[0])
 
-    def test_unauthenticated_returns_401(self):
+    def test_unauthenticated_returns_401(self) -> None:
         self.client.logout()
         resp = self.client.get("/api/users/search/", {"q": "test"})
         self.assertIn(resp.status_code, [401, 403])
 
-    def test_non_staff_cannot_use_org_context(self):
+    def test_non_staff_cannot_use_org_context(self) -> None:
         """Any authenticated user can search, but org_id requires org staff access."""
         regular = CustomUser.objects.create_user(username="regular", password="test123")
         self.client.force_authenticate(user=regular)
@@ -162,7 +162,7 @@ class SearchUsersTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("qz", [u["username"] for u in resp.data])
 
-    def test_max_20_results(self):
+    def test_max_20_results(self) -> None:
         for i in range(25):
             CustomUser.objects.create_user(
                 username=f"bulkuser{i}", password="test", nickname=f"Bulk{i}"
@@ -171,7 +171,7 @@ class SearchUsersTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertLessEqual(len(resp.data), 20)
 
-    def test_org_search_matches_that_orgs_guild_nickname(self):
+    def test_org_search_matches_that_orgs_guild_nickname(self) -> None:
         dragon = CustomUser.objects.create_user(
             username="dc_account", password="test", discordNickname="Gwaihir"
         )
@@ -186,14 +186,14 @@ class SearchUsersTest(TestCase):
         self.assertIn(dragon.pk, rows)
         self.assertEqual(rows[dragon.pk]["guildNickname"], "DragonClaw")
 
-    def test_org_search_guild_nickname_null_for_non_members(self):
+    def test_org_search_guild_nickname_null_for_non_members(self) -> None:
         resp = self.client.get(
             "/api/users/search/", {"q": "globaluser", "org_id": self.org.pk}
         )
         self.assertEqual(resp.status_code, 200)
         self.assertIsNone(resp.data[0]["guildNickname"])
 
-    def test_other_orgs_guild_nickname_not_matched(self):
+    def test_other_orgs_guild_nickname_not_matched(self) -> None:
         OrgUser.objects.filter(user=self.other_org_user).update(
             guild_nickname="Featherfall"
         )
@@ -203,25 +203,25 @@ class SearchUsersTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data, [])
 
-    def test_global_search_matches_discord_global_name(self):
+    def test_global_search_matches_discord_global_name(self) -> None:
         self.global_user.discordNickname = "Windlord"
         self.global_user.save()
         resp = self.client.get("/api/users/search/", {"q": "windlord"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual([u["pk"] for u in resp.data], [self.global_user.pk])
 
-    def test_non_numeric_org_id_falls_back_to_global(self):
+    def test_non_numeric_org_id_falls_back_to_global(self) -> None:
         resp = self.client.get(
             "/api/users/search/", {"q": "globaluser", "org_id": "abc"}
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual([u["pk"] for u in resp.data], [self.global_user.pk])
 
-    def test_plain_query_works(self):
+    def test_plain_query_works(self) -> None:
         resp = self.client.get("/api/users/search/", {"q": "abc"})
         self.assertEqual(resp.status_code, 200)
 
-    def test_non_staff_org_search_is_forbidden(self):
+    def test_non_staff_org_search_is_forbidden(self) -> None:
         regular = CustomUser.objects.create_user(username="regular2", password="x")
         self.client.force_authenticate(user=regular)
         resp = self.client.get(
@@ -229,7 +229,7 @@ class SearchUsersTest(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
-    def test_org_members_ranked_before_slice(self):
+    def test_org_members_ranked_before_slice(self) -> None:
         for i in range(21):
             CustomUser.objects.create_user(username=f"aaarank{i:02d}", password="test")
         member = CustomUser.objects.create_user(username="zzzrank", password="test")

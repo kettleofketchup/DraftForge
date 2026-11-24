@@ -11,7 +11,7 @@ from app.models import CustomUser
 class CustomUserMMRVerificationTest(TestCase):
     """Test CustomUser MMR verification fields."""
 
-    def test_user_has_mmr_verification_fields(self):
+    def test_user_has_mmr_verification_fields(self) -> None:
         """CustomUser should have MMR verification tracking fields."""
         user = CustomUser.objects.create_user(
             username="testuser", password="testpass123"
@@ -20,7 +20,7 @@ class CustomUserMMRVerificationTest(TestCase):
         self.assertFalse(user.has_active_dota_mmr)
         self.assertIsNone(user.dota_mmr_last_verified)
 
-    def test_user_can_set_mmr_verified(self):
+    def test_user_can_set_mmr_verified(self) -> None:
         """Can set MMR verification status and timestamp."""
         user = CustomUser.objects.create_user(
             username="testuser", password="testpass123"
@@ -34,7 +34,7 @@ class CustomUserMMRVerificationTest(TestCase):
         self.assertTrue(user.has_active_dota_mmr)
         self.assertIsNotNone(user.dota_mmr_last_verified)
 
-    def test_needs_mmr_verification_property(self):
+    def test_needs_mmr_verification_property(self) -> None:
         """needs_mmr_verification should be True if verified > 30 days ago."""
         user = CustomUser.objects.create_user(
             username="testuser", password="testpass123"

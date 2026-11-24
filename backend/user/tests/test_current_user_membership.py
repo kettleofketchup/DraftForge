@@ -116,7 +116,7 @@ class MemberOrganizationIdsTests(TestCase):
         self.assertEqual(result, sorted([self.orgs["B"].pk, self.orgs["D"].pk]))
 
     def test_current_user_adds_at_most_two_queries(self) -> None:
-        with mock.patch("app.views_main.member_organization_ids", return_value=[]):
+        with mock.patch("user.views_account.member_organization_ids", return_value=[]):
             with CaptureQueriesContext(connection) as patched:
                 self.client.get(CURRENT_USER_URL)
         with CaptureQueriesContext(connection) as unpatched:

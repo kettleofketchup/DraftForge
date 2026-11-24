@@ -19,8 +19,8 @@ class UserDeleteRouteTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.staff)
 
-    @patch("app.views_main.standing.on_user_deleted")
-    @patch("app.views_main.release_earning_sends")
+    @patch("user.views_account.standing.on_user_deleted")
+    @patch("user.views_account.release_earning_sends")
     def test_detail_delete_runs_destroy_cleanup(
         self, release: MagicMock, on_deleted: MagicMock
     ) -> None:

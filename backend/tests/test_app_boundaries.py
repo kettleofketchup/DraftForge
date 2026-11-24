@@ -856,12 +856,53 @@ TOURNAMENT = MovedSlice(
     cached_labels=frozenset({"tournament", "team", "game"}),
 )
 
+_USER_SPLIT_DEFS = {
+    "app.views_main": (
+        "UserView",
+        "UserCreateView",
+        "current_user",
+        "bulk_users",
+        "steam_account_id_lookup",
+        "refresh_avatar",
+        "refresh_user_avatar_admin",
+        "refresh_all_avatars",
+    ),
+    "app.functions.user": ("ProfileUpdateSerializer", "profile_update"),
+    "app.views.user_search": ("search_users",),
+    "app.serializers_ssr": ("UserSerializerSSR",),
+    "app.views.ssr": ("UserSSRView",),
+    "app.views.internal": ("list_users_for_avatar_check", "update_user_avatar"),
+    "app.tests.test_search_users": ("SearchUsersTest",),
+    "app.tests.test_user_delete_route": ("UserDeleteRouteTests",),
+    "app.tests.test_current_user_membership": ("MemberOrganizationIdsTests",),
+    "app.tests.test_user_partial_patch": ("PartialUserPatchTests",),
+    "app.tests.test_user_mmr_verification": ("CustomUserMMRVerificationTest",),
+    "app.tests.test_user_privilege_fields": ("UserPrivilegeFieldsTests",),
+    "app.tests.test_steam_account_id_conflict": (
+        "SteamAccountIdConflictTests",
+        "SteamAccountIdLookupTests",
+        "SteamAccountIdConflictLabelTests",
+    ),
+    "app.tests.test_views_main_auth": ("RefreshAllAvatarsRateLimitTest",),
+    "app.tests.test_internal_avatar_and_sweep": (
+        "ListDiscordLinkedUsersTest",
+        "ListDiscordGuildIdsTest",
+        "BulkUpdateUserAvatarsTest",
+    ),
+    "app.tests.test_ssr_views": ("SSREndpointTests",),
+}
+
 USER = MovedSlice(
     name="user",
     source_app="app",
     new_app="user",
     moved=frozenset(
         {
+            *(
+                (module, name)
+                for module, names in _USER_SPLIT_DEFS.items()
+                for name in names
+            ),
             ("app.serializers", "UserPkField"),
             ("app.serializers", "PositionsSerializer"),
             ("app.serializers", "TournamentUserSerializer"),
@@ -961,6 +1002,16 @@ USER = MovedSlice(
     ),
     retired_modules=frozenset(
         {
+            "app.functions.user",
+            "app.views.user_search",
+            "app.functions",
+            "app.tests.test_search_users",
+            "app.tests.test_user_delete_route",
+            "app.tests.test_current_user_membership",
+            "app.tests.test_user_partial_patch",
+            "app.tests.test_user_mmr_verification",
+            "app.tests.test_user_privilege_fields",
+            "app.tests.test_steam_account_id_conflict",
             "app.schemas",
             "app.user_cache",
             "app.tests.test_user_core_cache",
@@ -1015,6 +1066,16 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 # under the new app; None: no single home file to check (renamed within the
 # source app, or a retired package).
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
+    "app.functions.user": "user.views_profile",
+    "app.views.user_search": "user.views_search",
+    "app.functions": None,
+    "app.tests.test_search_users": "user.tests.test_search_users",
+    "app.tests.test_user_delete_route": "user.tests.test_user_delete_route",
+    "app.tests.test_current_user_membership": "user.tests.test_current_user_membership",
+    "app.tests.test_user_partial_patch": "user.tests.test_user_partial_patch",
+    "app.tests.test_user_mmr_verification": "user.tests.test_user_mmr_verification",
+    "app.tests.test_user_privilege_fields": "user.tests.test_user_privilege_fields",
+    "app.tests.test_steam_account_id_conflict": "user.tests.test_steam_account_id_conflict",
     "app.schemas": "user.schemas",
     "app.user_cache": "user.cache",
     "app.tests.test_user_core_cache": "user.tests.test_user_core_cache",
@@ -1048,51 +1109,22 @@ RETIRED_MODULE_HOMES: dict[str, str | None] = {
 
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
-    "draft": {
-        "app/views_main.py": BackEdge(
-            frozenset({"DraftRound", "DraftTeam"}),
-            "current_user lists the user's pending team-draft pick and the active "
-            "hero drafts the user captains",
-        ),
-    },
+    "draft": {},
     "org": {
+        "app/views_main.py": BackEdge(
+            frozenset({"Organization"}), "home_stats cross-domain aggregate"
+        ),
         "app/admin.py": BackEdge(
             frozenset({"api", "release_earning_sends"}),
             "CustomUser admin delete checks standing blockers, releases promo "
             "earning sends and records standing on user deletion",
         ),
-        "app/views/user_search.py": BackEdge(
-            frozenset(
-                {"OrgUser", "Organization", "has_org_staff_access", "user_name_q"}
-            ),
-            "user search scopes by Organization, matches org server nicknames, "
-            "checks org staff and reports org membership",
-        ),
         "app/views/internal.py": BackEdge(
             frozenset({"OrgUser"}),
             "repeater subscriber endpoint reports each subscriber's org membership",
         ),
-        "app/views_main.py": BackEdge(
-            frozenset(
-                {
-                    "OrgUser",
-                    "Organization",
-                    "api",
-                    "has_org_staff_access",
-                    "member_organization_ids",
-                    "release_earning_sends",
-                }
-            ),
-            "UserView org-staff checks, profile claims and deletion standing; "
-            "current_user membership ids; home stats counts Organization",
-        ),
     },
     "league": {
-        "app/views/user_search.py": BackEdge(
-            frozenset({"League", "LeagueUser"}),
-            "user search resolves ?league_id= to a League and flags league "
-            "membership",
-        ),
         "app/views_main.py": BackEdge(
             frozenset({"League"}),
             "home_stats caches on and counts League as a cross-domain home-page "
@@ -1100,34 +1132,10 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
         ),
     },
     "user": {
-        "app/functions/user.py": BackEdge(
-            frozenset({"PositionsSerializer", "UserSerializer"}),
-            "profile updates remain in app until Task 8",
-        ),
         "app/models.py": BackEdge(
             frozenset({"BaseUserProfile", "DotaUserProfile"}),
             "CustomUser profile accessors",
             type_only=frozenset({"DotaUserProfile"}),
-        ),
-        "app/views_main.py": BackEdge(
-            frozenset(
-                {
-                    "BaseUserProfile",
-                    "DotaUserProfile",
-                    "with_user_profiles",
-                    "refresh_avatars_batched",
-                    "refresh_user_avatar",
-                    "steam_account_id_holder",
-                    "steam_account_id_identity",
-                    "UserSerializer",
-                    "serialize_user_core",
-                }
-            ),
-            "user-only code still in app until Task 8",
-        ),
-        "app/views/user_search.py": BackEdge(
-            frozenset({"with_user_profiles", "TournamentUserSerializer"}),
-            "user-only code still in app until Task 8",
         ),
     },
     "tournament": {
@@ -1143,12 +1151,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
-ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
-    (
-        "app/views/internal.py",
-        "update_user_avatar",
-    ): "internal endpoint of the same name; moves to user.internal.avatar in Task 8",
-}
+ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {}
 
 GUARD_FILE = "tests/test_app_boundaries.py"
 
