@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+const { get, post } = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 
-vi.mock('~/components/api/axios', () => ({ default: { get } }));
+vi.mock('~/components/api/axios', () => ({ default: { get, post } }));
 
-import { getClaimRequests } from '../api';
+import { approveClaimRequest, getClaimRequests } from '../api';
 
 const row = {
   id: 1,
@@ -32,6 +32,7 @@ const row = {
 
 beforeEach(() => {
   get.mockReset();
+  post.mockReset();
 });
 
 describe('getClaimRequests', () => {
@@ -73,5 +74,18 @@ describe('getClaimRequests', () => {
     await expect(
       getClaimRequests({ organizationId: 4 }),
     ).rejects.toBeInstanceOf(ZodError);
+  });
+});
+
+describe('approveClaimRequest', () => {
+  it('posts the approval and returns the message', async () => {
+    post.mockResolvedValue({ data: { message: 'Profile merged' } });
+    await expect(approveClaimRequest(9)).resolves.toBe('Profile merged');
+    expect(post).toHaveBeenCalledWith('/claim-requests/9/approve/');
+  });
+
+  it('rejects a malformed body', async () => {
+    post.mockResolvedValue({ data: {} });
+    await expect(approveClaimRequest(9)).rejects.toBeInstanceOf(ZodError);
   });
 });

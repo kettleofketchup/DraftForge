@@ -5,6 +5,7 @@ import { fetchLeague } from '~/components/api/api';
 import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { LeagueSSR } from '~/lib/ssr-types';
+import { useOrgStore } from '~/store/orgStore';
 import type { Route } from './+types/league';
 
 export async function loader({ params }: Route.LoaderArgs) {

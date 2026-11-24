@@ -168,10 +168,10 @@ export const TournamentDetailPage: React.FC = () => {
     setActiveTab(tab);
     setPendingDraftId(Number.isNaN(draftId) ? null : draftId);
     setPendingMatchId(matchId);
-    setLive(isLive);
-    if (isLive) {
+    if (isLive && !useTournamentStore.getState().live) {
       setAutoAdvance(true);
     }
+    setLive(isLive);
   }, [
     slug,
     setActiveTab,
