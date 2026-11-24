@@ -14,6 +14,351 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.20.0] - 2026-11-24
+
+### Upgrading
+
+Add `<SITE_URL>/api/discord/install/callback/` (for production
+`https://dota.kettle.sh/api/discord/install/callback/`) to the bot application's
+OAuth2 redirect URIs in the Discord Developer Portal. Without it Discord rejects the
+"Connect Discord server" flow with an invalid redirect URI error.
+
+Two migrations run on deploy: `app.0116_customuser_steam_account_verified` adds four
+nullable verification columns to users, and `events.0042_eventsignup_self_made` adds
+`EventSignup.self_made` (default `False`, with a database default so containers still on
+the old image can insert signups during the deploy). Neither backfills anything.
+
+Every existing Friend ID starts unverified and not checked against Steam. Every existing
+signup starts with `self_made=False`, because earlier releases did not record who made a
+signup, so event and league staff can verify those members only after the members sign
+up to one of their events themselves. Site staff can verify anyone straight away.
+
+The Steam existence check uses `STEAM_API_KEY`. Without it the check fails open: IDs are
+saved and shown as "Not checked against Steam". Set `STEAM_ACCOUNT_LOOKUP_ENABLED=false`
+to turn the check off; it defaults to on, and to off in the test stack.
+
+Run migrations: `org.0023_api_tokens` adds the API token, daily usage and per-org limit
+tables. The per-minute limit uses the Redis cache; if Redis is unreachable the minute limit
+is skipped (logged as `org_api_rate_cache_unavailable`) while the daily limit still applies.
+
+The prod and release stacks now keep the SQLite database in `backend/data/` (mounted at
+`/app/backend/data`, with `SQLITE_PATH=data/prod.db.sqlite3` in `docker/.env.prod` and
+`docker/.env.release`). Move the existing database there once, with the backend
+stopped so nothing is left only in the write-ahead log. `just dev::release` refuses to
+run until this is done.
+
+Release stack (the database is `backend/prod.db.sqlite3` on the host):
+
+```bash
+git pull
+docker compose --project-directory . -f docker/docker-compose.release.yaml stop backend
+mkdir -p backend/data
+mv backend/prod.db.sqlite3 backend/data/
+mv backend/prod.db.sqlite3-wal backend/prod.db.sqlite3-shm backend/data/ 2>/dev/null || true
+chown -R 1000:1000 backend/data   # the image's appuser; use sudo if needed
+just dev::release
+```
+
+The `-wal`/`-shm` files on the host are normally absent: before this change they lived
+inside the backend container, and stopping it cleanly checkpoints them into the main
+file. Stop the container rather than killing it. The prod stack
+(`docker/docker-compose.prod.yaml`) used `backend/db.sqlite3`; move that file to
+`backend/data/prod.db.sqlite3` the same way.
+
+### Security
+
+- Clearing a member's Friend ID from the organization Users tab or the user edit dialog
+  now persists; before, the old ID was silently restored on save.
+- A verified Friend ID can only be changed or cleared by staff of the organization that
+  verified it, or by site staff. Other organizers get a 403
+  (`steam_account_verified_elsewhere`) instead of silently wiping the verification.
+- Only event staff can view an event's Discord log, its DM history and its Discord task
+  schedule. The Discord tab on the event page is now shown to event staff only.
+- Only staff can view the subscriber list of an event series.
+- Starting a hero draft now needs tournament management access or a captain
+  of one of the game's teams. Before, any signed-in user could create one and
+  assign any team to the game.
+- `PATCH /api/users/<id>/` ignores changes to `is_staff`, `is_superuser` and
+  `is_active` unless the caller is a superuser. Before, any user could create an
+  organization and make themselves a superuser.
+
+### Added
+
+- The Playwright `prepare` job can run on a self-hosted home runner for allowlisted authors' same-repo pull requests. It then builds through the home BuildKit and pushes only `draftforge-ci/<img>:pr-<n>-<hash>`, never a trusted `draftforge/` tag or the shared build cache, and test jobs pull those images first. It stays on `ubuntu-latest`, as before, until the `SELF_HOSTED_RUNNERS` and `HOME_RUNNER_AUTHORS` repository variables are set; the `PREPARE_RUNNER` variable is gone. See `docs/development/ci-runners.md`.
+- `docker::buildx` and `docker::db::build` take `--mode=pr --pr=<n>`, `just ci::prepare-images --probe` reports what is missing without building, and `just ci::check-runs-on` rejects any job whose `runs-on` could reach a self-hosted runner without the home-runner guard.
+- Event staff can see who changed each sign-up, when and how, in a new History tab and from each signup row (#497).
+- Ready check service and API (#529): starting roll call opens a ready check, and operators can view,
+  open, escalate, close and resolve it and confirm members on their behalf; members confirm themselves
+  through `POST /api/events/<id>/ready/`. Nothing is scheduled or messaged yet, and automatic mode stays
+  staff-verified on this site until members get a Ready button. Until line placement ships, Maybe RSVPs
+  are not asked and freed seats are filled in waitlist order.
+- The event host and helpers can run the event's ready check, with a required reason to resolve a held
+  check, and a member who confirms too late is told to contact the host by name.
+- The event host and helpers see and resolve the event's ops notices on the event page.
+- Members in the event voice channel now confirm their ready check when Voice presence confirms is on. The bot tracks joins and leaves and repairs presence with a 60-second snapshot; operators can read feed ages and set presence by hand with a required reason recorded in the signup ledger. Leaving voice never undoes a confirmation.
+- Staff can replace a team's captain in one step from the team manage dialog, picking a teammate, a stand-in, or a player whose team is already out of the tournament; the old captain is marked a dropout unless you untick it.
+- The team manage dialog shows whether a team is still in the tournament, eliminated or the winner, lets staff set a team's placement (with a reason, recorded in the team history), and players of eliminated teams can now be added to other teams.
+- Leadership release gate: an org can require a moderator to release captain review
+  results before captains and members see them, with an optional auto-release
+  fallback (1 to 720 hours after the window closes). The event page's Captain reviews
+  section shows each captain's release state and offers **Release** per captain and
+  **Release all pending** (#844).
+- Org settings: a "Connect Discord server" button in the Discord section adds the
+  DraftForge bot through Discord's install screen and links the server to the org
+  automatically, so admins no longer copy a server ID by hand. The section shows
+  which server is connected or warns when the bot is missing, and the org page
+  shows admins a "Connect Discord" shortcut until the bot is in place.
+- Leadership screens: the Leadership tab with rating, points and per-trait boards and a
+  captain panel, "Rate your captain" for teammates on the event page and the tab, review
+  moderation for org admins on the event page, and Leadership settings with a trait
+  editor.
+- The organization Promotion tab can now invite more than recent tournament players. Tabs switch between **Recent players**, **Active members** (anyone who signed up for or played an org event in the last 7/14/30/90 days) and **New on Discord** (people who recently joined the org's Discord server, newest first). Discord members without a DraftForge account are listed too; choosing **Message** creates their account from Discord so the send can be recorded.
+- Self-set Steam Friend IDs are checked against Steam: an ID that belongs to no Steam
+  account is refused on the profile page, web and Discord signups and the org Dota
+  profile (#790). If Steam is unreachable the ID is saved and marked "Not checked
+  against Steam".
+- Staff see an Unverified or Verified badge next to a member's Friend ID in the MMR
+  approval dialog, the player modal and the tournament Players tab, with Steam and
+  Dotabuff links and a Verify action. Verified IDs show which organization vouched.
+- Site staff can verify any member; event and league staff can verify members who signed
+  up to their event themselves. Members see "Unverified" on their own profile.
+- New endpoint `GET/POST /api/users/<id>/steam-verification/`.
+- New docs page: Steam Friend ID verification.
+- MMR sync API: org admins create personal app tokens (Org Settings → API access) that an
+  external service uses to push member MMRs in bulk, matched by Steam ID (32- or 64-bit) or
+  Discord ID. A site admin turns it on per org with the new "MMR sync API" locked feature.
+  Each token is limited per minute and per day (60/min and 5,000/day by default; site admins
+  can override per org), and requests are counted per user per day.
+
+### Changed
+
+- The changelog, shellcheck, runs-on guard, prettier, shadcn-lint and PR labeler jobs, and a new `Typecheck (frontend)` job split out of `Unit tests (Vitest, slot guards)`, can run on the self-hosted home runner for allowlisted authors' same-repo pull requests, behind the same `SELF_HOSTED_RUNNERS` switch and guard as the Playwright `prepare` job, so the heavy test jobs wait less for a hosted slot. Everything else, and every push to `main`, stays on `ubuntu-latest`. `just ci::check-runs-on` now holds an explicit allowlist of the jobs that may use the home runner. See `docs/development/ci-runners.md`.
+- CI test jobs pull only the three images the test stack runs (backend-dev, frontend-dev and nginx) through the new `just docker::test-pull`, instead of every production and dev image.
+- The test-database and main image builds run only on a push to `main` or a dispatch from `main`, the test-database job no longer builds an unused backend image, and a dispatched release refuses to publish unless it runs from a tag.
+- Preview image builds read the build cache that `main` writes, which speeds them up without letting pull-request code write a cache other builds read.
+- Release images build with `--no-cache` (`just docker::release::push`), so a release neither reads nor overwrites the shared `:buildcache`; `docker::*::build` accepts `--no-cache` too.
+- CI skips Playwright when a change touches only docs, changelog fragments, root markdown,
+  the Helm chart or unrelated workflows; shellcheck runs only when recipes change; the docs
+  site redeploys only when docs or their toolchain change.
+- Signup changes made on the website, by staff, through Discord buttons and reactions, and
+  by the system are now recorded in the signup ledger with who acted, how, and the
+  signup's state before and after. Waitlist promotions link to the change that caused
+  them (#492).
+- Approving a profile claim now keeps the claimed profile's event sign-ups by moving them
+  to the claimer. They were deleted before.
+- The Django admin can no longer add a sign-up or change its status, user, event, team,
+  type or waitlist position. Staff change sign-ups through the event pages, which record
+  the change.
+- Starting roll call on an event already in roll call now succeeds without changing anything, and the
+  event host and helpers can start it.
+- Starting the tournament closes the open ready check first; a held check blocks the start with
+  "The ready check is held for staff; resolve it before starting."
+- Conduct records members who confirmed a roll call as attended through the ready check; members who
+  never confirmed a staff-verified roll call still stay pending for staff to decide.
+- Only staff can reinstate a dropped signup.
+- The organization Promotion tab now lists each audience in a full-width table with
+  larger **Recent players** / **Active members** / **New on Discord** tabs, a summary of
+  the filters in use and **Reset filters**. Each row has **Message** and **Mark as sent**
+  (in a menu on phones); both open a dialog with the template picker, preview, Copy,
+  the player's Discord profile link and undo, and nothing is recorded until you confirm.
+- Promotion candidates show the organization's MMR for the event's game, or Unknown, and
+  can be filtered by a minimum and maximum MMR. The filter runs on the server before the
+  New on Discord row limit, and players with an Unknown MMR are left out while it is set.
+- Every user search box and picker (members, players, stand-ins, walk-ins, Add Member) now
+  matches the same names and shows results the same way: avatar, display name and @handle.
+- Member search (Add Member dialog and stand-in picker) now starts at 2 characters, so members with two-letter names can be found. The "Press Enter to search" fallback is gone.
+- Org staff can now moderate Leadership reviews (see raters, void, restore and release)
+  and see other captains' unreleased details, as org admins could. Nobody, site staff
+  included, can see, moderate or release reviews of themselves (#844).
+- Captain rating points now follow the reviewer minimum in force: raising "minimum
+  reviews" after an event has closed hides that event's rating and its rating points
+  together (before, the points kept counting).
+- Organization settings and the tournament editor respond faster: an edit now
+  redraws only that field, not every section of the dialog. Event dialogs also
+  stop redrawing every tab after a failed save.
+- Tournament backend code started moving from `app` into a new `tournament`
+  Django app, ahead of the model move. The tournament, team and game
+  permission helpers are now in `tournament.permissions`, the team roster,
+  audit, reference, leadership and completion services in
+  `tournament.services`, the tournament signal receivers in
+  `tournament.signals`, the tournament prefetch plan in `tournament.state`,
+  the tournament list helpers in `tournament.listing` and `tournament.buckets`,
+  `create_team_from_captain` and `serialize_tournament` in
+  `tournament.functions`, the worker-side tournament client in
+  `tournament.internal_client` and its schemas in `tournament.schemas`. The
+  `audit_team_leadership`, `import_prod_tournament` and
+  `sync_prod_tournaments` management commands keep their names.
+- `has_event_staff_access` is now in `events.permissions`, the lobby Steam
+  league check in `league.permissions`, and `request_user` in
+  `app.permissions`.
+- Logger names of the moved modules change from `app.*` to `tournament.*`
+  (for example `app.signals` is now `tournament.signals` and
+  `app.services.team_management` is now
+  `tournament.services.team_management`). The INFO level override for
+  `app.functions.tournament` now applies to `tournament.functions`. Log
+  queries that filter on the old names need updating.
+- The `view` field of `drf_error_response` logs for
+  `POST /api/tournaments/create-team-from-captain` now reads
+  `tournament.functions.WrappedAPIView` instead of
+  `app.functions.tournament.WrappedAPIView`.
+- `app.schemas` no longer re-exports the Discord and event schemas under
+  their old names; import them from `discordbot.schemas` and
+  `events.schemas`.
+- The bracket app's config class is now `bracket.apps.BracketConfig`.
+- Tournament HTTP and WebSocket paths, URL names, payloads, models and
+  tables are unchanged.
+- The tournament HTTP and WebSocket surface moved from `app` into the
+  `tournament` app. The tournament, team, game, team-log, bracket and draft
+  serializers are now in `tournament.serializers`; the tournament, team,
+  game, bracket and CSV import views in `tournament.views`; the tournament
+  member add view in `tournament.views.members`; the tournament internal
+  endpoints in `tournament.views.internal`; the tournament SSR view in
+  `tournament.ssr`; the tournament WebSocket consumer and route in
+  `tournament.consumers` and `tournament.routing`; and the team log admin in
+  `tournament.admin`. `OrganizationsSerializer` is now in `org.serializers`,
+  and `LeaguesSerializer` and `LeagueMinimalSerializer` in
+  `league.serializers`.
+- `app.views.admin_team` is now `app.views.user_search` and holds only
+  `search_users`.
+- Logger names of the moved views change from `app.*` to `tournament.*`:
+  `app.views_main` is now `tournament.views.tournament` and
+  `tournament.views.team` (for example `tournament_cache_miss`,
+  `team_list_cache_miss`, `team_deleted`, `team_delete_refused`),
+  `app.views.bracket` is now `tournament.views.bracket`,
+  `app.views.csv_import` is now `tournament.views.csv_import`, and the
+  `captain_teams_removed` log now comes from
+  `tournament.serializers.tournament` instead of `app.serializers`. Log
+  queries that filter on the old names need updating.
+- The `view` field of `drf_error_response` logs for the moved views changes
+  the same way (for example `app.views_main.TeamView` is now
+  `tournament.views.team.TeamView`).
+- Tournament HTTP and WebSocket paths, URL names, payloads, models and
+  tables are unchanged.
+- The `Tournament`, `Team`, `Game` and `TeamLog` models (with
+  `LeadershipProblem`, `TeamLogVia` and `TeamLogAction`) moved from `app`
+  into the `tournament` Django app, and the tournament enums (`GameMode`,
+  `DotaLobbyMode`, `DotaLobbyLaunch`, `DraftStyles`) into
+  `tournament.choices`. The migrations are state-only: the tables keep their
+  `app_tournament`, `app_team`, `app_game` and `app_teamlog` names (and the
+  `app_tournament_users`, `app_team_members`, `app_team_dropin_members`,
+  `app_team_left_members` and `app_team_league_users` join tables), and no
+  schema changes on deploy.
+- The four ContentType rows are relabelled from `app` to `tournament`, so
+  permission labels change from `app.*` to `tournament.*` (for example
+  `app.change_team` is now `tournament.change_team`). Existing user and group
+  grants carry over.
+- The team log admin moved from `/admin/app/teamlog/` to
+  `/admin/tournament/teamlog/`.
+- The cacheops profile keys `app.tournament`, `app.team` and `app.game` are
+  renamed to `tournament.tournament`, `tournament.team` and
+  `tournament.game`, with the same profiles.
+- Team usage and reference payloads (the `team_in_use` 409 on team delete
+  and the draft reset responses) now name the models `tournament.Game` and
+  `tournament.Tournament`, and their keys `tournament.Game.radiant_team`,
+  `tournament.Game.dire_team` and so on, instead of `app.*`. The `usage`
+  list keeps its order.
+- `TOURNAMNET_TYPE_CHOICES` is renamed `TOURNAMENT_TYPE_CHOICES`.
+- HTTP and WebSocket paths, URL names, Redis keys and table names are
+  unchanged.
+
+### Fixed
+
+- Approving a profile claim now updates the organization's Users tab and member count right away: the merged profile disappears and the claimer shows up, without reloading the page.
+- Event lists now show the new status and signup counts right after you open signups, start roll call or the tournament, sign up or cancel, or manage signups, instead of keeping the old values until a reload.
+- The leadership and contributions standings now update straight away after an event is completed, cancelled, reopened, deleted or renamed, without a page reload.
+- The draft's available-players search now finds players by their Discord and server names,
+  not just username and nickname.
+- The Add Member search icon stays centred when the short-query hint shows.
+- Prod and release deploys no longer lose recent database writes when the backend
+  container is recreated: the SQLite write-ahead log now sits on the host next to the
+  database (#803).
+- Approving or rejecting a profile claim no longer errors when the claimed profile was already merged by another claim: reject works, and approve rejects the claim with a clear reason. Two staff approving the same claim at once can no longer both run the merge, and the approval log now records the merged profile's id and Steam ID (#804).
+- The claim requests API only lists, shows, approves and rejects claims; creating, editing or deleting one now returns 405 instead of a server error or an unlogged delete (#805)
+- The organization Claims tab now shows how many profile claims are waiting for review, and the Pending filter keeps its count while you look at approved or rejected claims (#806).
+- `just db::populate::fresh` and `just db::reset-test` also delete the test DB's SQLite `-wal`/`-shm` files, and stop this worktree's test-slot backend and celery worker while the DB is replaced (starting them again afterwards), so a running stack no longer makes migrate fail with `disk I/O error` (#807).
+- The Users tab on organization and league pages shows the member count on every tab instead of "..." until the Users tab is opened.
+- Production Celery beat now runs the stale Discord lease sweeper every minute, so
+  reminder leases left behind by a crashed or restarted worker are cleared again (#850).
+- League MMR adjustments from Steam league stats now compare each player with the whole league's current averages, so a player alone in a league is no longer pushed to +500 and a league-wide refresh gives the same result in any order (#861).
+- The Discord Activity's tournament bracket view shows the bracket again instead of an
+  empty panel under the header.
+- Eliminated teams now get their tournament placement in single-elimination brackets
+  (final loser 2nd, semi-final losers 3rd, quarter-final losers 5th, and so on) and when
+  results come from the bracket Save button or a linked Steam match. Changing or clearing
+  a result clears placements that no longer hold (#843).
+- Keep activity test participants and Steam teams within existing DTX members so tournament discovery fixtures retain their isolated organization memberships.
+- Give each league-stats layout viewport its own test budget without weakening geometry assertions or increasing timeouts.
+- The organization Claims tab no longer shows "Failed to load claim requests" on the Approved filter. An approved claim now reads "Merged into" the claimer, because approving merges and removes the claimed profile.
+- The signup reminder setting and the task schedule now say the DM goes to the series' subscribers who haven't signed up, instead of just "users".
+- The event form now warns when "Mention signed-up members before start" can't send because no signup post will exist, and the task schedule says why start mention is misconfigured.
+- Initialize team draft Auto mode before opening the modal so a delayed URL update cannot reset manual round navigation.
+- Restore the missing organization-store import on league pages so they render instead of crashing with `useOrgStore is not defined`.
+- Member and player searches now match the name shown on each card, including Discord and
+  server nicknames, not just the username.
+- The search icon in the Add Member dialog stays centred in the search box when the "Press Enter to search" hint appears.
+- Clearing a number box in the event and org default settings no longer
+  snaps it to a value while you type. Emptying Max Teams no longer ticks
+  Unlimited, and People Per Team, Draft Time, announcement hours and
+  Generate Days Ahead no longer jump back to a default.
+- The organization page header no longer wraps the org name around the **Org Settings**
+  button on phones: the name takes the full width and the button sits below it.
+- The Conduct docs now say that an event's staff, including staff of the event's
+  league, can see attendance reasons and who made an edit for that event.
+- A newly created organization now shows up on the Organizations page right away, and deleted or renamed organizations update the list without a reload.
+- Organization staff can edit players on a tournament page again: the edit button
+  now appears on player cards and in the Player Profile modal, and the Add Player
+  and Import CSV buttons show on the Players tab.
+- Discord signup posts and their updates now work without enabling announcements.
+- Merging two accounts that were both seated in the same event now promotes the next waitlisted player into the seat the duplicate signup held.
+- Merging two accounts signed up for the same event no longer drops the seat one of them held when the other's signup was cancelled, rejected, tentative or waitlisted; the seated signup is kept.
+- Approving a signup with an MMR override now saves the approval and its audit log entry together, so one can no longer be kept without the other.
+- A staff add that fails no longer leaves the player added to the organization.
+- The organization log entry for an approved profile claim now records which profile was merged and its Steam ID, instead of leaving both empty.
+- The stale repeater cleanup script no longer overfills the event it moves signups to: players keep a seat only while it has room, the rest join the end of its waitlist in their original order with their own places, and waitlisted players move up into any seats left free.
+- A Discord account merge now keeps the duplicate account's nickname, Steam account, Dota positions, MMR verification and Deadlock rank when the kept account has none. When both accounts belong to the same organization, the duplicate's league memberships, event DMs and organization game profiles now move to the kept account instead of being deleted; a league membership both accounts hold keeps the higher MMR and the duplicate's teams. Every row the merge still deletes is logged with the rows deleted along with it.
+- Approving a profile claim now moves the claimed account's league memberships, event DMs and organization game profiles to the claimer when both belong to the same organization, instead of deleting them. A game profile the claimer already has is kept, and the duplicate is logged before it is deleted.
+- Marking yourself tentative or declining an event now checks and records the event as it currently stands, so a recently closed event no longer accepts a tentative signup and the signup history no longer shows an outdated event name, time or state.
+- Signing up for an event now checks the event as it currently stands, so an event that has just closed no longer accepts a signup.
+- Signing up on the web checks event eligibility once instead of twice. On an event that is not accepting signups, an invalid request (an unknown intent, a malformed profile or a profile error such as a Steam ID already in use) now returns that error first, instead of "Event is not accepting signups".
+- `just test::slot-reap` can now remove the `df-run-<hex>` project (usually a lone
+  `redis-run-<hex>` container) that a killed `just test::run` leaves behind. A project
+  counts as orphaned once no one-off container runs in it and the process that created
+  it is gone; `just test::slot-reap --stale` and every slotless `just test::run` sweep
+  such projects. `just test::run` also cleans up on SIGTERM and SIGHUP, not only Ctrl-C.
+- Organization and league staff can run a tournament without a site admin:
+  team draft Start and Force start, draft moderation, undo, draft style and
+  captains, hero draft Start, Reset, pause and resume, bracket editing, Link
+  Steam Match and the tournament card's Edit button now follow tournament
+  management access instead of site staff only.
+- Staff of the organization running an event can manage that event's
+  tournament when it has no league.
+- League staff and league admins can edit a player's org MMR from a
+  tournament in their league (MMR only; other profile fields stay with
+  org staff).
+- The shuffle draft tie roll popup now counts down to the moment the server starts the
+  next pick clock, so "Clock starts in" is right for a viewer who sees the roll late,
+  and every viewer's popup closes together. A viewer who sees it as the hold ends still
+  gets 3 seconds to read who picks next.
+- Pausing the draft while the tie roll popup is up now shows "Clock paused" and keeps it
+  open; after a resume it counts down to the moved clock start.
+- Removing a team's captain from a tournament's players no longer deletes a team
+  that has played. A team with a placement, bracket games, HeroDrafts, a drafted
+  roster or team history stays, and its captaincy passes to the deputy or the next
+  member through the usual succession, recorded in the team history. Only a
+  captain-only team that has not been drafted yet is still deleted (#841).
+- Removing a player from a tournament no longer changes the rosters of teams that
+  are already knocked out, and can no longer delete such a team; only teams still
+  playing lose the player (#842).
+- Someone added to a league who wasn't in its organization yet now shows up on the organization's Users tab and in its member count right away, without a page reload
+- Creating a league now shows it on the organization and leagues pages right away, and edited league names and Steam IDs update in league lists without a reload.
+- League lists now check the data the server sends, so an unexpected response is logged as an error instead of silently filling the list with incomplete leagues.
+- Tournament and league pages now pick up organization changes, such as a newly linked Discord server, without a page reload (#890)
+- Organization member lists now check the server's reply, so a malformed response shows a load error instead of filling the member list with incomplete data.
+- New org members added through Admin Team (admin, staff or promoter) or as an event host or helper now show up on the organization's Users tab and in its member count right away, without a page reload
+- Promotion DMs now pick up a new organization name or Discord link and an edited event name or time straight away, instead of showing the old text until the page is reloaded.
+- Event series stay in sync across pages: renaming, pausing, subscribing to or creating a series now shows up on the Events page, the organization page and the series page without a reload, and deleting a series removes its upcoming events from the event lists straight away
+- The confirmation for deleting an event series now says that its upcoming and open events are deleted too, and that only in-progress, completed and cancelled events are kept.
+
 ## [0.19.0] - 2026-11-22
 
 ### Upgrading

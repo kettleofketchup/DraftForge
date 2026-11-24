@@ -1,1 +1,0 @@
-- `just db::populate::fresh` and `just db::reset-test` also delete the test DB's SQLite `-wal`/`-shm` files, and stop this worktree's test-slot backend and celery worker while the DB is replaced (starting them again afterwards), so a running stack no longer makes migrate fail with `disk I/O error` (#807).
