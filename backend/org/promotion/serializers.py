@@ -50,10 +50,15 @@ class SendRequestSerializer(serializers.Serializer):
     )
 
 
-def send_data(send: PromoSend, points_awarded: int | None) -> dict[str, Any]:
+def send_data(
+    send: PromoSend, points_awarded: int | None, sfg_writeback: dict[str, Any]
+) -> dict[str, Any]:
+    """A recorded send. ``sfg_writeback`` is its outbox summary; recording a
+    send never means it reached SFG."""
     return {
         "id": send.pk,
         "earns_points": send.earns_points,
         "points_awarded": points_awarded,
         "sent_at": serializers.DateTimeField().to_representation(send.sent_at),
+        "sfg_writeback": sfg_writeback,
     }

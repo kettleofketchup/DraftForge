@@ -696,8 +696,8 @@ promoter, org staff, admin, owner or site admin.
 | GET | `events/` | Promotable events (`upcoming`, `signups_open`): `[{id, name, scheduled_at, ends_at, state, signups_open_at}]` | Promoter |
 | GET | `events/{event_id}/candidates/?n=&hide_signed_up=&hide_messaged=&q=` | Recipient pool from the last `n` past tournaments (default 3, clamped 1-10). `{n, rows}`; each row has the player, tournaments played, `signed_up`, `earning_send_exists` and `last_messaged` (with `can_undo`). | Promoter |
 | POST | `events/{event_id}/render/` | Body `{"template_id", "recipient_id"}`. Returns `{text, warnings, will_earn}`. | Promoter |
-| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at}`; `points_awarded` is `null` while Contributions is locked. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. | Promoter |
-| DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `204`. | Its sender while still a promoter, or org staff |
+| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at, sfg_writeback}`; `points_awarded` is `null` while Contributions is locked. `sfg_writeback` is the send's SFG outbox summary `{state, reason, delivery_id}`; only `state: "applied"` means SFG stored it. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. | Promoter |
+| DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `200` with `{sfg_writeback}`: undo cannot unsend the DM, so its outbox receipt stays and can still be dispatched. | Its sender while still a promoter, or org staff |
 
 ### Conduct
 

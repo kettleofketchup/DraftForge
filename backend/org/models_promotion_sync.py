@@ -78,6 +78,19 @@ class _OutboxQuerySet(_GuardedQuerySet):
         )
         return senders, recipients
 
+    def redact_payloads(self) -> int:
+        """Drop these rows' frozen payloads, keeping ``payload_hash``.
+
+        The only sanctioned write to ``payload`` after it is set: account
+        deletion removes the Discord IDs it holds. The hash stays as a
+        tombstone, and because it is non-empty the payload can never be
+        materialised again.
+        """
+        # models.QuerySet.update skips the frozen-field guard on purpose.
+        return models.QuerySet.update(
+            self.filter(payload__isnull=False), payload=None, updated_at=timezone.now()
+        )
+
 
 class ReceiptSource(models.TextChoices):
     SFG = "sfg", "SFG"

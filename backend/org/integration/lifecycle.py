@@ -17,9 +17,12 @@ moves, and only to the account that owns that Discord ID:
   deleted, from a ``pre_delete`` receiver in ``org.signals`` so no delete
   path can skip it. Its receipts are quarantined as ``account_deleted`` and
   unlinked, so a later replay of the same SFG contact neither ticks a new
-  owner nor recreates anything. Its outbox rows that were never sent are
-  canceled; applied, canceled and in-flight rows are left alone, and frozen
-  payloads are not rewritten here.
+  owner nor recreates anything. Its open outbox rows (pending, retry,
+  paused, reconciliation_required and in_flight) are canceled and their
+  leases dropped, so a dispatcher's late answer for an in-flight row finds no
+  lease to finalize and cannot bring the row back. A request already on the
+  wire cannot be recalled. Every row naming the account, applied ones too,
+  has its payload redacted; the payload hash stays as a tombstone.
 
 Neither function creates an account or membership, touches source facts or
 deletes a receipt.
@@ -117,16 +120,19 @@ def cancel_or_redact_promotion_identity(user: CustomUser) -> None:
         association_reason=AssociationReason.ACCOUNT_DELETED,
         association_updated_at=now,
     )
-    canceled = PromotionContactOutbox.objects.filter(
-        Q(sender_user_id=user.pk) | Q(recipient_user_id=user.pk),
-        state__in=_UNSENT_STATES,
-    ).update(
+    rows = PromotionContactOutbox.objects.filter(
+        Q(sender_user_id=user.pk) | Q(recipient_user_id=user.pk)
+    )
+    canceled = rows.filter(state__in=_OPEN_STATES).update(
         state=OutboxState.CANCELED,
         last_reason=ACCOUNT_DELETED,
         due_at=None,
+        lease_token=None,
+        lease_expires_at=None,
         updated_at=now,
     )
-    if quarantined or canceled:
+    redacted = rows.redact_payloads()
+    if quarantined or canceled or redacted:
         log.info(
             "promo_identity_canceled_for_deletion",
             system="org",
@@ -134,4 +140,5 @@ def cancel_or_redact_promotion_identity(user: CustomUser) -> None:
             user_id=user.pk,
             receipts_quarantined=quarantined,
             outbox_canceled=canceled,
+            outbox_redacted=redacted,
         )

@@ -416,8 +416,10 @@ class PromotionRenderAndSendTest(PromotionApiBase):
         self.assertTrue(first_body["earns_points"])
         self.assertIsNone(first_body["points_awarded"])
         self.assertEqual(
-            set(first_body), {"id", "earns_points", "points_awarded", "sent_at"}
+            set(first_body),
+            {"id", "earns_points", "points_awarded", "sent_at", "sfg_writeback"},
         )
+        self.assertEqual(first_body["sfg_writeback"]["state"], "pending")
         send = PromoSend.objects.get(pk=first_body["id"])
         self.assertEqual(send.sender_id, self.users["promoter"].pk)
         self.assertEqual(send.text, "Hi Recipient")
@@ -531,7 +533,8 @@ class PromotionUndoTest(PromotionApiBase):
         response = self.request(
             "staff", "delete", f"{base(self.org.pk)}sends/{send.pk}/"
         )
-        self.assertEqual(response.status_code, 204, response.content)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["sfg_writeback"]["state"], "pending")
         self.assertFalse(PromoSend.objects.filter(pk=send.pk).exists())
         self.assertFalse(
             ContributionEntry.objects.nocache().filter(event=self.event).exists()
@@ -542,4 +545,4 @@ class PromotionUndoTest(PromotionApiBase):
         response = self.request(
             "promoter", "delete", f"{base(self.org.pk)}sends/{send.pk}/"
         )
-        self.assertEqual(response.status_code, 204, response.content)
+        self.assertEqual(response.status_code, 200, response.content)

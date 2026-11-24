@@ -19,15 +19,33 @@ Environment variables:
 The configured guild is checked against the org's own Discord server when a
 binding is used (`org.integration.bindings`), not here, because settings load
 before the database is available. Errors name the bad field, never its value.
+
+`backend.settings` also builds `PROMOTION_ADAPTOR` through
+`PromotionAdaptorConfig.from_env()`: where the outbox dispatcher
+(`python manage.py dispatch_promotion_contacts`) sends receipts.
+
+    PROMOTION_ADAPTOR_ENABLED       default false. While false nothing is sent
+                                    and the URL and key are not read.
+    PROMOTION_ADAPTOR_BASE_URL      https://host[:port], no path, query or
+                                    credentials. Plain http only for loopback
+                                    test hosts.
+    PROMOTION_ADAPTOR_API_KEY       the adaptor's sfga_ promotion:write key,
+    PROMOTION_ADAPTOR_API_KEY_FILE  or a file holding it (not both).
+    PROMOTION_ADAPTOR_TIMEOUT       seconds per request, default 30.
+    PROMOTION_ADAPTOR_MAX_ATTEMPTS  default 5; the last failure needs
+                                    reconciliation.
+    PROMOTION_ADAPTOR_RETRY_CAP     longest backoff in seconds, default 120.
 """
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -139,3 +157,119 @@ def _validate(
         guilds.add(binding.guild_id)
         events.update(binding.events.keys())
     return tuple(bindings)
+
+
+ADAPTOR_ENV_PREFIX = "PROMOTION_ADAPTOR_"
+ADAPTOR_KEY_PREFIX = "sfga_"
+# Plain http is allowed only for isolated test hosts on loopback.
+INSECURE_TEST_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_TRUE = frozenset({"1", "true", "yes", "on"})
+_FALSE = frozenset({"", "0", "false", "no", "off"})
+
+
+@dataclass(frozen=True)
+class PromotionAdaptorConfig:
+    """Outbound outbox dispatch to the adaptor. Off unless configured."""
+
+    enabled: bool = False
+    base_url: str = ""
+    api_key: str = field(default="", repr=False)
+    timeout: float = 30.0
+    max_attempts: int = 5
+    retry_cap: float = 120.0
+
+    @classmethod
+    def from_env(
+        cls, *, environ: Mapping[str, str] | None = None
+    ) -> PromotionAdaptorConfig:
+        env = os.environ if environ is None else environ
+
+        def get(name: str) -> str:
+            return env.get(ADAPTOR_ENV_PREFIX + name, "").strip()
+
+        enabled = _flag(get("ENABLED"), "ENABLED")
+        timeout = _positive(get("TIMEOUT"), "TIMEOUT", 30.0)
+        max_attempts = int(
+            _positive(get("MAX_ATTEMPTS"), "MAX_ATTEMPTS", 5, whole=True)
+        )
+        retry_cap = _positive(get("RETRY_CAP"), "RETRY_CAP", 120.0)
+        if not enabled:
+            # Off: the URL and credential are not read at all.
+            return cls(timeout=timeout, max_attempts=max_attempts, retry_cap=retry_cap)
+        return cls(
+            enabled=True,
+            base_url=_base_url(get("BASE_URL")),
+            api_key=_api_key(get("API_KEY"), get("API_KEY_FILE")),
+            timeout=timeout,
+            max_attempts=max_attempts,
+            retry_cap=retry_cap,
+        )
+
+
+def _adaptor_error(name: str, message: str) -> ImproperlyConfigured:
+    return ImproperlyConfigured(f"{ADAPTOR_ENV_PREFIX}{name}: {message}")
+
+
+def _flag(raw: str, name: str) -> bool:
+    value = raw.lower()
+    if value in _TRUE:
+        return True
+    if value in _FALSE:
+        return False
+    raise _adaptor_error(name, "must be true or false")
+
+
+def _positive(raw: str, name: str, default: float, *, whole: bool = False) -> float:
+    if not raw:
+        return default
+    try:
+        value = float(int(raw)) if whole else float(raw)
+    except ValueError:
+        raise _adaptor_error(name, "must be a positive number") from None
+    if not math.isfinite(value) or value <= 0:
+        raise _adaptor_error(name, "must be a positive number")
+    return value
+
+
+def _base_url(raw: str) -> str:
+    if not raw:
+        raise _adaptor_error("BASE_URL", "is required when enabled")
+    try:
+        parts = urlsplit(raw)
+        host = parts.hostname or ""
+        _ = parts.port  # raises on a malformed port
+    except ValueError:
+        raise _adaptor_error("BASE_URL", "is not a valid URL") from None
+    if parts.scheme not in ("https", "http") or not host:
+        raise _adaptor_error("BASE_URL", "must be an https URL")
+    if parts.scheme == "http" and host not in INSECURE_TEST_HOSTS:
+        raise _adaptor_error(
+            "BASE_URL", "plain http is allowed only for loopback test hosts"
+        )
+    if parts.username is not None or parts.password is not None:
+        raise _adaptor_error("BASE_URL", "must not contain credentials")
+    if parts.path not in ("", "/") or "?" in raw or "#" in raw:
+        raise _adaptor_error("BASE_URL", "must not contain a path, query or fragment")
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _api_key(raw: str, path: str) -> str:
+    if raw and path:
+        raise _adaptor_error("API_KEY", "set API_KEY or API_KEY_FILE, not both")
+    if path:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                raw = fh.read().strip()
+        except (OSError, UnicodeDecodeError):
+            raise _adaptor_error("API_KEY_FILE", "could not be read") from None
+    if not raw:
+        raise _adaptor_error("API_KEY", "is required when enabled")
+    valid = (
+        raw.startswith(ADAPTOR_KEY_PREFIX)
+        and raw.isascii()
+        and raw.isprintable()
+        and " " not in raw
+    )
+    if not valid:
+        raise _adaptor_error("API_KEY", "must be an sfga_ adaptor key")
+    return raw

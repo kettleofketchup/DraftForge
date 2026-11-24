@@ -31,7 +31,7 @@ from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
-from config.promotion_sync import PromotionSyncConfig
+from config.promotion_sync import PromotionAdaptorConfig, PromotionSyncConfig
 from config.redis_host import is_docker, resolve_redis_host
 from config.signup_post import SignupPostConfig
 from telemetry.config import init_telemetry
@@ -336,6 +336,9 @@ SIGNUP_POST = SignupPostConfig.from_env(disabled_default=RUNNING_TESTS)
 # SFG event-promotion org/guild and event/occasion bindings
 # (config/promotion_sync.py, SFG_PROMOTION_BINDINGS). Empty unless configured.
 SFG_PROMOTION_SYNC = PromotionSyncConfig.from_env()
+# Where dispatch_promotion_contacts sends outbox receipts (PROMOTION_ADAPTOR_*).
+# Off by default; while off nothing is sent and no credential is read.
+PROMOTION_ADAPTOR = PromotionAdaptorConfig.from_env()
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):

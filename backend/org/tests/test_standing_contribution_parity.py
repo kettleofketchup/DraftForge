@@ -31,6 +31,7 @@ from org.models import (
     PromoSend,
     PromoTemplate,
 )
+from org.models_promotion_sync import PromotionContactOutbox
 from org.promotion.services import record_promo_send, undo_promo_send
 from tournament.models import Tournament
 
@@ -42,8 +43,10 @@ from tournament.models import Tournament
 # up the dropped account's receipts and points its open outbox rows at the
 # kept account (one UPDATE for senders, one for recipients). Every user
 # delete, including the dropped account in a merge, runs the pre_delete hook
-# that quarantines its receipts and cancels its unsent outbox rows (one
-# UPDATE each); after a merge that hook finds none of the merged rows.
+# that quarantines its receipts, cancels its open outbox rows and redacts the
+# payloads of every outbox row naming it (one UPDATE each); after a merge
+# that hook finds none of the merged rows. The send view also reads the new
+# send's outbox summary for its sfg_writeback field (one SELECT).
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
 CLOSE_AUTO_CANCEL_QUERIES = 42
 CLOSE_ADMIN_CANCEL_QUERIES = 12
@@ -54,14 +57,14 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 208
-MERGE_CLAIM_QUERIES = 189
-DELETE_API_QUERIES = 112
-DELETE_ADMIN_QUERIES = 163
+MERGE_DISCORD_QUERIES = 209
+MERGE_CLAIM_QUERIES = 190
+DELETE_API_QUERIES = 113
+DELETE_ADMIN_QUERIES = 164
 DELETE_ADMIN_CONFIRM_QUERIES = 53
-PROMO_SEND_QUERIES = 28
+PROMO_SEND_QUERIES = 29
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 126
+PROMO_RELEASE_QUERIES = 127
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8
@@ -617,6 +620,15 @@ class PromoParityTest(_ParityBase):
                 "earns_points": True,
                 "points_awarded": 1,
                 "sent_at": serializers.DateTimeField().to_representation(send.sent_at),
+                "sfg_writeback": {
+                    "state": "pending",
+                    "reason": None,
+                    "delivery_id": str(
+                        PromotionContactOutbox.objects.get(
+                            local_send_id=send.pk
+                        ).delivery_id
+                    ),
+                },
             },
         )
         self.assertEqual(ledger(self.org), [self._promo_row(send)])

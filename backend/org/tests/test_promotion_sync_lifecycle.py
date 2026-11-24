@@ -12,7 +12,11 @@ membership.
 
 from __future__ import annotations
 
+import uuid
+from datetime import timedelta
+
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.discord_accounts import merge_discord_accounts
@@ -25,6 +29,7 @@ from org.models import OrgUser, PromoSend
 from org.models_promotion_sync import (
     AssociationReason,
     AssociationState,
+    ImmutableFieldError,
     OutboxState,
     PromotionContactOutbox,
 )
@@ -253,18 +258,56 @@ class DeletionTests(_ImportBase):
             template=None,
             text="Hi",
         )
+        in_flight = record_promo_send(
+            sender=self.users["promoter"],
+            event=self.event,
+            recipient=self.recipient,
+            template=None,
+            text="Again",
+        )
         PromotionContactOutbox.objects.filter(local_send_id=applied.pk).update(
             state=OutboxState.APPLIED
         )
+        PromotionContactOutbox.objects.filter(local_send_id=in_flight.pk).update(
+            state=OutboxState.IN_FLIGHT,
+            lease_token=uuid.uuid4(),
+            lease_expires_at=timezone.now() + timedelta(minutes=1),
+        )
+        applied_hash = PromotionContactOutbox.objects.get(
+            local_send_id=applied.pk
+        ).payload_hash
         cancel_or_redact_promotion_identity(self.recipient)
         row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
         self.assertEqual(row.state, OutboxState.CANCELED)
         self.assertEqual(row.last_reason, "account_deleted")
-        self.assertEqual(
-            PromotionContactOutbox.objects.get(local_send_id=applied.pk).state,
-            OutboxState.APPLIED,
-        )
+        self.assertIsNone(row.payload)
+        self.assertTrue(row.payload_hash)
+        flying = PromotionContactOutbox.objects.get(local_send_id=in_flight.pk)
+        self.assertEqual(flying.state, OutboxState.CANCELED)
+        self.assertIsNone(flying.lease_token)
+        self.assertIsNone(flying.lease_expires_at)
+        self.assertIsNone(flying.payload)
+        # Another account's applied row keeps its state and payload.
+        other = PromotionContactOutbox.objects.get(local_send_id=applied.pk)
+        self.assertEqual(other.state, OutboxState.APPLIED)
+        self.assertIsNotNone(other.payload)
+        self.assertEqual(other.payload_hash, applied_hash)
         self.assertTrue(PromoSend.objects.filter(pk=send.pk).exists())
+
+    @override_settings(DISCORD_BOT_TOKEN="test-bot-token")
+    def test_redacted_payload_cannot_be_materialised_again(self) -> None:
+        send = record_promo_send(
+            sender=self.users["promoter"],
+            event=self.event,
+            recipient=self.recipient,
+            template=None,
+            text="Hi",
+        )
+        cancel_or_redact_promotion_identity(self.recipient)
+        row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        row.payload = {"schema_version": 1}
+        with self.assertRaises(ImmutableFieldError):
+            row.save(update_fields=["payload"])
 
     def test_quarantined_evidence_stays_in_universe(self) -> None:
         player = self.non_member_player("evidence_player")
