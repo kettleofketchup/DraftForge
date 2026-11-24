@@ -3,6 +3,7 @@ Tournament population functions for test database.
 """
 
 import random
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 from django.db import transaction
@@ -30,12 +31,18 @@ OWN_STEP_CONFIG_PKS: frozenset[int] = frozenset(
 )
 
 
-def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = False):
+def create_dynamic_tournament(
+    config: DynamicTournamentConfig,
+    force: bool = False,
+    *,
+    candidate_users: Iterable[CustomUser] | None = None,
+) -> Tournament | None:
     """Create a tournament from a DynamicTournamentConfig.
 
     Args:
         config: The DynamicTournamentConfig with tournament settings
         force: If True, recreate tournament even if it exists
+        candidate_users: Optional pool for participants and Steam team members
 
     Returns:
         Tournament: The created or existing Tournament instance
@@ -61,13 +68,10 @@ def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = Fal
         )
         return None
 
-    # Get users with Steam IDs for team membership
-    users_with_steam = list(
-        CustomUser.objects.filter(steam_account_id__isnull=False).exclude(
-            steam_account_id=0
-        )
+    all_users = list(
+        CustomUser.objects.all() if candidate_users is None else candidate_users
     )
-    all_users = list(CustomUser.objects.all())
+    users_with_steam = [user for user in all_users if user.steam_account_id]
 
     if len(all_users) < config.user_count:
         print(
