@@ -310,7 +310,7 @@ class CeleryHopTests(TransactionTestCase):
 
 
 class DispatchSkippedBranchTests(TransactionTestCase):
-    """notify_signup_changed must log embed_update_skipped (not queued) when flags off."""
+    """No usable signup or announcement destination logs skipped, not queued."""
 
     def setUp(self):
         clear_contextvars()
@@ -327,7 +327,7 @@ class DispatchSkippedBranchTests(TransactionTestCase):
     def tearDown(self):
         clear_contextvars()
 
-    def test_logs_skipped_when_discord_announcement_disabled(self):
+    def test_logs_skipped_without_signup_or_announcement_destination(self) -> None:
         from events.discord.dispatch import notify_signup_changed
 
         with (
@@ -339,7 +339,7 @@ class DispatchSkippedBranchTests(TransactionTestCase):
         skipped = [log for log in logs if log["event"] == "embed_update_skipped"]
         queued = [log for log in logs if log["event"] == "embed_update_queued"]
         self.assertEqual(len(skipped), 1)
-        self.assertEqual(skipped[0]["reason"], "discord_announcement_disabled")
+        self.assertEqual(skipped[0]["reason"], "no_signup_or_announcement_destination")
         self.assertEqual(len(queued), 0)
         mock_apply_async.assert_not_called()
 
