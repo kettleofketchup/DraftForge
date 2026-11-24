@@ -9,7 +9,7 @@ Organizations create one-off or recurring events that automatically generate tou
 - **Recurring event series** with configurable frequency (daily, weekly, bi-weekly, monthly)
 - **Discord integration** — scheduled events, signup sync, channel announcements, attendance confirmation
 - **Organization event defaults** — pre-fill event config from org-level settings
-- **Repeater subscriptions** — users subscribe to get notified when new events are created
+- **Repeater subscriptions** — subscribers get a Discord DM reminder to sign up before each series event
 - **Waitlist** with automatic promotion when slots open
 - **Roll call** page for confirming player attendance before tournament start
 - **End time, Complete and host/helpers** for multi-day events, closing an event and crediting who ran it
@@ -151,11 +151,11 @@ Admin approve uses `POST /api/event-signups/{id}/approve/` with optional `{ "mmr
 
 ### Repeater Subscriptions
 
-Users can subscribe to event repeaters (mail icon on repeater cards). Two distinct notifications hang off a series, and they reach different audiences:
+Users can subscribe to event repeaters (mail icon on repeater cards). The mail icon is shown only while *Post new events* is on, so turning it off also hides the way to subscribe to the signup-reminder DMs. Two distinct notifications hang off a series, and they reach different audiences:
 
 | When | What is sent | Gated by |
 |---|---|---|
-| An event is created from the series | A **channel embed** announcing the new event | `EventRepeater.discord_notify_new_events`, then the event's `discord_announcement` **and** `discord_announcement_channel_id` |
+| An event is created from the series | A **channel embed** announcing the new event | `EventRepeater.discord_notify_new_events` (shown as *Post new events*) and the event's `discord_announcement_channel_id`; independent of the pre-day announcement toggle |
 | `discord_signup_reminder_hours` before the event | A **DM to each series subscriber** who hasn't signed up yet | `discord_signup_reminder` (series only); sent only while signups are open and the event has a Discord scheduled event |
 
 Subscribers without a linked Discord account get no DM, and a cancelled signup counts as not signed up.

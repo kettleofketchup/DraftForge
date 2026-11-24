@@ -1149,8 +1149,8 @@ def _send_new_event_notification_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
-    if not event.discord_announcement or not event.discord_announcement_channel_id:
-        return "Skipped: announcements disabled"
+    if not event.discord_announcement_channel_id:
+        return "Skipped: no announcement channel"
 
     embed = build_new_event_embed(event)
     # Lease-wrapped send: claims (new_event, event_id) before the HTTP POST, so a
