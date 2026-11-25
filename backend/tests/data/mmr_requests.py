@@ -1,6 +1,6 @@
 """MMR update request E2E test data.
 
-Used by frontend/tests/playwright/e2e/11-org-mmr/06-mmr-update-requests.spec.ts.
+Used by frontend/tests/playwright/e2e/org-mmr/mmr-update-requests.spec.ts.
 Created by tests.populate.mmr_requests.populate_mmr_requests_data.
 
 - Org / league 60 "MMR Requests Org" / "MMR Requests League" (steam league 17945).

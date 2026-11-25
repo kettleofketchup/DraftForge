@@ -21,8 +21,8 @@ npm run cypress:install
 ```
 tests/cypress/
 ├── e2e/                     # End-to-end tests
-│   ├── 00-hydration-handling.cy.ts # React hydration error handling
-│   ├── 01-navigation.cy.ts  # Navigation and basic functionality
+│   ├── hydration-handling.cy.ts # React hydration error handling
+│   ├── navigation.cy.ts  # Navigation and basic functionality
 │   ├── 01b-structure-accessibility.cy.ts # HTML structure and accessibility
 │   ├── 02-tournaments.cy.ts # Tournament features
 │   ├── 03-authentication.cy.ts # User auth and profile
@@ -99,7 +99,7 @@ python manage.py runserver
 
 ## Test Features
 
-### Hydration Handling Tests (`00-hydration-handling.cy.ts`)
+### Hydration Handling Tests (`hydration-handling.cy.ts`)
 
 - ✅ React hydration error suppression
 - ✅ Font loading compatibility
@@ -107,7 +107,7 @@ python manage.py runserver
 - ✅ Client-side navigation after hydration
 - ✅ Graceful handling of SSR mismatches
 
-### Navigation Tests (`01-navigation.cy.ts`)
+### Navigation Tests (`navigation.cy.ts`)
 
 - ✅ Home page loading
 - ✅ Navigation link functionality

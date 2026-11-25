@@ -5,12 +5,15 @@ Contains functions for creating bracket-related test scenarios:
 - populate_bracket_linking_scenario: Creates data for bracket match linking tests
 - populate_bracket_unset_winner_tournament: Creates data for unset winner E2E tests
 - populate_bracket_placement_single/_double: Pending 4-team brackets for placement E2E tests
+- populate_placement_reopen_conflict_tournament: Knocked-out team whose player joined a live team (#922)
 """
 
 import random
 from datetime import date, datetime
 from datetime import time as dt_time
 from datetime import timezone as dt_tz
+
+from django.db import transaction
 
 from app.models import CustomUser
 from league.models import League
@@ -21,8 +24,13 @@ from tests.data.tournaments import (
     BRACKET_PLACEMENT_DOUBLE_TOURNAMENT,
     BRACKET_PLACEMENT_SINGLE_TOURNAMENT,
     BRACKET_UNSET_WINNER_TOURNAMENT,
+    PLACEMENT_REOPEN_CONFLICT_TOURNAMENT,
 )
 from tournament.models import Game, Team, Tournament
+from tournament.services.bracket_placement import (
+    apply_bracket_placements,
+    tournament_bracket_placements,
+)
 from user.models import PositionsModel
 
 from .constants import BRACKET_STEAM_ID_BASE, BRACKET_USER_COUNT, DTX_STEAM_LEAGUE_ID
@@ -663,6 +671,61 @@ def populate_bracket_placement_double(force: bool = False) -> Tournament | None:
             loser_next_game=losers_r1,
             loser_next_game_slot="radiant" if position == 0 else "dire",
         )
+
+    _flush_redis_cache()
+    return tournament
+
+
+def populate_placement_reopen_conflict_tournament(
+    force: bool = False,
+) -> Tournament | None:
+    """4-team single elimination: B beat A (placement 3); A's second player also plays for live C."""
+    config = PLACEMENT_REOPEN_CONFLICT_TOURNAMENT
+    for team_config in config.teams:
+        for member in team_config.members:
+            CustomUser.objects.get_or_create(username=member.username)
+    created = _create_placement_tournament(config, force)
+    if created is None:
+        return Tournament.objects.filter(name=config.name).first()
+    tournament, (team_a, team_b, team_c, team_d) = created
+
+    def game(
+        round_: int, position: int, status: str = "pending", **kwargs: object
+    ) -> Game:
+        return Game.objects.create(
+            tournament=tournament,
+            bracket_type="winners",
+            elimination_type="single",
+            round=round_,
+            position=position,
+            status=status,
+            **kwargs,
+        )
+
+    with transaction.atomic():
+        before = tournament_bracket_placements(tournament.pk)
+        final = game(2, 0, radiant_team=team_b)
+        game(
+            1,
+            0,
+            radiant_team=team_a,
+            dire_team=team_b,
+            winning_team=team_b,
+            status="completed",
+            next_game=final,
+            next_game_slot="radiant",
+        )
+        game(
+            1,
+            1,
+            radiant_team=team_c,
+            dire_team=team_d,
+            next_game=final,
+            next_game_slot="dire",
+        )
+        apply_bracket_placements(tournament.pk, before)
+
+    team_c.members.add(team_a.members.get(username=config.teams[0].members[1].username))
 
     _flush_redis_cache()
     return tournament

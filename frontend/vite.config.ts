@@ -76,7 +76,7 @@ export default defineConfig({
     // EVERY dep. Requests already in flight for the old hash 504 with
     // "Outdated Optimize Dep", so the route chunk never loads and the page
     // renders the navbar and nothing else. CI hit exactly that in
-    // 15-edit-user/02 as a 30s timeout, with the frontend log showing
+    // edit-user/tournament-edit as a 30s timeout, with the frontend log showing
     // "new dependencies optimized: i18next / optimized dependencies changed.
     // reloading" and 504s on react-dom_client.js and react-router_dom.js.
     include: [

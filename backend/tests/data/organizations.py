@@ -74,7 +74,7 @@ EVENTS_ORG: TestOrganization = TestOrganization(
 )
 
 # Auth-matrix E2E tests — isolated org used by the role-context matrix
-# in frontend/tests/playwright/e2e/17-auth/. Keeping it separate from
+# in frontend/tests/playwright/e2e/auth/. Keeping it separate from
 # DTX means other suites can mutate DTX admins/staff without flapping
 # the auth matrix.
 AUTH_MATRIX_ORG: TestOrganization = TestOrganization(
