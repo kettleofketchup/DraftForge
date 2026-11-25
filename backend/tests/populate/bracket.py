@@ -15,7 +15,7 @@ from datetime import timezone as dt_tz
 
 from django.db import transaction
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from league.models import League
 from steam.models import Match, PlayerMatchStats
 from tests.data.models import TestTournament
@@ -31,6 +31,7 @@ from tournament.services.bracket_placement import (
     apply_bracket_placements,
     tournament_bracket_placements,
 )
+from user.models import PositionsModel
 
 from .constants import BRACKET_STEAM_ID_BASE, BRACKET_USER_COUNT, DTX_STEAM_LEAGUE_ID
 from .utils import _ensure_league_user, _ensure_org_user, _flush_redis_cache

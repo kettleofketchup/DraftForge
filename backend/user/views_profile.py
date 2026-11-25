@@ -8,10 +8,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 # Create your views here.
-from app.models import PositionsModel
 from events.eligibility import precheck_friend_id, validate_friend_id
 from steam.services.account_lookup import steam_account_exists
 from telemetry.logging import get_logger
+from user.models import PositionsModel
 from user.serializers import (
     PositionsSerializer,
     UserSerializer,

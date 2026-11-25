@@ -5,10 +5,11 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from steam.services.account_lookup import SteamLookupRateLimited
+from user.models import PositionsModel
 
 
 class PlayerDotaProfileTest(TestCase):

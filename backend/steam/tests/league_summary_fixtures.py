@@ -1,6 +1,7 @@
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from steam.functions.stats_update import player_won
 from steam.models import Match, PlayerMatchStats
+from user.models import PositionsModel
 
 
 def make_player(username: str, steamid: int | None) -> CustomUser:

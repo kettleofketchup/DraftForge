@@ -12,7 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import ActorRole, EventState, SignupMeans
 from events.ledger import SignupActor
 from events.models import Event, EventSignup, SignupLedgerEntry
@@ -34,6 +34,7 @@ from tests.data.signup_history import (
     SIGNUP_HISTORY_WITHDRAWER,
 )
 from tests.populate.utils import ensure_org_user
+from user.models import PositionsModel
 
 _MEMBER_MMR = 3000
 

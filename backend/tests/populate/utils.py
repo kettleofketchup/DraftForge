@@ -14,14 +14,16 @@ from cacheops.redis import redis_client as cacheops_redis
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from discordbot.services.users import get_discord_members_data
+from events.models import Event, EventSignup, SignupLedgerEntry
 from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_for, validate_org_mmr
 from org.models import Organization, OrgUser, OrgUserGameMmr, PromoSend
 from org.standing import api as standing
+from user.models import PositionsModel
 
 from .avatars import apply_committed_avatars
 from .constants import (
@@ -186,6 +188,19 @@ def ensure_org_user(
                 org_user=org_user, game_type=game_type
             ).delete()
     return org_user
+
+
+def delete_events(events: QuerySet[Event]) -> int:
+    """Delete events with their signup ledger rows, which a plain delete orphans."""
+    pks = list(events.values_list("pk", flat=True))
+    SignupLedgerEntry.objects.filter(event_id__in=pks).purge()
+    return Event.objects.nocache().filter(pk__in=pks).delete()[0]
+
+
+def delete_event_signups(event: Event) -> int:
+    """Delete an event's signups with its signup ledger rows."""
+    SignupLedgerEntry.objects.filter(event=event).purge()
+    return EventSignup.objects.nocache().filter(event=event).delete()[0]
 
 
 def delete_ledger_for_users(pks: Iterable[int]) -> None:

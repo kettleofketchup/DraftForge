@@ -5,7 +5,7 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from events.tests.actors import SYSTEM
 from league.models import League
 from org.contributions.kinds import ContributionKind
@@ -14,6 +14,7 @@ from org.views import ClaimRequestViewSet
 from steam.functions.league_summary import get_league_summary
 from steam.tests.league_summary_fixtures import make_player, record_series
 from tests.cache import flush_run_cache
+from user.models import ProfileClaimRequest
 
 STEAM_LEAGUE = 90001
 

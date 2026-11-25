@@ -5,7 +5,7 @@ import requests
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from org.models import (
     AttendanceOutcome,
     ContributionEntry,
@@ -19,6 +19,7 @@ from user.management.prod_payload import (
     position_values,
     steam_account_id,
 )
+from user.models import PositionsModel
 
 log = get_logger(__name__)
 
