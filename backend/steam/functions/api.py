@@ -92,7 +92,6 @@ def relink_users(request: Request) -> Response:
     match_ids = serializer.validated_data.get("match_ids", [])
 
     if match_ids:
-        # Relink specific matches
         linked_count = 0
         for match_id in match_ids:
             stats = PlayerMatchStats.objects.filter(
@@ -103,7 +102,6 @@ def relink_users(request: Request) -> Response:
                     linked_count += 1
         result = {"linked_count": linked_count}
     else:
-        # Relink all
         linked_count = relink_all_users()
         result = {"linked_count": linked_count}
 
@@ -303,14 +301,12 @@ def link_game_match(request: Request, game_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check permission
     if not can_manage_game(request.user, game):
         return Response(
             {"error": "You do not have permission to link matches for this game"},
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Verify match exists
     if not Match.objects.filter(match_id=match_id).exists():
         return Response(
             {"error": "Match not found"},
@@ -320,7 +316,6 @@ def link_game_match(request: Request, game_id: int) -> Response:
     game.gameid = match_id
     game.save()
 
-    # Invalidate cache for game and tournament
     invalidate_obj(game)
     if game.tournament:
         invalidate_obj(game.tournament)
@@ -345,7 +340,6 @@ def unlink_game_match(request: Request, game_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check permission
     if not can_manage_game(request.user, game):
         return Response(
             {"error": "You do not have permission to unlink matches for this game"},
@@ -391,7 +385,6 @@ def auto_assign_matches(request: Request) -> Response:
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check permission
     try:
         tournament = Tournament.objects.select_related("league").get(pk=tournament_id)
     except Tournament.DoesNotExist:

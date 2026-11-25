@@ -36,7 +36,6 @@ export function useBracketQuery(tournamentId: number | null) {
     refetchInterval: isDirty ? false : 5_000,
   });
 
-  // Seed Zustand store from query data
   useEffect(() => {
     if (!query.data) return;
 
@@ -75,7 +74,6 @@ export function useBracketQuery(tournamentId: number | null) {
       return;
     }
 
-    // Map API matches to frontend format
     const mappedMatches = apiMatches.map((m) =>
       mapApiMatchToMatch(m, apiMatches),
     );
@@ -165,7 +163,6 @@ export function useSaveBracket(tournamentId: number) {
         isDirty: false,
         isVirtual: false,
       });
-      // Invalidate to ensure cache is fresh
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
       log.info('bracket_saved', {
         tournamentId,

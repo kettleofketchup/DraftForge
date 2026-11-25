@@ -65,7 +65,6 @@ def create_team_from_captain(request: Request) -> Response:
     except CustomUser.DoesNotExist:
         return Response({"error": "User not found"}, status=404)
 
-    # Check tournament staff permission
     if not can_edit_tournament(request.user, tournament):
         return Response(
             {"error": "You do not have permission to create teams in this tournament"},
@@ -114,7 +113,6 @@ def create_team_from_captain(request: Request) -> Response:
     )
     team.members.add(user)
 
-    # Invalidate specific tournament after team creation
     invalidate_obj(tournament)
     invalidate_obj(team)
     tournament_changed_on_commit(tournament.pk, "team", team_id=team.pk)

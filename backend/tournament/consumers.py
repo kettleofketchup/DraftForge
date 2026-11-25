@@ -19,17 +19,14 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         self.tournament_id = self.scope["url_route"]["kwargs"]["tournament_id"]
         self.room_group_name = f"tournament_{self.tournament_id}"
 
-        # Validate tournament exists
         tournament_exists = await self.tournament_exists(self.tournament_id)
         if not tournament_exists:
             await self.close()
             return
 
-        # Join tournament group
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        # Send recent events on connect
         recent_events = await self.get_recent_events(self.tournament_id)
         await self.send(
             text_data=json.dumps(

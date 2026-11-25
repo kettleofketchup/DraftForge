@@ -125,7 +125,6 @@ def _resolve_user_for_csv_row(
     if steam_err:
         return None, False, steam_err, None
 
-    # Clean discord_id (strip whitespace, treat empty as None)
     discord_id = str(discord_id_str).strip() if discord_id_str else None
     if discord_id == "" or discord_id == "None":
         discord_id = None
@@ -658,7 +657,6 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
         if resync_snapshots and user.pk not in snapshotted:
             new_snapshots.add(user.pk)
 
-        # Handle team assignment
         team_name = (row.get("team_name") or "").strip()
         team_captain = bool(row.get("team_captain"))
         if team_name:

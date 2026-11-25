@@ -259,18 +259,15 @@ def handle_tournament_user_addition(
     tournament = instance
     added_pks = pk_set
 
-    # Skip if tournament has no league
     if not tournament.league:
         return
 
     league = tournament.league
     org = league.organization
 
-    # Skip if league has no organization
     if not org:
         return
 
-    # Get the users that were added
     added_users = CustomUser.objects.filter(pk__in=added_pks)
     seeded = set(
         LeagueUser.objects.filter(league=league, user_id__in=added_pks).values_list(
