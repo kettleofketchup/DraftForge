@@ -2,13 +2,13 @@
 User Edit test data population.
 
 Creates an isolated organization, league, and tournament for user edit testing.
-Also creates 3 test users that are members of the org, league, and tournament.
+Also creates the USER_EDIT_USERS that are members of the org, league, and tournament.
 
 Infrastructure created:
 - User Edit Org (pk=5) - dedicated org for user edit tests
 - User Edit League (pk=5, steam_league_id=17933) - under User Edit org
-- User Edit Tournament - under User Edit league, with 3 users
-- 12 edit test users (pk=2050-2061) - members of the org/league/tournament
+- User Edit Tournament - under User Edit league, with every edit test user
+- 13 edit test users (pk=2050-2062) - members of the org/league/tournament
 """
 
 from django.utils import timezone

@@ -474,7 +474,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
-# User Edit Test Users (pk=2050-2061)
+# User Edit Test Users (pk=2050-2062)
 # Members of the User Edit Org / League / Tournament.
 #
 # Every spec file owns its users: files run in parallel, so two files
@@ -494,6 +494,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
 # 2059 | edit_user_tourn_mmr       | 12-tournament-mmr-edit
 # 2060 | edit_user_multi           | 07-sequential-multi-user (user A)
 # 2061 | edit_user_scope           | 09-scope-permissions
+# 2062 | edit_user_dota_positions  | 11-dota-tab-positions
 # =============================================================================
 
 USER_EDIT_USERS: list[TestUser] = [
@@ -592,6 +593,14 @@ USER_EDIT_USERS: list[TestUser] = [
         discord_id="400000000000000012",
         steam_id_64=76561198900000102,
         mmr=3800,
+    ),
+    TestUser(
+        pk=2062,
+        username="edit_user_dota_positions",
+        nickname="Edit Dota Positions",
+        discord_id="400000000000000013",
+        steam_id_64=76561198900000103,
+        mmr=3900,
     ),
 ]
 
