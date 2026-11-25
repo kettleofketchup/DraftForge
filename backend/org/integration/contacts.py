@@ -588,10 +588,13 @@ def import_contact_receipts(org: Organization, payload: Any) -> dict[str, Any]:
     lock_ids = _lock_set(batch, events, [*retained.values(), *candidates])
 
     def lock_org() -> None:
-        # Serializes with rescoring, which locks the same row first.
+        # Serializes with rescoring, which locks the same row first. NO KEY
+        # UPDATE, so a send holding an event lock can still insert rows that
+        # reference the org (their foreign-key check takes KEY SHARE);
+        # FOR UPDATE would deadlock against it.
         list(
             Organization.objects.nocache()
-            .select_for_update()
+            .select_for_update(no_key=True)
             .filter(pk=org.pk)
             .values_list("pk", flat=True)
         )

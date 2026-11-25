@@ -2,7 +2,10 @@
 
 A merge into the account that owns the receipt's Discord ID keeps the tick.
 A merge or relink that would hand the receipt to a different Discord owner
-quarantines it instead: the evidence stays, the tick goes. A merge also
+quarantines it instead: the evidence stays and no account is linked. A
+quarantined non-holder never ticks; a quarantined receipt that holds the
+(event, player) point still ticks the row with its Discord ID, because the
+external point belongs to that Discord ID. A merge also
 moves the dropped account's open outbox rows to the kept account, so the
 dropped account's delete cannot cancel a DM still owed to the external
 contact log. Deleting an
@@ -74,7 +77,7 @@ class MergeTests(_ImportBase):
         self.assertIsNone(stored.user_id)
         self.assertEqual(stored.discord_id, discord_id)
         self.assertFalse(self.ticked(keep.discordId, keep))
-        self.assertFalse(self.ticked(discord_id, None))
+        self.assertTrue(self.ticked(discord_id, None))
 
     def test_reconcile_leaves_other_users_receipts_alone(self) -> None:
         self.imported(
@@ -184,7 +187,7 @@ class MergeTests(_ImportBase):
         self.assertEqual(row.recipient_user_id, drop.pk)
         self.assertEqual(row.state, OutboxState.APPLIED)
 
-    def test_relink_to_new_owner_does_not_transfer_tick(self) -> None:
+    def test_relink_to_new_owner_does_not_transfer_the_link(self) -> None:
         old_owner = self.non_member_player("relink_old")
         discord_id = old_owner.discordId
         self.imported([self.entry(8021, old_owner)])
@@ -194,7 +197,7 @@ class MergeTests(_ImportBase):
         new_owner = CustomUser.objects.create_user(
             username="relink_new", password="x", discordId=discord_id
         )
-        self.assertFalse(self.ticked(discord_id, new_owner))
+        self.assertTrue(self.ticked(discord_id, new_owner))
         body = self.imported([self.entry(8021, new_owner)])
         self.assertEqual(self.statuses(body), ["quarantined"])
         stored = self.receipt(8021)
@@ -224,7 +227,7 @@ class DeletionTests(_ImportBase):
         self.assertEqual(stored.association_reason, AssociationReason.ACCOUNT_DELETED)
         self.assertIsNone(stored.user_id)
         self.assertIsNone(stored.org_user_id)
-        self.assertFalse(self.ticked(discord_id, None))
+        self.assertTrue(self.ticked(discord_id, None))
 
         users, org_users = CustomUser.objects.count(), OrgUser.objects.count()
         body = self.imported([self.entry(8021, discord_id)])
@@ -257,12 +260,12 @@ class DeletionTests(_ImportBase):
         self.assertEqual(stored.association_reason, AssociationReason.ACCOUNT_DELETED)
         self.assertIsNone(stored.user_id)
 
-        # A later account that owns the same Discord ID gets no tick, and a
-        # replay naming it cannot turn the receipt back into a link.
+        # A later account that owns the same Discord ID is ticked by the held
+        # point, but a replay naming it cannot turn the receipt into a link.
         heir = self._user("model_heir")
         heir.discordId = discord_id
         heir.save()
-        self.assertFalse(self.ticked(discord_id, heir))
+        self.assertTrue(self.ticked(discord_id, heir))
         body = self.imported([self.entry(8021, heir)])
         self.assertEqual(self.statuses(body), ["quarantined"])
 

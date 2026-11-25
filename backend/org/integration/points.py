@@ -20,7 +20,9 @@ the local points it had voided.
 
 Everything here runs inside the import's locks (the org row, then each
 touched event in ascending order), so it does no locking of its own beyond
-``select_for_update`` on a ledger entry before reading its points.
+``select_for_update`` on a ledger entry before reading its points. The one
+exception is ``settle_after_merge``, called by an account merge, which takes
+the event locks itself.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from django.utils import timezone
 from app.models import CustomUser
 from events.models import Event
 from org.contributions.kinds import ContributionKind
+from org.integration.event_lock import with_event_mutations
 from org.models import ContributionEntry, OrgLog, OrgUser, PromoSend
 from org.models_promotion_sync import (
     ContactReason,
@@ -54,9 +57,11 @@ log = get_logger(__name__)
 __all__ = [
     "PointOutcome",
     "external_point_held",
+    "external_point_held_for",
     "resettle_key",
     "retract",
     "settle",
+    "settle_after_merge",
     "supersede",
     "unsettle",
     "void_local",
@@ -524,19 +529,116 @@ def _restore_local(
 def external_point_held(event: Event, recipient: CustomUser) -> bool:
     """Whether an imported contact holds the point for this recipient.
 
-    Checks the recipient's current Discord ID and the send-time Discord IDs
-    of their sends for the event, so a recipient who relinked Discord after
-    a void is still covered. Any association state counts.
+    True when a receipt in any association state holds the point for the
+    recipient's current Discord ID or a send-time Discord ID of their sends
+    for the event, or when one of those sends has its entry voided by a
+    receipt that still holds the point (a merge can bring that send to an
+    account with another Discord ID). This is the one predicate behind
+    "may send", "will earn" and the tick.
     """
-    discord_ids = set(
-        PromoSend.objects.filter(event=event, recipient=recipient)
+    return external_point_held_for(event.pk, recipient.pk)
+
+
+def external_point_held_for(event_id: int, recipient_id: int) -> bool:
+    """``external_point_held`` by ids, in one query."""
+    snapshots = (
+        PromoSend.objects.filter(event_id=event_id, recipient_id=recipient_id)
         .exclude(recipient_discord_id="")
-        .values_list("recipient_discord_id", flat=True)
+        .values("recipient_discord_id")
     )
-    if recipient.discordId:
-        discord_ids.add(recipient.discordId)
-    if not discord_ids:
-        return False
-    return ExternalPromotionReceipt.objects.filter(
-        event=event, discord_id__in=discord_ids, holds_point=True
-    ).exists()
+    current = (
+        CustomUser.objects.filter(pk=recipient_id)
+        .exclude(discordId__isnull=True)
+        .exclude(discordId="")
+        .values("discordId")
+    )
+    voiders = ContributionEntry.objects.filter(
+        kind=ContributionKind.PROMO_VOID.value,
+        reversal_of__voided=True,
+        reversal_of__promo_send__event_id=event_id,
+        reversal_of__promo_send__recipient_id=recipient_id,
+        external_contact__isnull=False,
+    ).values("external_contact_id")
+    return (
+        ExternalPromotionReceipt.objects.filter(event_id=event_id, holds_point=True)
+        .filter(
+            Q(discord_id__in=snapshots) | Q(discord_id__in=current) | Q(pk__in=voiders)
+        )
+        .exists()
+    )
+
+
+def settle_after_merge(keep: CustomUser, discord_ids: set[str]) -> int:
+    """Void ``keep``'s earning sends on points an imported contact holds.
+
+    Runs inside the merge transaction once the sends have moved to
+    ``keep``. ``discord_ids`` are both accounts' Discord IDs, read before
+    the merge. For every event where a receipt with one of them holds the
+    point and ``keep`` has an earning send, the send stops earning and its
+    entry is voided as ``void_local`` does, under the event locks in
+    ascending order. Returns the number of entries voided.
+    """
+    ids = {d for d in discord_ids if d}
+    if not ids:
+        return 0
+    held = set(
+        ExternalPromotionReceipt.objects.filter(
+            discord_id__in=ids, holds_point=True, event__isnull=False
+        ).values_list("event_id", flat=True)
+    )
+    if not held:
+        return 0
+    earning = set(
+        PromoSend.objects.filter(
+            recipient=keep, earns_points=True, event_id__in=held
+        ).values_list("event_id", flat=True)
+    )
+    if not earning:
+        return 0
+
+    def locked() -> int:
+        voided = 0
+        for event_id in sorted(earning):
+            holder = (
+                ExternalPromotionReceipt.objects.filter(
+                    event_id=event_id, discord_id__in=ids, holds_point=True
+                )
+                .order_by("source_contact_id")
+                .first()
+            )
+            if holder is None:
+                continue
+            sends = (
+                PromoSend.objects.filter(
+                    event_id=event_id, recipient=keep, earns_points=True
+                )
+                .select_related("sender")
+                .order_by("pk")
+            )
+            for send in sends:
+                send.earns_points = False
+                send.save(update_fields=["earns_points"])
+                entry = _locked_entry(promo_send=send)
+                if entry is None or entry.voided:
+                    continue
+                _void(
+                    entry,
+                    holder,
+                    reason=VOID_LOCAL_REASON,
+                    target=send.sender,
+                    send_id=send.pk,
+                )
+                voided += 1
+        return voided
+
+    voided = with_event_mutations(sorted(earning), locked)
+    if voided:
+        log.info(
+            "promo_points_settled_after_merge",
+            system="org",
+            subsystem="integration",
+            keep_user_id=keep.pk,
+            events=len(earning),
+            voided=voided,
+        )
+    return voided

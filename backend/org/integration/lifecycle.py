@@ -9,7 +9,10 @@ moves, and only to the account that owns that Discord ID:
   folded into ``keep``. Receipts linked to ``drop`` move to ``keep`` when
   ``keep`` owns their Discord ID (with ``keep``'s membership in that org);
   otherwise they are quarantined, unlinked, so the generic merge cannot
-  hand the tick to a different Discord owner. Outbox rows that are not yet
+  hand them to a different Discord owner (a quarantined non-holder never
+  ticks; a point holder keeps ticking its own Discord ID). The merge then
+  calls ``points.settle_after_merge`` once the sends have moved, so an
+  earning send that now meets an external point holder is voided. Outbox rows that are not yet
   applied or canceled and name ``drop`` as sender or recipient are pointed at
   ``keep``, following the sends the merge moves, so the delete hook that
   runs for ``drop`` finds nothing of the merged account's to cancel. Their
@@ -24,8 +27,9 @@ moves, and only to the account that owns that Discord ID:
 - ``cancel_or_redact_promotion_identity(user)`` runs before an account is
   deleted, from a ``pre_delete`` receiver in ``org.signals`` so no delete
   path can skip it. Its receipts are quarantined as ``account_deleted`` and
-  unlinked, so a later replay of the same external contact neither ticks a new
-  owner nor recreates anything. Its open outbox rows (pending, retry,
+  unlinked, so a later replay of the same external contact neither links a
+  new owner nor recreates anything. A receipt holding the point keeps
+  ``holds_point``: the external point still belongs to its Discord ID. Its open outbox rows (pending, retry,
   paused, reconciliation_required and in_flight) are canceled and their
   leases dropped, so a dispatcher's late answer for an in-flight row finds no
   lease to finalize and cannot bring the row back. A request already on the

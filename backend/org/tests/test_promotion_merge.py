@@ -19,7 +19,9 @@ from org.models import (
     PromoSend,
     PromoTemplate,
 )
+from org.models_promotion_sync import ExternalPromotionReceipt
 from org.promotion.services import demote_colliding_earning_sends
+from org.tests.test_promotion_ledger import _LedgerBase
 from user.discord_accounts import merge_discord_accounts
 from user.models import ProfileClaimRequest
 
@@ -235,3 +237,65 @@ class SyncProdUsersPromotionTest(_PromoMergeFixture):
 
         self.assertFalse(PromoSend.objects.exists())
         self.assertFalse(CustomUser.objects.exists())
+
+
+class ExternalHolderMergeTest(_LedgerBase):
+    """A merge that brings an external point holder and an earning local send
+    for the same event together leaves one live point: the external one."""
+
+    def _assert_one_live_point(self, send: PromoSend) -> None:
+        send.refresh_from_db()
+        self.assertFalse(send.earns_points)
+        entry = self.entry_for(send)
+        self.assertTrue(entry.voided)
+        [void] = self.reversals(entry, ContributionKind.PROMO_VOID)
+        self.assertEqual(void.points, -entry.points)
+        self.assertTrue(
+            ExternalPromotionReceipt.objects.filter(
+                source_contact_id=8021, holds_point=True
+            ).exists()
+        )
+        live = (
+            ContributionEntry.objects.nocache()
+            .filter(organization=self.org, event=self.event)
+            .aggregate(total=Sum("points"))["total"]
+        )
+        self.assertEqual(live, 0)
+
+    def test_merge_drop_holder_keep_earning_send_one_live_point(self) -> None:
+        drop = self.non_member_player("ext_drop")
+        keep = self.non_member_player("ext_keep")
+        self.imported([self.entry(8021, drop)])
+        send = self.send(keep)
+        self.assertTrue(send.earns_points)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self._assert_one_live_point(send)
+
+    def test_claim_request_holder_and_earning_send_one_live_point(self) -> None:
+        claimer = self.non_member_player("ext_claimer")
+        OrgUser.objects.create(user=claimer, organization=self.org)
+        target = CustomUser.objects.create_user(username="ext_target", password="x")
+        OrgUser.objects.create(user=target, organization=self.org)
+        self.imported([self.entry(8021, claimer)])
+        send = self.raw_send(target)
+        self.assertEqual(send.recipient_discord_id, "")
+        claim = ProfileClaimRequest.objects.create(
+            claimer=claimer,
+            target_user=target,
+            organization=self.org,
+            status=ProfileClaimRequest.Status.PENDING,
+        )
+        admin = CustomUser.objects.create_superuser(
+            username="ext_claim_admin", password="x"
+        )
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.post(f"/api/claim-requests/{claim.pk}/approve/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        send.refresh_from_db()
+        self.assertEqual(send.recipient_id, claimer.pk)
+        self._assert_one_live_point(send)

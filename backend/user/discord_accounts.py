@@ -36,6 +36,7 @@ from org.accounts import (
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.integration import points as promotion_points
 from org.integration.lifecycle import reconcile_promotion_identity
 from org.mmr import merge_org_mmrs
 from org.mmr_requests.services import repoint_mmr_requests
@@ -174,6 +175,9 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     }
     game_snapshot = _snapshot_game_profiles(drop)
     dropped_steam_account_id = drop.steam_account_id
+    # Both Discord IDs, before the merge rewrites either account, for the
+    # promotion points settled once the sends have moved.
+    merged_discord_ids = {keep.discordId or "", drop.discordId or ""}
 
     # All-or-nothing: a failure mid-loop must not leave a half-merged state
     # (some relations moved, both accounts still alive). (select_for_update is
@@ -241,6 +245,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                 _repoint(obj, field_name)
 
         dedupe_host_helpers(keep)
+        promotion_points.settle_after_merge(keep, merged_discord_ids)
 
         # Purge keep's reverse-relation caches before reading/writing through
         # them in the carryover loop. The related-objects loop above poisoned

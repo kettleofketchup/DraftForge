@@ -1,11 +1,14 @@
 """Which promotion candidates an imported external contact ticks.
 
-A non-quarantined invitation receipt for the event and a Discord ID ticks
-the candidate row with that Discord ID, unless the receipt is linked to a
-different account than the row's. Echoes of our own sends and contacts
-retracted at the source never tick. So a Discord-only guild row ticks before and after
-the person gets an account, and a Discord ID that moved to another account
-does not carry its old contacts across.
+An invitation receipt for the event that holds the (event, player) point
+ticks the candidate row with its Discord ID, in any association state: the
+external point belongs to that Discord ID, and the send guard refuses the
+same row, so the tick and the 409 always agree. A receipt that does not hold
+the point (a duplicate) ticks only when it is not quarantined, and not a
+row linked to a different account than its own. Echoes of our own sends and
+contacts retracted at the source never tick. So a Discord-only guild row
+ticks before and after the person gets an account, and a quarantined
+non-holder never ticks.
 
 Kept apart from ``contacts`` (the import) so the promoter candidate code can
 use it without importing the import path.
@@ -33,7 +36,9 @@ def suppressing_receipts(event_id: int) -> QuerySet[ExternalPromotionReceipt]:
             event_id=event_id, contact_reason=ContactReason.EVENT_INVITE
         )
         .exclude(point_status__in=[PointStatus.ECHO, PointStatus.RETRACTED])
-        .exclude(association_state=AssociationState.QUARANTINED)
+        .filter(
+            Q(holds_point=True) | ~Q(association_state=AssociationState.QUARANTINED)
+        )
     )
 
 
@@ -42,7 +47,7 @@ def external_contact_exists(event_id: int) -> Exists:
     return Exists(
         suppressing_receipts(event_id)
         .filter(discord_id=OuterRef("discordId"))
-        .filter(Q(user__isnull=True) | Q(user=OuterRef("pk")))
+        .filter(Q(holds_point=True) | Q(user__isnull=True) | Q(user=OuterRef("pk")))
     )
 
 
@@ -74,7 +79,7 @@ def external_contacts(
             (
                 r
                 for r in by_discord.get(discord_id, [])
-                if r.user_id is None or r.user_id == user_id
+                if r.holds_point or r.user_id is None or r.user_id == user_id
             ),
             None,
         )
