@@ -2,7 +2,7 @@
  * Captain takeover from an eliminated team.
  *
  * Uses the `captain_takeover` tournament (the team management fixture under its
- * own name, so it never races 06-team-management on a second worker):
+ * own name, so it never races team-management on a second worker):
  * - TM Alpha: 5 members, captain alpha_1
  * - TM Bravo: 5 members (captain bravo_1) plus stand-in bravo_standin
  * - TM Delta: 5 members, captain delta_1, placement 4 (eliminated)

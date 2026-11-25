@@ -31,7 +31,7 @@ import { API_URL } from '../../fixtures/base-url';
 const USER_EDIT_ORG_NAME = 'User Edit Org';
 // Dedicated user for this spec — see USER_EDIT_USERS in
 // backend/tests/data/users.py. Looked up by username so parallel specs
-// in 15-edit-user/ don't race on the same record.
+// in edit-user/ don't race on the same record.
 const TARGET_USERNAME = 'edit_user_cache';
 let orgPk: number;
 let targetUserPk: number;

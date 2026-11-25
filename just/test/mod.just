@@ -186,7 +186,7 @@ slot-reap *args:
 background state:
     {{slots_py}} background "$1"
 
-# The simulated dota_lobby for the 22-dota-lobby specs: just test::dota-lobby [up|down|restart|logs|ps]
+# The simulated dota_lobby for the dota-lobby specs: just test::dota-lobby [up|down|restart|logs|ps]
 [group('test')]
 dota-lobby action="up":
     #!/usr/bin/env bash

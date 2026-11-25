@@ -37,7 +37,7 @@ The E2E suite now runs on Playwright; these are the just recipes (no venv activa
 just test::pw::headless
 
 # Run specific category
-just test::pw::draft       # Draft tests (07-draft, 08-shuffle-draft)
+just test::pw::draft       # Draft tests (draft, shuffle-draft)
 just test::pw::tournament  # Tournament tests (03, 04)
 just test::pw::bracket     # Bracket tests (09)
 just test::pw::league      # League tests (10)
@@ -142,14 +142,14 @@ Ask these questions:
 | Category | Directory | What It Tests |
 |----------|-----------|---------------|
 | Navigation | `00-01` | React hydration, routing |
-| Tournaments List | `03-tournaments` | Tournament list page |
-| Tournament Detail | `04-tournament` | Single tournament view |
-| Match Stats | `05-match-stats` | Stats modal |
+| Tournaments List | `tournaments` | Tournament list page |
+| Tournament Detail | `tournament` | Single tournament view |
+| Match Stats | `match-stats` | Stats modal |
 | Mobile | `06-mobile` | Responsive behavior |
-| Captain Draft | `07-draft` | Captain pick flow |
-| Shuffle Draft | `08-shuffle-draft` | Shuffle draft flow |
-| Bracket | `09-bracket` | Bracket display/linking |
-| Leagues | `10-leagues` | League pages |
+| Captain Draft | `draft` | Captain pick flow |
+| Shuffle Draft | `shuffle-draft` | Shuffle draft flow |
+| Bracket | `bracket` | Bracket display/linking |
+| Leagues | `leagues` | League pages |
 
 ## Test Data Dependencies
 

@@ -11,11 +11,15 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
+import { parseBracketError } from '~/lib/bracketError';
+import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import type { BracketMatch } from '../types';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { SteamMatchCard, type MatchSuggestion } from './SteamMatchCard';
+
+const log = getLogger('bracket:steam-link');
 
 interface LinkSteamMatchModalProps {
   isOpen: boolean;
@@ -112,7 +116,14 @@ export function LinkSteamMatchModal({
       toast.success(`Linked to Match #${matchId}`);
       onClose();
     } catch (error) {
-      console.error('Failed to link match:', error);
+      const { message, code, details } = parseBracketError(error);
+      log.error('bracket_link_failed', {
+        gameId: game.gameId,
+        matchId,
+        message,
+        code,
+        details,
+      });
       toast.error('Failed to link match. Are you logged in as staff?');
     }
   };
@@ -127,8 +138,18 @@ export function LinkSteamMatchModal({
       onLinkUpdated();
       toast.success('Match unlinked');
     } catch (error) {
-      console.error('Failed to unlink match:', error);
-      toast.error('Failed to unlink match. Are you logged in as staff?');
+      const { message, code, details } = parseBracketError(error);
+      log.error('bracket_unlink_failed', {
+        gameId: game.gameId,
+        message,
+        code,
+        details,
+      });
+      if (code === 'roster_conflict') {
+        toast.error(`Failed to unlink match: ${message}`);
+      } else {
+        toast.error('Failed to unlink match. Are you logged in as staff?');
+      }
     }
   };
 

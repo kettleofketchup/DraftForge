@@ -112,7 +112,7 @@ services:
       - test-network
 
   # dota_lobby in simulation mode: no Steam logon, simulated bots, players and
-  # matches (docker/dota-lobby/simulator.yaml). Only for the 22-dota-lobby
+  # matches (docker/dota-lobby/simulator.yaml). Only for the dota-lobby
   # Playwright specs, so it is behind a profile: start it with
   # `just test::dota-lobby up` or COMPOSE_PROFILES=dota-lobby. The image is
   # the GHCR release pinned by DOTA_LOBBY_IMAGE_TAG (0.2.0, the first with
