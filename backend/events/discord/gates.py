@@ -97,6 +97,14 @@ def signup_post_destination(event: "EmbedEvent") -> Destination | None:
     )
 
 
+def signup_post_channel(discord_state: "DiscordEventStateSchema") -> str | None:
+    if discord_state.signup_channel_type == "forum":
+        return discord_state.signup_thread_id or discord_state.signup_channel_id
+    if discord_state.signup_channel_type == "text":
+        return discord_state.signup_channel_id
+    return discord_state.signup_thread_id or discord_state.signup_channel_id
+
+
 SIGNUPS_OPEN_ONLY: frozenset[str] = frozenset({EventState.SIGNUPS_OPEN})
 
 

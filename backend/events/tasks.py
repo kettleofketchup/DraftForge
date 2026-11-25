@@ -68,6 +68,7 @@ from events.discord.gates import (
     profile_reminder_gate,
     scheduled_event_gate,
     scheduled_event_sync_gate,
+    signup_post_channel,
     signup_post_gate,
     signup_reminder_gate,
     start_mention_gate,
@@ -1028,17 +1029,14 @@ def _resolve_signup_edit_channel(
                 signup_channel_id=discord_state.signup_channel_id,
                 **fields,
             )
-            return discord_state.signup_channel_id
-        return discord_state.signup_thread_id
-    if channel_type == "text":
-        return discord_state.signup_channel_id
-    log.warning(
-        "legacy_channel_type",
-        signup_message_id=discord_state.signup_message_id,
-        has_thread_id=bool(discord_state.signup_thread_id),
-        **fields,
-    )
-    return discord_state.signup_thread_id or discord_state.signup_channel_id
+    elif channel_type != "text":
+        log.warning(
+            "legacy_channel_type",
+            signup_message_id=discord_state.signup_message_id,
+            has_thread_id=bool(discord_state.signup_thread_id),
+            **fields,
+        )
+    return signup_post_channel(discord_state)
 
 
 def _log_signup_post_edit_applied(

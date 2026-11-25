@@ -90,3 +90,14 @@ def message_log_exists(source: str, source_id: int | str) -> bool:
         .filter(Q(success__isnull=True) | Q(success=True))
         .exists()
     )
+
+
+def latest_message_log_discord_id(source: str, source_id: int | str) -> str | None:
+    return (
+        DiscordMessageLog.objects.filter(
+            source=source, source_id=source_id, success=True
+        )
+        .order_by("-created_at")
+        .values_list("discord_message_id", flat=True)
+        .first()
+    )
