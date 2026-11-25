@@ -1844,6 +1844,22 @@ def create_off_schedule_event(
     return event
 
 
+SERIES_SHARED_FIELDS: tuple[str, ...] = ("name", "description")
+SERIES_CASCADE_CONFIG_FIELDS = [
+    f for f in EVENT_CONFIG_FIELDS if f not in SIGNUP_OPEN_POLICY_FIELDS
+]
+
+
+def apply_repeater_config_to_event(repeater: EventRepeater, event: Event) -> None:
+    """Copy the series config every cascade copies; the policy and password stay out."""
+    for field_name in SERIES_SHARED_FIELDS:
+        setattr(event, field_name, getattr(repeater, field_name))
+    _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
+    _copy_mixin_fields(repeater, event, SERIES_CASCADE_CONFIG_FIELDS)
+    _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+    _copy_mixin_fields(repeater, event, DOTA_LOBBY_CONFIG_FIELDS)
+
+
 @transaction.atomic
 def sync_future_events(
     repeater: EventRepeater,
@@ -1924,14 +1940,10 @@ def sync_future_events(
         .exclude(is_off_schedule=True)
         .select_related("tournament")
     )
-    shared_fields = ["name", "description"]
-    config_fields = [
-        f for f in EVENT_CONFIG_FIELDS if f not in SIGNUP_OPEN_POLICY_FIELDS
-    ]
     update_fields = (
-        shared_fields
+        list(SERIES_SHARED_FIELDS)
         + TOURNAMENT_TEMPLATE_FIELDS
-        + config_fields
+        + SERIES_CASCADE_CONFIG_FIELDS
         + DISCORD_CONFIG_FIELDS
         + DOTA_LOBBY_CONFIG_FIELDS
         + ["dota_lobby_password"]
@@ -1945,12 +1957,7 @@ def sync_future_events(
         previous_password = event.dota_lobby_password
         previous_mode = event.dota_lobby_password_mode
         previous_draft_options = event_draft_option_values(event)
-        for field_name in shared_fields:
-            setattr(event, field_name, getattr(repeater, field_name))
-        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
-        _copy_mixin_fields(repeater, event, config_fields)
-        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
-        _copy_mixin_fields(repeater, event, DOTA_LOBBY_CONFIG_FIELDS)
+        apply_repeater_config_to_event(repeater, event)
         event.dota_lobby_password = series_lobby_password(
             repeater, previous_mode, previous_password
         )
