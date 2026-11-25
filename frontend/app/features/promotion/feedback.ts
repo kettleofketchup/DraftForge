@@ -1,11 +1,9 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { extractApiError } from '~/lib/apiError';
-import type { getLogger } from '~/lib/logger';
 import {
   formatDiscordTimestamps,
   type DiscordPreviewOptions,
-} from './discordPreview';
+} from '~/components/discord/timestamps';
+import { extractApiError } from '~/lib/apiError';
+import type { getLogger } from '~/lib/logger';
 
 export function reportPromoError(
   log: ReturnType<typeof getLogger>,
@@ -19,13 +17,6 @@ export function reportPromoError(
   if (status != null && status >= 400 && status < 500) log.warn(event, payload);
   else log.error(event, payload);
   return message;
-}
-
-export function usePreviewOptions(): DiscordPreviewOptions {
-  const { i18n } = useTranslation();
-  const locale = i18n?.resolvedLanguage ?? 'en';
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return useMemo(() => ({ locale, timeZone }), [locale, timeZone]);
 }
 
 export function relativeFromIso(

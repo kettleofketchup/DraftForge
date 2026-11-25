@@ -1,6 +1,6 @@
+export { formatDiscordTimestamps } from '~/components/discord/timestamps';
 export { CandidateList } from './CandidateList';
 export { ComposePanel } from './ComposePanel';
-export { formatDiscordTimestamps } from './discordPreview';
 export { PromoteEventButton, canPromoteEvent } from './PromoteEventButton';
 export {
   DEFAULT_PROMOTION_COLUMNS,

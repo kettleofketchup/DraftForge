@@ -1,4 +1,5 @@
 import { Copy, MessageSquare, NotebookPen, Undo2 } from 'lucide-react';
+import type { DiscordPreviewOptions } from '~/components/discord/timestamps';
 import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
 import {
@@ -9,7 +10,6 @@ import {
 } from '~/components/ui/data-table';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import type { DiscordPreviewOptions } from './discordPreview';
 import { relativeFromIso } from './feedback';
 import { isLinked, type CandidateRow, type CandidateSource } from './schemas';
 

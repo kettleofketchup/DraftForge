@@ -44,3 +44,9 @@ export type TopLevelComponent = DiscordMessage['components'][number];
 export type ContainerChild = Container['components'][number];
 export type ActionRowChild = ActionRow['components'][number];
 export type SectionAccessory = Section['accessory'];
+
+export type DiscordResolver = {
+  users?: Record<string, string>;
+  roles?: Record<string, { name: string; color?: number }>;
+  channels?: Record<string, string>;
+};

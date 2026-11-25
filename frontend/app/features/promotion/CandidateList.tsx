@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { usePreviewOptions } from '~/components/discord/timestamps';
 import { GAME_LABEL, toGameType } from '~/components/game/constants';
 import { Badge } from '~/components/ui/badge';
 import {
@@ -17,7 +18,7 @@ import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import { reportPromoError } from './feedback';
 import { parseMmrBound, validateMmrRange } from './mmrFilter';
 import type { ComposeMode } from './promotionColumns';
 import { PromotionTable } from './PromotionTable';

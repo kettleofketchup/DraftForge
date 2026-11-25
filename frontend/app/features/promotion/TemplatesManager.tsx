@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import {
+  formatDiscordTimestamps,
+  usePreviewOptions,
+} from '~/components/discord/timestamps';
+import {
   DestructiveButton,
   PrimaryButton,
   SecondaryButton,
@@ -21,8 +25,7 @@ import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { getLogger } from '~/lib/logger';
-import { formatDiscordTimestamps } from './discordPreview';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import { reportPromoError } from './feedback';
 import {
   useDeletePromoTemplate,
   usePromoTemplates,

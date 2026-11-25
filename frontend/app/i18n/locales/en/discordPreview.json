@@ -1,0 +1,10 @@
+{
+  "markdown": {
+    "spoiler": "Spoiler"
+  },
+  "mention": {
+    "unknown_channel": "#channel:{{id}}",
+    "unknown_role": "@role:{{id}}",
+    "unknown_user": "@user:{{id}}"
+  }
+}

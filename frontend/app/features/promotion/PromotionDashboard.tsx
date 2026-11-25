@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import { usePreviewOptions } from '~/components/discord/timestamps';
 import { GAME_LABEL, toGameType } from '~/components/game/constants';
 import { SecondaryButton } from '~/components/ui/buttons';
 import type { OrgFeatureAccess } from '~/features/org-features';
@@ -8,7 +9,7 @@ import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { CandidateList } from './CandidateList';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import { reportPromoError } from './feedback';
 import { candidateRowId, type ComposeMode } from './promotionColumns';
 import {
   PromotionMessageDialog,

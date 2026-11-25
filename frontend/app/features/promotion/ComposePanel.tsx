@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import {
+  formatDiscordTimestamps,
+  usePreviewOptions,
+} from '~/components/discord/timestamps';
+import {
   BrandSelect,
   BrandSelectContent,
   BrandSelectItem,
@@ -25,8 +29,7 @@ import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
-import { formatDiscordTimestamps } from './discordPreview';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import { reportPromoError } from './feedback';
 import type { ComposeMode } from './promotionColumns';
 import { useRenderPromo, useSendPromo, useUndoPromoSend } from './queries';
 import {
