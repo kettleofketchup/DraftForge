@@ -694,9 +694,9 @@ promoter, org staff, admin, owner or site admin.
 | PATCH | `templates/{template_pk}/` | Edit a template; returns it with `warnings` | Org staff |
 | DELETE | `templates/{template_pk}/` | Delete a template. `204`. | Org staff |
 | GET | `events/` | Promotable events (`upcoming`, `signups_open`): `[{id, name, scheduled_at, ends_at, state, signups_open_at}]` | Promoter |
-| GET | `events/{event_id}/candidates/?n=&hide_signed_up=&hide_messaged=&q=` | Recipient pool from the last `n` past tournaments (default 3, clamped 1-10). `{n, rows}`; each row has the player, tournaments played, `signed_up`, `earning_send_exists` and `last_messaged` (with `can_undo`). | Promoter |
+| GET | `events/{event_id}/candidates/?n=&hide_signed_up=&hide_messaged=&q=` | Recipient pool from the last `n` past tournaments (default 3, clamped 1-10). `{n, rows}`; each row has the player, tournaments played, `signed_up`, `earning_send_exists` and `last_messaged` (with `can_undo`). Each row also has `contact_recorded` (a local send or an SFG contact exists) and `external_contact` (`{source: "sfg", recorded_at, delivery_verified: false, can_undo: false}` or `null`); `last_messaged` stays local-only. The response adds `contact_sync: {configured, last_receipt_imported_at, warning}`, where `warning` is `history_may_be_incomplete` when the org is bound. See [SFG promotion sync](../features/sfg-promotion-sync.md). | Promoter |
 | POST | `events/{event_id}/render/` | Body `{"template_id", "recipient_id"}`. Returns `{text, warnings, will_earn}`. | Promoter |
-| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at, sfg_writeback}`; `points_awarded` is `null` while Contributions is locked. `sfg_writeback` is the send's SFG outbox summary `{state, reason, delivery_id}`; only `state: "applied"` means SFG stored it. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. | Promoter |
+| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at, sfg_writeback}`; `points_awarded` is `null` while Contributions is locked. `sfg_writeback` is the send's SFG outbox summary `{state, reason, delivery_id}`; only `state: "applied"` means SFG stored it. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. `409 {"code": "contact_already_recorded"}` if an SFG contact for this recipient and event is recorded. Every send, earning or not, gets its own outbox receipt. | Promoter |
 | DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `200` with `{sfg_writeback}`: undo cannot unsend the DM, so its outbox receipt stays and can still be dispatched. | Its sender while still a promoter, or org staff |
 
 ### Conduct
@@ -1626,6 +1626,40 @@ Abandon a hero draft. Can be called by a captain in the draft or an admin.
 
 - `403`: User not authorized to abandon this draft
 - `400`: Draft already completed or abandoned
+
+## Integration API
+
+Machine-to-machine endpoints for the SFG adaptor. Guide:
+[SFG promotion sync](../features/sfg-promotion-sync.md). All under
+`/api/organizations/{id}/integration/v1/`. Only `Authorization: Bearer dfk_…` app tokens
+are accepted (no session). Each request checks the token, its org (`404` for another
+org), the operation grant (`403 operation_not_granted`), the operation's feature
+(`403 feature_locked`), that the token's owner is still an org admin
+(`403 not_permitted`), and the rate budget (`429` with `Retry-After`).
+
+Requests and responses are strict JSON: bodies at most 65,536 bytes
+(`413 request_too_large`), `application/json` in UTF-8 (`415 unsupported_media_type`),
+no duplicate or unknown keys, at most 100 batch entries. IDs are canonical positive
+decimal strings and points are signed decimal strings; timestamps are UTC with a `Z`
+and at most 6 fractional digits. Unknown or repeated query parameters are `400`.
+Cursors are opaque, signed and bound to the org, the resource and a fingerprint of the
+listed identities; a tampered or foreign cursor is `400 invalid_cursor`, a changed
+listing is `409 mapping_changed` (start again from the first page).
+
+Errors use their own envelope, not `{"detail"}`:
+
+```json
+{"error": {"code": "binding_missing", "message": "No promotion sync binding is configured for this resource.", "request_id": "<same as X-Request-ID>"}}
+```
+
+| Method | Endpoint | Description | Operation |
+|--------|----------|-------------|-----------|
+| GET | `events/{event_id}/recipients/?limit=&cursor=` | People the adaptor may report contacts for: org members, recent tournament players, active members, recent guild joiners and anyone already contacted for the event. `{mapping_version, recipients: [{user_id, org_user_id, discord_id}], next_cursor}`, ordered by Discord ID, accounts without one last with `discord_id: null`; `limit` 1-100, default 100. Nobody is enrolled by the read. `403 binding_missing` / `binding_mismatch` without a valid binding, `503 subject_source_unavailable` when the guild member list cannot be read. | `promotion:read` |
+| POST | `contact-receipts/` | Import SFG contacts for one bound event: `{source: "sfg", mapping_version, entries: [{source_contact_id, event_id, user_id, org_user_id, discord_id, recorded_at, contact_method, linkage: "occasion"}]}` (`contact_method` is `DISCORD_DM`, `DISCORD_GROUP_DM` or `OTHER`; `user_id` and `org_user_id` may be `null`). All or nothing: `200 {results: [{index, status}], applied, unchanged, quarantined, association_updated}` with `status` `applied`, `unchanged` or `quarantined`. `409 source_content_conflict` (same SFG ID, different facts), `409 mapping_changed`, `409 import_conflict_retry` (retry once). Never creates sends, awards, accounts or memberships. | `promotion:import` |
+| GET | `contributions/?limit=&cursor=` | `{source: "draftforge", track: "contribution", period: "all_time", observed_at, members: [{user_id, org_user_id, discord_id, status, points, observed_at}], next_cursor}`, every org member by membership ID. `status` is `available` with `points` (zero and negative included), or `unavailable` with `reason: "discord_mapping_missing"` and no points. `503 ledger_unavailable` rather than an empty page. Needs no promotion binding. | `contributions:read` |
+
+Token management (`/api/organizations/{id}/api-tokens/`, session auth) accepts
+`operations` on create; see [MMR sync API](../features/org-mmr-sync-api.md#token-operations).
 
 ## Response Format
 
