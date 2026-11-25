@@ -268,7 +268,10 @@ npm run dev
 
 **Backend (via Docker - Recommended)**:
 ```bash
-# Run all tests (avoids Redis hanging issues)
+# Run every backend test as CI does (in this worktree's test stack, with Redis)
+just test::backend::all
+
+# Run one package
 just test::run 'python manage.py test app.tests -v 2'
 
 # Run specific test module
