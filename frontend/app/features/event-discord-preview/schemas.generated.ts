@@ -177,43 +177,7 @@ export type SelectMenu = z.infer<typeof SelectMenuSchema>;
 export const ActionRowSchema = z.object({
   type: z.literal(1),
   components: z.array(
-    z.any().superRefine((x, ctx) => {
-      const schemas = [ButtonSchema, SelectMenuSchema];
-      const { errors, failed } = schemas.reduce<{
-        errors: z.core.$ZodIssue[];
-        failed: number;
-      }>(
-        ({ errors, failed }, schema) =>
-          ((result) =>
-            result.error
-              ? {
-                  errors: [...errors, ...result.error.issues],
-                  failed: failed + 1,
-                }
-              : { errors, failed })(schema.safeParse(x)),
-        { errors: [], failed: 0 },
-      );
-      const passed = schemas.length - failed;
-      if (passed !== 1) {
-        ctx.addIssue(
-          errors.length
-            ? {
-                path: [],
-                code: 'invalid_union',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              }
-            : {
-                path: [],
-                code: 'custom',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              },
-        );
-      }
-    }),
+    z.discriminatedUnion('type', [ButtonSchema, SelectMenuSchema]),
   ),
 });
 export type ActionRow = z.infer<typeof ActionRowSchema>;
@@ -243,50 +207,14 @@ export const DiscordPreviewRequestSchema = z
       'announcement_notice',
       'new_event_post',
     ]),
-    context: z.any().superRefine((x, ctx) => {
-      const schemas = [
-        EventContextSchema,
-        NewEventContextSchema,
-        SeriesOneOffContextSchema,
-        RepeaterContextSchema,
-        NewRepeaterContextSchema,
-        OrgDefaultsContextSchema,
-      ];
-      const { errors, failed } = schemas.reduce<{
-        errors: z.core.$ZodIssue[];
-        failed: number;
-      }>(
-        ({ errors, failed }, schema) =>
-          ((result) =>
-            result.error
-              ? {
-                  errors: [...errors, ...result.error.issues],
-                  failed: failed + 1,
-                }
-              : { errors, failed })(schema.safeParse(x)),
-        { errors: [], failed: 0 },
-      );
-      const passed = schemas.length - failed;
-      if (passed !== 1) {
-        ctx.addIssue(
-          errors.length
-            ? {
-                path: [],
-                code: 'invalid_union',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              }
-            : {
-                path: [],
-                code: 'custom',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              },
-        );
-      }
-    }),
+    context: z.discriminatedUnion('type', [
+      EventContextSchema,
+      NewEventContextSchema,
+      SeriesOneOffContextSchema,
+      RepeaterContextSchema,
+      NewRepeaterContextSchema,
+      OrgDefaultsContextSchema,
+    ]),
     values: z.record(z.string(), z.any()),
     open_signups: z.boolean(),
   })
@@ -326,43 +254,7 @@ export type Thumbnail = z.infer<typeof ThumbnailSchema>;
 export const SectionSchema = z.object({
   type: z.literal(9),
   components: z.array(TextDisplaySchema),
-  accessory: z.any().superRefine((x, ctx) => {
-    const schemas = [ThumbnailSchema, ButtonSchema];
-    const { errors, failed } = schemas.reduce<{
-      errors: z.core.$ZodIssue[];
-      failed: number;
-    }>(
-      ({ errors, failed }, schema) =>
-        ((result) =>
-          result.error
-            ? {
-                errors: [...errors, ...result.error.issues],
-                failed: failed + 1,
-              }
-            : { errors, failed })(schema.safeParse(x)),
-      { errors: [], failed: 0 },
-    );
-    const passed = schemas.length - failed;
-    if (passed !== 1) {
-      ctx.addIssue(
-        errors.length
-          ? {
-              path: [],
-              code: 'invalid_union',
-              errors: [errors],
-              message:
-                'Invalid input: Should pass single schema. Passed ' + passed,
-            }
-          : {
-              path: [],
-              code: 'custom',
-              errors: [errors],
-              message:
-                'Invalid input: Should pass single schema. Passed ' + passed,
-            },
-      );
-    }
-  }),
+  accessory: z.discriminatedUnion('type', [ThumbnailSchema, ButtonSchema]),
 });
 export type Section = z.infer<typeof SectionSchema>;
 
@@ -371,49 +263,13 @@ export const ContainerSchema = z.object({
   accent_color: z.union([z.number().int(), z.null()]),
   spoiler: z.union([z.boolean(), z.null()]),
   components: z.array(
-    z.any().superRefine((x, ctx) => {
-      const schemas = [
-        ActionRowSchema,
-        SectionSchema,
-        TextDisplaySchema,
-        SeparatorSchema,
-        MediaGallerySchema,
-      ];
-      const { errors, failed } = schemas.reduce<{
-        errors: z.core.$ZodIssue[];
-        failed: number;
-      }>(
-        ({ errors, failed }, schema) =>
-          ((result) =>
-            result.error
-              ? {
-                  errors: [...errors, ...result.error.issues],
-                  failed: failed + 1,
-                }
-              : { errors, failed })(schema.safeParse(x)),
-        { errors: [], failed: 0 },
-      );
-      const passed = schemas.length - failed;
-      if (passed !== 1) {
-        ctx.addIssue(
-          errors.length
-            ? {
-                path: [],
-                code: 'invalid_union',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              }
-            : {
-                path: [],
-                code: 'custom',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              },
-        );
-      }
-    }),
+    z.discriminatedUnion('type', [
+      ActionRowSchema,
+      SectionSchema,
+      TextDisplaySchema,
+      SeparatorSchema,
+      MediaGallerySchema,
+    ]),
   ),
 });
 export type Container = z.infer<typeof ContainerSchema>;
@@ -422,50 +278,14 @@ export const DiscordMessageSchema = z.object({
   content: z.union([z.string(), z.null()]),
   embeds: z.array(EmbedSchema),
   components: z.array(
-    z.any().superRefine((x, ctx) => {
-      const schemas = [
-        ActionRowSchema,
-        ContainerSchema,
-        SectionSchema,
-        TextDisplaySchema,
-        SeparatorSchema,
-        MediaGallerySchema,
-      ];
-      const { errors, failed } = schemas.reduce<{
-        errors: z.core.$ZodIssue[];
-        failed: number;
-      }>(
-        ({ errors, failed }, schema) =>
-          ((result) =>
-            result.error
-              ? {
-                  errors: [...errors, ...result.error.issues],
-                  failed: failed + 1,
-                }
-              : { errors, failed })(schema.safeParse(x)),
-        { errors: [], failed: 0 },
-      );
-      const passed = schemas.length - failed;
-      if (passed !== 1) {
-        ctx.addIssue(
-          errors.length
-            ? {
-                path: [],
-                code: 'invalid_union',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              }
-            : {
-                path: [],
-                code: 'custom',
-                errors: [errors],
-                message:
-                  'Invalid input: Should pass single schema. Passed ' + passed,
-              },
-        );
-      }
-    }),
+    z.discriminatedUnion('type', [
+      ActionRowSchema,
+      ContainerSchema,
+      SectionSchema,
+      TextDisplaySchema,
+      SeparatorSchema,
+      MediaGallerySchema,
+    ]),
   ),
   allowed_mentions: z.union([z.record(z.string(), z.any()), z.null()]),
   flags: z.union([z.number().int(), z.null()]),

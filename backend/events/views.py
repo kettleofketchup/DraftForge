@@ -6,6 +6,7 @@ from cacheops import cached_as
 from celery import current_app
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
@@ -19,7 +20,7 @@ from django.db.models import (
     QuerySet,
 )
 from django.db.models.functions import Abs, Coalesce, Now
-from django.http import QueryDict
+from django.http import Http404, QueryDict
 from django.utils import timezone
 from django.utils import timezone as tz
 from pydantic import ValidationError as PydanticValidationError
@@ -1073,6 +1074,10 @@ class EventViewSet(viewsets.ModelViewSet):
             )
         except PreviewInputError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoPermissionDenied as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except Http404 as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
         return Response(preview.model_dump(mode="json"))
 
     def check_object_permissions(self, request: Request, obj: Event) -> None:

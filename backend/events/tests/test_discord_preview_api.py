@@ -123,12 +123,15 @@ class DiscordPreviewApiTest(EventTestCase):
                 with self.subTest(who=who, context=name):
                     response = self._post(user, self._body(context))
                     self.assertEqual(response.status_code, 403, response.content)
+                    if user is not None:
+                        self.assertTrue(response.json().get("error"), response.content)
 
     def test_own_staff_denied_on_other_org_ids(self) -> None:
         for name, context in self._contexts(self.other_org).items():
             with self.subTest(context=name):
                 response = self._post(self.org_staff, self._body(context))
                 self.assertEqual(response.status_code, 403, response.content)
+                self.assertTrue(response.json().get("error"), response.content)
 
     def test_allowed_callers_get_200_in_every_context(self) -> None:
         allowed = {
@@ -163,6 +166,7 @@ class DiscordPreviewApiTest(EventTestCase):
             with self.subTest(context=name):
                 response = self._post(self.admin, self._body(context))
                 self.assertEqual(response.status_code, 404, response.content)
+                self.assertTrue(response.json().get("error"), response.content)
 
     def test_csrf_enforced(self) -> None:
         client = Client(enforce_csrf_checks=True)
