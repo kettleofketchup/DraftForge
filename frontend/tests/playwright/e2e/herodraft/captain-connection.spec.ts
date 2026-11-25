@@ -1,9 +1,9 @@
 import { expect } from '@playwright/test';
-import { loginAsUser, waitForHydration } from '../fixtures/auth';
-import { BASE_URL } from '../fixtures/base-url';
-import { test as base } from '../fixtures/external-apis';
-import type { HeroDraftInfo } from '../fixtures/herodraft';
-import { getHeroDraftByKey, resetHeroDraft } from '../fixtures/herodraft';
+import { loginAsUser, waitForHydration } from '../../fixtures/auth';
+import { BASE_URL } from '../../fixtures/base-url';
+import { test as base } from '../../fixtures/external-apis';
+import type { HeroDraftInfo } from '../../fixtures/herodraft';
+import { getHeroDraftByKey, resetHeroDraft } from '../../fixtures/herodraft';
 
 /**
  * Test captain connection management for HeroDraft.

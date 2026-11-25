@@ -48,7 +48,7 @@ test.describe('Edit User on Organization Page (@cicd)', () => {
   });
 
   // Dedicated user for this spec — never use `.first()` on usercard, that
-  // races with every other 15-edit-user spec that also picks index 0.
+  // races with every other edit-user spec that also picks index 0.
   const TARGET_USERNAME = 'edit_user_org';
 
   test('@cicd smoke: edit user nickname via org user card', async ({

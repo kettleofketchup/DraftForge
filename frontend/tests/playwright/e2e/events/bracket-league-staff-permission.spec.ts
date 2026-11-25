@@ -16,7 +16,7 @@ import {
 const TOURNAMENT_PK = 100;
 
 // Use /games (not /bracket) — it's the convention used by existing bracket
-// specs (see frontend/tests/playwright/e2e/09-bracket/02-bracket-match-linking.spec.ts).
+// specs (see frontend/tests/playwright/e2e/bracket/bracket-match-linking.spec.ts).
 const TOURNAMENT_ROUTE = `/tournament/${TOURNAMENT_PK}/games`;
 
 test.describe('Bracket toolbar league-staff permission @cicd', () => {

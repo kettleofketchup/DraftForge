@@ -4,7 +4,7 @@
  * Covers the NEW layered EditProfileModal Dota tab, which edits the
  * logged-in user's OWN DotaUserProfile.positions via
  * PATCH /api/users/me/profile/game/dota/. This is distinct from
- * 08-position-persistence.spec.ts, which guards the legacy userCard
+ * position-persistence.spec.ts, which guards the legacy userCard
  * `/users/<id>/` shim path — do NOT merge the two.
  *
  * Login: the per-user fixture loginAsUser(pk) as edit_user_dota_positions
@@ -117,7 +117,7 @@ test.describe('Edit Profile — Dota tab positions (new layered modal)', () => {
   }) => {
     await loginAsUser(EDIT_USER_POSITIONS_PK);
     // Wider viewport so the 5-column position grid renders without the trigger
-    // hit boxes overlapping (mirrors 08-position-persistence.spec.ts).
+    // hit boxes overlapping (mirrors position-persistence.spec.ts).
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/profile');
 

@@ -95,7 +95,7 @@ TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
     organization_pk=2,  # Test Organization
 )
 
-# Discord Activity bracket view (e2e/27-activity). Its bracket games come from
+# Discord Activity bracket view (e2e/activity). Its bracket games come from
 # populate_activity_bracket_data, not BRACKET_TEST_CONFIGS.
 ACTIVITY_BRACKET_CONFIG = DynamicTournamentConfig(
     pk=950,
