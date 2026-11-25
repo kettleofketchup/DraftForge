@@ -64,6 +64,34 @@ class RepeaterCopyFieldsTest(EventTestCase):
             self.assertFalse(event.discord_send_draft_link)
             self.assertFalse(event.discord_send_herodraft_link)
 
+    @patch("events.services.notify_create_discord_event")
+    @patch("events.services.notify_new_event")
+    def test_post_channel_fields_propagate_on_sync(
+        self, _notify: MagicMock, _create: MagicMock
+    ) -> None:
+        repeater = self._create_repeater()
+        upcoming = Event.objects.create(
+            organization=self.org,
+            event_repeater=repeater,
+            name="Sunday Turbo",
+            scheduled_at=tz.now() + timedelta(days=2),
+            state=EventState.UPCOMING,
+        )
+        channels = {
+            "discord_confirm_attendance_channel_id": "111111111111111111",
+            "discord_profile_reminder_channel_id": "222222222222222222",
+            "discord_new_event_channel_id": "333333333333333333",
+        }
+        for field, value in channels.items():
+            setattr(repeater, field, value)
+        repeater.save()
+
+        sync_future_events(repeater)
+
+        upcoming.refresh_from_db()
+        for field, value in channels.items():
+            self.assertEqual(getattr(upcoming, field), value, field)
+
 
 class SyncFutureEventsShieldTest(EventTestCase):
     def setUp(self):
