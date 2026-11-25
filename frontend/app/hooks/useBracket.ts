@@ -139,6 +139,8 @@ interface MatchResultVars {
   winner: 'radiant' | 'dire' | null;
 }
 
+export const MATCH_RESULT_MUTATION_KEY = ['bracket-match-result'];
+
 /**
  * Persists a single match result via advance_winner (issue #466). The caller
  * applies the change to the store first. Writes may overlap (issue #963): the
@@ -147,6 +149,7 @@ interface MatchResultVars {
 export function usePersistMatchResult(tournamentId: number | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: MATCH_RESULT_MUTATION_KEY,
     mutationFn: ({ gameId, winner }: MatchResultVars) =>
       advanceWinnerAPI(gameId, winner),
     onMutate: () => {

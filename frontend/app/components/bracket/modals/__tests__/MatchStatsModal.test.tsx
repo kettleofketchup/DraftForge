@@ -48,6 +48,7 @@ vi.mock('~/hooks/useHeroDraft', () => ({
   useResetHeroDraft: () => ({ isPending: false, mutateAsync: vi.fn() }),
 }));
 vi.mock('~/hooks/useBracket', () => ({
+  MATCH_RESULT_MUTATION_KEY: ['bracket-match-result'],
   usePersistMatchResult: () => ({ isPending: false, mutate: persistMutate }),
 }));
 vi.mock('~/hooks/useGameLobby', () => ({ useGameLobby }));

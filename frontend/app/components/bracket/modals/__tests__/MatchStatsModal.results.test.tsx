@@ -87,9 +87,7 @@ function Harness({ matchId }: { matchId: string }) {
   useBracketQuery(7);
   const match = useBracketStore((s) => s.matches.find((m) => m.id === matchId));
   if (!match) return null;
-  return (
-    <MatchStatsModal key={matchId} match={match} isOpen onClose={() => {}} />
-  );
+  return <MatchStatsModal match={match} isOpen onClose={() => {}} />;
 }
 
 let qc: QueryClient;

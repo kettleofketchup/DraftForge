@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Link2, Loader2, RotateCcw, Swords } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -19,7 +19,10 @@ import {
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { usePersistMatchResult } from '~/hooks/useBracket';
+import {
+  MATCH_RESULT_MUTATION_KEY,
+  usePersistMatchResult,
+} from '~/hooks/useBracket';
 import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { useGameLobby } from '~/hooks/useGameLobby';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
@@ -68,6 +71,13 @@ export function MatchStatsModal({
   const holdResultForSave = useBracketStore((state) => state.holdResultForSave);
   const queryClient = useQueryClient();
   const persistMatchResult = usePersistMatchResult(tournament?.pk ?? undefined);
+  const resultSaving =
+    useIsMutating({
+      mutationKey: MATCH_RESULT_MUTATION_KEY,
+      predicate: (m) =>
+        (m.state.variables as { gameId?: number } | undefined)?.gameId ===
+        match?.gameId,
+    }) > 0;
 
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -275,7 +285,7 @@ export function MatchStatsModal({
                       lobbyWinnerSlot === 'radiant' && 'ring-2 ring-warning',
                     )}
                     onClick={() => handleSetWinner('radiant')}
-                    disabled={persistMatchResult.isPending}
+                    disabled={resultSaving}
                     data-testid="radiantWinsButton"
                     data-lobby-suggested={
                       lobbyWinnerSlot === 'radiant' || undefined
@@ -293,7 +303,7 @@ export function MatchStatsModal({
                       lobbyWinnerSlot === 'dire' && 'ring-2 ring-warning',
                     )}
                     onClick={() => handleSetWinner('dire')}
-                    disabled={persistMatchResult.isPending}
+                    disabled={resultSaving}
                     data-testid="direWinsButton"
                     data-lobby-suggested={
                       lobbyWinnerSlot === 'dire' || undefined
@@ -322,7 +332,7 @@ export function MatchStatsModal({
                 <SecondaryButton
                   size="sm"
                   onClick={handleUnsetWinner}
-                  disabled={persistMatchResult.isPending}
+                  disabled={resultSaving}
                   data-testid="unsetWinnerButton"
                 >
                   <RotateCcw className="size-4 mr-1" />
