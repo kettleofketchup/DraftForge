@@ -1,4 +1,7 @@
 {
+  "component": {
+    "select_placeholder": "Make a selection"
+  },
   "markdown": {
     "spoiler": "Spoiler"
   },
@@ -6,5 +9,13 @@
     "unknown_channel": "#channel:{{id}}",
     "unknown_role": "@role:{{id}}",
     "unknown_user": "@user:{{id}}"
+  },
+  "message": {
+    "app_tag": "APP"
+  },
+  "scheduled_event": {
+    "ends": "Ends",
+    "location": "Location",
+    "starts": "Starts"
   }
 }

@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '~/lib/utils';
+import { discordColorHex } from './colors';
 import {
   parseDiscordMarkdown,
   type MdNode,
@@ -28,11 +29,6 @@ const LINK = 'text-info hover:underline';
 
 function shortId(id: string): string {
   return id.length > 4 ? `${id.slice(0, 4)}…` : id;
-}
-
-function roleHex(color: number | undefined): string | undefined {
-  if (!color) return undefined;
-  return `#${color.toString(16).padStart(6, '0')}`;
 }
 
 type Ctx = {
@@ -172,7 +168,7 @@ function renderNode(node: MdNode, key: number, ctx: Ctx): ReactNode {
     }
     case 'roleMention': {
       const role = resolve.roles?.[node.id];
-      const hex = roleHex(role?.color);
+      const hex = discordColorHex(role?.color);
       return (
         <span
           key={key}

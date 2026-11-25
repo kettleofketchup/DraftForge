@@ -1,4 +1,7 @@
 {
+  "component": {
+    "select_placeholder": "Haz una selección"
+  },
   "markdown": {
     "spoiler": "Spoiler"
   },
@@ -6,5 +9,13 @@
     "unknown_channel": "#canal:{{id}}",
     "unknown_role": "@rol:{{id}}",
     "unknown_user": "@usuario:{{id}}"
+  },
+  "message": {
+    "app_tag": "APP"
+  },
+  "scheduled_event": {
+    "ends": "Termina",
+    "location": "Ubicación",
+    "starts": "Empieza"
   }
 }
