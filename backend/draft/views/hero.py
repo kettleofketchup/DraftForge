@@ -28,6 +28,7 @@ from draft.services.hero_chat import reconcile_draft_memberships
 from draft.tasks import hero_tick
 from events.discord.tournament_dispatch import notify_herodraft_created
 from telemetry.logging import get_logger
+from tournament.broadcast import bracket_changed_on_commit
 from tournament.models import Game, Team
 from tournament.permissions import (
     IsTournamentStaff,
@@ -176,6 +177,7 @@ def create_herodraft(request: Request, game_pk: int) -> Response:
     )
 
     broadcast_herodraft_event(draft, "draft_created")
+    bracket_changed_on_commit(game.tournament_id, game.pk)
 
     # Notify Discord if tournament has discord_send_herodraft_link enabled
     if game.tournament:
@@ -679,6 +681,7 @@ def reset_draft(request: Request, draft_pk: int) -> Response:
     )
 
     broadcast_herodraft_event(draft, "draft_reset")
+    bracket_changed_on_commit(draft.game.tournament_id, draft.game_id)
 
     draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data)

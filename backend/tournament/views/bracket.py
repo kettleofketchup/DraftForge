@@ -13,6 +13,7 @@ from draft.models import HeroDraft
 from events.overrides import REASON_MAX_LENGTH
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
+from tournament.broadcast import bracket_changed_on_commit, tournament_changed_on_commit
 from tournament.models import Game, Team, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.permissions import IsTournamentStaff
@@ -335,6 +336,7 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
 
     # Invalidate caches after saving bracket
     invalidate_after_commit(*saved_games, tournament)
+    bracket_changed_on_commit(tournament.pk)
 
     return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
 
@@ -430,6 +432,7 @@ def _unset_winner(game: Game) -> Response:
         *(t for t, _ in to_clear),
         *([game.tournament] if game.tournament else []),
     )
+    bracket_changed_on_commit(game.tournament_id, game.pk)
     return Response(BracketGameSerializer(game).data)
 
 
@@ -600,6 +603,7 @@ def advance_winner(request: Request, game_id: int) -> Response:
     if game.tournament:
         objs_to_invalidate.append(game.tournament)
     invalidate_after_commit(*objs_to_invalidate)
+    bracket_changed_on_commit(game.tournament_id, game.pk)
 
     return Response(BracketGameSerializer(game).data)
 
@@ -711,5 +715,6 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
     invalidate_obj(team)
     if tournament:
         invalidate_obj(tournament)
+    tournament_changed_on_commit(tournament.pk, "placement", team_id=team.pk)
 
     return Response({"team_id": team.pk, "placement": team.placement})

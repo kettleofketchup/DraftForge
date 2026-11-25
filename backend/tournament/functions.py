@@ -8,6 +8,7 @@ from app.cache_utils import invalidate_obj
 from app.models import CustomUser
 from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger
+from tournament.broadcast import tournament_changed_on_commit
 from tournament.models import LIVE_TEAM_FIRST, Team, Tournament
 from tournament.permissions import can_edit_tournament
 from tournament.serializers.tournament import TournamentSerializer
@@ -92,6 +93,7 @@ def create_team_from_captain(request: Request) -> Response:
 
         existing.draft_order = draft_order
         existing.save()
+        tournament_changed_on_commit(tournament.pk, "team", team_id=existing.pk)
         return Response(
             {
                 "error": "User is already a captain in this tournament with a draft order"
@@ -115,5 +117,6 @@ def create_team_from_captain(request: Request) -> Response:
     # Invalidate specific tournament after team creation
     invalidate_obj(tournament)
     invalidate_obj(team)
+    tournament_changed_on_commit(tournament.pk, "team", team_id=team.pk)
 
     return Response(serialize_tournament(tournament), status=201)

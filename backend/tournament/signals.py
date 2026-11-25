@@ -21,6 +21,7 @@ from league.models import LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_map
 from org.models import OrgUser
 from telemetry.logging import get_logger
+from tournament.broadcast import send_tournament_update
 from tournament.models import Game, Team, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.services.team_audit import (
@@ -32,13 +33,22 @@ from tournament.services.team_leadership import successor_after_removal
 from tournament.services.team_management import follow_captain
 from tournament.services.team_references import team_references
 from tournament.services.team_signals import (
+    TeamRosterChange,
     change_from_log,
     send_roster_changed_on_commit,
     team_audit_owner,
+    team_roster_changed,
 )
 from tournament.services.tournament_completion import sync_tournament_completion
 
 log = get_logger(__name__)
+
+
+@receiver(team_roster_changed, dispatch_uid="tournament_broadcast_roster_change")
+def broadcast_roster_change(
+    sender: type, change: TeamRosterChange, **kwargs: object
+) -> None:
+    send_tournament_update(change.tournament_id, "team", team_id=change.team_id)
 
 
 @receiver(m2m_changed, sender="tournament.Team_members")

@@ -23,6 +23,7 @@ import './bracket-styles.css';
 
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { useOrganization } from '~/components/organization';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { useBracketQuery } from '~/hooks/useBracket';
 import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { cn } from '~/lib/utils';
@@ -162,7 +163,11 @@ function BracketFlowInner({
   // Use individual selectors to prevent unnecessary re-renders
   const matches = useBracketStore((state) => state.matches);
   const isDirty = useBracketStore((state) => state.isDirty);
-  const { isLoading, data: bracketData } = useBracketQuery(tournamentId);
+  const {
+    isLoading,
+    data: bracketData,
+    serverChanged,
+  } = useBracketQuery(tournamentId);
 
   const { getLayoutedElements } = useElkLayout();
   const { setViewport, getViewport, fitView } = useReactFlow();
@@ -604,6 +609,25 @@ function BracketFlowInner({
           data-testid="bracket-unsaved-changes"
         >
           Unsaved changes
+        </div>
+      )}
+
+      {isDirty && serverChanged && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 bg-warning/10 text-warning text-sm px-3 py-1 rounded"
+          data-testid="bracket-server-changed"
+        >
+          <span>
+            Someone else changed this bracket since you started editing.
+          </span>
+          <SecondaryButton
+            size="sm"
+            onClick={() => useBracketStore.setState({ isDirty: false })}
+            data-testid="bracket-load-latest"
+          >
+            Discard my edits and load theirs
+          </SecondaryButton>
         </div>
       )}
 

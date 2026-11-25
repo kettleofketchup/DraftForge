@@ -40,6 +40,7 @@ from steam.serializers import (
 from steam.services.match_suggestions import get_match_suggestions_for_game
 from steam.utils.steam_api_caller import SteamAPI
 from telemetry.logging import get_logger
+from tournament.broadcast import bracket_changed_on_commit
 from tournament.models import Game, Tournament
 from tournament.permissions import can_manage_game
 from tournament.services.bracket_placement import (
@@ -323,6 +324,7 @@ def link_game_match(request: Request, game_id: int) -> Response:
     invalidate_obj(game)
     if game.tournament:
         invalidate_obj(game.tournament)
+    bracket_changed_on_commit(game.tournament_id, game.pk)
 
     return Response({"status": "linked", "match_id": match_id})
 
@@ -358,6 +360,7 @@ def unlink_game_match(request: Request, game_id: int) -> Response:
         game.save(update_fields=["gameid", "winning_team", "status"])
         apply_bracket_placements(game.tournament_id, placements_before)
         invalidate_after_commit(game, *([game.tournament] if game.tournament else []))
+        bracket_changed_on_commit(game.tournament_id, game.pk)
 
     return Response({"status": "unlinked"})
 

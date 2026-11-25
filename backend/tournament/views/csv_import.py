@@ -26,6 +26,7 @@ from org.mmr import (
 from org.models import Organization, OrgLog, OrgUser
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+from tournament.broadcast import tournament_changed_on_commit
 from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
 from user.display_names import user_display_name
@@ -706,5 +707,6 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
 
     # Invalidate tournament cache so refreshed data reflects MMR changes
     invalidate_obj(tournament)
+    tournament_changed_on_commit(tournament.pk, "members")
 
     return Response({"summary": summary, "results": results})

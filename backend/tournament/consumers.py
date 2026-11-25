@@ -82,6 +82,18 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             )
         )
 
+    async def tournament_update(self, event: dict[str, object]) -> None:
+        """Teams, members, placements or settings changed; clients refetch."""
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "tournament_update",
+                    "kind": event.get("kind"),
+                    "team_id": event.get("team_id"),
+                }
+            )
+        )
+
     @consumer_db
     def tournament_exists(self, tournament_id: int) -> bool:
         return Tournament.objects.filter(pk=tournament_id).exists()
