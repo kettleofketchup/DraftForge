@@ -65,6 +65,38 @@ describe('EVENT_SECTION_FIELDS', () => {
   });
 });
 
+describe('per-post channel fields', () => {
+  const discord = EVENT_SECTION_FIELDS.discord;
+  it('lists the per-post channel fields under Discord', () => {
+    expect(discord.discord_confirm_attendance_channel_id?.label).toBe(
+      'Attendance reminder channel',
+    );
+    expect(discord.discord_profile_reminder_channel_id?.label).toBe(
+      'Profile reminder channel',
+    );
+    expect(discord.discord_new_event_channel_id?.label).toBe(
+      'New event channel',
+    );
+    for (const key of [
+      'discord_confirm_attendance_channel_id',
+      'discord_profile_reminder_channel_id',
+      'discord_new_event_channel_id',
+    ]) {
+      expect(discord[key]?.keywords).toEqual(
+        expect.arrayContaining(['channel', 'post']),
+      );
+      expect(discord[key]?.description).toMatch(/announcement channel/i);
+      expect(discord[key]?.description).toMatch(/blank/i);
+    }
+  });
+
+  it('describes the announcement channel as the fallback', () => {
+    expect(discord.discord_announcement_channel_id?.description).toBe(
+      'Channel for the pre-day announcement, and for reminders and new-event posts that have no channel of their own.',
+    );
+  });
+});
+
 describe('discord_profile_reminder copy', () => {
   const entry = EVENT_SECTION_FIELDS.discord.discord_profile_reminder;
   it('uses the shared description', () => {

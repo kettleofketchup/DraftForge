@@ -299,6 +299,9 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_confirm_attendance_channel_id: string;
+  discord_profile_reminder_channel_id: string;
+  discord_new_event_channel_id: string;
   discord_subscriber_dm?: boolean;
   discord_subscriber_dm_hours?: number;
   discord_require_rank_screenshot: boolean;
@@ -448,6 +451,9 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_confirm_attendance_channel_id: string;
+  discord_profile_reminder_channel_id: string;
+  discord_new_event_channel_id: string;
   discord_announcement_role_ids: string[];
   discord_signup_role_ids: string[];
   discord_start_mention: boolean;

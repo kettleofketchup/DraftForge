@@ -333,6 +333,12 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       description: PROFILE_REMINDER_DESCRIPTION,
     },
     discord_profile_reminder_hours: { label: 'Profile reminder: when to send' },
+    discord_profile_reminder_channel_id: {
+      label: 'Profile reminder channel',
+      description:
+        'Channel for the profile reminder. Leave blank to use the announcement channel.',
+      keywords: ['channel', 'post'],
+    },
     discord_confirm_attendance: {
       label: 'Post attendance reminder in Discord',
       description:
@@ -340,6 +346,12 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_confirm_attendance_hours: {
       label: 'Attendance reminder: when to send',
+    },
+    discord_confirm_attendance_channel_id: {
+      label: 'Attendance reminder channel',
+      description:
+        'Channel for the attendance reminder. Leave blank to use the announcement channel.',
+      keywords: ['channel', 'post'],
     },
     discord_post_signups: {
       label: 'Post event signup embed',
@@ -375,7 +387,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     discord_announcement_channel_id: {
       label: 'Announcement channel',
       description:
-        'Shared by the pre-day announcement, attendance reminder, profile reminder and series new-event posts.',
+        'Channel for the pre-day announcement, and for reminders and new-event posts that have no channel of their own.',
     },
     discord_announcement_hours: {
       label: 'Hours before event',
@@ -391,6 +403,12 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       description:
         'Post each new series event in the announcement channel when it is created',
       keywords: ['new event', 'channel', 'notify'],
+    },
+    discord_new_event_channel_id: {
+      label: 'New event channel',
+      description:
+        'Channel for series new-event posts. Leave blank to use the announcement channel.',
+      keywords: ['channel', 'post', 'new event'],
     },
   },
 };
