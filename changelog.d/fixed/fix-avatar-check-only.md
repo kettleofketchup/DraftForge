@@ -1,0 +1,1 @@
+- `manage.py refresh_avatars --check-only` now checks the same avatar image URLs (with the `.png` or `.gif` extension) that a real refresh checks, so it no longer reports working avatars as invalid.
