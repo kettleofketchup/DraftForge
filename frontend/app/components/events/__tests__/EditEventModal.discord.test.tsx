@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -176,5 +182,36 @@ describe('EditEventModal Discord tab', () => {
       discord_confirm_attendance_channel_id: '666',
       discord_profile_reminder_channel_id: '777',
     });
+  });
+
+  it('series event shows the signup reminder DM in Direct messages', async () => {
+    render(
+      <EditEventModal event={seriesEvent} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    await openDiscordTab();
+    const group = screen.getByTestId('discord-subsection-direct-messages');
+    expect(
+      within(group).getByTestId('discord-discord_signup_reminder'),
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByTestId('discord-signup-reminder-subscribe-note'),
+    ).toBeInTheDocument();
+    expect(within(group).queryByRole('alert')).toBeNull();
+    expect(
+      screen.queryByTestId('discord-direct-messages-series-only'),
+    ).toBeNull();
+  });
+
+  it('single event shows the series-only Direct messages line', async () => {
+    render(<EditEventModal event={baseEvent} open onOpenChange={() => {}} />, {
+      wrapper: Wrapper,
+    });
+    await openDiscordTab();
+    const group = screen.getByTestId('discord-subsection-direct-messages');
+    expect(
+      within(group).getByTestId('discord-direct-messages-series-only'),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('discord-discord_signup_reminder')).toBeNull();
   });
 });

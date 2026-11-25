@@ -29,6 +29,7 @@ import {
   EVENT_SECTION_FIELDS,
   NEW_EVENTS_DESCRIPTION,
   PROFILE_REMINDER_DESCRIPTION,
+  SIGNUP_REMINDER_LABEL,
 } from './form/settingsFields';
 import { PostChannelField } from './PostChannelField';
 import {
@@ -233,6 +234,11 @@ function AnnouncementChannelField({
 const discordLabel = (field: string): string =>
   EVENT_SECTION_FIELDS.discord[field].label;
 
+const signupReminderMeta = EVENT_SECTION_FIELDS.discord.discord_signup_reminder;
+
+const SUBSCRIBE_NOTE =
+  "Members subscribe on the series page, or with Notify Me on the event's signup post in Discord.";
+
 interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
   control: Control<T>;
   isRepeater: boolean;
@@ -241,6 +247,9 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
    *  `isRepeater`; a one-off event inherits the series' setting instead of
    *  exposing its own toggle. */
   showNotifyNewEvents?: boolean;
+  /** Shows the signup-reminder DM. Defaults to `isRepeater`; org defaults
+   *  pass it to edit the value new series inherit. */
+  showSignupReminder?: boolean;
 }
 
 export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
@@ -248,6 +257,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
   isRepeater,
   organizationId,
   showNotifyNewEvents = isRepeater,
+  showSignupReminder = isRepeater,
 }: DiscordConfigSectionProps<T>) {
   // T extends DiscordFields by the generic constraint, so narrowing to
   // Control<DiscordFields> is sound: we touch only the discord-config slice.
@@ -405,25 +415,6 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           )}
         </div>
       </Subsection>
-
-      {/* Signup reminder — repeater-only (single events have no subscriber list) */}
-      {isRepeater && (
-        <div className="rounded-md border border-border p-3 space-y-3">
-          <CheckboxField
-            control={control}
-            name="discord_signup_reminder"
-            label="Send signup reminder"
-            description="DM series subscribers who haven't signed up yet, before the event starts"
-          />
-          {signupReminder && (
-            <HoursSelect
-              control={control}
-              name="discord_signup_reminder_hours"
-              label="Hours before event"
-            />
-          )}
-        </div>
-      )}
 
       <Subsection
         testId="discord-subsection-channel-posts"
@@ -707,6 +698,46 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
               users={channelUsers}
             />
           </div>
+        )}
+      </Subsection>
+
+      <Subsection
+        testId="discord-subsection-direct-messages"
+        title="Direct messages"
+      >
+        {showSignupReminder ? (
+          <div className="rounded-md border border-border p-3 space-y-3">
+            <CheckboxField
+              control={control}
+              name="discord_signup_reminder"
+              label={
+                isRepeater
+                  ? SIGNUP_REMINDER_LABEL
+                  : `${SIGNUP_REMINDER_LABEL} (default for new series)`
+              }
+              description={signupReminderMeta.description ?? ''}
+            />
+            <p
+              className="ml-7 text-sm text-muted-foreground"
+              data-testid="discord-signup-reminder-subscribe-note"
+            >
+              {SUBSCRIBE_NOTE}
+            </p>
+            {signupReminder && (
+              <HoursSelect
+                control={control}
+                name="discord_signup_reminder_hours"
+                label="Hours before event"
+              />
+            )}
+          </div>
+        ) : (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="discord-direct-messages-series-only"
+          >
+            Direct messages are set on recurring series.
+          </p>
         )}
       </Subsection>
     </div>

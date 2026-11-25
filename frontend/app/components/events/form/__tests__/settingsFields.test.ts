@@ -12,6 +12,7 @@ import {
   EVENT_SECTION_FIELDS,
   NEW_EVENTS_DESCRIPTION,
   PROFILE_REMINDER_DESCRIPTION,
+  SIGNUP_REMINDER_LABEL,
 } from '../settingsFields';
 import { EVENT_TAB_META } from '../tabs';
 
@@ -141,5 +142,20 @@ describe('discord_signup_reminder metadata', () => {
       "DM series subscribers who haven't signed up yet, before the event starts",
     );
     expect(meta.description).not.toMatch(/\bDM users\b/i);
+  });
+
+  it('signup reminder label matches the rendered toggle', () => {
+    expect(SIGNUP_REMINDER_LABEL).toBe('Signup reminder DM');
+    expect(meta.label).toBe(SIGNUP_REMINDER_LABEL);
+    expect(meta.keywords).toEqual(
+      expect.arrayContaining(['dm', 'direct message', 'subscribers']),
+    );
+  });
+
+  it('stays listed under the Discord section exactly once', () => {
+    const sections = Object.entries(EVENT_SECTION_FIELDS)
+      .filter(([, fields]) => 'discord_signup_reminder' in fields)
+      .map(([section]) => section);
+    expect(sections).toEqual(['discord']);
   });
 });

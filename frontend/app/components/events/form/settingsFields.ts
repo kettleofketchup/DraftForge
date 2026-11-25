@@ -18,6 +18,8 @@ export const PROFILE_REMINDER_DESCRIPTION: string =
 export const ATTENDANCE_REMINDER_DESCRIPTION: string =
   "Posts a reminder in its channel (the announcement channel when none is picked) before the event. It doesn't track replies; use the ready check to require confirmation.";
 
+export const SIGNUP_REMINDER_LABEL: string = 'Signup reminder DM';
+
 export const NEW_EVENTS_DESCRIPTION: string =
   'Post each new series event in its channel (the announcement channel when none is picked) when it is created';
 
@@ -327,9 +329,10 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       description: 'Extra information appended to the Discord event details',
     },
     discord_signup_reminder: {
-      label: 'Send signup reminder',
+      label: SIGNUP_REMINDER_LABEL,
       description:
         "DM series subscribers who haven't signed up yet, before the event starts",
+      keywords: ['dm', 'direct message', 'subscribers'],
     },
     discord_signup_reminder_hours: {
       label: 'Signup reminder: hours before event',
