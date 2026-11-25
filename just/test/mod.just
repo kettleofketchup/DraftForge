@@ -207,7 +207,7 @@ dota-lobby action="up":
 compose *args:
     {{compose}} "$@"
 
-# Run only the tests this branch's changes reach (backend import graph + whole apps Django loads by name, `vitest related`); --plan only prints them. Iteration aid: the full suites still gate Verify and CI
+# Run only the tests this branch's changes reach (--plan lists them); the full suites still gate CI
 [group('test')]
 affected *args:
     #!/usr/bin/env bash
