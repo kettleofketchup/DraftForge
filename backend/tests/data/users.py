@@ -491,7 +491,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
 # 2056 | edit_user_mmr             | 04-org-mmr-edit
 # 2057 | edit_user_positions       | 08-position-persistence
 # 2058 | edit_user_cache           | 10-cache-merge
-# 2059 | edit_user_tourn_mmr       | 11-tournament-mmr-edit
+# 2059 | edit_user_tourn_mmr       | 12-tournament-mmr-edit
 # 2060 | edit_user_multi           | 07-sequential-multi-user (user A)
 # 2061 | edit_user_scope           | 09-scope-permissions
 # =============================================================================

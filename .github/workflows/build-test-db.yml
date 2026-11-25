@@ -14,7 +14,6 @@ on:
       - 'backend/**/models/*.py'
       - 'backend/**/models_*.py'
       # populate's direct imports; keep in step with scripts/hash-test-db-sources.sh
-      - 'backend/app/steam_accounts.py'
       - 'backend/common/game.py'
       - 'backend/discordbot/services/users.py'
       - 'backend/events/constants.py'
@@ -40,6 +39,7 @@ on:
       - 'backend/tests/helpers/steam_match.py'
       - 'backend/tests/test_auth.py'
       - 'backend/tournament/choices.py'
+      - 'backend/user/steam_accounts.py'
       - 'scripts/hash-test-db-sources.sh'
   workflow_dispatch:
 
