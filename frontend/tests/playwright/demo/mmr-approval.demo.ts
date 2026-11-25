@@ -17,9 +17,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { API_URL, waitForHydration } from '../fixtures/auth';
 import { BASE_URL } from '../fixtures/base-url';
-import { isCsrfCookie } from '../fixtures/cookies';
 import { waitForDemoReady } from '../fixtures/demo-utils';
-import { getCsrfToken } from '../fixtures/events';
+import {
+  getCsrfToken,
+  getEventsSeedData,
+  loginEventUser,
+  postWithCsrf,
+} from '../fixtures/events';
 
 const VIDEO_OUTPUT_DIR = 'demo-results/videos/mmr_approval';
 const FINAL_VIDEO_DIR = '../docs/assets/videos';
@@ -143,11 +147,8 @@ test.describe('MMR Approval Demo', () => {
       (window as Window & { playwright?: boolean }).playwright = true;
     });
 
-    // Login as admin (pk=5000)
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5000 },
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const seed = await getEventsSeedData(context);
+    await loginEventUser(context, 'admin', 'event admin');
 
     const page = await context.newPage();
 
@@ -163,12 +164,12 @@ test.describe('MMR Approval Demo', () => {
       `${API_URL}/events/?open_signups=true`,
       {
         data: {
-          organization: 7, // Events Test Org
+          organization: seed.org_pk,
           name: 'Wednesday Inhouse #42',
           description: 'Weekly inhouse — manual MMR approval required',
           scheduled_at: new Date(Date.now() + 86400000).toISOString(),
           tournament_name: 'Inhouse Tournament',
-          tournament_league: 7, // Events Test League
+          tournament_league: seed.events_league_pk,
           tournament_type: 'single_elimination',
           game_type: 1,
           draft_type: 'shuffle',
@@ -184,36 +185,33 @@ test.describe('MMR Approval Demo', () => {
         },
       },
     );
+    if (!createResp.ok()) {
+      throw new Error(
+        `event create failed: ${createResp.status()} ${await createResp.text()}`,
+      );
+    }
     const event = await createResp.json();
     const eventId = event.id;
 
-    // RSVP as player 1 (pk=5001, has DotaProfile with Legend 3, screenshot)
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5001 },
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const csrf2 =
-      (await context.cookies()).find((c) => isCsrfCookie(c.name))?.value || '';
-    await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf2 },
-    });
+    // RSVP as player 1 (Legend 3, screenshot), then player 2 (Ancient 1).
+    for (const [role, label] of [
+      ['player', 'event player'],
+      ['player_2', 'event player 2'],
+    ] as const) {
+      await loginEventUser(context, role, label);
+      const resp = await postWithCsrf(
+        context,
+        `${API_URL}/events/${eventId}/signup/`,
+        { intent: 'rsvp' },
+      );
+      if (!resp.ok()) {
+        throw new Error(
+          `${label} signup failed: ${resp.status()} ${await resp.text()}`,
+        );
+      }
+    }
 
-    // RSVP as player 2 (pk=5002, has DotaProfile with Ancient 1)
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5002 },
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const csrf3 =
-      (await context.cookies()).find((c) => isCsrfCookie(c.name))?.value || '';
-    await context.request.post(`${API_URL}/events/${eventId}/rsvp/`, {
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf3 },
-    });
-
-    // Switch back to admin
-    await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 5000 },
-      headers: { 'Content-Type': 'application/json' },
-    });
+    await loginEventUser(context, 'admin', 'event admin');
 
     // =========================================================================
     // Step 1 — Navigate to event page (video starts here)
@@ -272,6 +270,9 @@ test.describe('MMR Approval Demo', () => {
     // Click approve button in modal
     const confirmBtn = modal.getByTestId('mmr-modal-approve');
     await demoClick(page, confirmBtn, 300);
+    const confirmApprove = page.getByTestId('mmr-confirm-approve');
+    await confirmApprove.waitFor({ state: 'visible', timeout: 5000 });
+    await demoClick(page, confirmApprove, 300);
 
     // Wait for modal to close
     await modal.waitFor({ state: 'hidden', timeout: 10000 });

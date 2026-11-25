@@ -45,7 +45,7 @@ Treating retry-passes as defects, not noise.
 | 1 | `frontend/tests/playwright/e2e/herodraft/stale-connection.spec.ts:174` | `client reconnects after WebSocket is force-closed` | retry-passed | **HARD FAIL** |
 | 2 | `frontend/tests/playwright/e2e/herodraft/two-captains-full-draft.spec.ts:237` | `@cicd should complete a full draft with both captains via tournament UI` | retry-passed | retry-passed |
 | 3 | `frontend/tests/playwright/e2e/herodraft/websocket-reconnect-fuzz.spec.ts:162` | `should recover draft state after reconnection during drafting phase` | retry-passed | passed clean |
-| 4 | `frontend/tests/playwright/e2e/08-shuffle-draft/01-full-draft.spec.ts:410` | `Shuffle Draft - Captain Login Scenarios — should switch captains after a pick in shuffle draft` | n/a | retry-passed (new) |
+| 4 | `frontend/tests/playwright/e2e/shuffle-draft/full-draft.spec.ts:410` | `Shuffle Draft - Captain Login Scenarios — should switch captains after a pick in shuffle draft` | n/a | retry-passed (new) |
 
 There are **two distinct root causes**, and the spin-off needs to address each:
 
@@ -196,7 +196,7 @@ So the test's view of the world at the moment of failure: `useQuery` was still
 `isLoading: true`, meaning the `fetchTournament(pk)` API call hadn't resolved
 within the test's effective budget.
 
-Test budget breakdown (`01-full-draft.spec.ts:410-425`):
+Test budget breakdown (`full-draft.spec.ts:410-425`):
 1. `await loginAdmin()` — variable
 2. `await visitAndWaitForHydration(page, ...)` — `page.goto` + `1500ms` hard
    wait (`helpers/utils.ts:62`)
@@ -305,7 +305,7 @@ consumer rehydrates the correct state.
 - The fuzz body itself (reconnect timing, jitter) is not the suspect — leave
   that logic alone.
 
-### 4. `08-shuffle-draft/01-full-draft.spec.ts:410` — switch captains after a pick (Cause C)
+### 4. `shuffle-draft/full-draft.spec.ts:410` — switch captains after a pick (Cause C)
 
 **What it should verify:** in a shuffle draft, the captain seat advances after
 a pick is committed.

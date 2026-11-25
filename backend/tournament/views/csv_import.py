@@ -13,7 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from events.eligibility import apply_admin_steam_account_id
 from league.models import LeagueUser
 from org.mmr import (
@@ -29,6 +29,7 @@ from telemetry.logging import get_logger
 from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
 from user.display_names import user_display_name
+from user.models import PositionsModel
 from user.serializers import TournamentUserSerializer
 from user.steam_accounts import log_steam_verification_change
 
@@ -440,7 +441,12 @@ def _update_mmr_for_target(
             LeagueUser.objects.update_or_create(
                 user=user,
                 league=league,
-                defaults={"org_user": org_user, "mmr": base_mmr},
+                defaults={
+                    "org_user": org_user,
+                    "mmr": base_mmr,
+                    "mmr_verified_at": None,
+                    "mmr_verified_by": None,
+                },
             )
     elif org:
         pending_mmrs[user.pk] = base_mmr
@@ -455,8 +461,12 @@ def _resync_league_snapshots(league: League, values: dict[int, int]) -> None:
     stale = [row for row in rows if row.mmr != values[row.user_id]]
     for row in stale:
         row.mmr = values[row.user_id]
+        row.mmr_verified_at = None
+        row.mmr_verified_by = None
     if stale:
-        LeagueUser.objects.bulk_update(stale, ["mmr"])
+        LeagueUser.objects.bulk_update(
+            stale, ["mmr", "mmr_verified_at", "mmr_verified_by"]
+        )
         invalidate_after_commit(*stale)
 
 
@@ -635,7 +645,12 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
                 LeagueUser.objects.update_or_create(
                     user=user,
                     league=league,
-                    defaults={"org_user": org_user, "mmr": base_mmr},
+                    defaults={
+                        "org_user": org_user,
+                        "mmr": base_mmr,
+                        "mmr_verified_at": None,
+                        "mmr_verified_by": None,
+                    },
                 )
 
         tournament.users.add(user)

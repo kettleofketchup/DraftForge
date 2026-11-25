@@ -28,6 +28,7 @@ from discordbot.test_utils import (
     get_test_bot_tokens,
 )
 from org.models import Organization
+from user.models import PositionsModel
 
 SKIP_REASON = "DISCORD_BOT_TOKEN not configured"
 HAS_TOKEN = bool(getattr(settings, "DISCORD_BOT_TOKEN", ""))
@@ -330,7 +331,7 @@ class RealEventAnnouncementTaskTest(TestCase):
 
         from django.utils import timezone
 
-        from app.models import CustomUser, PositionsModel
+        from app.models import CustomUser
         from events.constants import EventState
         from events.models import Event
 
@@ -414,7 +415,7 @@ class MultiUserReactionTest(TestCase):
 
         from django.utils import timezone
 
-        from app.models import CustomUser, PositionsModel
+        from app.models import CustomUser
         from events.constants import EventState
         from events.models import Event
         from events.tasks import send_event_announcement

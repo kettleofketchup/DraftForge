@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import (
@@ -17,6 +17,7 @@ from events.services import (
 from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
+from user.models import PositionsModel
 
 
 class StaffAddSignupTest(TestCase):

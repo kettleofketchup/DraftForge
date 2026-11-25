@@ -150,7 +150,7 @@ GitHub's rate limit. The image hosts in `IMAGE_HOST_PATTERNS` (the `assets.kettl
 feature previews, ui-avatars, the Discord and Steam CDNs) get a local placeholder image,
 so no spec waits on a CDN. Import `test` from `../fixtures`, not `@playwright/test`, to get it.
 
-Stubbed responses carry an `x-e2e-stub` header. `00-external-api-stubs.spec.ts` fails if
+Stubbed responses carry an `x-e2e-stub` header. `external-api-stubs.spec.ts` fails if
 the home page fetches anything from a third-party host without it; add the host to the
 fixture when the app starts loading from a new one.
 

@@ -39,18 +39,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # Frontend typecheck, its own job so it can run on the home runner (unlike `unit`, it
-  # needs neither setup-toolchain nor `packages: read`). Same guard as playwright.yml
-  # `prepare`; scripts/check-runs-on.sh allowlists this job (docs/development/ci-runners.md).
+  # Frontend typecheck, its own job so it runs in parallel with `unit` (it needs neither
+  # setup-toolchain nor `packages: read`). Hosted on purpose: `npm ci` makes it 3-5x
+  # slower on the 1-CPU home runner (docs/development/ci-runners.md).
   typecheck:
     name: Typecheck (frontend)
-    runs-on: >-
-      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
-      && github.event_name == 'pull_request'
-      && github.event.pull_request.head.repo.full_name == github.repository
-      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
-      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
-      && 'draftforge-home' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
@@ -108,11 +102,17 @@ jobs:
       - name: Check the generated message types are current
         run: just py::gen-message-types --check
 
+      - name: Check the generated MMR summary types are current
+        run: just py::gen-mmr-summary-types --check
+
       - name: Check the generated Steam verification types are current
         run: just py::gen-steam-verification --check
 
       - name: Check the generated Discord connect API is current
         run: just py::gen-discord-connect-api --check
+
+      - name: Check the generated bot access API is current
+        run: just py::gen-bot-access-api --check
 
       - name: Check the promotion render fixture copies match
         run: cmp backend/org/tests/render_fixture.json frontend/app/features/promotion/__tests__/render_fixture.json

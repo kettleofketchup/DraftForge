@@ -1,10 +1,11 @@
 from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from org.models import Organization, OrgLog
 from steam.tests.league_summary_fixtures import make_player
 from tests.cache import flush_run_cache
+from user.models import ProfileClaimRequest
 
 
 class ClaimApproveOrgLogTests(TransactionTestCase):

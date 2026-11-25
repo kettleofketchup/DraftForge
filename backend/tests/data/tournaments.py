@@ -19,6 +19,7 @@ from tests.data.models import DynamicTournamentConfig, TestTournament
 from tests.data.teams import (
     BRACKET_UNSET_WINNER_TEAMS,
     HERODRAFT_TEAMS,
+    PLACEMENT_REOPEN_CONFLICT_TEAMS,
     REAL_TOURNAMENT_38_TEAMS,
 )
 
@@ -95,7 +96,7 @@ TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
     organization_pk=2,  # Test Organization
 )
 
-# Discord Activity bracket view (e2e/20-activity). Its bracket games come from
+# Discord Activity bracket view (e2e/activity). Its bracket games come from
 # populate_activity_bracket_data, not BRACKET_TEST_CONFIGS.
 ACTIVITY_BRACKET_CONFIG = DynamicTournamentConfig(
     pk=950,
@@ -220,6 +221,21 @@ BRACKET_PLACEMENT_DOUBLE_TOURNAMENT: TestTournament = TestTournament(
     steam_league_id=DTX_STEAM_LEAGUE_ID,
     league_name="DTX League",
     teams=BRACKET_UNSET_WINNER_TEAMS,
+)
+
+# =============================================================================
+# Placement Reopen Conflict Tournament (#922)
+# Single elimination: Reopen B beat Reopen A (placement 3); Reopen A's
+# reopen_conflict_a2 also plays for live Reopen C.
+# =============================================================================
+
+PLACEMENT_REOPEN_CONFLICT_TOURNAMENT: TestTournament = TestTournament(
+    name="bracket:placement Reopen Conflict Tournament",
+    tournament_type="single_elimination",
+    state="in_progress",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    teams=PLACEMENT_REOPEN_CONFLICT_TEAMS,
 )
 
 # =============================================================================

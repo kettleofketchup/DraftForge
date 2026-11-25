@@ -17,6 +17,9 @@ bots:
     leagues: [17940]
   - name: sim_bot_3
     leagues: [17940]
+  # Administers no league: the Lobby bots tab shows it as missing access.
+  - name: sim_bot_4
+    leagues: []
 lobby:
   auto_launch_delay: 1s
   postgame_linger: 5s

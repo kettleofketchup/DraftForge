@@ -543,3 +543,215 @@ class PaginationTests(ClientTestBase):
         events = list(self.client.list_events("lob_1", after=5))
         self.assertEqual(len(events), 1)
         self.assertEqual(self.request.call_count, 1)
+
+
+def _bot(**overrides):
+    bot = {
+        "name": "sim_bot_1",
+        "username": "sim_login_1",
+        "state": "gc_ready",
+        "ready": True,
+        "reason": None,
+        "last_error": "steam_logon_failed",
+        "last_error_message": "boom",
+        "since": "2026-11-24T10:00:00Z",
+        "steam_id": "76561197960265729",
+        "limited": True,
+        "lobby_stale": False,
+        "token_expires_at": "2026-12-24T10:00:00Z",
+        "renew_blocked": None,
+        "attempt": 0,
+        "gc_queue_position": None,
+        "ready_since": "2026-11-24T10:00:00Z",
+        "leagues": None,
+        "lobby": None,
+    }
+    bot.update(overrides)
+    return bot
+
+
+class BotAccessClientTests(ClientTestBase):
+    def test_list_bots_drops_username_and_nulls(self):
+        self.request.return_value = _resp(
+            200, {"bots": [_bot(), _bot(name="sim_bot_2", lobby="lob_x", leagues=[7])]}
+        )
+        bots = self.client.list_bots()
+        method, url, _ = self.call()
+        self.assertEqual((method, url), ("GET", f"{BASE}/v1/bots"))
+        first, second = bots
+        self.assertFalse(hasattr(first, "username"))
+        self.assertFalse(hasattr(first, "last_error"))
+        self.assertFalse(hasattr(first, "token_expires_at"))
+        self.assertEqual(first.leagues, [])
+        self.assertEqual(first.steam_id, "76561197960265729")
+        self.assertIsNone(first.lobby)
+        self.assertEqual((second.lobby, second.leagues), ("lob_x", [7]))
+
+    def test_list_bots_null_list(self):
+        self.request.return_value = _resp(200, {"bots": None, "simulation": True})
+        self.assertEqual(self.client.list_bots(), [])
+
+    def test_list_bots_not_retried_on_unreachable(self):
+        self.request.side_effect = requests.ConnectionError
+        with self.assertRaises(DotaLobbyUnavailable):
+            self.client.list_bots()
+        self.assertEqual(self.request.call_count, 1)
+        self.assertEqual(self.sleeps, [])
+
+    def test_get_league_parses_holders_and_bots(self):
+        self.request.return_value = _resp(
+            200,
+            {
+                "league_id": 17929,
+                "name": "DTX",
+                "holders": [
+                    {
+                        "bot": "sim_bot_1",
+                        "source": "gc",
+                        "verified": True,
+                        "first_seen_at": None,
+                        "refreshed_at": "2026-11-24T10:00:00Z",
+                        "bot_state": "gc_ready",
+                        "ready": True,
+                        "lobby_id": None,
+                    }
+                ],
+                "bots": [{"name": "sim_bot_1", "stale": True}],
+                "holders_total": 1,
+                "holders_free": 1,
+            },
+        )
+        league = self.client.get_league(17929, retry=False)
+        holder = league.holders[0]
+        self.assertEqual(
+            (holder.bot, holder.source, holder.verified), ("sim_bot_1", "gc", True)
+        )
+        self.assertEqual(holder.refreshed_at.year, 2026)
+        self.assertEqual(
+            (league.bots[0].name, league.bots[0].stale), ("sim_bot_1", True)
+        )
+
+    def test_get_league_null_holders(self):
+        self.request.return_value = _resp(
+            200, {"league_id": 1, "holders": None, "bots": None}
+        )
+        league = self.client.get_league(1)
+        self.assertEqual((league.holders, league.bots), ([], []))
+
+    def test_get_league_retry_false(self):
+        self.request.side_effect = requests.ConnectionError
+        with self.assertRaises(DotaLobbyUnavailable):
+            self.client.get_league(1, retry=False)
+        self.assertEqual(self.request.call_count, 1)
+
+    def test_get_bot_leagues_quotes_name(self):
+        self.request.return_value = _resp(
+            200,
+            {
+                "bot": "a/b",
+                "leagues": [
+                    {
+                        "league_id": 17929,
+                        "name": None,
+                        "source": "gc",
+                        "verified": True,
+                        "first_seen_at": None,
+                        "refreshed_at": "2026-11-24T10:00:00Z",
+                        "stale": False,
+                    }
+                ],
+                "refresh": {
+                    "ok_at": "2026-11-24T10:00:00Z",
+                    "error": "gc timeout",
+                    "error_at": None,
+                },
+                "changes": None,
+            },
+        )
+        result = self.client.get_bot_leagues("a/b")
+        method, url, _ = self.call()
+        self.assertEqual(method, "GET")
+        self.assertTrue(url.endswith("/v1/bots/a%2Fb/leagues"), url)
+        self.assertEqual(result.refresh.ok_at.year, 2026)
+        self.assertFalse(hasattr(result.refresh, "error"))
+        self.assertEqual(result.leagues[0].league_id, 17929)
+
+    def test_get_bot_leagues_null_refresh_fields(self):
+        self.request.return_value = _resp(
+            200, {"bot": "sim_bot_1", "leagues": None, "refresh": {"ok_at": None}}
+        )
+        result = self.client.get_bot_leagues("sim_bot_1")
+        self.assertEqual(result.leagues, [])
+        self.assertIsNone(result.refresh.ok_at)
+
+    def test_get_bot_leagues_timeout_override(self):
+        self.request.return_value = _resp(200, {"bot": "sim_bot_1", "leagues": []})
+        self.client.get_bot_leagues("sim_bot_1", timeout=4.0)
+        self.assertEqual(self.call()[2]["timeout"][1], 4.0)
+
+    def test_get_bot_leagues_not_retried(self):
+        self.request.return_value = _problem(503, "unavailable", retryable=True)
+        with self.assertRaises(DotaLobbyError):
+            self.client.get_bot_leagues("sim_bot_1")
+        self.assertEqual(self.request.call_count, 1)
+
+    def test_get_bot_leagues_failure_log_redacts_name(self):
+        self.request.return_value = _problem(
+            404, "not_found", detail='no bot named "sim_bot_1"'
+        )
+        with capture_logs() as logs, self.assertRaises(DotaLobbyError):
+            self.client.get_bot_leagues("sim_bot_1")
+        failed = [e for e in logs if e["event"] == "dota_lobby_request_failed"]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["http_path"], "/v1/bots/{name}/leagues")
+        self.assertNotIn("sim_bot_1", repr(logs))
+
+    def test_refresh_leagues_uses_long_timeout(self):
+        self.request.return_value = _resp(
+            200,
+            {
+                "results": [
+                    {"bot": "sim_bot_1", "status": "ok", "error": None, "leagues": [1]},
+                    {
+                        "bot": "sim_bot_2",
+                        "status": "not_ready",
+                        "error": None,
+                        "leagues": None,
+                    },
+                ]
+            },
+        )
+        result = self.client.refresh_leagues()
+        method, url, kwargs = self.call()
+        self.assertEqual((method, url), ("POST", f"{BASE}/v1/leagues/refresh"))
+        self.assertEqual(kwargs["json"], {})
+        self.assertEqual(kwargs["timeout"], (CONNECT_TIMEOUT_SECONDS, 20.0))
+        self.assertEqual(
+            [(r.bot, r.status) for r in result.results],
+            [("sim_bot_1", "ok"), ("sim_bot_2", "not_ready")],
+        )
+
+    def test_refresh_leagues_keeps_longer_configured_timeout(self):
+        client = DotaLobbyClient(BASE, API_KEY, 30)
+        self.request.return_value = _resp(200, {"results": None})
+        self.assertEqual(client.refresh_leagues().results, [])
+        self.assertEqual(self.call()[2]["timeout"], (CONNECT_TIMEOUT_SECONDS, 30.0))
+
+    def test_refresh_leagues_not_retried(self):
+        self.request.return_value = _problem(503, "unavailable", retryable=True)
+        with self.assertRaises(DotaLobbyError):
+            self.client.refresh_leagues()
+        self.assertEqual(self.request.call_count, 1)
+
+    def test_refresh_leagues_409_raises_invalid_state(self):
+        self.request.return_value = _problem(409, "invalid_state")
+        with self.assertRaises(DotaLobbyError) as ctx:
+            self.client.refresh_leagues()
+        self.assertEqual(
+            (ctx.exception.code, ctx.exception.status), ("invalid_state", 409)
+        )
+
+    def test_default_timeout_unchanged(self):
+        self.request.return_value = _resp(200, {"bots": []})
+        self.client.list_bots()
+        self.assertEqual(self.call()[2]["timeout"], (CONNECT_TIMEOUT_SECONDS, 5))

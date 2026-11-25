@@ -16,7 +16,7 @@ from requests.exceptions import HTTPError
 from structlog.testing import capture_logs
 
 from app.internal_client import InternalAPIUnavailable
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from discordbot import dm as discord_dm
 from discordbot.dm_keys import signup_reminder_key
 from discordbot.dm_ledger import ClaimResult
@@ -50,6 +50,7 @@ from events.tests._internal_client_orm import DiscordTestMixin
 from events.tests.base import EventTestCase
 from events.tests.test_signup_post_independence import destination_pairs
 from org.models import OrgUser
+from user.models import PositionsModel
 
 
 def _ok_response(payload: dict[str, Any]) -> MagicMock:

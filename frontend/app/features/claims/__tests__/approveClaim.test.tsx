@@ -79,11 +79,13 @@ describe('useApproveClaim', () => {
     expect(useUserCacheStore.getState().entities[TARGET]).toBeUndefined();
   });
 
-  it('skips target eviction when the merged profile is already absent', async () => {
+  it('refreshes the org for a merged target without evicting an absent-user query', async () => {
     vi.mocked(approveClaimRequest).mockResolvedValue('approved');
+    useUserStore.setState({ currentUser: { pk: VIEWER } as UserType });
     const { qc, wrapper } = setup();
-    qc.setQueryData(['user', null], { placeholder: true });
+    qc.setQueryData(['user', null], { anonymous: true });
     const { result } = renderHook(() => useApproveClaim(ORG), { wrapper });
+
     await act(async () => {
       await result.current.mutateAsync({
         id: 1,
@@ -91,10 +93,14 @@ describe('useApproveClaim', () => {
         target_user: null,
       });
     });
-    expect(qc.getQueryData(['user', null])).toEqual({ placeholder: true });
-    expect(qc.getQueryData(['user', TARGET])).toEqual({ pk: TARGET });
+
+    expect(approveClaimRequest).toHaveBeenCalledWith(1);
     expect(qc.getQueryState(ORG_KEY)?.isInvalidated).toBe(true);
+    expect(qc.getQueryState(ORG_USERS_KEY)?.isInvalidated).toBe(true);
+    expect(qc.getQueryState(PENDING_KEY)?.isInvalidated).toBe(true);
     expect(qc.getQueryState(['user', CLAIMER])?.isInvalidated).toBe(true);
+    expect(qc.getQueryData(['user', null])).toEqual({ anonymous: true });
+    expect(qc.getQueryData(['user', TARGET])).toEqual({ pk: TARGET });
   });
 
   it('leaves the caches alone when the approval fails', async () => {

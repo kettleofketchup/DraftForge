@@ -2,18 +2,18 @@
 User Edit test data population.
 
 Creates an isolated organization, league, and tournament for user edit testing.
-Also creates 3 test users that are members of the org, league, and tournament.
+Also creates the USER_EDIT_USERS that are members of the org, league, and tournament.
 
 Infrastructure created:
 - User Edit Org (pk=5) - dedicated org for user edit tests
 - User Edit League (pk=5, steam_league_id=17933) - under User Edit org
-- User Edit Tournament - under User Edit league, with 3 users
-- 3 edit test users (pk=2050-2052) - members of the org/league/tournament
+- User Edit Tournament - under User Edit league, with every edit test user
+- 13 edit test users (pk=2050-2062) - members of the org/league/tournament
 """
 
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from league.models import League
 from org.models import Organization
 from tests.data.leagues import USER_EDIT_LEAGUE
@@ -26,6 +26,7 @@ from tests.populate.utils import (
     ensure_org_user,
 )
 from tournament.models import Tournament
+from user.models import PositionsModel
 
 
 def populate_user_edit_data(force=False):
@@ -35,7 +36,7 @@ def populate_user_edit_data(force=False):
     1. User Edit Org + League (isolated from other orgs)
     2. User Edit Tournament (under User Edit league)
     3. Admin user added as org admin (for E2E access)
-    4. 3 edit test users as members of org/league/tournament
+    4. USER_EDIT_USERS as members of org/league/tournament
     """
     print("Populating user edit test data...")
 
@@ -95,7 +96,7 @@ def populate_user_edit_data(force=False):
         print(f"  Added {admin_user.username} as admin of {USER_EDIT_ORG.name}")
 
     # 4b. Add the existing non-staff org-admin test user (pk=1020) as admin of
-    #     User Edit Org so 09-scope-permissions.spec can verify the scope-aware
+    #     User Edit Org so scope-permissions.spec can verify the scope-aware
     #     permission gate (org admin can edit on org page, cannot on profile page).
     #     ORG_ADMIN_USER is created by populate.users.populate_users_data().
     org_admin_user = CustomUser.objects.filter(pk=ORG_ADMIN_USER.pk).first()

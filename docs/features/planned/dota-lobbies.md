@@ -78,7 +78,9 @@ without a scored result, was abandoned: the game goes back to pending and may ge
    once no attempt is in flight: each attempt holds the row for two minutes, and a retryable
    failure holds it until the task's own retry is due plus those two minutes
    (`next_attempt_at`). Any error (`league_not_held`, `invalid_request`, ...) ends the row in
-   state `error` with `last_error_code` for organizers. A `409 conflict` is resolved by
+   state `error` with `last_error_code` for organizers. For `league_not_held`, league admins
+   can check which bots hold the league on the
+   [Lobby bots tab](../lobby-bot-league-access.md). A `409 conflict` is resolved by
    looking up the lobby holding the reference: DraftForge adopts it when it is the same row's,
    closes it and retries when it is an earlier lobby of the same game, and gives up otherwise.
 
@@ -301,7 +303,7 @@ announcements. The opt-in Discord lobby info DM still sends it to the game's ros
 
 ### End-to-end tests
 
-`frontend/tests/playwright/e2e/18-dota-lobby/` runs the integration against the real
+`frontend/tests/playwright/e2e/dota-lobby/` runs the integration against the real
 dota_lobby service in simulation mode, the test stack's `dota-lobby` service (see
 [Test Stack Slots](../../development/test-stack-slots.md#simulated-dota_lobby)). The
 specs use their own data (Lobby Test Org and League, the Lobby Test Series with a fixed
@@ -311,11 +313,11 @@ API:
 
 | Spec | What it proves |
 |------|----------------|
-| `01-fixed-password` | A new fixed series password reaches the event and its tournament, and the created lobby has exactly that password in the simulated game coordinator |
-| `02-random-password` | A regenerated random password leaves the existing lobby alone; the recreated lobby gets the new one and the old lobby is closed |
-| `03-password-visibility` | A registered player sees the password on the event page and a rostered player in the match dialog; a user who is neither and league-only staff get `404` from the event endpoint, no password from the lobby API, and see it nowhere |
-| `04-lifecycle` | Invited players join and sit on their sides, a chat line reaches the bot, staff launch, the match starts (game live, in-game dot on the bracket), the simulated match ends (provisional winner suggested, not submitted), no new lobby is offered for the played match, and a replay is offered once staff reset the game |
-| `05-modal-fit` | At 390x844 and 1366x768 the Match Details title and close button stay in the viewport and Link Steam Match is reached by scrolling the dialog body |
+| `fixed-password` | A new fixed series password reaches the event and its tournament, and the created lobby has exactly that password in the simulated game coordinator |
+| `random-password` | A regenerated random password leaves the existing lobby alone; the recreated lobby gets the new one and the old lobby is closed |
+| `password-visibility` | A registered player sees the password on the event page and a rostered player in the match dialog; a user who is neither and league-only staff get `404` from the event endpoint, no password from the lobby API, and see it nowhere |
+| `lifecycle` | Invited players join and sit on their sides, a chat line reaches the bot, staff launch, the match starts (game live, in-game dot on the bracket), the simulated match ends (provisional winner suggested, not submitted), no new lobby is offered for the played match, and a replay is offered once staff reset the game |
+| `modal-fit` | At 390x844 and 1366x768 the Match Details title and close button stay in the viewport and Link Steam Match is reached by scrolling the dialog body |
 
 ### Design notes
 

@@ -24,14 +24,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from common.game import GameType
 from common.utils import isTestEnvironment
 from discordbot.models import DiscordEvent, DiscordEventLog
 from draft.models import Draft
 from events.constants import EventState
 from events.ledger import SignupActor
-from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
+from events.models import (
+    Event,
+    EventRepeater,
+    EventSignup,
+    RepeaterSubscription,
+)
 from events.services import generate_events_for_repeater, process_rsvp
 from events.tasks import sync_discord_events
 from league.models import League, LeagueUser
@@ -42,6 +47,7 @@ from tests.data.tournaments import (
     BRACKET_PLACEMENT_DOUBLE_TOURNAMENT,
     BRACKET_PLACEMENT_SINGLE_TOURNAMENT,
     BRACKET_UNSET_WINNER_TOURNAMENT,
+    PLACEMENT_REOPEN_CONFLICT_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
 )
 from tests.data.users import (
@@ -83,13 +89,19 @@ from tests.populate.bracket import (
     populate_bracket_placement_double,
     populate_bracket_placement_single,
     populate_bracket_unset_winner_tournament,
+    populate_placement_reopen_conflict_tournament,
 )
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
-from tests.populate.utils import ensure_org_user
+from tests.populate.utils import (
+    delete_event_signups,
+    delete_events,
+    ensure_org_user,
+)
 from tests.test_events_discord import discord_auth_failure
 from tests.test_teamdraft import clear_teamdraft_redis
 from tournament.models import Tournament
 from tournament.serializers.tournament import TournamentSerializer
+from user.models import ProfileClaimRequest
 from user.serializers import UserSerializer
 
 log = logging.getLogger(__name__)
@@ -101,7 +113,6 @@ def get_social_token(user, provider="discord"):
     except UserSocialAuth.DoesNotExist:
         log.warning("Social Auth Doesn't exist")
         return None
-    # Access token
     access_token = social.extra_data.get("access_token")
 
     # If provider supports refresh tokens:
@@ -133,7 +144,6 @@ def create_social_auth(user):
             )
             return
 
-    # Fake Discord user ID
     log.debug(f"Getting or creating social auth for user {user.username}")
     social, created = UserSocialAuth.objects.update_or_create(
         user=user,
@@ -169,7 +179,6 @@ def createTestSuperUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=ADMIN_USER.pk,
         username=ADMIN_USER.username,
@@ -199,7 +208,6 @@ def createTestStaffUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=STAFF_USER.pk,
         username=STAFF_USER.username,
@@ -229,7 +237,6 @@ def createTestUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=REGULAR_USER.pk,
         username=REGULAR_USER.username,
@@ -268,7 +275,6 @@ def createClaimableTestUser() -> tuple[CustomUser, bool]:
     if user:
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=CLAIMABLE_USER.pk,
         username=CLAIMABLE_USER.username,  # None
@@ -303,7 +309,6 @@ def createUserClaimerTestUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=USER_CLAIMER.pk,
         username=USER_CLAIMER.username,
@@ -333,7 +338,6 @@ def createOrgAdminTestUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=ORG_ADMIN_USER.pk,
         username=ORG_ADMIN_USER.username,
@@ -391,7 +395,6 @@ def createOrgStaffTestUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=ORG_STAFF_USER.pk,
         username=ORG_STAFF_USER.username,
@@ -421,7 +424,6 @@ def createLeagueAdminTestUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=LEAGUE_ADMIN_USER.pk,
         username=LEAGUE_ADMIN_USER.username,
@@ -451,7 +453,6 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
         create_social_auth(user)
         return user, False
 
-    # Create with specific PK if not found
     user = CustomUser(
         pk=LEAGUE_STAFF_USER.pk,
         username=LEAGUE_STAFF_USER.username,
@@ -574,7 +575,7 @@ def login_user(request):
     return return_tokens(user)
 
 
-# Login as user claimer (has Discord + Steam ID matching claimable_profile)
+# Login as user claimer (has Discord, no Steam ID; claims claimable_profile)
 @csrf_exempt
 @api_view(["POST"])
 @authentication_classes([])
@@ -582,16 +583,14 @@ def login_user(request):
 def login_user_claimer(request):
     """
     Login as user_claimer - for testing claim/merge flow.
-    This user has the same Steam ID as claimable_profile.
+    This user has no Steam ID and claims claimable_profile.
     Also ensures claimable_profile exists.
     """
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Ensure the claimable user exists first
     createClaimableTestUser()
 
-    # Login as the claimer
     user, created = createUserClaimerTestUser()
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
     return return_tokens(user)
@@ -1024,6 +1023,7 @@ def reset_tournament_by_key(request, key: str):
         "captain_takeover": populate_captain_takeover_tournament,
         "captain_removal": populate_captain_removal_tournament,
         "knocked_out_roster": populate_knocked_out_roster_tournament,
+        "placement_reopen_conflict": populate_placement_reopen_conflict_tournament,
     }
 
     def clear_existing_draft_redis(name: str) -> None:
@@ -1046,6 +1046,7 @@ def reset_tournament_by_key(request, key: str):
         "captain_takeover": CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
         "captain_removal": CAPTAIN_REMOVAL_TOURNAMENT_NAME,
         "knocked_out_roster": KNOCKED_OUT_ROSTER_TOURNAMENT_NAME,
+        "placement_reopen_conflict": PLACEMENT_REOPEN_CONFLICT_TOURNAMENT.name,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)
@@ -1093,12 +1094,10 @@ def create_claimable_user(request):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Generate unique identifiers if not provided
     unique_id = str(uuid.uuid4())[:8]
     username = request.data.get("username", f"claimable_{unique_id}")
     nickname = request.data.get("nickname", f"Claimable User {unique_id}")
 
-    # Create user without Discord or Steam
     user = CustomUser.objects.create(
         username=username,
         nickname=nickname,
@@ -1267,7 +1266,6 @@ def create_claim_request(request):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Generate unique identifiers
     unique_id = str(uuid.uuid4())[:8]
     claimer_username = request.data.get("claimer_username", f"claimer_{unique_id}")
     target_steamid = request.data.get(
@@ -1298,7 +1296,6 @@ def create_claim_request(request):
     target_user.set_unusable_password()
     target_user.save()
 
-    # Create the claim request
     claim_request = ProfileClaimRequest.objects.create(
         claimer=claimer,
         target_user=target_user,
@@ -1386,7 +1383,8 @@ def reset_events_data(request):
     """
     TEST ONLY: Reset events E2E data to clean state.
 
-    Deletes all EventSignups and resets the E2E Signup Event to signups_open.
+    Resets the E2E Signup Event to signups_open with no signups and deletes
+    test-created repeaters and repeater-generated events.
     Used by Playwright tests to ensure consistent state between test runs.
     """
     if not isTestEnvironment(request):
@@ -1404,7 +1402,7 @@ def reset_events_data(request):
     ).exclude(name="Weekly Inhouse")
     test_repeaters.delete()
 
-    # Reset the seeded E2E Signup Event to signups_open (don't delete signups or events)
+    # Reset the seeded E2E Signup Event to signups_open; it keeps no signups
     reset_count = 0
     deleted_generated = 0
     try:
@@ -1419,7 +1417,7 @@ def reset_events_data(request):
             old_tournament.delete()
         else:
             signup_event.save()
-        EventSignup.objects.filter(event=signup_event).delete()
+        delete_event_signups(signup_event)
         invalidate_obj(signup_event)
         reset_count += 1
     except Event.DoesNotExist:
@@ -1434,7 +1432,7 @@ def reset_events_data(request):
         DiscordEvent.objects.filter(event=event).delete()
         if event.tournament:
             event.tournament.delete()
-        event.delete()
+        delete_events(Event.objects.filter(pk=event.pk))
         deleted_generated += 1
 
     return Response(
@@ -1459,28 +1457,23 @@ def reset_events_demo(request):
 
     EVENTS_ORG_NAME = "Events Test Org"
 
-    # Delete all signups
     signups_deleted = EventSignup.objects.filter(
         event__organization__name=EVENTS_ORG_NAME
     ).delete()[0]
 
-    # Delete all tournaments linked to events
     tournament_pks = Event.objects.filter(
         organization__name=EVENTS_ORG_NAME, tournament__isnull=False
     ).values_list("tournament_id", flat=True)
     tournaments_deleted = Tournament.objects.filter(pk__in=tournament_pks).delete()[0]
 
-    # Delete all events
-    events_deleted = Event.objects.filter(organization__name=EVENTS_ORG_NAME).delete()[
-        0
-    ]
+    events_deleted = delete_events(
+        Event.objects.filter(organization__name=EVENTS_ORG_NAME)
+    )
 
-    # Delete all subscriptions
     RepeaterSubscription.objects.filter(
         event_repeater__organization__name=EVENTS_ORG_NAME
     ).delete()
 
-    # Delete all repeaters
     repeaters_deleted = EventRepeater.objects.filter(
         organization__name=EVENTS_ORG_NAME
     ).delete()[0]

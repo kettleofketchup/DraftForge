@@ -191,3 +191,14 @@ Previews run PR-built code behind forward-auth. Two limits of that model:
   `PREVIEW_REQUIRE_VERIFIED=true` commit logins can be forged. Treat every write
   collaborator as able to run code in a preview until images are deployed by a digest that a
   trusted workflow records.
+
+## Upload body cap
+
+The nginx stacks cap the MMR screenshot upload paths (`/api/mmr-requests/` and
+`/api/{organizations,leagues}/<id>/mmr-requests/staff-set/`) at 9 MB with a dedicated
+`client_max_body_size 9m` location. The chart adds no Traefik `Buffering` middleware for
+these paths: the preview profile already renders 5 Middlewares against the
+`count/middlewares.traefik.io: "5"` quota, so a sixth would fail every preview sync. In a
+preview the Django upload guard is the only cap. It returns 413 when `Content-Length` is
+over 9 MB and stops parsing a file part past 8 MB, but Daphne still spools the request body
+before the view runs. Previews are ephemeral and behind forward-auth, so that is accepted.

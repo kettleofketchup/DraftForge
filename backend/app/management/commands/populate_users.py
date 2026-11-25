@@ -4,6 +4,7 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandParser
 
 from tests.populate import populate_users
+from tests.populate.utils import without_task_publishing
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,8 @@ class Command(BaseCommand):
 
         try:
             self.stdout.write("Starting user population...")
-            populate_users(force=force)
+            with without_task_publishing():
+                populate_users(force=force)
             self.stdout.write(
                 self.style.SUCCESS("Successfully populated users from Discord!")
             )

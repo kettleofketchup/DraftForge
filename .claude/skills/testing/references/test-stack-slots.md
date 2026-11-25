@@ -30,7 +30,7 @@ not be your worktree. Never hardcode `https://localhost`: Playwright code import
 | `just test::down` / `stop` / `logs` / `ps` / `exec` / `restart` | This slot only; error if no slot or it was taken |
 | `just test::run '<cmd>'` | Never allocates; without a slot runs in a throwaway `df-run-<hex>` project |
 | `just test::compose <args>` | Compose against this slot; `--stack dev` for `df-dev`. Use instead of raw `docker compose` / `docker exec <name>` |
-| `just test::dota-lobby [up\|down\|restart\|logs\|ps]` | The simulated dota_lobby (service `dota-lobby`, profile `dota-lobby`) for the 18-dota-lobby specs. `up` runs the slot's `up -d` with the profile on |
+| `just test::dota-lobby [up\|down\|restart\|logs\|ps]` | The simulated dota_lobby (service `dota-lobby`, profile `dota-lobby`) for the dota-lobby specs. `up` runs the slot's `up -d` with the profile on |
 | `just test::background on\|off` | Discord bot + celery beat + real tokens for this N ≥ 1 slot (one project at a time) |
 | `just test::slot-release` | Release own slot (stack must be down) |
 | `just test::slot-release --slot N` | Release someone else's idle slot. Pre-checks first (Rules) |
@@ -45,8 +45,8 @@ From another directory: `just -f <wt>/justfile -d <wt> <recipe>`.
 
 Slots N ≥ 1 with background off have no bot, no beat, and blank `DISCORD_BOT_TOKEN` /
 `STEAM_API_KEY`. Specs that need real Discord (run on slot 0 or with
-`background on`): `16-events/03-roll-call`, `04-discord-integration`,
-`06-full-lifecycle`, `07-notification-dm`, `08-tournament-discord-lifecycle`. They
+`background on`): `events/roll-call`, `discord-integration`,
+`full-lifecycle`, `notification-dm`, `tournament-discord-lifecycle`. They
 warn and skip their Discord assertions otherwise, so a pass there proves nothing about
 Discord. Backend `events.tests.test_discord_integration` skips without the token;
 `just test::run` prints a notice when it blanks it.

@@ -47,6 +47,7 @@ from .test_dota_lobby import (
     reset_dota_lobby,
     seed_dota_lobby_row,
 )
+from .test_events_data import events_data
 from .test_events_discord import (
     discord_status,
     send_test_notification,
@@ -62,6 +63,7 @@ from .test_herodraft import (
     reset_herodraft,
     warp_herodraft_round,
 )
+from .test_mmr_requests import mmr_requests_data, mmr_requests_reset
 from .test_mmr_sync import login_mmr_sync, reset_mmr_sync
 from .test_org_features import login_org_features, org_features_data, reset_org_features
 from .test_signup_history import reset_signup_history, signup_history_data
@@ -127,7 +129,7 @@ urlpatterns = [
         name="login-event-league-staff",
     ),
     # Auth-matrix role logins — isolated org/league for the role-context
-    # matrix in frontend/tests/playwright/e2e/17-auth/.
+    # matrix in frontend/tests/playwright/e2e/auth/.
     path(
         "login-auth-matrix-org-owner/",
         login_auth_matrix_org_owner,
@@ -279,6 +281,7 @@ urlpatterns = [
         seed_discord_members,
         name="test-seed-discord-members",
     ),
+    path("events/data/", events_data, name="test-events-data"),
     # Discord Activity launch staged against the TEST-stack Discord fake
     path(
         "discord-activity/setup/",
@@ -382,6 +385,8 @@ urlpatterns = [
         game_org_mmr_approve_setup,
         name="test-game-org-mmr-approve-setup",
     ),
+    path("mmr-requests/data/", mmr_requests_data, name="test-mmr-requests-data"),
+    path("mmr-requests/reset/", mmr_requests_reset, name="test-mmr-requests-reset"),
     path(
         "signup-history/data/",
         signup_history_data,

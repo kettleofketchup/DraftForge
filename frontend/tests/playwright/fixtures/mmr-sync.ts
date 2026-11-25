@@ -1,5 +1,5 @@
 /**
- * MMR sync API E2E fixtures (19-org-features/10-mmr-sync-api spec).
+ * MMR sync API E2E fixtures (org-features/mmr-sync-api spec).
  *
  * Infrastructure (backend/tests/populate/mmr_sync.py, tests.data.mmr_sync):
  * - MMR Sync Org: mmr_sync unlocked; admin, staff, member and a Steam-linked player

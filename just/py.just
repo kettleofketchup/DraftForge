@@ -41,7 +41,7 @@ script *args:
 # pytest on the host with docker/.env.test loaded and the cache on, as in the test container
 [group('py')]
 test *args:
-    {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
+    {{quote(root / "scripts/test-limits.sh")}} wrap {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
 
 # Write frontend/app/lib/opsnotices/noticeTypes.generated.ts from backend/*/ops_notices.py
 [group('py')]
@@ -59,6 +59,13 @@ gen-message-types *args:
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/lib/notifications/messageTypes.generated.ts")}} "$@"
 
+# Regenerate frontend/app/features/mmr-requests/summary.generated.ts from org/mmr_requests/schemas.py; --check fails instead of writing when stale
+[group('py')]
+gen-mmr-summary-types *args:
+    {{quote(python)}} -I {{quote(backend / "org/mmr_requests/export_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/mmr-requests/summary.generated.ts")}} "$@"
+
 # Regenerate frontend/app/features/steam-verification/api.generated.ts from backend/app/steam_verification_schemas.py; --check fails instead of writing when stale
 [group('py')]
 gen-steam-verification *args:
@@ -72,3 +79,10 @@ gen-discord-connect-api *args:
     {{quote(python)}} -I {{quote(backend / "discordbot/export_install_schema.py")}} \
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/features/discord-connect/api.generated.ts")}} "$@"
+
+# Regenerate frontend/app/features/bot-access/schemas.generated.ts from backend/lobby/bot_access/schemas.py; --check fails instead of writing when stale
+[group('py')]
+gen-bot-access-api *args:
+    {{quote(python)}} -I {{quote(backend / "lobby/export_bot_access_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/bot-access/schemas.generated.ts")}} "$@"

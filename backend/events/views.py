@@ -198,16 +198,21 @@ def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
 def _attach_user_can_manage(
     payload: dict[str, Any] | list[dict[str, Any]], user: CustomUser | AnonymousUser
 ) -> dict[str, Any] | list[dict[str, Any]]:
-    """Mutate a serialized Event payload (or list of them) to set per-request user flags.
+    """Set per-request viewer fields on a serialized Event payload (or list of them).
+
+    Sets user_can_manage, user_can_manage_event_staff and user_is_event_operator,
+    plus manage_viewer_pk: the viewer the flags were computed for (None for
+    anonymous, who keep the serializer's False defaults).
 
     Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
     The Event instances are looked up by id from the payload; one batched query
     covers both list and single-item cases.
     """
-    if not user or not user.is_authenticated:
-        return payload  # default False already set by serializer
     items = payload if isinstance(payload, list) else [payload]
-    if not items:
+    viewer_pk = user.pk if user and user.is_authenticated else None
+    for p in items:
+        p["manage_viewer_pk"] = viewer_pk
+    if viewer_pk is None or not items:
         return payload
     events_by_pk = {
         e.pk: e
@@ -1776,18 +1781,6 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                         request, signup.user, signup.event, staff_only=True
                     ),
                 )
-                if mmr_override is not None:
-                    OrgLog.objects.create(
-                        organization=signup.event.organization,
-                        actor=request.user,
-                        action="set_mmr",
-                        target_user=signup.user,
-                        details={
-                            "mmr": mmr_override,
-                            "event_id": signup.event.pk,
-                            "game_type": int(game_type),
-                        },
-                    )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2153,6 +2146,7 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         return entry
 
     has_channel = bool(event.discord_announcement_channel_id)
+    profile_misconfigured: bool = event.discord_profile_reminder and not has_channel
     # Mirrored in frontend/app/components/events/startMentionPrerequisite.ts
     has_signup_post = (event.discord_announcement and has_channel) or (
         event.discord_post_signups and bool(event.discord_post_signups_channel_id)
@@ -2234,7 +2228,12 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             ),
             log_source="profile_reminder",
             check_interval="Every 30s",
-            description=f"Posts {event.discord_profile_reminder_hours}h before event",
+            misconfigured=profile_misconfigured,
+            description=(
+                "Enabled but no announcement channel is set"
+                if profile_misconfigured
+                else f"Posts in the announcement channel {event.discord_profile_reminder_hours}h before event"
+            ),
         ),
         _task(
             "start_mention",

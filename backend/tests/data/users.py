@@ -137,7 +137,7 @@ EVENT_LEAGUE_STAFF_USER: TestUser = TestUser(
 
 # =============================================================================
 # Auth Matrix Role Test Users (pk=1090-1096)
-# Dedicated to the role-context matrix at /tests/playwright/e2e/17-auth/.
+# Dedicated to the role-context matrix at /tests/playwright/e2e/auth/.
 # Scoped to AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9) so the
 # matrix is fully isolated from DTX-using suites — neither side can flap
 # the other by mutating org/league memberships.
@@ -474,25 +474,27 @@ CSV_IMPORT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
-# User Edit Test Users (pk=2050-2059)
+# User Edit Test Users (pk=2050-2062)
 # Members of the User Edit Org / League / Tournament.
 #
-# Independent specs each own a dedicated user (so they can run in parallel
-# without read-modify-write races on the same record). Sequential specs
-# share alpha/bravo/charlie.
+# Every spec file owns its users: files run in parallel, so two files
+# sharing a user race on its nickname.
 #
 # pk   | username                  | owner
 # -----|---------------------------|-----------------------------------
-# 2050 | edit_user_alpha           | sequential specs (05, 07)
-# 2051 | edit_user_bravo           | sequential specs (07 needs A+B)
-# 2052 | edit_user_charlie         | sequential reserve
-# 2053 | edit_user_org             | 01-org-edit
-# 2054 | edit_user_tournament      | 02-tournament-edit
-# 2055 | edit_user_league          | 03-league-edit
-# 2056 | edit_user_mmr             | 04-org-mmr-edit
-# 2057 | edit_user_positions       | 08-position-persistence
-# 2058 | edit_user_cache           | 10-cache-merge
-# 2059 | edit_user_tourn_mmr       | 11-tournament-mmr-edit
+# 2050 | edit_user_alpha           | sequential-cross-context
+# 2051 | edit_user_bravo           | sequential-multi-user (user B)
+# 2052 | edit_user_charlie         | reserve
+# 2053 | edit_user_org             | org-edit
+# 2054 | edit_user_tournament      | tournament-edit
+# 2055 | edit_user_league          | league-edit
+# 2056 | edit_user_mmr             | org-mmr-edit
+# 2057 | edit_user_positions       | position-persistence
+# 2058 | edit_user_cache           | cache-merge
+# 2059 | edit_user_tourn_mmr       | tournament-mmr-edit
+# 2060 | edit_user_multi           | sequential-multi-user (user A)
+# 2061 | edit_user_scope           | scope-permissions
+# 2062 | edit_user_dota_positions  | dota-tab-positions
 # =============================================================================
 
 USER_EDIT_USERS: list[TestUser] = [
@@ -575,6 +577,30 @@ USER_EDIT_USERS: list[TestUser] = [
         discord_id="400000000000000010",
         steam_id_64=76561198900000010,
         mmr=3400,
+    ),
+    TestUser(
+        pk=2060,
+        username="edit_user_multi",
+        nickname="Edit Multi",
+        discord_id="400000000000000011",
+        steam_id_64=76561198900000101,
+        mmr=3700,
+    ),
+    TestUser(
+        pk=2061,
+        username="edit_user_scope",
+        nickname="Edit Scope",
+        discord_id="400000000000000012",
+        steam_id_64=76561198900000102,
+        mmr=3800,
+    ),
+    TestUser(
+        pk=2062,
+        username="edit_user_dota_positions",
+        nickname="Edit Dota Positions",
+        discord_id="400000000000000013",
+        steam_id_64=76561198900000103,
+        mmr=3900,
     ),
 ]
 

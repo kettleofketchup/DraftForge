@@ -1,10 +1,13 @@
-import { Users } from 'lucide-react';
+import { BadgeCheck, Users } from 'lucide-react';
 import type { TournamentType } from '~/components/tournament/types';
+import { Badge } from '~/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { MmrRequestsTab, useMmrPendingCount } from '~/features/mmr-requests';
 import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { useLeagueStore } from '~/store/leagueStore';
 import type { LeagueType } from './schemas';
 import { InfoTab } from './tabs/InfoTab';
+import { LobbyBotsTab } from './tabs/LobbyBotsTab';
 import { MatchesTab } from './tabs/MatchesTab';
 import { TournamentsTab } from './tabs/TournamentsTab';
 import { UsersTab } from './tabs/UsersTab';
@@ -16,7 +19,17 @@ interface Props {
   onTabChange: (tab: string) => void;
   canViewMembers: boolean;
   memberAccessSettled: boolean;
+  canReviewMmr?: boolean;
+  canManageLobbyBots: boolean;
+  lobbyBotsAccessSettled: boolean;
 }
+
+const GRID_COLS: Record<number, string> = {
+  3: 'grid-cols-3',
+  4: 'grid-cols-4',
+  5: 'grid-cols-5',
+  6: 'grid-cols-6',
+};
 
 export const LeagueTabs: React.FC<Props> = ({
   league,
@@ -25,6 +38,9 @@ export const LeagueTabs: React.FC<Props> = ({
   onTabChange,
   canViewMembers,
   memberAccessSettled,
+  canReviewMmr = false,
+  canManageLobbyBots,
+  lobbyBotsAccessSettled,
 }) => {
   const leagueUserPks = useLeagueStore((state) => state.leagueUserPks);
   const leagueUsersLoading = useLeagueStore(
@@ -41,12 +57,19 @@ export const LeagueTabs: React.FC<Props> = ({
     loadedCount: leagueUserPks.length,
     fallbackCount: league.users_count,
   });
+  const leaguePk = league.pk ?? 0;
+  const mmrPendingCount =
+    useMmrPendingCount({ league: leaguePk }, canReviewMmr && leaguePk > 0).data
+      ?.count ?? 0;
+  const tabCount =
+    3 +
+    (canViewMembers ? 1 : 0) +
+    (canReviewMmr ? 1 : 0) +
+    (canManageLobbyBots ? 1 : 0);
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-      <TabsList
-        className={`hidden md:grid w-full ${canViewMembers ? 'grid-cols-4' : 'grid-cols-3'}`}
-      >
+      <TabsList className={`hidden md:grid w-full ${GRID_COLS[tabCount]}`}>
         <TabsTrigger value="info" data-testid="league-tab-info">
           Info
         </TabsTrigger>
@@ -62,6 +85,29 @@ export const LeagueTabs: React.FC<Props> = ({
         <TabsTrigger value="matches" data-testid="league-tab-matches">
           Matches
         </TabsTrigger>
+        {canReviewMmr && (
+          <TabsTrigger
+            value="mmr-requests"
+            data-testid="league-tab-mmr-requests"
+          >
+            <BadgeCheck className="w-4 h-4 mr-2" />
+            MMR requests
+            {mmrPendingCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-2 text-xs"
+                data-testid="league-tab-mmr-requests-count"
+              >
+                {mmrPendingCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        )}
+        {canManageLobbyBots && (
+          <TabsTrigger value="lobby-bots" data-testid="league-tab-lobby-bots">
+            Lobby bots
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="info" className="mt-6">
@@ -83,6 +129,23 @@ export const LeagueTabs: React.FC<Props> = ({
       <TabsContent value="matches" className="mt-6">
         {league.pk && <MatchesTab leaguePk={league.pk} />}
       </TabsContent>
+
+      {canReviewMmr && league.pk && (
+        <TabsContent value="mmr-requests" className="mt-6">
+          <MmrRequestsTab scope={{ league: league.pk }} />
+        </TabsContent>
+      )}
+
+      {canManageLobbyBots && (
+        <TabsContent value="lobby-bots" className="mt-6">
+          {league.pk && (
+            <LobbyBotsTab
+              leaguePk={league.pk}
+              enabled={lobbyBotsAccessSettled}
+            />
+          )}
+        </TabsContent>
+      )}
     </Tabs>
   );
 };

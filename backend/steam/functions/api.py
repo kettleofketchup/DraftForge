@@ -354,7 +354,7 @@ def unlink_game_match(request: Request, game_id: int) -> Response:
         placements_before = tournament_bracket_placements(game.tournament_id)
         game.gameid = None
         game.winning_team = None
-        game.status = "scheduled"
+        game.status = "pending"
         game.save(update_fields=["gameid", "winning_team", "status"])
         apply_bracket_placements(game.tournament_id, placements_before)
         invalidate_after_commit(game, *([game.tournament] if game.tournament else []))

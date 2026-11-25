@@ -7,7 +7,10 @@ import {
   editEventFormSchema,
   readyCheckConfigSchema,
 } from '../../schemas';
-import { EVENT_SECTION_FIELDS } from '../settingsFields';
+import {
+  EVENT_SECTION_FIELDS,
+  PROFILE_REMINDER_DESCRIPTION,
+} from '../settingsFields';
 import { EVENT_TAB_META } from '../tabs';
 
 describe('EVENT_SECTION_FIELDS', () => {
@@ -59,6 +62,20 @@ describe('EVENT_SECTION_FIELDS', () => {
     expect(
       EVENT_SECTION_FIELDS.approval.require_steam_id.description,
     ).not.toMatch(/dota/i);
+  });
+});
+
+describe('discord_profile_reminder copy', () => {
+  const entry = EVENT_SECTION_FIELDS.discord.discord_profile_reminder;
+  it('uses the shared description', () => {
+    expect(entry.description).toBe(PROFILE_REMINDER_DESCRIPTION);
+  });
+  it('describes an announcement-channel post, not a DM', () => {
+    expect(PROFILE_REMINDER_DESCRIPTION).toMatch(/announcement channel/i);
+    expect(PROFILE_REMINDER_DESCRIPTION).not.toMatch(/\bDM/);
+    expect(PROFILE_REMINDER_DESCRIPTION).not.toMatch(/dota/i);
+    expect(PROFILE_REMINDER_DESCRIPTION).not.toMatch(/mmr/i);
+    expect(PROFILE_REMINDER_DESCRIPTION).not.toMatch(/mention|ping/i);
   });
 });
 

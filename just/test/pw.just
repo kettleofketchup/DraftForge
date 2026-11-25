@@ -30,7 +30,7 @@ run *args:
     fi
     cd frontend
     if [[ "${DF_PW_CONTAINER-}" != 1 ]]; then
-        exec npx playwright test "$@"
+        exec {{quote(root / "scripts/test-limits.sh")}} wrap npx playwright test "$@"
     fi
     # Mounted at the same path so report and annotation paths match the checkout;
     # frontend/node_modules must resolve inside the image (CI links it to /app/node_modules).
@@ -41,7 +41,9 @@ run *args:
     for name in "${pass[@]}"; do
         env_args+=(-e "$name")
     done
-    exec docker run --rm --network host --ipc host --entrypoint "" \
+    {{quote(root / "scripts/test-limits.sh")}} apply
+    cgroup=$({{quote(root / "scripts/test-limits.sh")}} cgroup)
+    exec docker run --rm --network host --ipc host --entrypoint "" ${cgroup:+--cgroup-parent "$cgroup"} \
         --user "$(id -u):$(id -g)" -e HOME=/tmp "${env_args[@]}" \
         -v "$PWD:$PWD" -w "$PWD" {{quote(pw_image)}} \
         node_modules/.bin/playwright test "$@"
@@ -59,10 +61,41 @@ ui:
 debug:
     {{pw}} --debug
 
-# Spec files whose path matches a pattern, without project dependencies
+# Specs under e2e/ by file (roll-call), path (events/roll-call) or directory (events), else any path containing it; no project dependencies
 [group('test::pw')]
 spec pattern *args:
-    {{pw}} "$1" --no-deps "${@:2}"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    e2e=frontend/tests/playwright/e2e
+    p=${1#./}
+    shift
+    p=${p#frontend/}
+    p=${p#tests/playwright/}
+    p=${p#e2e/}
+    p=${p%/}
+    p=${p%.spec.ts}
+    mapfile -t specs < <(cd {{quote(root)}}/"$e2e" && find . -name '*.spec.ts' | sed 's|^\./||; s|\.spec\.ts$||' | LC_ALL=C sort)
+    picked=()
+    for s in "${specs[@]}"; do
+        if [[ $s == "$p" || ${s##*/} == "$p" || $s == "$p"/* ]]; then
+            picked+=("$s")
+        fi
+    done
+    if (( ${#picked[@]} == 0 )); then
+        for s in "${specs[@]}"; do
+            [[ $s == *"$p"* ]] && picked+=("$s")
+        done
+    fi
+    if (( ${#picked[@]} == 0 )); then
+        echo "no spec under $e2e matches '$p'" >&2
+        exit 1
+    fi
+    printf '[pw] spec: %s\n' "${picked[@]}" >&2
+    filters=()
+    for s in "${picked[@]}"; do
+        filters+=("/\\/e2e\\/${s//\//\\/}\\.spec\\.ts\$/")
+    done
+    {{pw}} "${filters[@]}" --no-deps "$@"
 
 [group('test::pw')]
 file path *args:
@@ -92,29 +125,29 @@ report dir="":
 
 [group('test::pw')]
 navigation *args:
-    {{pw}} tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts "$@"
+    {{pw}} tests/playwright/e2e/hydration-handling.spec.ts tests/playwright/e2e/navigation.spec.ts "$@"
 
 [group('test::pw')]
 tournament *args:
-    {{pw}} tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ "$@"
+    {{pw}} tests/playwright/e2e/tournaments/ tests/playwright/e2e/tournament/ "$@"
 
 [group('test::pw')]
 draft *args:
-    {{pw}} tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ "$@"
+    {{pw}} tests/playwright/e2e/draft/ tests/playwright/e2e/shuffle-draft/ "$@"
 
 [group('test::pw')]
 bracket *args:
-    {{pw}} tests/playwright/e2e/09-bracket/ "$@"
+    {{pw}} tests/playwright/e2e/bracket/ "$@"
 
 [group('test::pw')]
 league *args:
-    {{pw}} tests/playwright/e2e/10-leagues/ "$@"
+    {{pw}} tests/playwright/e2e/leagues/ "$@"
 
 [group('test::pw')]
 herodraft *args:
     {{pw}} tests/playwright/e2e/herodraft/ "$@"
 
-# The 18-dota-lobby specs. With this slot's simulator running
+# The dota-lobby specs. With this slot's simulator running
 # (just test::dota-lobby up) they must use it: a skip is an error.
 [group('test::pw')]
 dota-lobby *args:
@@ -147,18 +180,18 @@ cicd-layout *args:
 cicd-herodraft *args:
     {{cicd}} --project=herodraft --no-deps "$@"
 
-# The 16-events specs in order (events-sequential): they share one seeded event PK
+# The events specs in order (events-sequential): they share one seeded event PK
 [group('test::pw')]
 cicd-events *args:
     {{cicd}} --project=events-sequential --no-deps "$@"
 
-# The 19-org-features specs in order (org-features-sequential): they share
+# The org-features specs in order (org-features-sequential): they share
 # the seeded locked features orgs and reset them per test
 [group('test::pw')]
 cicd-org-features *args:
     {{cicd}} --project=org-features-sequential --no-deps "$@"
 
-# The 18-dota-lobby specs in order (dota-lobby-sequential): they share one
+# The dota-lobby specs in order (dota-lobby-sequential): they share one
 # simulated dota_lobby. Specs that need it skip unless `just test::dota-lobby up`
 # ran, and then fail rather than skip when it never becomes available.
 [group('test::pw')]
