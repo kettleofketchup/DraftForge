@@ -57,6 +57,7 @@ from events.capacity import (  # noqa: E402
 )
 from events.constants import EventState, SignupAction, SignupStatus  # noqa: E402
 from events.ledger import SignupActor, record_signup_change, snapshot  # noqa: E402
+from events.line import waitlist_ranks  # noqa: E402
 from events.models import (  # noqa: E402
     Event,
     EventRepeater,
@@ -119,13 +120,11 @@ def find_target_event(stale: Event, candidates: list[Event]) -> Event | None:
 
 
 def _move_order(rows: list[EventSignup], stale: Event) -> list[EventSignup]:
-    """Seated rows in line order, then the waitlist in waitlist order, then the rest."""
-    seated = [r for r in rows if r.status in seat_holding_statuses(stale)]
-    waiting = sorted(
-        (r for r in rows if r.status == SignupStatus.WAITLISTED),
-        key=lambda r: (r.waitlist_position is None, r.waitlist_position or 0, r.pk),
-    )
-    rest = [r for r in rows if r not in seated and r not in waiting]
+    """Seated rows, then the waitlist, then the rest, each in line order."""
+    in_line = sorted(rows, key=lambda r: (r.line_seq is None, r.line_seq or 0, r.pk))
+    seated = [r for r in in_line if r.status in seat_holding_statuses(stale)]
+    waiting = [r for r in in_line if r.status == SignupStatus.WAITLISTED]
+    rest = [r for r in in_line if r not in seated and r not in waiting]
     return [*seated, *waiting, *rest]
 
 
@@ -147,6 +146,9 @@ def migrate_signups(
         .aggregate(max_pos=Max("waitlist_position"))["max_pos"]
         or 0
     ) + 1
+    stale_ranks = waitlist_ranks(stale)
+    target_waiting = len(waitlist_ranks(locked))
+    moved_ranks: list[int] = []
     actor = SignupActor.system(correlation_id=correlation_id)
     rows = list(
         EventSignup.objects.nocache()
@@ -161,12 +163,19 @@ def migrate_signups(
             print(f"    skip signup user={s.user_id} ({s.user}) — already on target")
             skipped += 1
             continue
-        before = snapshot(s, extra={"event_id": stale.pk})
+        stale_rank = stale_ranks.get(s.pk)
+        if stale_rank is not None:
+            moved_ranks.append(stale_rank)
+            stale_rank -= sum(1 for gone in moved_ranks if gone < stale_rank)
+        before = snapshot(s, extra={"event_id": stale.pk}, waitlist_rank=stale_rank)
         if s.status in seat_holding_statuses(stale) and not has_free_seat(locked):
             s.status = SignupStatus.WAITLISTED
+        target_rank: int | None = None
         if s.status == SignupStatus.WAITLISTED:
             s.waitlist_position = next_position
             next_position += 1
+            target_waiting += 1
+            target_rank = target_waiting
         else:
             s.waitlist_position = None
         s.event = locked
@@ -180,7 +189,7 @@ def migrate_signups(
                 "updated_at",
             ]
         )
-        after = snapshot(s, extra={"event_id": target.pk})
+        after = snapshot(s, extra={"event_id": target.pk}, waitlist_rank=target_rank)
         source = record_signup_change(
             event=stale,
             subject=s.user,

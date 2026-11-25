@@ -1743,7 +1743,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if event_id:
             qs = qs.filter(event_id=event_id)
         if self.action == "list":
-            qs = qs.annotate_line_rank()
+            qs = qs.annotate_line_rank().annotate_waitlist_rank()
         return qs
 
     @action(detail=True, methods=["post"])

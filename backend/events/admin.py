@@ -6,6 +6,7 @@ from django.db.models import Model, QuerySet
 from django.http import HttpRequest
 
 from app.models import CustomUser
+from events.line import waitlist_rank
 from events.models import (
     Event,
     EventRepeater,
@@ -118,6 +119,7 @@ class EventSignupAdmin(admin.ModelAdmin):
         "event_team",
         "signup_type",
         "waitlist_position",
+        "computed_waitlist_rank",
         "signed_up_at",
         "line_seq",
         "commitment",
@@ -130,6 +132,10 @@ class EventSignupAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return False
+
+    @admin.display(description="Waitlist rank (line order)")
+    def computed_waitlist_rank(self, obj: EventSignup) -> int | None:
+        return waitlist_rank(obj)
 
 
 class _ReadOnlyFieldsAdmin(admin.ModelAdmin):

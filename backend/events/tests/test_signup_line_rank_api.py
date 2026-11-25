@@ -110,7 +110,7 @@ class SignupLineRankApiTests(TestCase):
         self.assertEqual(combined[b[0].pk], 1)
         self.assertEqual(combined[b[2].pk], 3)
 
-    def _count_list_queries(self) -> int:
+    def _count_list_queries(self, expected_rows: int = 6) -> int:
         # QueryStatsMiddleware calls reset_queries(), which breaks CaptureQueriesContext.
         flush_run_cache()
         executed: list[str] = []
@@ -121,7 +121,7 @@ class SignupLineRankApiTests(TestCase):
 
         with connection.execute_wrapper(record):
             rows = self._list()
-        self.assertEqual(len(rows), 6)
+        self.assertEqual(len(rows), expected_rows)
         self.assertTrue(executed)
         return len(executed)
 
@@ -141,6 +141,73 @@ class SignupLineRankApiTests(TestCase):
         ):
             without_rank = self._count_list_queries()
         self.assertEqual(with_rank, without_rank)
+
+    def test_waitlist_position_adds_no_queries(self) -> None:
+        for i in range(2):
+            event = self._event(max_players=1, name=f"W{i}")
+            for u in self.users[3 * i : 3 * i + 3]:
+                process_rsvp(event, u, actor=SYSTEM)
+        self.assertEqual(
+            EventSignup.objects.filter(status=SignupStatus.WAITLISTED).count(), 4
+        )
+        with_rank = self._count_list_queries()
+        with (
+            mock.patch.object(
+                line.EventSignupQuerySet, "annotate_waitlist_rank", lambda self: self
+            ),
+            mock.patch.object(
+                EventSignupSerializer, "get_waitlist_position", lambda self, obj: None
+            ),
+        ):
+            without_rank = self._count_list_queries()
+        self.assertEqual(with_rank, without_rank)
+
+    def _waitlisted_with_stale_positions(
+        self,
+    ) -> tuple[Event, EventSignup, list[EventSignup]]:
+        event = self._event(max_players=1)
+        seated, *waiting = [
+            process_rsvp(event, u, actor=SYSTEM) for u in self.users[:4]
+        ]
+        for signup, stale in zip(waiting, (9, 8, 7), strict=True):
+            EventSignup.objects.filter(pk=signup.pk).update(waitlist_position=stale)
+        return event, seated, waiting
+
+    def test_computed_waitlist_position_ignores_stored(self) -> None:
+        event, seated, waiting = self._waitlisted_with_stale_positions()
+        positions = {row["id"]: row["waitlist_position"] for row in self._list(event)}
+        self.assertEqual(
+            [positions[s.pk] for s in waiting],
+            [1, 2, 3],
+        )
+        self.assertIsNone(positions[seated.pk])
+
+        client = APIClient()
+        for signup, rank in zip(waiting, (1, 2, 3), strict=True):
+            response = client.get(reverse("event-signup-detail", args=[signup.pk]))
+            self.assertEqual(response.json()["waitlist_position"], rank)
+
+        request = APIRequestFactory().get("/")
+        request.user = AnonymousUser()
+        rows = EventSignupSerializer(
+            EventSignup.objects.filter(event=event).order_by("-pk"),
+            many=True,
+            context={"request": request},
+        ).data
+        self.assertEqual(
+            {row["id"]: row["waitlist_position"] for row in rows}, positions
+        )
+
+    def test_waitlist_position_per_event(self) -> None:
+        first = self._event(max_players=1, name="First")
+        second = self._event(max_players=1, name="Second")
+        a = [process_rsvp(first, u, actor=SYSTEM) for u in self.users[:2]]
+        b = [process_rsvp(second, u, actor=SYSTEM) for u in self.users[2:5]]
+        combined = {row["id"]: row["waitlist_position"] for row in self._list()}
+        self.assertEqual(combined[a[1].pk], 1)
+        self.assertEqual(combined[b[1].pk], 1)
+        self.assertEqual(combined[b[2].pk], 2)
+        self.assertIsNone(combined[a[0].pk])
 
     def test_single_object_rank(self) -> None:
         event, signups, cancelled = self._filled_event()
