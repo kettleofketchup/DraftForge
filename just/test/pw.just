@@ -59,7 +59,7 @@ ui:
 debug:
     {{pw}} --debug
 
-# Spec files under e2e/ by name, without project dependencies: a file (roll-call), a path (events/roll-call) or a directory (events); with no such name, every spec whose path contains it
+# Specs under e2e/ by file (roll-call), path (events/roll-call) or directory (events), else any path containing it; no project dependencies
 [group('test::pw')]
 spec pattern *args:
     #!/usr/bin/env bash
