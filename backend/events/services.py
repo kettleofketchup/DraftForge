@@ -37,6 +37,7 @@ from events.discord import (
     notify_new_event,
     notify_signup_changed,
 )
+from events.discord.gates import repeater_generates
 from events.eligibility import (
     EligibilityResult,
     claim_friend_id,
@@ -1728,10 +1729,8 @@ def _today() -> datetime.date:
 
 def generate_events_for_repeater(repeater: EventRepeater) -> list[Event]:
     """Generate upcoming events for a repeater. Returns list of created Events."""
-    if not repeater.is_active:
-        return []
     today = _today()
-    if repeater.ends_at and repeater.ends_at < today:
+    if not repeater_generates(repeater, today).would_send:
         return []
 
     to_date = today + timedelta(days=repeater.generate_days_ahead)

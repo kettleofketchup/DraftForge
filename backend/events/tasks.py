@@ -61,6 +61,17 @@ from events.discord.embeds import (
     build_scheduled_event_sync_payload,
     build_subscriber_dm_embed,
 )
+from events.discord.gates import (
+    announcement_branch,
+    attendance_reminder_gate,
+    new_event_post_gate,
+    profile_reminder_gate,
+    scheduled_event_gate,
+    scheduled_event_sync_gate,
+    signup_post_gate,
+    signup_reminder_gate,
+    start_mention_gate,
+)
 from events.scheduling.fire import fire_due_reminders
 from events.signup_post_lock import (
     acquire_lock,
@@ -554,16 +565,16 @@ def _send_event_announcement_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
-    if event.state != "signups_open":
+    if "state_not_signups_open" in signup_post_gate(event).reasons:
         return f"Skipped: event state is {event.state}, not signups_open"
-    signup_available = bool(
-        event.discord_post_signups and event.discord_post_signups_channel_id
-    )
-    announcement_available = bool(
-        event.discord_announcement and event.discord_announcement_channel_id
-    )
-    if not (signup_available or announcement_available):
+    branch = announcement_branch(event)
+    if branch == "none":
         return "Skipped: no signup or announcement destination"
+    signup_available = branch in ("signup_post_only", "signup_post_and_notice")
+    announcement_available = branch in (
+        "signup_post_and_notice",
+        "fallback_signup_post",
+    )
 
     try:
         result = build_announcement_v2(event)
@@ -685,9 +696,10 @@ def send_attendance_reminder(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Event {event_id} not found"
-    if not event.discord_announcement_channel_id:
+    gate = attendance_reminder_gate(event)
+    if "no_channel" in gate.reasons:
         return f"No channel for event {event_id}"
-    if not event.discord_confirm_attendance:
+    if "toggle_off" in gate.reasons:
         return f"Attendance reminder disabled for event {event_id}"
 
     try:
@@ -731,9 +743,10 @@ def send_profile_reminder(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Event {event_id} not found"
-    if not event.discord_announcement_channel_id:
+    gate = profile_reminder_gate(event)
+    if "no_channel" in gate.reasons:
         return f"No channel for event {event_id}"
-    if not event.discord_profile_reminder:
+    if "toggle_off" in gate.reasons:
         return f"Profile reminder disabled for event {event_id}"
 
     try:
@@ -767,7 +780,6 @@ def send_profile_reminder(event_id: int) -> str:
 
 
 START_MENTION_SOURCE = "start_mention"
-START_MENTION_STATES: frozenset[str] = frozenset({"signups_open", "roll_call"})
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
@@ -793,17 +805,16 @@ def _send_start_mention_impl(event_id: int, fired_by_user_id: int | None) -> str
     event = get_event_for_task(event_id)
     if not event:
         return f"Event {event_id} not found"
-    if event.state not in START_MENTION_STATES:
+    manual = fired_by_user_id is not None
+    gate = start_mention_gate(event, manual=manual)
+    if "state_not_open_or_roll_call" in gate.reasons:
         return f"Skipped: event state is {event.state}"
-    if not event.discord_start_mention and fired_by_user_id is None:
+    if "toggle_off" in gate.reasons:
         return f"Start mention disabled for event {event_id}"
 
     discord_state = get_discord_event_state(event_id)
-    if not (
-        discord_state
-        and discord_state.signup_posted
-        and discord_state.signup_message_id
-    ):
+    gate = start_mention_gate(event, discord_state=discord_state, manual=manual)
+    if "no_signup_post_yet" in gate.reasons:
         log.info("start_mention_no_signup_post", reason="no_signup_post", **fields)
         return f"Skipped: no signup post for event {event_id}"
     channel_id = _resolve_signup_edit_channel(discord_state, fields)
@@ -1146,7 +1157,7 @@ def _send_new_event_notification_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
-    if not event.discord_announcement_channel_id:
+    if "no_channel" in new_event_post_gate(event).reasons:
         return "Skipped: no announcement channel"
 
     embed = build_new_event_embed(event)
@@ -1193,12 +1204,13 @@ def _create_discord_scheduled_event_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
-    if not event.discord_create_event:
+    gate = scheduled_event_gate(event)
+    if "toggle_off" in gate.reasons:
         return "Skipped: discord_create_event disabled"
     guild_id = event.organization.discord_server_id
-    if not guild_id:
+    if "no_discord_server" in gate.reasons:
         return "Skipped: no discord_server_id on organization"
-    if not starts_in_future(event.scheduled_at):
+    if "start_in_past" in gate.reasons:
         log.info(
             "discord_scheduled_event_skipped_past_start",
             system="events",
@@ -1363,10 +1375,19 @@ def _sync_discord_event_signups_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
-    if not event.discord_sync_signups:
+    if (
+        "toggle_off"
+        in scheduled_event_sync_gate(event, scheduled_event_message_id=None).reasons
+    ):
         return "Skipped: sync disabled"
     creation_log = get_first_message_log("create_discord_event", event.pk)
-    if not creation_log or not creation_log.discord_message_id:
+    gate = scheduled_event_sync_gate(
+        event,
+        scheduled_event_message_id=(
+            creation_log.discord_message_id if creation_log else None
+        ),
+    )
+    if "no_scheduled_event_yet" in gate.reasons:
         return "Skipped: no Discord event found"
 
     guild_id = event.organization.discord_server_id
@@ -1561,11 +1582,14 @@ def send_subscriber_notifications(event_id: int) -> str:
     if not event:
         return f"Event {event_id} not found"
 
-    if not event.event_repeater_id:
+    if "not_a_series" in signup_reminder_gate(event).reasons:
         return "No repeater"
 
     discord_state = get_discord_event_state(event_id)
-    if not discord_state or not discord_state.has_discord_event:
+    if (
+        "no_discord_server"
+        in signup_reminder_gate(event, discord_state=discord_state).reasons
+    ):
         return "No Discord event"
     discord_event_pk = discord_state.discord_event_pk
 

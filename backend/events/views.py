@@ -54,6 +54,7 @@ from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import ActorRole, Commitment, EventState, SignupAction
 from events.discord import notify_create_discord_event, notify_signup_changed
+from events.discord.gates import initial_state_for_new_event
 from events.discord.state import signup_list_queryset
 from events.eligibility import (
     EligibilityResult,
@@ -674,7 +675,10 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         except OccurrenceCollision as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
 
-        if data.get("open_signups"):
+        if (
+            initial_state_for_new_event(bool(data.get("open_signups")))
+            == EventState.SIGNUPS_OPEN
+        ):
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
@@ -963,7 +967,8 @@ class EventViewSet(viewsets.ModelViewSet):
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
-        if self.request.query_params.get("open_signups") == "true":
+        open_signups = self.request.query_params.get("open_signups") == "true"
+        if initial_state_for_new_event(open_signups) == EventState.SIGNUPS_OPEN:
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
