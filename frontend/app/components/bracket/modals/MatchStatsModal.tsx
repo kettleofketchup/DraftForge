@@ -1,4 +1,4 @@
-import { useIsMutating, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Link2, Loader2, RotateCcw, Swords } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -71,13 +71,11 @@ export function MatchStatsModal({
   const holdResultForSave = useBracketStore((state) => state.holdResultForSave);
   const queryClient = useQueryClient();
   const persistMatchResult = usePersistMatchResult(tournament?.pk ?? undefined);
-  const resultSaving =
-    useIsMutating({
-      mutationKey: MATCH_RESULT_MUTATION_KEY,
-      predicate: (m) =>
-        (m.state.variables as { gameId?: number } | undefined)?.gameId ===
-        match?.gameId,
-    }) > 0;
+  const savingGameIds = useMutationState({
+    filters: { mutationKey: MATCH_RESULT_MUTATION_KEY, status: 'pending' },
+    select: (m) =>
+      (m.state.variables as { gameId?: number } | undefined)?.gameId,
+  });
 
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -103,6 +101,7 @@ export function MatchStatsModal({
         )
       : null;
 
+  const resultSaving = savingGameIds.includes(match.gameId);
   const isGameComplete = match.status === 'completed';
   const hasMatchId = !!match.steamMatchId;
 

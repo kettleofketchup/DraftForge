@@ -95,7 +95,8 @@ from tournament.views.internal import (
     get_tournament_for_task,
     get_tournament_participants,
 )
-from tournament.views.members import add_tournament_member, remove_tournament_member
+from tournament.views.member_removal import remove_tournament_member
+from tournament.views.members import add_tournament_member
 from tournament.views.team import TeamCreateView, TeamView
 from tournament.views.tournament import (
     TournamentCreateView,

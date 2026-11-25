@@ -1,8 +1,5 @@
 """Bracket API views for tournament bracket management."""
 
-import hashlib
-from collections.abc import Iterable
-
 from django.db import transaction
 from django.db.models import Prefetch
 from rest_framework import status
@@ -32,37 +29,11 @@ from tournament.services.bracket_placement import (
     placement_for_game,
     tournament_bracket_placements,
 )
+from tournament.services.bracket_version import bracket_version
 from tournament.services.team_audit import log_snapshot_fields, write_team_log
 from tournament.services.team_management import live_conflicts, roster_conflict_body
 
 log = get_logger(__name__)
-
-_VERSION_FIELDS = (
-    "pk",
-    "bracket_type",
-    "round",
-    "position",
-    "elimination_type",
-    "status",
-    "radiant_team_id",
-    "dire_team_id",
-    "winning_team_id",
-    "next_game_id",
-    "next_game_slot",
-    "loser_next_game_id",
-    "loser_next_game_slot",
-    "swiss_record_wins",
-    "swiss_record_losses",
-)
-
-
-def bracket_version(games: Iterable[Game]) -> str:
-    """Token over the fields save_bracket writes; any change to them changes it."""
-    rows = sorted(
-        "|".join(str(getattr(game, field)) for field in _VERSION_FIELDS)
-        for game in games
-    )
-    return hashlib.sha256("\n".join(rows).encode()).hexdigest()[:32]
 
 
 @api_view(["GET"])
