@@ -397,10 +397,11 @@ class CustomUser(AbstractUser):
         )
         return self
 
-    def check_and_update_avatar(self) -> bool:
+    def check_and_update_avatar(self, force: bool = False) -> bool:
         """
         Checks if the current avatar URL is valid. If not, fetches the latest
-        avatar from Discord and updates the database.
+        avatar from Discord and updates the database. With ``force``, skips the
+        validity check and always fetches from Discord.
 
         Returns:
             bool: True if the avatar was updated, False otherwise.
@@ -408,8 +409,7 @@ class CustomUser(AbstractUser):
         if not self.discordId:
             return False
 
-        if not self.avatar:
-            # If no avatar is set, try to fetch one.
+        if force or not self.avatar:
             return self._fetch_and_update_avatar_from_discord()
 
         # Construct current avatar URL
