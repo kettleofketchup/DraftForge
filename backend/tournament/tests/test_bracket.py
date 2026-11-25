@@ -31,7 +31,6 @@ class SaveBracketTest(TestCase):
     """Test save_bracket endpoint."""
 
     def setUp(self):
-        """Create test data."""
         self.admin = CustomUser.objects.create_superuser(
             username="admin",
             password="admin123",
@@ -41,7 +40,6 @@ class SaveBracketTest(TestCase):
             name="Test Tournament",
             date_played=date.today(),
         )
-        # Create 4 teams
         self.teams = []
         for i in range(4):
             captain = CustomUser.objects.create_user(
@@ -181,7 +179,6 @@ class SaveBracketTest(TestCase):
 
     def test_save_bracket_clears_existing_bracket_games(self):
         """Save bracket deletes existing bracket games before creating new ones."""
-        # Create an existing game
         Game.objects.create(
             tournament=self.tournament,
             round=1,
@@ -190,7 +187,6 @@ class SaveBracketTest(TestCase):
         )
         self.assertEqual(Game.objects.filter(tournament=self.tournament).count(), 1)
 
-        # Save new bracket
         matches = [
             {
                 "id": "w-1-0",
@@ -406,7 +402,6 @@ class AdvanceWinnerPlacementTest(TestCase):
     """Test advance_winner sets placement correctly."""
 
     def setUp(self):
-        """Create test data."""
         self.admin = CustomUser.objects.create_superuser(
             username="admin",
             password="admin123",
@@ -511,7 +506,6 @@ class ManualPlacementOverrideTest(TestCase):
     """Test manual placement override endpoint."""
 
     def setUp(self):
-        """Create test data."""
         self.admin = CustomUser.objects.create_superuser(
             username="admin",
             password="admin123",
@@ -650,7 +644,6 @@ class UnsetWinnerTest(TestCase):
     """Test advance_winner with winner=null to unset winner."""
 
     def setUp(self):
-        """Create test data."""
         self.admin = CustomUser.objects.create_superuser(
             username="admin",
             password="admin123",
@@ -677,7 +670,6 @@ class UnsetWinnerTest(TestCase):
 
     def test_advance_winner_unset_clears_winner(self):
         """Test that advance_winner with winner=null clears the winner."""
-        # Create a completed game with team1 as winner
         game = Game.objects.create(
             tournament=self.tournament,
             bracket_type="losers",
@@ -692,30 +684,24 @@ class UnsetWinnerTest(TestCase):
         self.team2.placement = 3
         self.team2.save()
 
-        # Call advance_winner with None to unset
         response = self.client.post(
             f"/api/bracket/games/{game.pk}/advance-winner/",
             {"winner": None},
             format="json",
         )
 
-        # Assert success
         self.assertEqual(response.status_code, 200)
 
-        # Refresh from DB
         game.refresh_from_db()
         self.team2.refresh_from_db()
 
-        # Winner should be cleared
         self.assertIsNone(game.winning_team)
         # Status must be a valid Game.status choice ("scheduled" is not one)
         self.assertEqual(game.status, "pending")
-        # Loser's placement should be cleared
         self.assertIsNone(self.team2.placement)
 
     def test_advance_winner_unset_when_no_previous_winner(self):
         """Test that advance_winner with winner=null works when no winner set."""
-        # Create a game with no winner
         game = Game.objects.create(
             tournament=self.tournament,
             bracket_type="winners",
@@ -726,7 +712,6 @@ class UnsetWinnerTest(TestCase):
             status="pending",
         )
 
-        # Call advance_winner with None
         response = self.client.post(
             f"/api/bracket/games/{game.pk}/advance-winner/",
             {"winner": None},
@@ -736,10 +721,8 @@ class UnsetWinnerTest(TestCase):
         # Should still succeed
         self.assertEqual(response.status_code, 200)
 
-        # Refresh from DB
         game.refresh_from_db()
 
-        # Winner should remain None
         self.assertIsNone(game.winning_team)
         self.assertEqual(game.status, "pending")
 

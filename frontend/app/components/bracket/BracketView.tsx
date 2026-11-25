@@ -82,7 +82,6 @@ function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
       const targetMatch = matchMap.get(match.nextMatchId!);
       if (!targetMatch) return null;
 
-      // Get the winning team
       const winningTeam =
         match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
       if (!winningTeam?.pk) return null;
@@ -227,7 +226,6 @@ function BracketFlowInner({
         // Open hero draft modal directly instead of going through match modal
         setHeroDraftId(pendingDraftId);
         setShowHeroDraftModal(true);
-        // Clear the pending draft ID after processing
         setPendingDraftId(null);
       }
     }
@@ -252,7 +250,6 @@ function BracketFlowInner({
 
       if (matchToOpen) {
         setSelectedMatchId(matchToOpen.id);
-        // Clear the pending match ID after processing
         setPendingMatchId(null);
       }
     }
@@ -261,7 +258,7 @@ function BracketFlowInner({
   // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
 
-  // Layout matches using ELK when matches change
+  // Recompute the bracket layout when matches change
   useEffect(() => {
     if (matches.length === 0) {
       setNodes([]);
@@ -271,24 +268,21 @@ function BracketFlowInner({
     }
 
     const layoutBracket = async () => {
-      // Separate matches by bracket type
       const winnersMatches = matches.filter((m) => m.bracketType === 'winners');
       const losersMatches = matches.filter((m) => m.bracketType === 'losers');
       const grandFinalsMatches = matches.filter(
         (m) => m.bracketType === 'grand_finals',
       );
 
-      // Create nodes
       const winnersNodes = matchesToNodes(winnersMatches, badgeMapping);
       const losersNodes = matchesToNodes(losersMatches, badgeMapping);
 
-      // Create structural edges for layout
       const winnersEdges = createStructuralEdges(winnersMatches);
       const losersEdges = createStructuralEdges(losersMatches);
 
       /**
-       * Custom bracket layout with collision detection
-       * Places nodes by round, vertically centered to their targets
+       * Custom bracket layout with collision detection.
+       * Places nodes by round, each vertically centered between its source matches.
        */
       const layoutBracketNodes = (
         nodes: MatchNodeType[],
@@ -296,11 +290,9 @@ function BracketFlowInner({
       ): MatchNodeType[] => {
         if (nodes.length === 0) return nodes;
 
-        // Create lookup maps
         const nodeById = new Map(nodes.map((n) => [n.id, n]));
         const matchById = new Map(matchList.map((m) => [m.id, m]));
 
-        // Group nodes by round
         const roundGroups = new Map<number, MatchNodeType[]>();
         nodes.forEach((node) => {
           const round = (node.data as MatchNodeData).round;
@@ -308,7 +300,6 @@ function BracketFlowInner({
           roundGroups.get(round)!.push(node);
         });
 
-        // Sort rounds
         const rounds = Array.from(roundGroups.keys()).sort((a, b) => a - b);
 
         // Position round 1 nodes first (they have no source)
@@ -377,7 +368,6 @@ function BracketFlowInner({
             });
 
             byRound.forEach((roundNodes) => {
-              // Sort by Y position
               roundNodes.sort((a, b) => a.position.y - b.position.y);
 
               for (let i = 0; i < roundNodes.length - 1; i++) {
@@ -403,10 +393,8 @@ function BracketFlowInner({
         return nodes;
       };
 
-      // Layout winners bracket with custom algorithm
       const layoutedWinners = layoutBracketNodes(winnersNodes, winnersMatches);
 
-      // Layout losers bracket with custom algorithm
       const layoutedLosers = layoutBracketNodes(losersNodes, losersMatches);
 
       // Calculate offset for losers bracket
@@ -416,10 +404,8 @@ function BracketFlowInner({
       );
       const losersOffset = winnersMaxY + BRACKET_SECTION_GAP;
 
-      // Set divider position
       setDividerY(winnersMaxY + BRACKET_SECTION_GAP / 2);
 
-      // Apply offset to losers nodes
       const offsetLosers: MatchNodeType[] = layoutedLosers.map((node) => ({
         ...node,
         position: { x: node.position.x, y: node.position.y + losersOffset },

@@ -38,7 +38,6 @@ export function mapApiMatchToMatch(
   apiMatch: ApiBracketMatch,
   allMatches: ApiBracketMatch[],
 ): BracketMatch {
-  // Generate consistent string ID from bracket structure
   const id = generateMatchId(
     apiMatch.bracket_type,
     apiMatch.round,

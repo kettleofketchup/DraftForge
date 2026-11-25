@@ -248,7 +248,6 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
             game.swiss_record_losses = match.get("swissRecordLosses", 0)
             updated_count += 1
         else:
-            # Create new game
             game = Game(
                 tournament=tournament,
                 round=match.get("round", 1),
@@ -263,7 +262,6 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
             )
             created_count += 1
 
-        # Set teams if provided
         radiant_team = match.get("radiantTeam")
         game.radiant_team_id = (
             radiant_team["pk"] if radiant_team and radiant_team.get("pk") else None
@@ -363,13 +361,11 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
         placements_changed=placements_changed,
     )
 
-    # Return saved games
     saved_games = Game.objects.filter(tournament=tournament).select_related(
         "radiant_team", "dire_team", "winning_team", "next_game", "loser_next_game"
     )
     result_serializer = BracketGameSerializer(saved_games, many=True)
 
-    # Invalidate caches after saving bracket
     invalidate_after_commit(*saved_games, tournament)
 
     return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
@@ -629,7 +625,6 @@ def advance_winner(request: Request, game_id: int) -> Response:
         elimination_type=game.elimination_type,
     )
 
-    # Invalidate caches after advancing winner
     objs_to_invalidate = [game, winning_team]
     if losing_team:
         objs_to_invalidate.append(losing_team)
@@ -668,7 +663,6 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
 
     placement = request.data.get("placement")
 
-    # Validate placement
     if placement is not None:
         if not isinstance(placement, int) or placement < 1:
             log.warning(
@@ -743,7 +737,6 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
         manual=True,
     )
 
-    # Invalidate caches after setting placement
     invalidate_obj(team)
     if tournament:
         invalidate_obj(tournament)
