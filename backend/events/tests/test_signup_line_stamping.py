@@ -97,15 +97,9 @@ class SignupLineStampingTests(TestCase):
         past: datetime,
         later: EventSignup,
         first_commitment: str,
-        *,
-        in_place: bool = True,
     ) -> None:
         new.refresh_from_db()
-        if in_place:
-            self.assertEqual(new.pk, old_pk)
-        else:
-            self.assertNotEqual(new.pk, old_pk)
-            self.assertFalse(EventSignup.objects.filter(pk=old_pk).exists())
+        self.assertEqual(new.pk, old_pk)
         self.assertEqual(new.first_signed_up_at, past)
         self.assertEqual(new.first_commitment, first_commitment)
         self.assertGreater(new.line_seq, later.line_seq)
@@ -127,7 +121,7 @@ class SignupLineStampingTests(TestCase):
         past = self._age_first(old)
         new = create_tentative_signup(event, self.users[0], actor=SYSTEM)
         self.assertEqual(new.commitment, Commitment.MAYBE)
-        self._assert_carried(new, old.pk, past, later, Commitment.MAIN, in_place=False)
+        self._assert_carried(new, old.pk, past, later, Commitment.MAIN)
 
     def test_decline_then_rsvp_starts_first_fields_at_rsvp(self) -> None:
         event = self._event()

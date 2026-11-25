@@ -7,12 +7,14 @@ from django.db.models.signals import post_delete
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
-from events.constants import Commitment, SignupAction, SignupStatus
-from events.models import Event, EventSignup, SignupLedgerEntry
+from events.constants import Commitment, SignupAction, SignupStatus, SignupType
+from events.models import Event, EventSignup, EventTeam, SignupLedgerEntry
+from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
 from events.services import (
     _promote_from_waitlist,
     cancel_signup,
     create_tentative_signup,
+    create_tournament_for_event,
     decline_signup,
     demote_to_waitlist,
     process_rsvp,
@@ -462,4 +464,230 @@ class NoDeleteTests(LedgerContractMixin, EventTestCase):
         maybe = create_tentative_signup(event, self.make_user(), actor=self.staff_actor)
         process_rsvp(event, maybe.user, actor=self.staff_actor)
 
+        main = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        create_tentative_signup(event, main.user, actor=self.staff_actor)
+        cancelled = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        cancel_signup(cancelled, actor=self.staff_actor)
+        create_tentative_signup(event, cancelled.user, actor=self.staff_actor)
+
         self.assertEqual(deleted, [])
+
+
+@patch("events.services.notify_signup_changed")
+class SwitchToMaybeTests(LedgerContractMixin, EventTestCase):
+    def _age(self, signup: EventSignup) -> datetime:
+        past = tz.now() - timedelta(days=3)
+        EventSignup._base_manager.filter(pk=signup.pk).update(
+            first_signed_up_at=past, signed_up_at=past
+        )
+        return past
+
+    def _row(self, signup: EventSignup) -> EventSignup:
+        return EventSignup.objects.nocache().get(pk=signup.pk)
+
+    def _subject_entries(self, event: Event) -> list[SignupLedgerEntry]:
+        return [e for e in self.ledger(event) if e.subject_user_id == self.subject.pk]
+
+    def test_main_to_maybe_keeps_row(self, _notify: Any) -> None:
+        for restamps in (True, False):
+            with self.subTest(line_switch_restamps=restamps):
+                event = self.make_event(line_switch_restamps=restamps)
+                old = process_rsvp(event, self.subject, actor=self.member_actor)
+                later = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+                past = self._age(old)
+
+                with (
+                    capture_logs() as logs,
+                    self.captureOnCommitCallbacks(execute=True),
+                ):
+                    new = create_tentative_signup(
+                        event, self.subject, actor=self.member_actor
+                    )
+
+                self.assertEqual(new.pk, old.pk)
+                self.assertEqual(
+                    EventSignup.objects.filter(event=event, user=self.subject).count(),
+                    1,
+                )
+                row = self._row(old)
+                self.assertEqual(row.status, SignupStatus.TENTATIVE)
+                self.assertEqual(row.commitment, Commitment.MAYBE)
+                self.assertEqual(row.first_signed_up_at, past)
+                self.assertEqual(row.first_commitment, Commitment.MAIN)
+                self.assertEqual(row.first_rsvp_class, old.first_rsvp_class)
+                if restamps:
+                    self.assertGreater(row.line_seq, later.line_seq)
+                    self.assertGreater(row.signed_up_at, past)
+                else:
+                    self.assertEqual(row.line_seq, old.line_seq)
+                    self.assertEqual(row.signed_up_at, past)
+                entries = self._subject_entries(event)
+                self.assertEqual(entries[-1].action, SignupAction.SWITCHED_COMMITMENT)
+                self.assertEqual({e.signup_id for e in entries}, {old.pk})
+                names = [log["event"] for log in logs]
+                self.assertNotIn("signup_cancelled", names)
+                self.assertIn("signup_switched_to_maybe_in_place", names)
+                self.assertEqual("signup_line_restamped" in names, restamps)
+
+    def test_main_to_maybe_full_event_promotes_by_line(self, _notify: Any) -> None:
+        event = self.make_event(max_players=1)
+        seated = EventSignup.objects.create(
+            event=event, user=self.subject, status=SignupStatus.APPROVED
+        )
+        w1 = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=1,
+        )
+        w2 = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=2,
+        )
+        EventSignup.objects.filter(pk=w2.pk).update(line_seq=0)
+
+        create_tentative_signup(event, self.subject, actor=self.member_actor)
+
+        entries = self.ledger(event)
+        self.assertEqual(
+            [e.action for e in entries],
+            [SignupAction.SWITCHED_COMMITMENT, SignupAction.PROMOTED],
+        )
+        primary, promoted = entries
+        self.assertEqual(primary.signup_id, seated.pk)
+        self.assertEqual(promoted.caused_by_id, primary.pk)
+        self.assertEqual(promoted.signup_id, w2.pk)
+        self.assertEqual(self._row(w1).status, SignupStatus.WAITLISTED)
+
+    def test_waitlisted_to_maybe_promotes_nobody(self, _notify: Any) -> None:
+        event = self.make_event(max_players=1)
+        EventSignup.objects.create(
+            event=event, user=self.make_user(), status=SignupStatus.APPROVED
+        )
+        waiting = EventSignup.objects.create(
+            event=event,
+            user=self.subject,
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=4,
+        )
+        other = EventSignup.objects.create(
+            event=event,
+            user=self.make_user(),
+            status=SignupStatus.WAITLISTED,
+            waitlist_position=5,
+        )
+
+        signup = create_tentative_signup(event, self.subject, actor=self.member_actor)
+
+        self.assertEqual(signup.pk, waiting.pk)
+        entries = self.ledger(event)
+        self.assertEqual(
+            [e.action for e in entries], [SignupAction.SWITCHED_COMMITMENT]
+        )
+        self.assertEqual(entries[0].before["waitlist_position"], 1)
+        self.assertIsNone(entries[0].after["waitlist_position"])
+        row = self._row(waiting)
+        self.assertEqual(row.status, SignupStatus.TENTATIVE)
+        self.assertIsNone(row.waitlist_position)
+        self.assertEqual(self._row(other).status, SignupStatus.WAITLISTED)
+
+    def test_switch_to_maybe_clears_team_and_roster(self, _notify: Any) -> None:
+        event = self.make_event(roll_call_enabled=False)
+        tournament = create_tournament_for_event(event)
+        team = EventTeam.objects.create(event=event, name="Team", captain=self.staff)
+        seated = EventSignup.objects.create(
+            event=event,
+            user=self.subject,
+            status=SignupStatus.APPROVED,
+            event_team=team,
+            signup_type=SignupType.TEAM,
+            unmet_requirements=["steam_id"],
+            eligibility_reasons=[{"code": "steam_id"}],
+            eligibility_checked_at=tz.now(),
+        )
+        tournament.users.add(self.subject)
+
+        with patch("events.services.standing.on_signup_withdrawn") as withdrawn:
+            create_tentative_signup(event, self.subject, actor=self.member_actor)
+
+        row = self._row(seated)
+        self.assertEqual(row.status, SignupStatus.TENTATIVE)
+        self.assertIsNone(row.event_team_id)
+        self.assertEqual(row.signup_type, SignupType.USER)
+        self.assertEqual(row.unmet_requirements, [])
+        self.assertEqual(row.eligibility_reasons, [])
+        self.assertIsNone(row.eligibility_checked_at)
+        self.assertTrue(row.self_made)
+        self.assertFalse(tournament.users.filter(pk=self.subject.pk).exists())
+        withdrawn.assert_called_once()
+        self.assertEqual(
+            withdrawn.call_args.kwargs["prior_status"], SignupStatus.APPROVED
+        )
+        self.assertIs(withdrawn.call_args.kwargs["by_member"], True)
+        self.assertEqual(withdrawn.call_args.args[0].status, SignupStatus.TENTATIVE)
+
+    def test_cancelled_to_maybe(self, _notify: Any) -> None:
+        for forfeits in (True, False):
+            with self.subTest(line_withdraw_forfeits=forfeits):
+                event = self.make_event(
+                    line_withdraw_forfeits=forfeits, line_switch_restamps=False
+                )
+                old = process_rsvp(event, self.subject, actor=self.member_actor)
+                later = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+                past = self._age(old)
+                cancel_signup(old, actor=self.member_actor)
+
+                new = create_tentative_signup(
+                    event, self.subject, actor=self.member_actor
+                )
+
+                self.assertEqual(new.pk, old.pk)
+                row = self._row(old)
+                self.assertEqual(row.status, SignupStatus.TENTATIVE)
+                self.assertEqual(row.commitment, Commitment.MAYBE)
+                self.assertEqual(row.first_signed_up_at, past)
+                self.assertEqual(row.first_commitment, Commitment.MAIN)
+                if forfeits:
+                    self.assertGreater(row.line_seq, later.line_seq)
+                else:
+                    self.assertEqual(row.line_seq, old.line_seq)
+                    self.assertEqual(row.signed_up_at, past)
+                entries = self._subject_entries(event)
+                self.assertEqual(entries[-1].action, SignupAction.RESIGNED_UP)
+                self.assertEqual({e.signup_id for e in entries}, {old.pk})
+
+    def test_bare_decline_to_maybe_always_restamps(self, _notify: Any) -> None:
+        event = self.make_event(line_withdraw_forfeits=False)
+        declined = decline_signup(event, self.subject, actor=self.member_actor)
+        later = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+
+        new = create_tentative_signup(event, self.subject, actor=self.member_actor)
+
+        self.assertEqual(new.pk, declined.pk)
+        row = self._row(declined)
+        self.assertGreater(row.line_seq, later.line_seq)
+        self.assertEqual(row.first_signed_up_at, row.signed_up_at)
+        self.assertEqual(row.first_commitment, Commitment.MAYBE)
+        entries = self._subject_entries(event)
+        self.assertEqual(entries[-1].action, SignupAction.SIGNED_UP)
+        self.assertEqual({e.signup_id for e in entries}, {declined.pk})
+
+    def test_tentative_and_dropped_still_raise(self, _notify: Any) -> None:
+        cases = (
+            (SignupStatus.TENTATIVE, "Already marked as tentative"),
+            (SignupStatus.DROPPED, DROPPED_SIGNUP_MESSAGE),
+        )
+        for status, message in cases:
+            with self.subTest(status=status):
+                event = self.make_event()
+                row = EventSignup.objects.create(
+                    event=event, user=self.subject, status=status
+                )
+                with self.assertRaisesMessage(ValueError, message):
+                    create_tentative_signup(
+                        event, self.subject, actor=self.member_actor
+                    )
+                self.assertEqual(self._row(row).status, status)
+                self.assertEqual(self.ledger(event), [])

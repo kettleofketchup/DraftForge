@@ -173,16 +173,6 @@ def check_requirements(event: Event, user: CustomUser) -> bool:
     return evaluate_signup(event, user, for_staff_placement=True).clean
 
 
-def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
-    if existing is None:
-        return {}
-    return {
-        "first_signed_up_at": existing.first_signed_up_at,
-        "first_commitment": existing.first_commitment,
-        "first_rsvp_class": existing.first_rsvp_class,
-    }
-
-
 def _decide_signup_status(event: Event, result: EligibilityResult) -> SignupStatus:
     """Status for a signup taking a seat. Auto-approve events approve (or
     confirm) eligible players and hold the rest for staff; manual-approval
@@ -441,7 +431,7 @@ def process_rsvp(
 def create_tentative_signup(
     event: Event, user: CustomUser, *, actor: SignupActor
 ) -> EventSignup:
-    """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
+    """Mark the user Maybe (TENTATIVE), in place on any existing row.
 
     Funnel point for both the DRF action and the Discord tentative button.
 
@@ -449,50 +439,109 @@ def create_tentative_signup(
       - Self-serve admission applies (events.admission).
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
       - If existing DROPPED signup -> raise ValueError; the row is kept.
-      - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
-        -> withdraw it, delete the row, then create a fresh TENTATIVE.
-      - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
+      - If existing seat-holding or WAITLISTED row -> switch it to Maybe in
+        place; a freed seat promotes from the waitlist.
+      - If existing CANCELLED/REJECTED row -> bring it back as Maybe in place.
       - Records one ledger entry and dispatches notify_signup_changed once.
     """
     event = _reread_event(event)
     ensure_self_serve(event, user, intent=Commitment.MAYBE)
 
+    locked = lock_event(event)
     existing = (
         EventSignup.objects.nocache()
         .select_related("user__base_profile")
         .filter(event=event, user=user)
         .first()
     )
-    carry = _first_fields_carry(existing)
+    action = _create_action(existing, for_staff_placement=False)
     before: SignupSnapshot | None = None
     prior_status: str | None = None
-    action = _create_action(existing, for_staff_placement=False)
-    if existing:
+    if existing is None:
+        signup = EventSignup.objects.create(
+            event=event,
+            user=user,
+            status=SignupStatus.TENTATIVE,
+            self_made=True,
+        )
+    else:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
         if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
-        before = snapshot(existing)
-        if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            prior_status = _withdraw(existing, by_member=_by_member(actor))
+        before = _ranked_snapshot(existing)
+        prior_status = existing.status
+        withdrawing = prior_status not in REMOVED_SIGNUP_STATUSES
+        if withdrawing:
             action = SignupAction.SWITCHED_COMMITMENT
-        EventSignup.objects.filter(pk=existing.pk).delete()
+        restamp = _maybe_restamp_reason(existing, locked)
+        existing.event = locked
+        existing.status = SignupStatus.TENTATIVE
+        existing.commitment = Commitment.MAYBE
+        existing.self_made = True
+        existing.waitlist_position = None
+        existing.event_team = None
+        existing.signup_type = SignupType.USER
+        fields = [
+            "status",
+            "commitment",
+            "self_made",
+            "waitlist_position",
+            "event_team",
+            "signup_type",
+            *clear_eligibility(existing),
+            "updated_at",
+        ]
+        if restamp is not None:
+            fields += restamp_to_back(existing, reason=restamp)
+            if existing.first_signed_up_at is None:
+                fields += start_first_fields(existing)
+        existing.save(update_fields=fields)
+        signup = existing
+        if withdrawing:
+            standing.on_signup_withdrawn(
+                signup, prior_status=prior_status, by_member=_by_member(actor)
+            )
+            _roster_remove_if_left(signup)
+        context: dict[str, Any] = {
+            "system": "events",
+            "subsystem": "services",
+            "signup_id": signup.pk,
+            "user_id": user.pk,
+            "event_id": event.pk,
+            "prior_status": prior_status,
+            "status": signup.status,
+            "restamp_reason": restamp,
+        }
+        if withdrawing:
+            logger.info("signup_switched_to_maybe_in_place", **context)
+        else:
+            logger.info("signup_resigned_up_in_place", **context)
 
-    signup = EventSignup.objects.create(
-        event=event,
-        user=user,
-        status=SignupStatus.TENTATIVE,
-        self_made=True,
-        **carry,
+    entry = _record_leaf(
+        signup,
+        event=locked,
+        actor=actor,
+        action=action,
+        before=before,
+        after=snapshot(signup, waitlist_rank=None),
     )
-    entry = _record_leaf(signup, event=event, actor=actor, action=action, before=before)
-    if prior_status in seat_holding_statuses(event):
-        _promote_from_waitlist(event, cause=entry)
+    if prior_status in seat_holding_statuses(locked):
+        _promote_from_waitlist(locked, cause=entry)
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
     # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
+
+
+def _maybe_restamp_reason(signup: EventSignup, event: Event) -> str | None:
+    """Why a row turning Maybe goes to the back of the line, or None to keep its place."""
+    if signup.first_signed_up_at is None:
+        return "bare_decline"
+    if signup.status in REMOVED_SIGNUP_STATUSES:
+        return "resign_up" if forfeits_on_withdraw(event) else None
+    return "switch" if restamps_on_switch(event) else None
 
 
 @transaction.atomic

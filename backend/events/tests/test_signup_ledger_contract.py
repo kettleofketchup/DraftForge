@@ -916,7 +916,7 @@ class TentativeDeclineLedgerTests(LedgerContractMixin, EventTestCase):
         self.assertEqual(promoted.before["status"], SignupStatus.WAITLISTED)
 
     def test_tentative_from_seated_row_notifies_once(self, notify: Any) -> None:
-        event, _seated, waiting = self._full_event()
+        event, seated, waiting = self._full_event()
         actor = SignupActor(
             user=self.subject,
             role=ActorRole.MEMBER,
@@ -926,6 +926,7 @@ class TentativeDeclineLedgerTests(LedgerContractMixin, EventTestCase):
         with self.captureOnCommitCallbacks(execute=True):
             signup = create_tentative_signup(event, self.subject, actor=actor)
         self.assertEqual(notify.call_count, 1)
+        self.assertEqual(signup.pk, seated.pk)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self._assert_promotion_chain(
             event,
