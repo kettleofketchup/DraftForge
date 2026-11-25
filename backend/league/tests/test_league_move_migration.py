@@ -243,9 +243,9 @@ class LeagueMoveMigrationTests(TransactionTestCase):
         self._assert_grant(perm, user, group, ids["league"])
         self._assert_grant(member_perm, member_user, member_group, member_ct)
         self.assertEqual(_row_counts(), counts)
+        self._assert_links(league)
         self._migrate(AFTER_MOVE)
         self.assertEqual(_schema_rows(), schema_before)
-        self._assert_links(league)
 
     def test_duplicate_contenttypes_survive_both_directions(self) -> None:
         original, _ = ContentType.objects.get_or_create(
