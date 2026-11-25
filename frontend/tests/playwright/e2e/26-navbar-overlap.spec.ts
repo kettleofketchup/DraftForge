@@ -1,5 +1,5 @@
 /**
- * Desktop/tablet navbar width sweep (#252): no navbar item may overlap
+ * Desktop/tablet navbar width sweep: no navbar item may overlap
  * another, truncate its label or spill out of the bar, at any width from md
  * up to 2560px, logged in or out, with or without the preview login buttons,
  * once the GitHub star badge has loaded.

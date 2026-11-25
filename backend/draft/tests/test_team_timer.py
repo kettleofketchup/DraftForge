@@ -37,7 +37,11 @@ from draft.tasks.draft_tick import (
     registry_for,
 )
 from draft.tests.team_fixtures import TimedDraftFixture
-from draft.tests.ws_helpers import assert_no_frame_except_ping, read_until_type
+from draft.tests.ws_helpers import (
+    assert_no_frame_except_ping,
+    disconnect_and_wait,
+    read_until_type,
+)
 from tests.test_teamdraft import expire_draft_clock, stale_draft_heartbeat
 from tournament.models import Team
 
@@ -1579,11 +1583,11 @@ class DraftConsumerTimerTests(TransactionTestCase):
         comm2, _, _ = await self.connect(self.cap)
         await read_until_type(comm2, "draft_event")
         await read_until_type(comm1, "draft_event")
-        await comm2.disconnect()
+        await disconnect_and_wait(comm2)
         await assert_no_frame_except_ping(comm1, 1.0)
         count = await database_sync_to_async(self._disconnected_count)()
         self.assertEqual(count, 0)
-        await comm1.disconnect()
+        await disconnect_and_wait(comm1)
         count = await database_sync_to_async(self._disconnected_count)()
         self.assertEqual(count, 1)
         team = await database_sync_to_async(Team.objects.get)(pk=self.fx.teams[0].pk)
@@ -1749,7 +1753,7 @@ class DraftConsumerTimerTests(TransactionTestCase):
         comm.scope["user"] = cap
         await comm.connect()
         await read_until_type(comm, "draft_event")
-        await comm.disconnect()
+        await disconnect_and_wait(comm)
         draft = await database_sync_to_async(Draft.objects.get)(pk=fx.draft.pk)
         self.assertEqual(draft.state, TeamDraftState.DRAFTING)
         self.assertNotIn(fx.draft.pk, registry_for("teamdraft"))

@@ -47,6 +47,7 @@ from .test_dota_lobby import (
     reset_dota_lobby,
     seed_dota_lobby_row,
 )
+from .test_events_data import events_data
 from .test_events_discord import (
     discord_status,
     send_test_notification,
@@ -280,6 +281,7 @@ urlpatterns = [
         seed_discord_members,
         name="test-seed-discord-members",
     ),
+    path("events/data/", events_data, name="test-events-data"),
     # Discord Activity launch staged against the TEST-stack Discord fake
     path(
         "discord-activity/setup/",
