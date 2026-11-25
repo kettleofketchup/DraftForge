@@ -68,7 +68,11 @@ def check_match_for_games(match: Match) -> None:
 
             if confidence == 1.0:
                 # High confidence - auto-link and set winner
-                _link_game_to_match(game, match)
+                try:
+                    _link_game_to_match(game, match)
+                except PlacementRosterConflict as exc:
+                    _log_link_skipped(game, match, exc)
+                    continue
 
                 GameMatchSuggestion.objects.create(
                     game=game,
@@ -95,6 +99,20 @@ def check_match_for_games(match: Match) -> None:
                     player_overlap=overlap,
                     auto_linked=False,
                 )
+
+
+def _log_link_skipped(game: Game, match: Match, exc: PlacementRosterConflict) -> None:
+    game.refresh_from_db(fields=["gameid", "winning_team", "status"])
+    log.warning(
+        "game_link_skipped_roster_conflict",
+        system="steam",
+        subsystem="game_linking",
+        game_id=game.pk,
+        match_id=match.match_id,
+        tournament_id=game.tournament_id,
+        team_id=exc.team.pk,
+        user_ids=exc.user_ids,
+    )
 
 
 def _get_game_player_steam_ids(game: Game) -> set[int]:
@@ -634,15 +652,21 @@ def auto_link_matches_for_tournament(tournament_id: int) -> dict[str, int]:
     Auto-link exact matches (10/10 players + correct date),
     store suggestions for partial matches.
 
-    Returns: dict with {auto_linked_count, suggestions_created_count}
+    Returns: dict with {auto_linked_count, suggestions_created_count,
+    skipped_roster_conflict_count}
     """
     try:
         tournament = Tournament.objects.get(id=tournament_id)
     except Tournament.DoesNotExist:
-        return {"auto_linked_count": 0, "suggestions_created_count": 0}
+        return {
+            "auto_linked_count": 0,
+            "suggestions_created_count": 0,
+            "skipped_roster_conflict_count": 0,
+        }
 
     auto_linked_count = 0
     suggestions_created_count = 0
+    skipped_roster_conflict_count = 0
 
     # Get all unlinked games in this tournament
     unlinked_games = Game.objects.filter(
@@ -678,7 +702,12 @@ def auto_link_matches_for_tournament(tournament_id: int) -> dict[str, int]:
 
             if confidence == 1.0:
                 # Perfect match - auto-link and set winner
-                _link_game_to_match(game, match)
+                try:
+                    _link_game_to_match(game, match)
+                except PlacementRosterConflict as exc:
+                    _log_link_skipped(game, match, exc)
+                    skipped_roster_conflict_count += 1
+                    break
 
                 GameMatchSuggestion.objects.create(
                     game=game,
@@ -705,4 +734,5 @@ def auto_link_matches_for_tournament(tournament_id: int) -> dict[str, int]:
     return {
         "auto_linked_count": auto_linked_count,
         "suggestions_created_count": suggestions_created_count,
+        "skipped_roster_conflict_count": skipped_roster_conflict_count,
     }
