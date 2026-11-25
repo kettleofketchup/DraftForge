@@ -90,6 +90,8 @@ export interface ResetOrgFeaturesOptions {
   /** Turn the leadership staff release gate on, leaving closed snapshots pending. */
   releaseGate?: boolean;
   audiences?: boolean;
+  /** Hide review-derived feedback from captains (captain_feedback_visible off). */
+  captainFeedbackPrivate?: boolean;
 }
 
 /** Rebuild ledger, promo sends, point values, events, templates, switches and roles. */
@@ -102,6 +104,7 @@ export async function resetOrgFeatures(
       data: {
         release_gate: options.releaseGate ?? false,
         audiences: options.audiences ?? false,
+        captain_feedback_private: options.captainFeedbackPrivate ?? false,
       },
     }),
     'org-features reset',

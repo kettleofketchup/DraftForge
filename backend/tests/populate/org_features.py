@@ -483,18 +483,24 @@ def _rebuild() -> list[Organization]:
 
 
 def reset_org_features_data(
-    *, release_gate: bool = False, audiences: bool = False
+    *,
+    release_gate: bool = False,
+    audiences: bool = False,
+    captain_feedback_private: bool = False,
 ) -> dict[str, Any]:
     """Put the locked features data back to the seeded state; returns the lookup.
 
     release_gate turns the leadership staff release gate on without stamping,
     so the closed captain snapshots stay pending release.
+    captain_feedback_private hides review-derived feedback from captains.
     """
     restore_promotion_audience_settings()
     orgs = _rebuild()
-    if release_gate:
+    if release_gate or captain_feedback_private:
         OrgLeadershipSettings.objects.create(
-            organization_id=FEATURES_ORG.pk, require_staff_release=True
+            organization_id=FEATURES_ORG.pk,
+            require_staff_release=release_gate,
+            captain_feedback_visible=not captain_feedback_private,
         )
     for model in (
         Event,

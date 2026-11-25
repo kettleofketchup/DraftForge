@@ -921,6 +921,50 @@ class OrgFeaturesEndpointsTest(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_reset_captain_feedback_private_flag(self) -> None:
+        response = reset_org_features(
+            self.factory.post(
+                "/api/tests/org-features/reset/",
+                {"captain_feedback_private": True, "release_gate": True},
+                format="json",
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        row = self._gate_row()
+        assert row is not None
+        self.assertFalse(row.captain_feedback_visible)
+        self.assertTrue(row.require_staff_release)
+        self.assertFalse(row.review_dms_enabled)
+
+        response = reset_org_features(
+            self.factory.post(
+                "/api/tests/org-features/reset/",
+                {"captain_feedback_private": True},
+                format="json",
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        row = self._gate_row()
+        assert row is not None
+        self.assertFalse(row.captain_feedback_visible)
+        self.assertFalse(row.require_staff_release)
+
+        response = reset_org_features(
+            self.factory.post("/api/tests/org-features/reset/")
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self._gate_row())
+
+    def test_reset_rejects_non_bool_captain_feedback_private(self) -> None:
+        response = reset_org_features(
+            self.factory.post(
+                "/api/tests/org-features/reset/",
+                {"captain_feedback_private": "yes"},
+                format="json",
+            )
+        )
+        self.assertEqual(response.status_code, 400)
+
 
 @override_settings(DEBUG=True)
 class AuthMatrixPromoterTest(TestCase):

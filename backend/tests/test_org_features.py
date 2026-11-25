@@ -8,7 +8,8 @@ Routes under /api/tests/ (tests/urls.py):
 - POST org-features/reset/: rebuild the ledger, promo sends, point values,
   events, templates, switches and roles; returns the same body as data/.
   An optional JSON body {"release_gate": true} turns the leadership staff
-  release gate on with the closed snapshots left pending.
+  release gate on with the closed snapshots left pending;
+  {"captain_feedback_private": true} hides captain feedback from captains.
 """
 
 from django.contrib.auth import login
@@ -89,6 +90,16 @@ def reset_org_features(request: Request) -> Response:
             {"detail": "audiences must be true or false."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    captain_feedback_private = request.data.get("captain_feedback_private", False)
+    if not isinstance(captain_feedback_private, bool):
+        return Response(
+            {"detail": "captain_feedback_private must be true or false."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return Response(
-        reset_org_features_data(release_gate=release_gate, audiences=audiences)
+        reset_org_features_data(
+            release_gate=release_gate,
+            audiences=audiences,
+            captain_feedback_private=captain_feedback_private,
+        )
     )
