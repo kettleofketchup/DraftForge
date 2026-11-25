@@ -98,8 +98,8 @@ export function makeApiTokenColumns({
         </code>
       ),
       meta: {
-        headClassName: 'hidden w-44 sm:table-cell',
-        cellClassName: 'hidden w-44 sm:table-cell',
+        headClassName: 'hidden w-36 sm:table-cell',
+        cellClassName: 'hidden w-36 sm:table-cell',
       },
     },
     owner: {
@@ -120,8 +120,8 @@ export function makeApiTokenColumns({
         );
       },
       meta: {
-        headClassName: 'hidden w-40 md:table-cell',
-        cellClassName: 'hidden w-40 md:table-cell',
+        headClassName: 'hidden w-32 md:table-cell',
+        cellClassName: 'hidden w-32 md:table-cell',
       },
     },
     created: {
@@ -179,8 +179,8 @@ export function makeApiTokenColumns({
         );
       },
       meta: {
-        headClassName: 'w-24',
-        cellClassName: 'w-24',
+        headClassName: 'w-20',
+        cellClassName: 'w-20',
       },
     },
     actions: onRevoke
