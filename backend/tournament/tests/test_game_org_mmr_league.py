@@ -7,7 +7,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from events.models import Event, EventState, OrgEventDefaults
 from league.models import League, LeagueUser
@@ -20,6 +20,7 @@ from steam.models import LeaguePlayerStats
 from tests.populate.utils import ensure_org_user
 from tournament.serializers.tournament import TournamentSerializer
 from tournament.tests.test_game_org_mmr_drafts import GameOrgMmrFixtures
+from user.models import PositionsModel
 
 RATING_TABLE = '"org_orgusergamemmr"'
 _discord_seq = iter(range(880000000000000000, 890000000000000000))

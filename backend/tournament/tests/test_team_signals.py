@@ -14,7 +14,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from league.models import League
 from org.models import Organization
@@ -27,6 +27,7 @@ from tournament.services.team_signals import (
     owning_team_audit,
     team_roster_changed,
 )
+from user.models import PositionsModel
 
 
 class TeamMemberRemovalTests(TestCase):

@@ -19,12 +19,13 @@ from django.utils import timezone  # noqa: E402
 runner = DiscoverRunner(verbosity=0)
 old_config = runner.setup_databases()
 
-from app.models import CustomUser, GameType, PositionsModel  # noqa: E402
+from app.models import CustomUser, GameType  # noqa: E402
 from discordbot.models import DiscordMessageLog  # noqa: E402
 from events.constants import EventState, RepeatFrequency, SignupStatus  # noqa: E402
 from events.models import Event, EventRepeater, EventSignup  # noqa: E402
 from events.tasks import send_event_announcement  # noqa: E402
 from org.models import Organization  # noqa: E402
+from user.models import PositionsModel  # noqa: E402
 
 # Create org
 org = Organization.objects.create(

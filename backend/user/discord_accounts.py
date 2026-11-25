@@ -24,7 +24,7 @@ from django.db.models import Model
 from social_django.models import UserSocialAuth
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from draft.services.hero_chat import repoint_chat_attribution
 from events.ledger import SignupActor
 from events.merge import merge_user_signups
@@ -42,6 +42,7 @@ from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
 from org.standing import api as standing
 from telemetry.logging import get_logger
+from user.models import PositionsModel
 
 logger = get_logger(__name__)
 

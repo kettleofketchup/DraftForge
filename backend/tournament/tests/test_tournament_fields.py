@@ -1,12 +1,13 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from league.models import League
 from org.models import Organization
 from tournament.choices import DraftStyles
 from tournament.models import Tournament
+from user.models import PositionsModel
 
 
 class TournamentFieldsTests(TestCase):

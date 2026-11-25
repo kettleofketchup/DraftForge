@@ -16,7 +16,7 @@ permission matrix on the Danger Zone UI.
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
 from org.models import ContributionEntry, Organization
@@ -30,6 +30,7 @@ from tests.data.org_delete import (
     ORG_DELETE_STAFF,
 )
 from tests.populate.utils import delete_ledger_for_users, ensure_org_user
+from user.models import PositionsModel
 
 
 def _get_or_create_user(user_data: TestUser, force: bool) -> CustomUser:

@@ -1,7 +1,7 @@
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from league.models import League, LeagueUser
 from org.models import Organization
 from steam.functions.mmr_calculation import (
@@ -10,6 +10,7 @@ from steam.functions.mmr_calculation import (
 )
 from steam.models import LeaguePlayerStats
 from tests.populate.utils import ensure_org_user
+from user.models import PositionsModel
 
 
 class TestMMRCalculation(TestCase):
