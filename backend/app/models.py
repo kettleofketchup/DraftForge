@@ -367,10 +367,7 @@ class CustomUser(AbstractUser):
         if force or not self.avatar:
             return self._fetch_and_update_avatar_from_discord()
 
-        extension = "gif" if self.avatar.startswith("a_") else "png"
-        current_url = f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
-
-        if self._is_avatar_url_valid(current_url):
+        if self._is_avatar_url_valid(self.discord_avatar_cdn_url):
             return False
 
         return self._fetch_and_update_avatar_from_discord()
@@ -537,6 +534,14 @@ class CustomUser(AbstractUser):
                     delattr(self, attr)
 
     @property
+    def discord_avatar_cdn_url(self) -> str | None:
+        """CDN URL of the stored avatar hash; None unless discordId and avatar are both set."""
+        if not self.discordId or not self.avatar:
+            return None
+        extension = "gif" if self.avatar.startswith("a_") else "png"
+        return f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
+
+    @property
     def avatarUrl(self) -> str | None:
         """
         Constructs the Discord avatar URL from the stored discordId and avatar hash.
@@ -546,14 +551,13 @@ class CustomUser(AbstractUser):
             return None
 
         if self.avatar:
-            extension = "gif" if self.avatar.startswith("a_") else "png"
-            return f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
+            return self.discord_avatar_cdn_url
 
         if self.discordId:
             # Discord default avatar, indexed by user ID
             return f"https://cdn.discordapp.com/embed/avatars/{(int(self.discordId) >> 22) % 6}.png"
 
-        return "https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
+        return "https://cdn.discordapp.com/embed/avatars/0.png"
 
     class Meta:
         indexes = [
