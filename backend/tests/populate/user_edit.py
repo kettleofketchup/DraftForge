@@ -35,7 +35,7 @@ def populate_user_edit_data(force=False):
     1. User Edit Org + League (isolated from other orgs)
     2. User Edit Tournament (under User Edit league)
     3. Admin user added as org admin (for E2E access)
-    4. 3 edit test users as members of org/league/tournament
+    4. USER_EDIT_USERS as members of org/league/tournament
     """
     print("Populating user edit test data...")
 
