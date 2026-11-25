@@ -16,17 +16,32 @@ write, or the team is out but has no placement yet, so manual tie-breaks of
 teams the write didn't affect survive.
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 from django.db.models import Max
 
 from app.cache_utils import invalidate_after_commit
+from app.models import CustomUser
 from telemetry.logging import get_logger
 from tournament.models import Game, Team
+from tournament.services.team_management import live_conflicts, roster_conflict_body
 
 log = get_logger(__name__)
 
 _BRACKET_ORDER: dict[str, int] = {"winners": 0, "losers": 1, "grand_finals": 2}
+
+
+class PlacementRosterConflict(Exception):
+    """Clearing `team`'s placement would put `users` on two live teams."""
+
+    def __init__(
+        self, team: Team, users: Sequence[CustomUser], body: dict[str, Any]
+    ) -> None:
+        super().__init__(body["error"])
+        self.team = team
+        self.user_ids: list[int] = [u.pk for u in users]
+        self.body = body
 
 
 def losers_bracket_placement(game_round: int, max_losers_round: int | None) -> int:
@@ -67,18 +82,36 @@ def placement_for_loser(
     return None
 
 
+def max_single_elimination_winners_round(tournament_id: int | None) -> int | None:
+    return (
+        Game.objects.nocache()
+        .filter(
+            tournament_id=tournament_id,
+            bracket_type="winners",
+            elimination_type="single",
+        )
+        .aggregate(Max("round"))["round__max"]
+    )
+
+
+def decides_tournament_winner(game: Game, max_winners_round: int | None) -> bool:
+    return game.bracket_type == "grand_finals" or (
+        is_single_elimination_winners(game) and game.round == max_winners_round
+    )
+
+
 def placement_for_game(game: Game) -> int | None:
     """Placement of this game's loser if the loss eliminates it, read from the DB."""
     if not loser_is_eliminated(game):
         return None
-    rounds = Game.objects.nocache().filter(tournament_id=game.tournament_id)
-    max_losers_round = rounds.filter(bracket_type="losers").aggregate(Max("round"))[
-        "round__max"
-    ]
-    max_winners_round = rounds.filter(
-        bracket_type="winners", elimination_type="single"
-    ).aggregate(Max("round"))["round__max"]
-    return placement_for_loser(game, max_losers_round, max_winners_round)
+    max_losers_round = (
+        Game.objects.nocache()
+        .filter(tournament_id=game.tournament_id, bracket_type="losers")
+        .aggregate(Max("round"))["round__max"]
+    )
+    return placement_for_loser(
+        game, max_losers_round, max_single_elimination_winners_round(game.tournament_id)
+    )
 
 
 def compute_bracket_placements(games: Iterable[Game]) -> dict[int, int | None]:
@@ -113,9 +146,7 @@ def compute_bracket_placements(games: Iterable[Game]) -> dict[int, int | None]:
             placement = placement_for_loser(game, max_losers_round, max_winners_round)
             if placement is not None:
                 placements[loser_id] = placement
-        if game.bracket_type == "grand_finals" or (
-            is_single_elimination_winners(game) and game.round == max_winners_round
-        ):
+        if decides_tournament_winner(game, max_winners_round):
             placements[game.winning_team_id] = 1
     return placements
 
@@ -146,7 +177,9 @@ def apply_bracket_placements(
     """Write placements that changed since ``before`` was taken; returns team_id -> new placement.
 
     Take ``before`` with ``tournament_bracket_placements`` ahead of the game
-    writes and call this after them, inside the same transaction.
+    writes and call this after them, inside the same transaction. Raises
+    ``PlacementRosterConflict`` if a cleared placement would put a player on two
+    live teams; the caller's transaction must roll back.
     """
     if tournament_id is None:
         return {}
@@ -156,6 +189,7 @@ def apply_bracket_placements(
         return {}
     changed: dict[int, int | None] = {}
     teams: list[Team] = []
+    reopened: list[Team] = []
     for team in Team.objects.nocache().select_for_update().filter(pk__in=candidates):
         old, new = before.get(team.pk), after.get(team.pk)
         missing = new is not None and team.placement is None
@@ -166,6 +200,8 @@ def apply_bracket_placements(
         team.save(update_fields=["placement"])
         changed[team.pk] = new
         teams.append(team)
+        if previous is not None and new is None:
+            reopened.append(team)
         log.info(
             "bracket_placement_derived",
             system="bracket",
@@ -175,6 +211,20 @@ def apply_bracket_placements(
             previous_placement=previous,
             placement=new,
         )
+    for team in sorted(reopened, key=lambda t: t.pk):
+        conflicts = live_conflicts(team)
+        if conflicts:
+            log.warning(
+                "bracket_placement_clear_blocked_roster_conflict",
+                system="bracket",
+                subsystem="placement",
+                tournament_id=tournament_id,
+                team_id=team.pk,
+                user_ids=[u.pk for u in conflicts],
+            )
+            raise PlacementRosterConflict(
+                team, conflicts, roster_conflict_body(team, conflicts)
+            )
     if teams:
         invalidate_after_commit(*teams)
     return changed

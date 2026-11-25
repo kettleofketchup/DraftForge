@@ -5,6 +5,7 @@ from django.db.models import Model
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from discordbot.models import DiscordEventDM
+from league.mmr import merge_league_users
 from league.models import LeagueUser
 from org.models import (
     OrgFeature,
@@ -35,7 +36,7 @@ def merge_member_dependents(
 ) -> None:
     """Move rows hanging off ``drop_ou`` onto ``keep_ou`` before it is deleted.
 
-    A league membership ``keep`` already holds keeps the higher MMR and
+    A league membership ``keep`` already holds prefers Official MMR, then higher MMR, and
     takes over the dropped row's teams; an org game profile ``keep_ou``
     already has wins. Rows that cannot move go through ``discard``.
     """
@@ -51,9 +52,7 @@ def merge_member_dependents(
             lu.save(update_fields=["user", "org_user"])
             invalidate_after_commit(lu)
             continue
-        if lu.mmr > existing.mmr:
-            existing.mmr = lu.mmr
-            existing.save(update_fields=["mmr"])
+        merge_league_users(lu, existing)
         for team in lu.teams.all():
             team.league_users.add(existing)
             invalidate_after_commit(team)

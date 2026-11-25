@@ -103,6 +103,7 @@ nav:
       - Organization Leadership: features/organization-leadership.md
       - Organization Settings: features/organization-settings.md
       - Org MMR per Game: features/org-mmr.md
+      - MMR Update Requests: features/mmr-update-requests.md
       - Steam Friend ID Verification: features/steam-friend-id.md
       - MMR Sync API: features/org-mmr-sync-api.md
       - Lobby Bot League Access: features/lobby-bot-league-access.md

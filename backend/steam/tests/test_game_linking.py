@@ -1,11 +1,18 @@
-from datetime import date, timedelta
+import contextlib
+from datetime import date, datetime, time, timedelta
+from datetime import timezone as dt_timezone
+from typing import Any
+from unittest import mock
 
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
+from structlog.testing import capture_logs
 
 from app.models import CustomUser
 from steam.functions.game_linking import (
     _get_game_player_steam_ids,
+    auto_assign_matches_by_time,
     auto_link_matches_for_tournament,
     check_match_for_games,
     confirm_suggestion,
@@ -15,6 +22,7 @@ from steam.functions.game_linking import (
 )
 from steam.models import GameMatchSuggestion, Match, PlayerMatchStats
 from tournament.models import Game, Team, Tournament
+from tournament.tests.test_bracket import SingleEliminationGuardBracket
 
 
 class CheckMatchForGamesTest(TestCase):
@@ -533,6 +541,7 @@ class AutoLinkMatchesForTournamentTest(TestCase):
 
         self.assertEqual(result["auto_linked_count"], 0)
         self.assertEqual(result["suggestions_created_count"], 0)
+        self.assertEqual(result["skipped_roster_conflict_count"], 0)
 
     def test_skips_already_linked_games(self):
         """Test that already linked games are skipped."""
@@ -565,3 +574,224 @@ class AutoLinkMatchesForTournamentTest(TestCase):
             ).count(),
             1,
         )
+
+
+class AutoLinkRosterConflictTests(SingleEliminationGuardBracket):
+    MATCH_A = 8922000101
+    MATCH_B = 8922000102
+
+    def day_timestamp(self, hour: int) -> int:
+        day = self.tournament.date_played.date()
+        return int(
+            datetime.combine(day, time(hour), tzinfo=dt_timezone.utc).timestamp()
+        )
+
+    def make_match(self, match_id: int, start_time: int, steam_ids: list[int]) -> Match:
+        match = Match.objects.create(
+            match_id=match_id,
+            radiant_win=True,
+            duration=2400,
+            start_time=start_time,
+            game_mode=22,
+            lobby_type=1,
+            league_id=self.tournament.linked_steam_league_id,
+        )
+        for i, steam_id in enumerate(steam_ids):
+            PlayerMatchStats.objects.create(
+                match=match,
+                steam_id=steam_id,
+                hero_id=i + 1,
+                kills=5,
+                deaths=2,
+                assists=10,
+                gold_per_min=500,
+                xp_per_min=600,
+                last_hits=200,
+                denies=20,
+                hero_damage=15000,
+                tower_damage=3000,
+                hero_healing=1000,
+                player_slot=i if i < 5 else 128 + i - 5,
+            )
+        return match
+
+    def test_auto_assign_skips_conflicting_game_and_links_the_rest(self) -> None:
+        self.conflict_setup()
+        Game.objects.filter(pk=self.semi1.pk).update(gameid=None)
+        base = 76561198092200000
+        semi1_players = [self.c, self.d, self.m1, self.m2, self.o1]
+        for offset, user in enumerate([*semi1_players, self.u3, self.u4], start=1):
+            CustomUser.objects.filter(pk=user.pk).update(steamid=base + offset)
+        self.make_match(
+            self.MATCH_A, self.day_timestamp(12), [base + i for i in range(1, 6)]
+        )
+        self.make_match(self.MATCH_B, self.day_timestamp(13), [base + 6, base + 7])
+        winners = {self.semi1.pk: self.other, self.semi2.pk: self.t3}
+
+        with (
+            mock.patch(
+                "steam.functions.game_linking._determine_winner_from_match",
+                side_effect=lambda game, match: winners[game.pk],
+            ),
+            capture_logs() as logs,
+        ):
+            result = auto_assign_matches_by_time(
+                self.tournament.pk, preview=False, min_overlap=1
+            )
+
+        semi1 = self.game(self.semi1)
+        self.assertIsNone(semi1.gameid, result["assignments"])
+        self.assertEqual(semi1.winning_team_id, self.team.pk)
+        self.assertEqual(self.refresh(self.other).placement, 3)
+        self.assertEqual(result["linked_count"], 1)
+        self.assertEqual(
+            result["skipped_roster_conflicts"],
+            [
+                {
+                    "game_id": self.semi1.pk,
+                    "match_id": self.MATCH_A,
+                    "team_id": self.other.pk,
+                    "user_ids": [self.o1.pk],
+                }
+            ],
+        )
+        semi2 = self.game(self.semi2)
+        self.assertEqual(semi2.gameid, self.MATCH_B)
+        self.assertEqual(semi2.winning_team_id, self.t3.pk)
+        skipped = [e for e in logs if e["event"] == "game_link_skipped_roster_conflict"]
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(skipped[0]["log_level"], "warning")
+        self.assertEqual(
+            {
+                k: skipped[0][k]
+                for k in (
+                    "system",
+                    "subsystem",
+                    "game_id",
+                    "match_id",
+                    "tournament_id",
+                    "team_id",
+                    "user_ids",
+                )
+            },
+            {
+                "system": "steam",
+                "subsystem": "game_linking",
+                "game_id": self.semi1.pk,
+                "match_id": self.MATCH_A,
+                "tournament_id": self.tournament.pk,
+                "team_id": self.other.pk,
+                "user_ids": [self.o1.pk],
+            },
+        )
+        self.assertFalse(any(e["event"] == "game_link_failed" for e in logs))
+
+    MATCH_FULL = 8922000201
+    FULL_IDS = [76561198092200100 + i for i in range(1, 11)]
+
+    def full_overlap_match(self) -> Match:
+        return self.make_match(self.MATCH_FULL, self.day_timestamp(12), self.FULL_IDS)
+
+    def only_semi1_ids(self, game: Game) -> set[int]:
+        return set(self.FULL_IDS) if game.pk == self.semi1.pk else set()
+
+    def full_overlap_conflict(self) -> Match:
+        self.conflict_setup()
+        Game.objects.filter(pk=self.semi1.pk).update(gameid=None)
+        return self.full_overlap_match()
+
+    def assert_semi1_skipped(self, logs: list[dict[str, Any]]) -> None:
+        semi1 = self.game(self.semi1)
+        self.assertIsNone(semi1.gameid)
+        self.assertEqual(semi1.winning_team_id, self.team.pk)
+        self.assertEqual(self.refresh(self.other).placement, 3)
+        self.assertFalse(
+            GameMatchSuggestion.objects.filter(
+                game=self.semi1, auto_linked=True
+            ).exists()
+        )
+        skipped = [e for e in logs if e["event"] == "game_link_skipped_roster_conflict"]
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(skipped[0]["log_level"], "warning")
+        self.assertEqual(
+            {
+                k: skipped[0][k]
+                for k in (
+                    "system",
+                    "subsystem",
+                    "game_id",
+                    "match_id",
+                    "tournament_id",
+                    "team_id",
+                    "user_ids",
+                )
+            },
+            {
+                "system": "steam",
+                "subsystem": "game_linking",
+                "game_id": self.semi1.pk,
+                "match_id": self.MATCH_FULL,
+                "tournament_id": self.tournament.pk,
+                "team_id": self.other.pk,
+                "user_ids": [self.o1.pk],
+            },
+        )
+
+    def patched_link(self) -> contextlib.ExitStack:
+        stack = contextlib.ExitStack()
+        stack.enter_context(
+            mock.patch(
+                "steam.functions.game_linking._get_game_player_steam_ids",
+                side_effect=self.only_semi1_ids,
+            )
+        )
+        stack.enter_context(
+            mock.patch(
+                "steam.functions.game_linking._determine_winner_from_match",
+                return_value=self.other,
+            )
+        )
+        return stack
+
+    def test_auto_link_skips_conflicting_game(self) -> None:
+        self.full_overlap_conflict()
+
+        with self.patched_link(), capture_logs() as logs:
+            result = auto_link_matches_for_tournament(self.tournament.pk)
+
+        self.assertEqual(result["auto_linked_count"], 0)
+        self.assertEqual(result["skipped_roster_conflict_count"], 1)
+        self.assert_semi1_skipped(logs)
+
+    def test_auto_link_endpoint_serializes_skip_count(self) -> None:
+        self.full_overlap_conflict()
+
+        with self.patched_link(), capture_logs() as logs:
+            response = self.client.post(
+                reverse("steam_auto_link"),
+                {"tournament_id": self.tournament.pk},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            response.data,
+            {
+                "auto_linked_count": 0,
+                "suggestions_created_count": 0,
+                "skipped_roster_conflict_count": 1,
+            },
+        )
+        self.assert_semi1_skipped(logs)
+
+    def test_check_match_for_games_skips_conflicting_game(self) -> None:
+        day = self.tournament.date_played.date()
+        Tournament.objects.filter(pk=self.tournament.pk).update(
+            date_played=datetime.combine(day, time(0), tzinfo=dt_timezone.utc)
+        )
+        match = self.full_overlap_conflict()
+
+        with self.patched_link(), capture_logs() as logs:
+            check_match_for_games(match)
+
+        self.assert_semi1_skipped(logs)

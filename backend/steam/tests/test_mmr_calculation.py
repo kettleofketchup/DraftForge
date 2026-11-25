@@ -1,4 +1,5 @@
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from app.models import CustomUser
 from league.models import League, LeagueUser
@@ -157,6 +158,30 @@ class TestMMRCalculation(TestCase):
         update_user_league_mmr(self.user, organization=self.org, league=self.league)
         self.league_user.refresh_from_db()
         self.assertEqual(self.league_user.mmr, 3800)
+
+    def _stamp_verified(self, mmr: int) -> None:
+        LeagueUser.objects.filter(pk=self.league_user.pk).update(
+            mmr=mmr, mmr_verified_at=timezone.now(), mmr_verified_by=self.user
+        )
+
+    def test_recompute_skips_verified_row_compute_branch(self) -> None:
+        self._stamp_verified(5100)
+        LeaguePlayerStats.objects.create(
+            user=self.user, league_id=12345, games_played=10, mmr_adjustment=200
+        )
+        update_user_league_mmr(self.user, organization=self.org, league=self.league)
+        row = LeagueUser.objects.nocache().get(pk=self.league_user.pk)
+        self.assertEqual(row.mmr, 5100)
+        self.assertIsNotNone(row.mmr_verified_at)
+        self.assertEqual(row.mmr_verified_by_id, self.user.pk)
+
+    def test_recompute_skips_verified_row_zero_branch(self) -> None:
+        self._stamp_verified(5100)
+        ensure_org_user(self.user, self.org, mmr=0)
+        update_user_league_mmr(self.user, organization=self.org, league=self.league)
+        row = LeagueUser.objects.nocache().get(pk=self.league_user.pk)
+        self.assertEqual(row.mmr, 5100)
+        self.assertIsNotNone(row.mmr_verified_at)
 
     def test_update_user_league_mmr_league_without_organization(self) -> None:
         """Should leave league_mmr unchanged when no organization is given."""

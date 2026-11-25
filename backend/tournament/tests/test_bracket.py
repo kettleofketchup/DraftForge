@@ -1,14 +1,27 @@
 """Tests for bracket save and team placement functionality."""
 
 from datetime import date
+from typing import Any
+from unittest import mock
 
+from django.db import transaction
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
+from structlog.testing import capture_logs
 
 from app.models import CustomUser
+from app.tests.test_bracket_placement import single_elim_matches
+from steam.functions.game_linking import _link_game_to_match
+from steam.models import GameMatchSuggestion, Match
 from tournament.models import Game, Team, TeamLog, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
+from tournament.services.bracket_placement import (
+    PlacementRosterConflict,
+    apply_bracket_placements,
+    tournament_bracket_placements,
+)
 from tournament.services.team_management import live_conflicts, replace_captain
 from tournament.tests.test_team_management import TeamManagementFixture, eliminate
 from tournament.views.bracket import calculate_placement
@@ -809,30 +822,10 @@ class AdvanceWinnerPersistenceTest(TestCase):
         self.assertIsNone(self.teams[1].placement)
 
 
-class PlacementClearGuardTests(TeamManagementFixture, TestCase):
-    """A placement clear that would put a player on two live teams is refused."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.admin = CustomUser.objects.create_superuser(
-            username="guard_admin", password="admin123", email="guard@test.com"
-        )
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.admin)
-        self.downstream = Game.objects.create(
-            tournament=self.tournament, bracket_type="losers", round=2, position=0
-        )
-        self.losers_game = Game.objects.create(
-            tournament=self.tournament,
-            bracket_type="losers",
-            round=1,
-            position=0,
-            radiant_team=self.team,
-            dire_team=self.other,
-            next_game=self.downstream,
-            next_game_slot="radiant",
-            elimination_type="double",
-        )
+class RosterGuardHelpers:
+    client: APIClient
+    actor: CustomUser
+    tournament: Tournament
 
     def _advance(self, game: Game, winner: str | None) -> Response:
         return self.client.post(
@@ -862,6 +855,32 @@ class PlacementClearGuardTests(TeamManagementFixture, TestCase):
         )
         for user in users:
             self.assertIn(user.username, response.data["error"])
+
+
+class PlacementClearGuardTests(RosterGuardHelpers, TeamManagementFixture, TestCase):
+    """A placement clear that would put a player on two live teams is refused."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.admin = CustomUser.objects.create_superuser(
+            username="guard_admin", password="admin123", email="guard@test.com"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+        self.downstream = Game.objects.create(
+            tournament=self.tournament, bracket_type="losers", round=2, position=0
+        )
+        self.losers_game = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="losers",
+            round=1,
+            position=0,
+            radiant_team=self.team,
+            dire_team=self.other,
+            next_game=self.downstream,
+            next_game_slot="radiant",
+            elimination_type="double",
+        )
 
     def test_unset_losers_game_after_takeover_409_and_no_side_effects(self) -> None:
         self.assertEqual(self._advance(self.losers_game, "radiant").status_code, 200)
@@ -977,3 +996,334 @@ class PlacementClearGuardTests(TeamManagementFixture, TestCase):
         eliminate(self.other, 4)
         self.team.dropin_members.add(self.o1)
         self.assertEqual(live_conflicts(self.refresh(self.other)), [self.o1])
+
+
+class SingleEliminationGuardBracket(
+    RosterGuardHelpers, TeamManagementFixture, TestCase
+):
+    """Rostered/Others/Third/Fourth in two semis feeding one final."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.admin = CustomUser.objects.create_superuser(
+            username="guard_se_admin", password="admin123", email="guard_se@test.com"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+        self.u3 = self.make_user("roster_t3")
+        self.u4 = self.make_user("roster_t4")
+        self.tournament.users.add(self.u3, self.u4)
+        self.t3 = Team.objects.create(
+            tournament=self.tournament, name="Third", captain=self.u3
+        )
+        self.t3.members.add(self.u3)
+        self.t4 = Team.objects.create(
+            tournament=self.tournament, name="Fourth", captain=self.u4
+        )
+        self.t4.members.add(self.u4)
+        self.teams4: list[Team] = [self.team, self.other, self.t3, self.t4]
+        t = self.teams4
+        self.final = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="winners",
+            elimination_type="single",
+            round=2,
+            position=0,
+        )
+        self.semi1 = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="winners",
+            elimination_type="single",
+            round=1,
+            position=0,
+            radiant_team=t[0],
+            dire_team=t[1],
+            next_game=self.final,
+            next_game_slot="radiant",
+        )
+        self.semi2 = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="winners",
+            elimination_type="single",
+            round=1,
+            position=1,
+            radiant_team=t[2],
+            dire_team=t[3],
+            next_game=self.final,
+            next_game_slot="dire",
+        )
+
+    def knock_out_other(self) -> None:
+        self.assertEqual(self._advance(self.semi1, "radiant").status_code, 200)
+        self.assertEqual(self.refresh(self.other).placement, 3)
+
+    def conflict_setup(self) -> None:
+        self.knock_out_other()
+        self._take_over(self.t3, self.o1)
+
+    def save(self, matches: list[dict[str, Any]]) -> Response:
+        return self.client.post(
+            f"/api/bracket/tournaments/{self.tournament.pk}/save/",
+            {"matches": matches},
+            format="json",
+        )
+
+    def game(self, game: Game) -> Game:
+        return Game.objects.nocache().get(pk=game.pk)
+
+
+class PlacementRequestGuardTests(SingleEliminationGuardBracket):
+    def test_save_clearing_result_refused(self) -> None:
+        self.conflict_setup()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.save(single_elim_matches(self.teams4, semi1=None))
+
+        self._assert_conflict(response, self.other, [self.o1])
+        semi1 = self.game(self.semi1)
+        self.assertEqual(semi1.winning_team_id, self.team.pk)
+        self.assertEqual(semi1.status, "completed")
+        self.assertEqual(self.refresh(self.other).placement, 3)
+        detail = self.client.get(f"/api/tournaments/{self.tournament.pk}/")
+        self.assertEqual(detail.status_code, 200)
+        others = next(t for t in detail.data["teams"] if t["pk"] == self.other.pk)
+        self.assertEqual(others["placement"], 3)
+
+    def test_save_deleting_eliminating_game_refused(self) -> None:
+        self.conflict_setup()
+        matches = [
+            m
+            for m in single_elim_matches(self.teams4, semi1="radiant")
+            if m["id"] != "w-1-0"
+        ]
+
+        response = self.save(matches)
+
+        self._assert_conflict(response, self.other, [self.o1])
+        self.assertTrue(Game.objects.nocache().filter(pk=self.semi1.pk).exists())
+        self.assertEqual(self.refresh(self.other).placement, 3)
+
+    def test_flip_reopening_player_on_third_live_team_refused(self) -> None:
+        self.conflict_setup()
+
+        response = self._advance(self.semi1, "dire")
+
+        self._assert_conflict(response, self.other, [self.o1])
+        self.assertEqual(self.game(self.semi1).winning_team_id, self.team.pk)
+        self.assertEqual(self.game(self.final).radiant_team_id, self.team.pk)
+        self.assertEqual(self.refresh(self.other).placement, 3)
+        self.assertIsNone(self.refresh(self.team).placement)
+
+    def test_flip_moving_player_to_eliminated_team_is_allowed(self) -> None:
+        self.knock_out_other()
+        self._take_over(self.team, self.o1)
+
+        response = self._advance(self.semi1, "dire")
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(self.refresh(self.other).placement)
+        self.assertEqual(self.refresh(self.team).placement, 3)
+
+    def test_steam_unlink_refused(self) -> None:
+        self.conflict_setup()
+        Game.objects.filter(pk=self.semi1.pk).update(gameid=8922000001)
+
+        response = self.client.delete(f"/api/steam/games/{self.semi1.pk}/unlink-match/")
+
+        self._assert_conflict(response, self.other, [self.o1])
+        semi1 = self.game(self.semi1)
+        self.assertEqual(semi1.gameid, 8922000001)
+        self.assertEqual(semi1.winning_team_id, self.team.pk)
+        self.assertEqual(semi1.status, "completed")
+        self.assertEqual(self.refresh(self.other).placement, 3)
+
+    def test_confirm_suggestion_refused(self) -> None:
+        self.conflict_setup()
+        Game.objects.filter(pk=self.semi1.pk).update(gameid=None)
+        match = Match.objects.create(
+            match_id=8922000003,
+            radiant_win=False,
+            duration=1800,
+            start_time=1700000000,
+            game_mode=2,
+            lobby_type=1,
+        )
+        suggestion = GameMatchSuggestion.objects.create(
+            game=self.semi1,
+            match=match,
+            tournament=self.tournament,
+            confidence_score=0.9,
+            player_overlap=9,
+            auto_linked=False,
+        )
+
+        with mock.patch(
+            "steam.functions.game_linking._determine_winner_from_match",
+            return_value=self.other,
+        ):
+            response = self.client.post(
+                f"/api/steam/suggestions/{suggestion.pk}/confirm/"
+            )
+
+        self._assert_conflict(response, self.other, [self.o1])
+        self.assertFalse(
+            GameMatchSuggestion.objects.nocache().get(pk=suggestion.pk).auto_linked
+        )
+        semi1 = self.game(self.semi1)
+        self.assertIsNone(semi1.gameid)
+        self.assertEqual(semi1.winning_team_id, self.team.pk)
+
+    def test_steam_link_direct_refused(self) -> None:
+        self.conflict_setup()
+        Game.objects.filter(pk=self.semi1.pk).update(gameid=None)
+        match = Match.objects.create(
+            match_id=8922000002,
+            radiant_win=False,
+            duration=1800,
+            start_time=1700000000,
+            game_mode=2,
+            lobby_type=1,
+        )
+        raised: Exception | None = None
+
+        with mock.patch(
+            "steam.functions.game_linking._determine_winner_from_match",
+            return_value=self.other,
+        ):
+            try:
+                _link_game_to_match(self.game(self.semi1), match)
+            except Exception as exc:
+                raised = exc
+
+        semi1 = self.game(self.semi1)
+        self.assertIsNone(semi1.gameid)
+        self.assertEqual(semi1.winning_team_id, self.team.pk)
+        self.assertEqual(self.refresh(self.other).placement, 3)
+        self.assertIsNotNone(raised)
+        self.assertIsInstance(raised, PlacementRosterConflict)
+
+
+class PlacementApplyGuardTests(SingleEliminationGuardBracket):
+    def _clear_semi1(self) -> None:
+        before = tournament_bracket_placements(self.tournament.pk)
+        with transaction.atomic():
+            Game.objects.filter(pk=self.semi1.pk).update(
+                winning_team=None, status="pending"
+            )
+            apply_bracket_placements(self.tournament.pk, before)
+
+    def test_apply_raises_and_rolls_back_when_clear_conflicts(self) -> None:
+        self.conflict_setup()
+
+        with self.assertRaises(PlacementRosterConflict) as ctx:
+            self._clear_semi1()
+
+        self.assertEqual(ctx.exception.team.pk, self.other.pk)
+        self.assertEqual(ctx.exception.user_ids, [self.o1.pk])
+        self.assertEqual(ctx.exception.body["code"], "roster_conflict")
+        self.assertEqual(
+            ctx.exception.body["details"],
+            {"team_id": self.other.pk, "user_ids": [self.o1.pk]},
+        )
+        self.assertIn(self.t3.name, ctx.exception.body["error"])
+        self.assertEqual(self.refresh(self.other).placement, 3)
+        self.assertEqual(self.game(self.semi1).winning_team_id, self.team.pk)
+
+    def test_apply_logs_blocked_clear(self) -> None:
+        self.conflict_setup()
+
+        with capture_logs() as logs, self.assertRaises(PlacementRosterConflict):
+            self._clear_semi1()
+
+        event = next(
+            e
+            for e in logs
+            if e["event"] == "bracket_placement_clear_blocked_roster_conflict"
+        )
+        self.assertEqual(
+            (event["system"], event["subsystem"], event["log_level"]),
+            ("bracket", "placement", "warning"),
+        )
+        self.assertEqual(
+            (event["tournament_id"], event["team_id"], event["user_ids"]),
+            (self.tournament.pk, self.other.pk, [self.o1.pk]),
+        )
+
+    def test_apply_clears_without_conflict(self) -> None:
+        self.knock_out_other()
+
+        self._clear_semi1()
+
+        self.assertIsNone(self.refresh(self.other).placement)
+
+    def test_live_team_in_other_tournament_is_not_a_conflict(self) -> None:
+        elsewhere = Tournament.objects.create(
+            name="Elsewhere Cup", date_played=timezone.now(), league=self.league
+        )
+        Team.objects.create(
+            tournament=elsewhere, name="Elsewhere", captain=self.o1
+        ).members.add(self.o1)
+        self.knock_out_other()
+
+        self._clear_semi1()
+
+        self.assertIsNone(self.refresh(self.other).placement)
+
+    def test_dropin_on_live_team_blocks_clear(self) -> None:
+        self.knock_out_other()
+        self.t3.dropin_members.add(self.o1)
+
+        with self.assertRaises(PlacementRosterConflict) as ctx:
+            self._clear_semi1()
+
+        self.assertEqual(ctx.exception.user_ids, [self.o1.pk])
+
+
+class SingleEliminationFinalUnsetTests(SingleEliminationGuardBracket):
+    def decide_final(self) -> None:
+        self.assertEqual(self._advance(self.semi1, "radiant").status_code, 200)
+        self.assertEqual(self._advance(self.semi2, "radiant").status_code, 200)
+        self.assertEqual(self._advance(self.final, "radiant").status_code, 200)
+        self.assertEqual(self.refresh(self.team).placement, 1)
+        self.assertEqual(self.refresh(self.t3).placement, 2)
+
+    def test_single_elimination_final_unset_checks_winner(self) -> None:
+        self.decide_final()
+        x_captain = self.make_user("roster_x")
+        self.tournament.users.add(x_captain)
+        live = Team.objects.create(
+            tournament=self.tournament, name="Live X", captain=x_captain
+        )
+        live.members.add(x_captain)
+        self._take_over(live, self.m1)
+
+        with capture_logs() as logs:
+            response = self._advance(self.final, None)
+
+        self._assert_conflict(response, self.team, [self.m1])
+        self.assertEqual(self.refresh(self.team).placement, 1)
+        self.assertEqual(self.refresh(self.t3).placement, 2)
+        final = self.game(self.final)
+        self.assertEqual(final.status, "completed")
+        self.assertEqual(final.winning_team_id, self.team.pk)
+        events = [entry["event"] for entry in logs]
+        self.assertIn("bracket_unset_blocked_roster_conflict", events)
+        self.assertNotIn("bracket_placement_clear_blocked_roster_conflict", events)
+
+    def test_single_elimination_final_unset_catches_player_on_both_finalists(
+        self,
+    ) -> None:
+        self.decide_final()
+        self.team.members.add(self.u3)
+
+        with capture_logs() as logs:
+            response = self._advance(self.final, None)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data["details"]["team_id"], self.t3.pk)
+        self.assertIn(
+            "bracket_unset_blocked_roster_conflict", [e["event"] for e in logs]
+        )
+        self.assertEqual(response.data["details"]["user_ids"], [self.u3.pk])
+        self.assertEqual(self.refresh(self.team).placement, 1)
+        self.assertEqual(self.refresh(self.t3).placement, 2)

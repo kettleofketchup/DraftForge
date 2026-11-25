@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  BadgeCheck,
   Building2,
   Calendar,
   CalendarDays,
@@ -38,6 +39,7 @@ import { OrganizationHeaderTitle } from '~/components/organization/OrganizationH
 import { buildOrgPageNavOptions } from '~/components/organization/orgPageNavOptions';
 import { OrgSettingsDialog } from '~/components/organization/OrgSettingsDialog';
 import { useOrgSettingsAccess } from '~/components/organization/tabs/orgSettings/useOrgSettingsAccess';
+import { Badge } from '~/components/ui/badge';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   EntityBreadcrumb,
@@ -59,6 +61,7 @@ import {
   useDiscordBotStatus,
   useDiscordConnectResult,
 } from '~/features/discord-connect';
+import { MmrRequestsTab, useMmrPendingCount } from '~/features/mmr-requests';
 import {
   LockedFeaturesPanel,
   removeFeatureQueries,
@@ -296,6 +299,9 @@ export default function OrganizationDetailPage() {
   const canEditEvents = isOrgStaff;
   const canAddMembers = isOrgStaff;
   const canViewClaims = isOrgStaff;
+  const canReviewMmr = isOrgStaff && !!pk;
+  const mmrPendingCount =
+    useMmrPendingCount({ org: pk ?? 0 }, canReviewMmr).data?.count ?? 0;
   const pendingClaimsCount = usePendingClaimsCount(pk, !!canViewClaims);
 
   // AddUserModal callbacks
@@ -351,6 +357,8 @@ export default function OrganizationDetailPage() {
         standingTabs,
         canUsePromotion,
         canViewClaims,
+        canReviewMmr,
+        mmrPendingCount,
         pendingClaimsCount,
       }),
     [
@@ -361,6 +369,8 @@ export default function OrganizationDetailPage() {
       standingTabs,
       canUsePromotion,
       canViewClaims,
+      canReviewMmr,
+      mmrPendingCount,
       pendingClaimsCount,
     ],
   );
@@ -508,6 +518,24 @@ export default function OrganizationDetailPage() {
                   count={pendingClaimsCount}
                   testId="org-tab-claims-pending-count"
                 />
+              </TabsTrigger>
+            )}
+            {canReviewMmr && (
+              <TabsTrigger
+                value="mmr-requests"
+                data-testid="org-tab-mmr-requests"
+              >
+                <BadgeCheck className="w-4 h-4 mr-2" />
+                MMR requests
+                {mmrPendingCount > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-2 text-xs"
+                    data-testid="org-tab-mmr-requests-count"
+                  >
+                    {mmrPendingCount}
+                  </Badge>
+                )}
               </TabsTrigger>
             )}
           </TabsList>
@@ -697,6 +725,12 @@ export default function OrganizationDetailPage() {
           {canViewClaims && pk && (
             <TabsContent value="claims">
               <ClaimsTab organizationId={pk} />
+            </TabsContent>
+          )}
+
+          {canReviewMmr && pk && (
+            <TabsContent value="mmr-requests">
+              <MmrRequestsTab scope={{ org: pk }} />
             </TabsContent>
           )}
         </Tabs>

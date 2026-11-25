@@ -352,10 +352,11 @@ class CustomUser(AbstractUser):
         )
         return self
 
-    def check_and_update_avatar(self) -> bool:
+    def check_and_update_avatar(self, force: bool = False) -> bool:
         """
         Checks if the current avatar URL is valid. If not, fetches the latest
-        avatar from Discord and updates the database.
+        avatar from Discord and updates the database. With ``force``, skips the
+        validity check and always fetches from Discord.
 
         Returns:
             bool: True if the avatar was updated, False otherwise.
@@ -363,15 +364,10 @@ class CustomUser(AbstractUser):
         if not self.discordId:
             return False
 
-        if not self.avatar:
-            # If no avatar is set, try to fetch one.
+        if force or not self.avatar:
             return self._fetch_and_update_avatar_from_discord()
 
-        # Construct current avatar URL
-        extension = "gif" if self.avatar.startswith("a_") else "png"
-        current_url = f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
-
-        if self._is_avatar_url_valid(current_url):
+        if self._is_avatar_url_valid(self.discord_avatar_cdn_url):
             return False
 
         return self._fetch_and_update_avatar_from_discord()
@@ -430,11 +426,9 @@ class CustomUser(AbstractUser):
                 new_avatar = user_data.get("avatar")
 
                 if new_avatar != self.avatar:
-                    # The avatar setter persists to base_profile.avatar via
-                    # bp.save(update_fields=["avatar"]) inside the setter, so
-                    # an explicit CustomUser.save(update_fields=["avatar"])
-                    # here would crash now that `avatar` is a property, not a
-                    # model field.
+                    # The setter persists to base_profile; an explicit
+                    # CustomUser.save(update_fields=["avatar"]) would crash
+                    # because `avatar` is a property, not a model field.
                     self.avatar = new_avatar
                     log.info(
                         "avatar_updated",
@@ -540,6 +534,14 @@ class CustomUser(AbstractUser):
                     delattr(self, attr)
 
     @property
+    def discord_avatar_cdn_url(self) -> str | None:
+        """CDN URL of the stored avatar hash; None unless discordId and avatar are both set."""
+        if not self.discordId or not self.avatar:
+            return None
+        extension = "gif" if self.avatar.startswith("a_") else "png"
+        return f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
+
+    @property
     def avatarUrl(self) -> str | None:
         """
         Constructs the Discord avatar URL from the stored discordId and avatar hash.
@@ -549,15 +551,13 @@ class CustomUser(AbstractUser):
             return None
 
         if self.avatar:
-            extension = "gif" if self.avatar.startswith("a_") else "png"
-            return f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
+            return self.discord_avatar_cdn_url
 
-        # Default avatar logic
         if self.discordId:
-            # New default avatar URL logic based on user ID
+            # Discord default avatar, indexed by user ID
             return f"https://cdn.discordapp.com/embed/avatars/{(int(self.discordId) >> 22) % 6}.png"
 
-        return "https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
+        return "https://cdn.discordapp.com/embed/avatars/0.png"
 
     class Meta:
         indexes = [

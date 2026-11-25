@@ -9,13 +9,15 @@ from rest_framework.views import exception_handler as drf_exception_handler
 from discordbot.activity_errors import ActivityAuthFailed
 from events.overrides import OverrideReasonRequired, OverrideRequired
 from telemetry.logging import get_logger
+from tournament.services.bracket_placement import PlacementRosterConflict
 from tournament.services.team_management import TeamManagementError
 
 log = get_logger("app.exception_handler")
 
 
 def exception_handler(exc: Exception, context: Mapping[str, Any]) -> Response | None:
-    """Wrap DRF's default handler: render override and team service errors, log 4xx/5xx."""
+    """Wrap DRF's default handler: render override, team service and placement
+    roster-conflict errors, log 4xx/5xx."""
     response = drf_exception_handler(exc, context)
 
     if response is None and isinstance(exc, OverrideRequired):
@@ -24,6 +26,8 @@ def exception_handler(exc: Exception, context: Mapping[str, Any]) -> Response | 
         response = Response(exc.as_response_data(), status=400)
     elif response is None and isinstance(exc, TeamManagementError):
         response = Response({"code": exc.code, "detail": exc.message}, status=400)
+    elif response is None and isinstance(exc, PlacementRosterConflict):
+        response = Response(exc.body, status=409)
 
     if response is not None and isinstance(exc, ActivityAuthFailed):
         response.status_code = 401

@@ -1,6 +1,6 @@
 """Org locked features E2E test data: Contributions and Promotion.
 
-Used by frontend/tests/playwright/e2e/19-org-features/.
+Used by frontend/tests/playwright/e2e/org-features/.
 populate_org_features_data creates it and reset_org_features_data puts it
 back between specs (tests.populate.org_features).
 

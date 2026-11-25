@@ -1,6 +1,6 @@
 """MMR sync API E2E test data.
 
-Used by frontend/tests/playwright/e2e/19-org-features/13-mmr-sync-api.spec.ts.
+Used by frontend/tests/playwright/e2e/org-features/mmr-sync-api.spec.ts.
 Created by tests.populate.mmr_sync (populate, and again by every reset).
 
 - Org 55 "MMR Sync Org": mmr_sync unlocked.
