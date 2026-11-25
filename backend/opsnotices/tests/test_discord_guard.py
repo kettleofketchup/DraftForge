@@ -30,6 +30,8 @@ FORBIDDEN_PREFIXES: tuple[str, ...] = ("sync_send_", "sync_edit_", "sync_create_
 FORBIDDEN_NAMES: frozenset[str] = frozenset(
     {
         "send_dm",
+        "send_interaction_dm",
+        "_open_dm_channel",
         "sync_send_dm",
         "sync_send_dm_result",
         "_send_dm_raw",
