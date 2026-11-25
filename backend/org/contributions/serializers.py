@@ -2,7 +2,6 @@ from typing import Any, TypedDict
 
 from rest_framework import serializers
 
-from app.display_names import first_name
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import (
     MANUAL_MAX_POINTS,
@@ -11,6 +10,7 @@ from org.contributions.services import (
     REASON_MAX_LENGTH,
 )
 from org.models import ContributionEntry, OrgUser
+from user.display_names import first_name
 
 MAX_PAGE_LIMIT = 500
 DEFAULT_PAGE_LIMIT = 100

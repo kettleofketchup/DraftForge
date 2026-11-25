@@ -94,8 +94,8 @@ class CacheopsSettingsTests(TestCase):
 # Files we scan. test_scan_targets_complete fails when a module with a
 # CustomUser @cached_as block is in neither list.
 SCAN_TARGETS = [
-    REPO_ROOT / "backend" / "app" / "views_main.py",
-    REPO_ROOT / "backend" / "app" / "user_cache.py",
+    REPO_ROOT / "backend" / "user" / "views_account.py",
+    REPO_ROOT / "backend" / "user" / "cache.py",
     REPO_ROOT / "backend" / "tournament" / "views" / "tournament.py",
     REPO_ROOT / "backend" / "tournament" / "views" / "team.py",
     REPO_ROOT / "backend" / "tournament" / "views" / "game.py",

@@ -30,7 +30,7 @@ User:
           - frontend/app/components/user/**
           - backend/app/**/auth*
           - backend/app/**/social*
-          - backend/app/views/user*
+          - backend/user/**
 
 documentation:
   - changed-files:

@@ -1,6 +1,6 @@
 """Internal endpoints for batched Discord-avatar refresh.
 
-Worker flow (see `app/tasks/avatar_refresh.py::refresh_avatars_batched`):
+Worker flow (see `user/tasks/avatar_refresh.py::refresh_avatars_batched`):
 
   1. GET  /api/internal/users/discord-linked/      list candidate users
   2. GET  /api/internal/orgs/discord-guild-ids/    list guilds to fetch
@@ -14,6 +14,7 @@ These endpoints live in the `user` app so they can grow without bloating
 from typing import Any
 
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
@@ -24,7 +25,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
-from app.cache_utils import invalidate_obj
+from app.cache_utils import invalidate_after_commit, invalidate_obj
 from org.models import Organization
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile
@@ -210,3 +211,88 @@ def bulk_update_user_avatars(request: Request) -> Response:
         requested=len(cleaned),
     )
     return Response({"updated": len(to_update)})
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def list_users_for_avatar_check(request: Request) -> Response:
+    """Return users with Discord IDs for avatar validation.
+
+    Query params:
+        has_avatar: "true" (only users with existing avatar) or "false"
+        limit: max results (default 100)
+        offset: pagination offset (default 0)
+    """
+
+    User = get_user_model()
+
+    qs = User.objects.filter(discordId__isnull=False)
+
+    has_avatar = request.query_params.get("has_avatar")
+    # avatar lives on base_profile; ORM filters need the relation path
+    if has_avatar == "true":
+        qs = qs.exclude(base_profile__avatar__isnull=True).exclude(
+            base_profile__avatar=""
+        )
+    elif has_avatar == "false":
+        qs = qs.filter(
+            Q(base_profile__avatar__isnull=True) | Q(base_profile__avatar="")
+        )
+
+    limit = int(request.query_params.get("limit", 100))
+    offset = int(request.query_params.get("offset", 0))
+
+    users = qs[offset : offset + limit]
+    return Response(
+        [
+            {
+                "pk": u.pk,
+                "discord_id": u.discordId,
+                "avatar": u.avatar,
+                "username": u.username,
+            }
+            for u in users
+        ]
+    )
+
+
+@api_view(["PATCH"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def update_user_avatar(request: Request, pk: int) -> Response:
+    """Update a user's avatar hash.
+
+    Body: {"avatar": "new_avatar_hash"} or {"avatar": null} to clear.
+    """
+
+    User = get_user_model()
+
+    try:
+        user = User.objects.get(pk=pk)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Discord avatar hashes are 32 chars (or 34 with the `a_` animated prefix).
+    # Cap at 64 to defend the TextField from accidental URL/blob payloads —
+    # this endpoint is internal-only but the only celery-driven ingress for
+    # avatar refresh, so a sanity cap closes a tail-risk.
+    avatar = request.data.get("avatar")
+    if avatar is not None:
+        if not isinstance(avatar, str):
+            return Response(
+                {"error": "avatar must be a string or null"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(avatar) > 64:
+            return Response(
+                {"error": "avatar exceeds 64 characters"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # avatar setter persists + invalidates base_profile; also evict the user
+    # row since UserSerializer.avatar reads through base_profile.
+    user.avatar = avatar
+    invalidate_after_commit(user)
+
+    return Response({"pk": user.pk, "avatar": user.avatar})

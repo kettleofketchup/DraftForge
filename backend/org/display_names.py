@@ -1,8 +1,8 @@
 from collections.abc import Iterable
 
-from app.display_names import first_name, user_display_name
 from app.models import CustomUser
 from org.models import Organization, OrgUser
+from user.display_names import first_name, user_display_name
 
 
 def guild_nicknames(

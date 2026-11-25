@@ -5,12 +5,12 @@ from typing import TypedDict
 
 from django.conf import settings
 
-from app.display_names import user_display_name
 from app.models import CustomUser
 from common.discord_format import discord_timestamp
 from events.models import Event
 from org.display_names import guild_nicknames
 from org.models import Organization
+from user.display_names import user_display_name
 
 
 class PlaceholderSpec(TypedDict):
