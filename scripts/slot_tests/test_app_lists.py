@@ -1,6 +1,5 @@
-"""Keep the hand-maintained Django app lists in step with MODEL_APPS."""
+"""Keep the hand-maintained Django app lists in step with every app that has migrations."""
 
-import ast
 import re
 from pathlib import Path
 
@@ -8,21 +7,11 @@ from scripts.slot_tests import test_just_recipes
 from scripts.slot_tests._helpers import ROOT
 
 
-def _model_apps_with_migrations(root: Path) -> list[str]:
-    source = (root / "backend/config/installed_apps.py").read_text()
-    for node in ast.parse(source).body:
-        target = node.target if isinstance(node, ast.AnnAssign) else None
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
-        if isinstance(target, ast.Name) and target.id == "MODEL_APPS":
-            entries: list[str] = ast.literal_eval(node.value)
-            labels = [entry.split(".", 1)[0] for entry in entries]
-            return [
-                label
-                for label in labels
-                if (root / "backend" / label / "migrations/__init__.py").is_file()
-            ]
-    raise AssertionError("MODEL_APPS not found in backend/config/installed_apps.py")
+def _apps_with_migrations(root: Path) -> list[str]:
+    return sorted(
+        init.parent.parent.name
+        for init in (root / "backend").glob("*/migrations/__init__.py")
+    )
 
 
 def _mod_just_apps(root: Path) -> list[str]:
@@ -32,8 +21,8 @@ def _mod_just_apps(root: Path) -> list[str]:
     return match.group(1).split()
 
 
-def test_model_apps_with_migrations_are_in_makemigrations_list() -> None:
-    missing = set(_model_apps_with_migrations(ROOT)) - set(_mod_just_apps(ROOT))
+def test_apps_with_migrations_are_in_makemigrations_list() -> None:
+    missing = set(_apps_with_migrations(ROOT)) - set(_mod_just_apps(ROOT))
     assert not missing, f"add to just/db/mod.just apps: {sorted(missing)}"
 
 
