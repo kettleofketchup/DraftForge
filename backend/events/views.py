@@ -198,16 +198,21 @@ def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
 def _attach_user_can_manage(
     payload: dict[str, Any] | list[dict[str, Any]], user: CustomUser | AnonymousUser
 ) -> dict[str, Any] | list[dict[str, Any]]:
-    """Mutate a serialized Event payload (or list of them) to set per-request user flags.
+    """Set per-request viewer fields on a serialized Event payload (or list of them).
+
+    Sets user_can_manage, user_can_manage_event_staff and user_is_event_operator,
+    plus manage_viewer_pk: the viewer the flags were computed for (None for
+    anonymous, who keep the serializer's False defaults).
 
     Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
     The Event instances are looked up by id from the payload; one batched query
     covers both list and single-item cases.
     """
-    if not user or not user.is_authenticated:
-        return payload  # default False already set by serializer
     items = payload if isinstance(payload, list) else [payload]
-    if not items:
+    viewer_pk = user.pk if user and user.is_authenticated else None
+    for p in items:
+        p["manage_viewer_pk"] = viewer_pk
+    if viewer_pk is None or not items:
         return payload
     events_by_pk = {
         e.pk: e

@@ -622,7 +622,7 @@ class MergeOrgMemberDependentsTest(TestCase):
 
 class MergeProfileCarryoverCoverageTest(TestCase):
     """A field added to a user profile model must get merge carryover handling
-    in app/discord_accounts.py, or be listed here as deliberately dropped."""
+    in user/discord_accounts.py, or be listed here as deliberately dropped."""
 
     def _fields(self, model: type) -> set[str]:
         return {f.name for f in model._meta.concrete_fields}

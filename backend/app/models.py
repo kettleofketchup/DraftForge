@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import Any, ClassVar, Self
 
 import requests
 from django.conf import settings
@@ -13,56 +13,11 @@ from app.cache_utils import invalidate_after_commit
 from common.game import GameType  # noqa: F401
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
-
-if TYPE_CHECKING:
-    from user.models import DotaUserProfile
+from user.models import BaseUserProfile, DotaUserProfile, PositionsModel
 
 User = settings.AUTH_USER_MODEL
 
 log = get_logger(__name__)
-
-
-class PositionsModel(models.Model):
-    carry = models.IntegerField(
-        default=0,
-        help_text="Rank of the carry position from 0 (No play) to 5 (best)",
-    )
-    mid = models.IntegerField(
-        default=0, help_text="Rank of the mid position from 0 (No play) to 5 (best)"
-    )
-    offlane = models.IntegerField(
-        default=0,
-        help_text="Rank of the offlane position from 0 (No play) to 5 (best)",
-    )
-    soft_support = models.IntegerField(
-        default=0,
-        help_text="Rank of the soft support position from 0 (No play) to 5 (best)",
-    )
-    hard_support = models.IntegerField(
-        default=0,
-        help_text="Rank of the hard support position from 0 (No play) to 5 (best)",
-    )
-
-    def __str__(self) -> str:
-        return f"Carry: {self.carry}, Mid: {self.mid}, Offlane: {self.offlane}, Soft Support: {self.soft_support}, Hard Support: {self.hard_support}"
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        super().save(*args, **kwargs)
-        # Positions live on user.DotaUserProfile (default reverse accessor
-        # dotauserprofile_set). Walk it + bubbled parents. Org positions are
-        # pos_1..5 booleans on org.PlayerDotaProfile (no PositionsModel FK) —
-        # cacheops auto-invalidates that model; not this loop.
-        # .nocache(): invalidation must walk the live rows — a cached join
-        # (invalidated only on DotaUserProfile) could miss a freshly linked
-        # profile and skip its parents.
-        dota_profiles = list(
-            self.dotauserprofile_set.select_related("base_profile__user").nocache()
-        )
-        targets = []
-        for dp in dota_profiles:
-            targets += [dp, dp.base_profile, dp.base_profile.user]
-        if targets:
-            invalidate_after_commit(*targets)
 
 
 class CustomUser(AbstractUser):
@@ -315,7 +270,7 @@ class CustomUser(AbstractUser):
         invalidate_after_commit(bp)
 
     @property
-    def dota_user_profile(self) -> "DotaUserProfile | None":
+    def dota_user_profile(self) -> DotaUserProfile | None:
         """Convenience accessor — the user-wide Dota profile lives one hop
         away on base_profile. Transitional sugar for the shims below and
         writers still phrasing reads as `user.dota_user_profile`. None-safe
@@ -535,9 +490,6 @@ class CustomUser(AbstractUser):
         # (model is registered with ops="all"). No explicit call needed.
 
         # 2. BaseUserProfile auto-create. Idempotent via get_or_create.
-        # local: user app is not in celery MODEL_APPS
-        from user.models import BaseUserProfile
-
         bp, _ = BaseUserProfile.objects.get_or_create(user=self)
 
         # 3. Flush pending nickname/avatar values buffered by the property
@@ -625,80 +577,3 @@ class Joke(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.username} - {self.tangoes_purchased} tangoes"
-
-
-class ProfileClaimRequest(models.Model):
-    """
-    Request to claim a profile (merge a Steam-only profile into a Discord account).
-
-    Flow:
-    1. User with Discord ID sees profile with Steam ID but no Discord
-    2. User clicks "Claim" which creates a pending request
-    3. Org admin reviews and approves/rejects
-    4. If approved, the merge happens and target profile is deleted
-    """
-
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        APPROVED = "approved", "Approved"
-        REJECTED = "rejected", "Rejected"
-
-    claimer = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.CASCADE,
-        related_name="claim_requests_made",
-        help_text="User requesting to claim the profile (has Discord ID)",
-    )
-    target_user = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="claim_requests_received",
-        help_text="Profile being claimed (has Steam ID, no Discord). NULL after merge.",
-    )
-    organization = models.ForeignKey(
-        "org.Organization",
-        on_delete=models.CASCADE,
-        related_name="claim_requests",
-        help_text="Organization where the target profile is a member",
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.PENDING,
-        db_index=True,
-    )
-    reviewed_by = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="claim_requests_reviewed",
-        help_text="Admin who approved/rejected the request",
-    )
-    rejection_reason = models.TextField(
-        blank=True,
-        help_text="Reason for rejection (if rejected)",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["organization", "status", "-created_at"]),
-            models.Index(fields=["claimer", "status"]),
-        ]
-        # Prevent duplicate pending requests for same claimer+target
-        constraints = [
-            models.UniqueConstraint(
-                fields=["claimer", "target_user"],
-                condition=models.Q(status="pending"),
-                name="unique_pending_claim_request",
-            )
-        ]
-
-    def __str__(self) -> str:
-        target = self.target_user
-        label = (target.nickname or target.steamid) if target else "(deleted profile)"
-        return f"{self.claimer.username} -> {label} ({self.status})"

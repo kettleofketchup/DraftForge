@@ -17,12 +17,12 @@ backend/
 │   ├── migrations/         # Database migrations
 │   ├── templatetags/       # Custom template tags
 │   ├── admin.py           # Django admin configuration
-│   ├── models.py          # CustomUser, PositionsModel, ProfileClaimRequest, Joke
+│   ├── models.py          # CustomUser, Joke
 │   ├── permissions.py     # Shared DRF permissions
 │   ├── serializers.py     # JokeSerializer
 │   └── views_main.py      # Auth pages and cross-domain home stats
 ├── user/                  # User profiles and account operations
-│   ├── models.py          # BaseUserProfile and per-game profiles
+│   ├── models.py          # Profiles, positions and claim requests
 │   ├── serializers.py     # User and positions payloads
 │   ├── cache.py           # Shared user payload cache
 │   ├── pipelines.py       # Discord social-auth steps

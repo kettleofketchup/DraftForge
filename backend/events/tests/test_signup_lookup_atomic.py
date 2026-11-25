@@ -7,11 +7,12 @@ from django.test import TransactionTestCase, override_settings
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from events.constants import EventState
 from events.discord import handle_signup_modal_submit
 from events.models import Event
 from org.models import Organization, OrgUser
+from user.models import PositionsModel
 
 ENSURE = "events.eligibility.steam.ensure_steam_account_exists"
 

@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from events.staff import dedupe_host_helpers
@@ -26,6 +26,7 @@ from org.models import (
     OrgUser,
 )
 from user.discord_accounts import merge_discord_accounts
+from user.models import ProfileClaimRequest
 
 
 class _LedgerFixture(TestCase):
