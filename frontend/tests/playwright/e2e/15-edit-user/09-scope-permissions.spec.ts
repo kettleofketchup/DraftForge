@@ -16,11 +16,9 @@ import {
 import { API_URL } from '../../fixtures/base-url';
 
 const USER_EDIT_ORG_NAME = 'User Edit Org';
-// Pin to a specific dedicated user so the test is deterministic instead of
-// depending on whatever happens to be at index 0 in the org's users list.
-// edit_user_alpha is a non-staff member of User Edit Org — perfect target
-// for "non-superuser, non-actor" visibility assertions.
-const TARGET_USERNAME = 'edit_user_alpha';
+// Dedicated non-staff member of User Edit Org, used by no other spec —
+// see USER_EDIT_USERS in backend/tests/data/users.py.
+const TARGET_USERNAME = 'edit_user_scope';
 let orgPk: number;
 let targetUserPk: number;
 

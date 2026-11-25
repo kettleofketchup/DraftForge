@@ -42,7 +42,10 @@ vi.mock('~/hooks/useMemberAccess', () => ({
   useMemberAccess: () => ({ canView: false, settled: false }),
 }));
 vi.mock('~/hooks/usePageNav', () => ({ usePageNav: () => undefined }));
-vi.mock('~/hooks/usePermissions', () => ({ useIsLeagueAdmin: () => false }));
+vi.mock('~/hooks/usePermissions', () => ({
+  useIsLeagueAdmin: () => false,
+  useIsLeagueStaff: () => false,
+}));
 
 const org = (discord_server_id: string | null) =>
   ({ pk: ORG_PK, name: 'Org', discord_server_id }) as OrganizationType;

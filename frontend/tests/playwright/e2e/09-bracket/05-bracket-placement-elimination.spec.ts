@@ -101,6 +101,7 @@ test.describe('Bracket placement on elimination (e2e)', () => {
   test('@cicd single elimination: a semi-final loser is placed 3rd, the final sets 1st and 2nd', async ({
     page,
   }) => {
+    test.setTimeout(60_000); // Three persisted results and four full page loads.
     const tournamentPk = await resetTournament(
       page,
       'bracket_placement_single',

@@ -3,6 +3,7 @@ services:
   frontend:
     container_name: frontend
     image: ghcr.io/kettleofketchup/draftforge/frontend-dev:latest
+    cgroup_parent: ${DF_TEST_CGROUP_PARENT:-}
     user: "1000:1000"
     env_file: "./docker/.env.test"
     volumes:
@@ -27,6 +28,7 @@ services:
     container_name: backend
     env_file: "./docker/.env.test"
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    cgroup_parent: ${DF_TEST_CGROUP_PARENT:-}
     restart: always
     environment:
       OTEL_SERVICE_NAME: backend
@@ -47,6 +49,7 @@ services:
         max-file: "3"
   nginx:
     image: ghcr.io/kettleofketchup/draftforge/nginx:latest
+    cgroup_parent: ${DF_TEST_CGROUP_PARENT:-}
     container_name: nginx
     restart: always
     env_file: "./docker/.env.test"
@@ -68,6 +71,7 @@ services:
 
   celery-worker:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    cgroup_parent: ${DF_TEST_CGROUP_PARENT:-}
     user: "1000:1000"
     entrypoint: ["celery"]
     # Prod/release use --pool=gevent --concurrency=20 once the new image
@@ -90,6 +94,7 @@ services:
 
   celery-beat:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    cgroup_parent: ${DF_TEST_CGROUP_PARENT:-}
     user: "1000:1000"
     entrypoint: ["celery"]
     command: ["-A", "config.celery_light", "beat", "-l", "info"]
@@ -116,6 +121,7 @@ services:
   # ghcr.io/kettleofketchup/dota_lobby:local (`just docker::build` in dota_lobby).
   dota-lobby:
     image: ${DOTA_LOBBY_IMAGE:-ghcr.io/kettleofketchup/dota_lobby:${DOTA_LOBBY_IMAGE_TAG:-0.2.0}}
+    cgroup_parent: ${DF_TEST_CGROUP_PARENT:-}
     profiles: ["dota-lobby"]
     command: ["serve", "--simulate"]
     environment:
@@ -134,6 +140,7 @@ services:
 
   discord-bot:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    cgroup_parent: ${DF_TEST_CGROUP_PARENT:-}
     user: "1000:1000"
     entrypoint: ["python", "manage.py", "run_discord_bot"]
     volumes:

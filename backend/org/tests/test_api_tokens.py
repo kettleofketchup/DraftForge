@@ -1,23 +1,29 @@
 from datetime import timedelta
+from typing import Any
 
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from common.game import GameType
+from org.api_tokens.sync import sync_mmrs
 from org.api_tokens.tokens import hash_secret, issue_token
 from org.features import FeatureKey, set_org_feature
 from org.mmr import get_org_mmr, set_org_mmr
 from org.models import (
+    MmrChangeRequest,
     Organization,
     OrgApiLimits,
     OrgApiToken,
     OrgApiTokenUsage,
     OrgLog,
     OrgUser,
+    OrgUserGameMmr,
 )
+from org.tests.mmr_request_mixin import MmrRequestTestMixin
 
 LOCMEM_CACHE = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 STEAM_BASE = CustomUser.STEAM_ID_64_BASE
@@ -236,6 +242,137 @@ class SyncTests(ApiTokenBase):
     def test_too_many_entries_400(self) -> None:
         resp = self.post({"entries": [{"steam_id": 1001, "mmr": 1}] * 501})
         self.assertEqual(resp.status_code, 400)
+
+
+class SyncOfficialTests(MmrRequestTestMixin, ApiTokenBase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.raw = issue_token(self.org, self.admin, "official").raw
+
+    def _post(
+        self, entries: list[dict[str, Any]], *, verified: bool = True
+    ) -> Response:
+        return self.bearer(self.raw).post(
+            self.sync_url(),
+            {"entries": entries, "mark_verified": verified},
+            format="json",
+        )
+
+    def _row(self, org_user: OrgUser) -> OrgUserGameMmr:
+        return OrgUserGameMmr.objects.nocache().get(
+            org_user=org_user, game_type=GameType.DOTA2
+        )
+
+    def test_token_owner_is_verifier_and_pending_request_is_superseded(self) -> None:
+        pending = self.make_request(org_user=self.ou_alice)
+
+        response = self._post([{"steam_id": 1001, "mmr": 4200}])
+
+        self.assertEqual(response.status_code, 200, response.data)
+        row = self._row(self.ou_alice)
+        self.assertEqual(row.mmr, 4200)
+        self.assertIsNotNone(row.verified_at)
+        self.assertEqual(row.verified_by_id, self.admin.pk)
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, MmrChangeRequest.Status.SUPERSEDED)
+        self.assertEqual(pending.reviewed_by_id, self.admin.pk)
+        self.assertEqual(pending.approved_mmr, 4200)
+        entry = OrgLog.objects.get(action="set_mmr", target_user=self.alice)
+        self.assertEqual(entry.actor_id, self.admin.pk)
+        self.assertEqual(entry.details["source"], "api_sync")
+        self.assertTrue(entry.details["verified"])
+
+    def test_unchanged_value_is_verified_and_supersedes_pending(self) -> None:
+        set_org_mmr(self.ou_alice, GameType.DOTA2, 3000, mark_verified=False)
+        pending = self.make_request(org_user=self.ou_alice)
+
+        response = self._post([{"steam_id": 1001, "mmr": 3000}])
+
+        self.assertEqual(response.data["unchanged"], 1)
+        self.assertEqual(response.data["updated"], 0)
+        self.assertEqual(self._row(self.ou_alice).verified_by_id, self.admin.pk)
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, MmrChangeRequest.Status.SUPERSEDED)
+        self.assertEqual(pending.approved_mmr, 3000)
+        self.assertFalse(OrgLog.objects.filter(action="set_mmr").exists())
+
+    def test_self_entry_rejected_without_blocking_other_members(self) -> None:
+        self.admin.discordId = "d-admin"
+        self.admin.save(update_fields=["discordId"])
+        own_membership = OrgUser.objects.create(user=self.admin, organization=self.org)
+
+        response = self._post(
+            [{"discord_id": "d-admin", "mmr": 5000}, {"steam_id": 1001, "mmr": 4200}]
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["updated"], 1)
+        self.assertEqual([entry["index"] for entry in response.data["invalid"]], [0])
+        self.assertFalse(
+            OrgUserGameMmr.objects.filter(org_user=own_membership).exists()
+        )
+        self.assertEqual(self._row(self.ou_alice).verified_by_id, self.admin.pk)
+        self.assertFalse(
+            OrgLog.objects.filter(action="set_mmr", target_user=self.admin).exists()
+        )
+
+    def test_staff_subject_rejected_for_plain_staff_but_member_processed(self) -> None:
+        self.org.staff.add(self.bob)
+
+        result = sync_mmrs(
+            self.org,
+            self.staff,
+            [{"steam_id": 1002, "mmr": 5000}, {"steam_id": 1001, "mmr": 4200}],
+        )
+
+        self.assertEqual(result.updated, 1)
+        self.assertEqual([entry["index"] for entry in result.invalid], [0])
+        self.assertFalse(OrgUserGameMmr.objects.filter(org_user=self.ou_bob).exists())
+        self.assertEqual(self._row(self.ou_alice).verified_by_id, self.staff.pk)
+
+    def test_org_admin_can_verify_staff_subject(self) -> None:
+        self.org.staff.add(self.bob)
+
+        response = self._post([{"steam_id": 1002, "mmr": 4200}])
+
+        self.assertEqual(response.data["invalid"], [])
+        self.assertEqual(self._row(self.ou_bob).verified_by_id, self.admin.pk)
+
+    def test_superuser_can_verify_own_entry(self) -> None:
+        self.admin.is_superuser = True
+        self.admin.discordId = "d-admin"
+        self.admin.save(update_fields=["is_superuser", "discordId"])
+        own_membership = OrgUser.objects.create(user=self.admin, organization=self.org)
+
+        response = self._post([{"discord_id": "d-admin", "mmr": 5000}])
+
+        self.assertEqual(response.data["invalid"], [])
+        self.assertEqual(self._row(own_membership).verified_by_id, self.admin.pk)
+
+    def test_unverified_bulk_write_clears_official_metadata_without_superseding(
+        self,
+    ) -> None:
+        set_org_mmr(
+            self.ou_alice,
+            GameType.DOTA2,
+            3000,
+            mark_verified=True,
+            verified_by=self.admin,
+        )
+        pending = self.make_request(org_user=self.ou_alice)
+
+        response = self._post([{"steam_id": 1001, "mmr": 4200}], verified=False)
+
+        self.assertEqual(response.data["updated"], 1)
+        row = self._row(self.ou_alice)
+        self.assertEqual(row.mmr, 4200)
+        self.assertIsNone(row.verified_at)
+        self.assertIsNone(row.verified_by_id)
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, MmrChangeRequest.Status.PENDING)
+        self.assertEqual(
+            OrgLog.objects.filter(action="set_mmr", target_user=self.alice).count(), 1
+        )
 
 
 class ThrottleAndUsageTests(ApiTokenBase):

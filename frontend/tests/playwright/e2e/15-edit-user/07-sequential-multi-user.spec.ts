@@ -20,12 +20,11 @@ const USER_EDIT_ORG_NAME = 'User Edit Org';
 
 let orgPk: number;
 
-// Sequential: each test in this file edits one or both shared users
-// (alpha + bravo) and the order matters (an earlier nickname change is
-// asserted against by a later test via getByText). `.serial` keeps these
-// tests in declaration order; using dedicated usernames keeps them from
-// racing with parallel specs in this directory.
-const USER_A_USERNAME = 'edit_user_alpha';
+// Sequential: each test in this file edits one or both of its users and
+// the order matters (an earlier nickname change is asserted against by a
+// later test via getByText). `.serial` keeps these tests in declaration
+// order; both users belong to this file alone — see USER_EDIT_USERS.
+const USER_A_USERNAME = 'edit_user_multi';
 const USER_B_USERNAME = 'edit_user_bravo';
 
 test.describe.serial('Sequential multi-user edits (@cicd)', () => {

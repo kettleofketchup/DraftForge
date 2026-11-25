@@ -12,6 +12,10 @@ import {
   GAME_TYPE,
   type GameTypeValue,
 } from '~/components/game/constants';
+import {
+  LARGE_MMR_CHANGE_THRESHOLD,
+  computeMmrDelta,
+} from '~/components/game/mmrDelta';
 import { Badge } from '~/components/ui/badge';
 import {
   CancelButton,
@@ -45,8 +49,6 @@ import { DisplayName } from '~/components/user/avatar';
 import type { UserType } from '~/components/user/types';
 import { useContextGameType } from '~/hooks/useGameType';
 import { cn } from '~/lib/utils';
-
-const LARGE_CHANGE_THRESHOLD = 0.2;
 
 // 0 means "Not added" for non-Dota games, so they require at least 1; Dota allows 0.
 function buildMmrSchema(gameType: GameTypeValue) {
@@ -119,13 +121,12 @@ export function MmrApprovalModal({
   const hasValue = typeof rawMmr === 'number' && Number.isFinite(rawMmr);
   const watchedMmr = hasValue ? rawMmr : 0;
   const priorMmr = signup?.org_user_mmr ?? null;
-  const hasDelta = priorMmr != null && hasValue && watchedMmr !== priorMmr;
-  const deltaAmount = hasDelta ? watchedMmr - priorMmr! : 0;
-  const deltaPct =
-    priorMmr != null && priorMmr > 0 && hasValue
-      ? Math.abs(watchedMmr - priorMmr) / priorMmr
-      : 0;
-  const isLargeChange = hasDelta && deltaPct >= LARGE_CHANGE_THRESHOLD;
+  const delta =
+    priorMmr != null && hasValue ? computeMmrDelta(priorMmr, watchedMmr) : null;
+  const hasDelta = delta != null && delta.delta !== 0;
+  const deltaAmount = hasDelta ? delta.delta : 0;
+  const deltaPct = delta?.pct ?? 0;
+  const isLargeChange = delta?.isLarge ?? false;
 
   if (!signup) return null;
 
@@ -196,7 +197,7 @@ export function MmrApprovalModal({
     if (isLargeChange) {
       return (
         base +
-        ` This is more than ${Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off the prior MMR — confirm this is intentional.`
+        ` This is more than ${Math.round(LARGE_MMR_CHANGE_THRESHOLD * 100)}% off the prior MMR — confirm this is intentional.`
       );
     }
     return base;
@@ -360,8 +361,8 @@ export function MmrApprovalModal({
                         {isLargeChange && (
                           <p className="mt-1 text-[11px] text-warning/80">
                             This is more than{' '}
-                            {Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off the
-                            previously approved MMR — you'll be asked to
+                            {Math.round(LARGE_MMR_CHANGE_THRESHOLD * 100)}% off
+                            the previously approved MMR — you'll be asked to
                             confirm.
                           </p>
                         )}

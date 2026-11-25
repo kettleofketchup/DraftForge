@@ -217,8 +217,8 @@ Turn the integration off; do not migrate back over retained data.
    Imports stop and the Promotion tab returns to its local-only behaviour.
 3. Receipts and outbox rows stay in the database as evidence.
 
-Migrations `org.0024_api_token_operations` and `org.0025_promotion_sync_receipts` are
-additive and reversible on a disposable database, but reversing `0025` drops every
+Migrations `org.0026_api_token_operations` and `org.0027_promotion_sync_receipts` are
+additive and reversible on a disposable database, but reversing `0027` drops every
 receipt and outbox row. Upgrading again restores the MMR pair on every token, so a
 rollback never widens a grant.
 

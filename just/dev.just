@@ -182,6 +182,11 @@ release:
         key=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')
         printf '\nDJANGO_SECRET_KEY=%s\n' "$key" >> "$env_file"
     fi
+    media_dir={{quote(root / "backend/media")}}
+    mkdir -p "$media_dir"
+    if [[ "$(stat -c %u "$media_dir")" != 1000 ]]; then
+        echo "WARNING: run sudo chown 1000:1000 ${media_dir} (backend runs as uid 1000)" >&2
+    fi
     version=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' {{quote(root / "docker/.env.release")}} | head -n 1)
     echo "pulling release version ${version:-<unset>}"
     {{in_env}} release . {{slots}} compose --stack release pull

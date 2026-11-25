@@ -30,7 +30,7 @@ run *args:
     fi
     cd frontend
     if [[ "${DF_PW_CONTAINER-}" != 1 ]]; then
-        exec npx playwright test "$@"
+        exec {{quote(root / "scripts/test-limits.sh")}} wrap npx playwright test "$@"
     fi
     # Mounted at the same path so report and annotation paths match the checkout;
     # frontend/node_modules must resolve inside the image (CI links it to /app/node_modules).
@@ -41,7 +41,9 @@ run *args:
     for name in "${pass[@]}"; do
         env_args+=(-e "$name")
     done
-    exec docker run --rm --network host --ipc host --entrypoint "" \
+    {{quote(root / "scripts/test-limits.sh")}} apply
+    cgroup=$({{quote(root / "scripts/test-limits.sh")}} cgroup)
+    exec docker run --rm --network host --ipc host --entrypoint "" ${cgroup:+--cgroup-parent "$cgroup"} \
         --user "$(id -u):$(id -g)" -e HOME=/tmp "${env_args[@]}" \
         -v "$PWD:$PWD" -w "$PWD" {{quote(pw_image)}} \
         node_modules/.bin/playwright test "$@"

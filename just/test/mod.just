@@ -14,6 +14,7 @@ slots_py := "cd " + quote(root) + " && " + slots
 test_db := env("DF_TEST_DB_FILE", root / "backend/test.db.sqlite3")
 # Where setup copies the main checkout's backend/.env; the slot guard tests point it at a temp file
 backend_env := env("DF_BACKEND_ENV_FILE", root / "backend/.env")
+limits := quote(root / "scripts/test-limits.sh")
 
 mod pw 'pw.just'
 mod backend 'backend.just'
@@ -36,11 +37,13 @@ ensure-db:
 # Start this worktree's test stack in the foreground
 [group('test')]
 up: ensure-db
+    {{limits}} apply
     {{compose}} up --remove-orphans
 
 # Start this worktree's test stack detached
 [group('test')]
 upd: ensure-db
+    {{limits}} apply
     {{compose}} up -d --remove-orphans
 
 [group('test')]
@@ -85,10 +88,20 @@ exec service cmd:
 run cmd service="backend":
     #!/usr/bin/env bash
     set -euo pipefail
-    if [[ -n "${1//[[:space:]]/}" ]]; then
-        exec {{compose}} run --rm --entrypoint "" "$2" sh -c "$1"
+    {{limits}} apply
+    procs=()
+    if [[ "${GITHUB_ACTIONS-}" != true && -z "${CI-}" ]]; then
+        procs=(-e "DJANGO_TEST_PROCESSES=${DJANGO_TEST_PROCESSES:-6}")
     fi
-    exec {{compose}} run --rm --entrypoint "" "$2"
+    if [[ -n "${1//[[:space:]]/}" ]]; then
+        exec {{compose}} run --rm --entrypoint "" "${procs[@]}" "$2" sh -c "$1"
+    fi
+    exec {{compose}} run --rm --entrypoint "" "${procs[@]}" "$2"
+
+# Show the shared CPU/memory cap on local tests and its current usage (DF_TEST_CPUS, DF_TEST_MEM; DF_TEST_LIMITS=0 disables)
+[group('test')]
+limits:
+    {{limits}} show
 
 # Stop the stack, update deps, build images, populate a fresh test DB, then start the stack detached
 [group('test')]
@@ -105,6 +118,7 @@ setup:
         fi
     fi
 
+    {{limits}} apply
     # Allocate the slot before anything touches containers.
     allocated=$({{slots}} ensure)
     read -r _ slot _ <<< "$allocated"

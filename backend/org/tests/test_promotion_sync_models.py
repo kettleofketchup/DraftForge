@@ -223,8 +223,8 @@ class PromotionContactOutboxModelTest(_SendFixture):
 
 
 class PromotionSyncMigrationTest(MigratorTestCase):
-    migrate_from = ("org", "0024_api_token_operations")
-    migrate_to = ("org", "0025_promotion_sync_receipts")
+    migrate_from = ("org", "0026_api_token_operations")
+    migrate_to = ("org", "0027_promotion_sync_receipts")
 
     def prepare(self) -> None:
         apps = self.old_state.apps

@@ -16,6 +16,8 @@
  *     ``status=completed`` but ``winning_team`` no longer matches either
  *     team in the slots. Unset Winner must still be visible and clicking
  *     it must unstick the row.
+ *  5. Steam unlink (issue #921): unlinking the (never-linked) target game
+ *     leaves it pending and the bracket loadable.
  *
  * Uses deterministic match selection via the
  * ``[data-bracket-type][data-round][data-position]`` attributes on each
@@ -39,6 +41,7 @@ import {
   test,
   visitAndWaitForHydration,
 } from '../../fixtures';
+import { getCsrfToken } from '../../fixtures/events';
 
 // Tournament pk is captured per-test from the reset response. The reset
 // endpoint DELETES + recreates the tournament so the pk changes; capturing
@@ -102,6 +105,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     bracket_type: string;
     round: number;
     position: number;
+    status: string;
     radiant_team: ApiTeam;
     dire_team: ApiTeam;
     next_game: number | null;
@@ -116,6 +120,14 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       .request.get(`/api/bracket/tournaments/${tournamentPk}/`);
     expect(resp.status()).toBe(200);
     return (await resp.json()).matches as ApiGame[];
+  }
+
+  async function fetchTargetGame(page: Page): Promise<ApiGame> {
+    const game = (await fetchGames(page)).find(
+      (g) => g.bracket_type === 'winners' && g.round === 1 && g.position === 0,
+    );
+    if (!game) throw new Error('winners R1 P0 game not found');
+    return game;
   }
 
   function slotTeam(game: ApiGame, slot: 'radiant' | 'dire' | null): ApiTeam {
@@ -278,11 +290,9 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     const matchPk = matchPkAttr ? Number(matchPkAttr) : NaN;
     expect(Number.isFinite(matchPk)).toBe(true);
 
-    // Force the production stuck state via test endpoint: Game.status
-    // becomes 'completed' but winning_team is a team that isn't currently
-    // in either slot, so mapApiMatchToMatch can't derive match.winner. This
-    // is exactly the prod state that hid the Unset Winner button before
-    // PR #236.
+    // Force the stuck state via test endpoint: Game.status becomes
+    // 'completed' but winning_team is in neither slot, so
+    // mapApiMatchToMatch can't derive match.winner.
     const forced = await page
       .context()
       .request.post('/api/tests/bracket/force-mismatched-winning-team/', {
@@ -304,9 +314,8 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       node.locator('[data-testid="bracket-winner-check-dire"]'),
     ).toHaveCount(0);
 
-    // Modal: PR #236 surfaces Unset Winner even when winner is undefined
-    // (gate is now `status === 'completed' || match.winner`). Without the
-    // fix this assertion fails — the regression we want CI to catch.
+    // Modal: Unset Winner must show even with no derivable winner
+    // (gate is `status === 'completed' || match.winner`).
     const dialog = await openTargetModal(page);
     await expect(
       dialog.locator('[data-testid="unsetWinnerButton"]'),
@@ -331,5 +340,26 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     await expect(
       recoveredDialog.locator('[data-testid="radiantWinsButton"]'),
     ).toBeVisible({ timeout: 5000 });
+  });
+
+  test('@cicd unlinking a bracket game keeps the bracket loadable and the game pending (issue #921)', async ({
+    page,
+  }) => {
+    const { pk: gamePk } = await fetchTargetGame(page);
+
+    const unlinkResp = await page
+      .context()
+      .request.delete(`/api/steam/games/${gamePk}/unlink-match/`, {
+        headers: { 'X-CSRFToken': await getCsrfToken(page.context()) },
+      });
+    expect(unlinkResp.status()).toBe(200);
+
+    await loadBracket(page);
+    const node = page.locator(TARGET_MATCH_SELECTOR);
+    await expect(node).toBeVisible({ timeout: 10000 });
+    await expect(node).toContainText('Upcoming');
+    await expect(page.getByText('No bracket generated yet.')).toHaveCount(0);
+
+    expect((await fetchTargetGame(page)).status).toBe('pending');
   });
 });
