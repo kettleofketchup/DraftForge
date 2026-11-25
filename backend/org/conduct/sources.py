@@ -2,13 +2,12 @@ from collections.abc import Mapping, Sequence
 
 from django.db.models import Q
 
-from events.constants import SignupMeans, SignupStatus, VoicePresenceSource
+from events.constants import SignupStatus, VoicePresenceSource
 from events.models import (
     Event,
     EventSignup,
     EventVoicePresence,
     ReadyCheck,
-    SignupLedgerEntry,
 )
 from events.ready_check_constants import (
     ReadyCheckEntryState,
@@ -67,20 +66,6 @@ def _entry_states(event: Event) -> dict[int, str]:
     return dict(check.entries.values_list("user_id", "state"))
 
 
-def _culled_signup_ids(signup_ids: Sequence[int]) -> set[int]:
-    cull: str | None = getattr(SignupMeans, "CULL", None)
-    if cull is None or not signup_ids:
-        return set()
-    latest: dict[int, str] = {}
-    for signup_id, means in (
-        SignupLedgerEntry.objects.filter(signup_id__in=signup_ids)
-        .order_by("occurred_at", "pk")
-        .values_list("signup_id", "means")
-    ):
-        latest[signup_id] = means
-    return {signup_id for signup_id, means in latest.items() if means == cull}
-
-
 def _voice_user_ids(event: Event, user_ids: set[int]) -> set[int]:
     if not user_ids:
         return set()
@@ -100,8 +85,6 @@ def automatic_outcomes(
     signups: Sequence[EventSignup],
 ) -> dict[int, Resolution]:
     entries = _entry_states(event)
-    dropped = [s for s in signups if s.status == SignupStatus.DROPPED]
-    culled = _culled_signup_ids([s.pk for s in dropped])
     voice = _voice_user_ids(
         event, {s.user_id for s in signups if s.status != SignupStatus.DROPPED}
     )
@@ -113,9 +96,8 @@ def automatic_outcomes(
         if signup.status == SignupStatus.DROPPED:
             if state == ReadyCheckEntryState.DROPPED:
                 result[org_user.pk] = (Outcome.NO_SHOW, OutcomeSource.READY_CHECK)
-            elif signup.pk in culled:
-                result[org_user.pk] = (Outcome.NO_SHOW, OutcomeSource.CULL)
             else:
+                # The start cull (#533) will attribute these as OutcomeSource.CULL.
                 log.debug(
                     "conduct_auto_source_skipped",
                     system="org",

@@ -46,6 +46,7 @@ from league.views_admin_team import (
     remove_league_admin,
     remove_league_staff,
 )
+from lobby.bot_access.views import BotAccessRefreshView, BotAccessView
 from org.api_tokens.views import (
     org_api_limits,
     org_api_tokens,
@@ -328,6 +329,16 @@ urlpatterns = [
         "api/leagues/<int:league_id>/staff/<int:user_id>/",
         remove_league_staff,
         name="remove_league_staff",
+    ),
+    path(
+        "api/leagues/<int:league_id>/bot-access/",
+        BotAccessView.as_view(),
+        name="league_bot_access",
+    ),
+    path(
+        "api/leagues/<int:league_id>/bot-access/refresh/",
+        BotAccessRefreshView.as_view(),
+        name="league_bot_access_refresh",
     ),
     # CSV Import
     path(

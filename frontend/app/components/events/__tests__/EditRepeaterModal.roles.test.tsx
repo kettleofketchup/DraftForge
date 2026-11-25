@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventRepeaterType } from '~/components/api/api';
@@ -183,6 +189,43 @@ describe('EditRepeaterModal tabs', () => {
     const sections = searchHits('edit-series').map((h) => h.section);
     expect(sections).toContain('Event');
     expect(sections).not.toContain('Approval');
+  });
+
+  it('describes the new-event toggle as an announcement-channel post', async () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    fireEvent.mouseDown(screen.getByTestId('edit-series-tab-discord'), {
+      button: 0,
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('edit-series-tab-discord')).toHaveAttribute(
+        'data-state',
+        'active',
+      ),
+    );
+    const label = screen.getByText('Post new events');
+    const block = label.closest('div.rounded-md') as HTMLElement;
+    const description = within(block).getByText(/announcement channel/i);
+    for (const el of [label, description]) {
+      expect(el.textContent).not.toMatch(/\bDM\b|subscri|cancel/i);
+    }
+    expect(screen.queryByText('Message interested users')).toBeNull();
+    expect(screen.queryByText(/DM subscribed users/)).toBeNull();
+  });
+
+  it('finds the new-event toggle when searching for notify', () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    fireEvent.change(screen.getByTestId('edit-series-search'), {
+      target: { value: 'notify' },
+    });
+    expect(searchHits('edit-series')).toContainEqual(
+      expect.objectContaining({ label: 'Post new events', section: 'Discord' }),
+    );
   });
 });
 

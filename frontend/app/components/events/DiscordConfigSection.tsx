@@ -20,8 +20,10 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
+import { announcementChannelUsers } from './announcementChannelUsers';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
+import { PROFILE_REMINDER_DESCRIPTION } from './form/settingsFields';
 import type { discordConfigSchema } from './schemas';
 import {
   START_MENTION_PREREQUISITE_NOTE,
@@ -165,7 +167,7 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
   control: Control<T>;
   isRepeater: boolean;
   organizationId: number;
-  /** Gates the repeater-only "Message interested users" block. Defaults to
+  /** Gates the repeater-only "Post new events" block. Defaults to
    *  `isRepeater`; a one-off event inherits the series' setting instead of
    *  exposing its own toggle. */
   showNotifyNewEvents?: boolean;
@@ -191,6 +193,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     announcement,
     announcementChannelId,
     startMention,
+    notifyNewEvents,
   ] = useWatch({
     control,
     name: [
@@ -203,9 +206,18 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
       'discord_announcement',
       'discord_announcement_channel_id',
       'discord_start_mention',
+      'discord_notify_new_events',
     ],
   });
 
+  const channelUsers = announcementChannelUsers({
+    announcement,
+    confirmAttendance,
+    profileReminder,
+    notifyNewEvents,
+    showNotifyNewEvents,
+  });
+  const usesAnnouncementChannel = channelUsers.length > 0;
   const prerequisite = startMentionPrerequisite({
     postSignups,
     signupChannelId: postSignupsChannelId,
@@ -327,7 +339,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           control={control}
           name="discord_profile_reminder"
           label="Profile update reminder"
-          description="DM signed-up users to complete their profile (Steam ID, MMR) before the event"
+          description={PROFILE_REMINDER_DESCRIPTION}
         />
         {profileReminder && (
           <HoursSelect
@@ -493,26 +505,6 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           <div className="ml-7 space-y-3">
             <FormField
               control={control}
-              name="discord_announcement_channel_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Announcement channel</FormLabel>
-                  <FormControl>
-                    <DiscordChannelPicker
-                      organizationId={organizationId}
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Channel where the announcement will be posted
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
               name="discord_announcement_hours"
               render={({ field }) => (
                 <FormItem>
@@ -558,14 +550,47 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
         )}
       </div>
 
-      {/* Notify new events — repeater only */}
+      {/* New-event channel post — repeater only */}
       {showNotifyNewEvents && (
         <div className="rounded-md border border-border p-3">
           <CheckboxField
             control={control}
             name="discord_notify_new_events"
-            label="Message interested users"
-            description="DM subscribed users when new events are created or cancelled"
+            label="Post new events"
+            description="Post each new series event in the announcement channel when it is created"
+          />
+        </div>
+      )}
+
+      {usesAnnouncementChannel && (
+        <div
+          className="rounded-md border border-border p-3"
+          data-testid="discord-announcement-channel-block"
+        >
+          <FormField
+            control={control}
+            name="discord_announcement_channel_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Announcement channel</FormLabel>
+                <FormControl>
+                  <DiscordChannelPicker
+                    organizationId={organizationId}
+                    value={field.value}
+                    onChange={field.onChange}
+                    data-testid="discord-announcement-channel-select"
+                  />
+                </FormControl>
+                <FormDescription>
+                  Shared by the pre-day announcement, attendance reminder,
+                  profile reminder and series new-event posts.
+                  <span className="block">
+                    {`Used by: ${channelUsers.join(', ')}`}
+                  </span>
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
           />
         </div>
       )}

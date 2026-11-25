@@ -10,11 +10,11 @@ import {
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 import { EventStateBadge } from './EventStateBadge';
-import { type EventType } from './schemas';
+import { type EventListItem } from './schemas';
 
 interface EventStripProps {
-  event: EventType;
-  onEdit?: (event: EventType) => void;
+  event: EventListItem;
+  onEdit?: (event: EventListItem) => void;
   onEditSeries?: (repeaterId: number) => void;
   className?: string;
 }
