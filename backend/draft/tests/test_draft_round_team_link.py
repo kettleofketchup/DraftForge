@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from draft.models import Draft, DraftRound
+from draft.serializers.team import DraftRoundSerializer
 from draft.services.shuffle import reassign_round_captain
 from draft.tests.team_fixtures import TimedDraftFixture
 from league.models import League
@@ -77,6 +78,18 @@ class DraftRoundTeamAccessorTests(TestCase):
 
         rnd.captain = None
         self.assertIsNone(rnd.team)
+
+    def test_editing_round_captain_moves_the_round_to_their_team(self) -> None:
+        rnd = self.make_round(self.cap_a, self.team_a)
+        serializer = DraftRoundSerializer(
+            rnd, data={"captain_id": self.cap_b.pk}, partial=True
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+
+        rnd = self.fresh(rnd)
+        self.assertEqual(rnd.captain_id, self.cap_b.pk)
+        self.assertEqual(rnd.drafting_team_id, self.team_b.pk)
 
     def test_stale_stored_pk_prefetched_falls_back_to_captain_lookup(self) -> None:
         stale_pk = Team.objects.aggregate(m=Max("pk"))["m"] + 1000
