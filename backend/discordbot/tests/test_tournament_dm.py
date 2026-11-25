@@ -808,7 +808,7 @@ class TournamentLinkAuthErrorTest(TestCase):
         self.assertEqual(row.status, DMStatus.FAILED)
         self.assertEqual(row.organization_id, self.org.pk)
 
-    def test_draft_links_fail_log_and_reraise(self) -> None:
+    def test_draft_links_fail_log_and_stop(self) -> None:
         with (
             patch(
                 "events.tournament_tasks.get_tournament_for_task",
@@ -823,12 +823,12 @@ class TournamentLinkAuthErrorTest(TestCase):
                 return_value=MagicMock(ok=True, json=lambda: {"id": self.tlog.pk}),
             ),
             ledger_bridge(),
-            self.assertRaises(DiscordAuthError),
         ):
-            send_tournament_draft_links(self.tournament.pk, 42)
+            result = send_tournament_draft_links(self.tournament.pk, 42)
+        self.assertIn("rejected the bot token", result)
         self._assert_failed_log()
 
-    def test_herodraft_links_fail_log_and_reraise(self) -> None:
+    def test_herodraft_links_fail_log_and_stop(self) -> None:
         with (
             patch(
                 "events.tournament_tasks.get_tournament_for_task",
@@ -843,9 +843,9 @@ class TournamentLinkAuthErrorTest(TestCase):
                 return_value=MagicMock(ok=True, json=lambda: {"id": self.tlog.pk}),
             ),
             ledger_bridge(),
-            self.assertRaises(DiscordAuthError),
         ):
-            send_tournament_herodraft_links(self.tournament.pk, 7, 3, "A", "B")
+            result = send_tournament_herodraft_links(self.tournament.pk, 7, 3, "A", "B")
+        self.assertIn("rejected the bot token", result)
         self._assert_failed_log()
 
 

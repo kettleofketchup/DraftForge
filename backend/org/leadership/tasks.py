@@ -57,6 +57,9 @@ def send_leadership_review_dms(
     for msg in messages:
         outcome = send_dm(_request(msg))
         counts[str(outcome.status)] += 1
+        if outcome.auth_rejected:
+            counts["auth_rejected"] += 1
+            break
     log.info(
         "leadership_review_dms_sent",
         system="org",

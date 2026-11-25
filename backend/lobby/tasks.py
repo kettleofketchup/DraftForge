@@ -31,7 +31,6 @@ from app.internal_client import create_tournament_log, update_tournament_log
 from discordbot.dm import DELIVERED_OUTCOMES, DMRequest, send_dm, task_run_id
 from discordbot.dm_keys import lobby_info_key
 from discordbot.models import DMKind, DMSubject
-from discordbot.utils import DiscordAuthError
 from events.discord.tournament_embeds import build_lobby_info_embed
 from lobby import internal_api
 from lobby.client import DotaLobbyClient, DotaLobbyError
@@ -547,50 +546,49 @@ def send_lobby_info(self: Task, game_lobby_id: int) -> str:
     task_id = task_run_id(self)
     sent = 0
     failed_users = []
-    try:
-        for person in recipients:
-            embed = build_lobby_info_embed(
-                info.get("tournament_name") or "",
-                lobby_name=view.name or info.get("name") or "",
-                password=password,
-                side=person["side"],
-                team_name=person["team_name"],
-                matchup=matchup,
-                region=info.get("region") or "",
-            )
-            outcome = send_dm(
-                DMRequest(
-                    kind=DMKind.LOBBY_INFO,
-                    idempotency_key=lobby_info_key(
-                        game_lobby_id=game_lobby_id,
-                        task_id=task_id,
-                        discord_id=person["discord_id"],
-                    ),
-                    discord_user_id=person["discord_id"] or None,
-                    recipient_user_id=person.get("user_pk"),
-                    organization_id=info.get("organization_id"),
-                    subject=(DMSubject.GAME_LOBBY, game_lobby_id),
-                    tournament_log_id=tournament_log_id,
-                    context={"side": person["side"]},
-                    embed=embed,
-                )
-            )
-            if outcome.status in DELIVERED_OUTCOMES:
-                sent += 1
-            else:
-                failed_users.append(person.get("username") or person["discord_id"])
-    except DiscordAuthError:
-        if tournament_log_id:
-            update_tournament_log(
-                tournament_log_id,
-                recipient_count=sent,
-                message=(
-                    f"Stopped sending lobby info after {sent}/{len(recipients)}: "
-                    "Discord rejected the bot token"
+    for person in recipients:
+        embed = build_lobby_info_embed(
+            info.get("tournament_name") or "",
+            lobby_name=view.name or info.get("name") or "",
+            password=password,
+            side=person["side"],
+            team_name=person["team_name"],
+            matchup=matchup,
+            region=info.get("region") or "",
+        )
+        outcome = send_dm(
+            DMRequest(
+                kind=DMKind.LOBBY_INFO,
+                idempotency_key=lobby_info_key(
+                    game_lobby_id=game_lobby_id,
+                    task_id=task_id,
+                    discord_id=person["discord_id"],
                 ),
-                success=False,
+                discord_user_id=person["discord_id"] or None,
+                recipient_user_id=person.get("user_pk"),
+                organization_id=info.get("organization_id"),
+                subject=(DMSubject.GAME_LOBBY, game_lobby_id),
+                tournament_log_id=tournament_log_id,
+                context={"side": person["side"]},
+                embed=embed,
             )
-        raise
+        )
+        if outcome.auth_rejected:
+            if tournament_log_id:
+                update_tournament_log(
+                    tournament_log_id,
+                    recipient_count=sent,
+                    message=(
+                        f"Stopped sending lobby info after {sent}/{len(recipients)}: "
+                        "Discord rejected the bot token"
+                    ),
+                    success=False,
+                )
+            return "Stopped: Discord rejected the bot token"
+        if outcome.status in DELIVERED_OUTCOMES:
+            sent += 1
+        else:
+            failed_users.append(person.get("username") or person["discord_id"])
 
     message = f"Sent lobby info to {sent}/{len(recipients)} players ({matchup})"
     if failed_users:

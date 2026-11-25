@@ -87,6 +87,22 @@ class SendLeadershipReviewDMsTaskTest(SimpleTestCase):
         self.assertEqual(send.call_args.args[0].skip_status, DMStatus.SKIPPED_DISABLED)
         self.assertEqual(result, {"planned": 1, "skipped_disabled": 1})
 
+    def test_rejected_bot_token_stops_sending(
+        self, plan: MagicMock, send: MagicMock
+    ) -> None:
+        plan.return_value = [_planned(), _planned(part=2, trait_ids=[5])]
+        send.return_value = DMOutcome(
+            status=DMStatus.FAILED,
+            ledger_id=1,
+            message_id=None,
+            channel_id=None,
+            error_code=None,
+            auth_rejected=True,
+        )
+        result = send_leadership_review_dms.run(9, [7])
+        self.assertEqual(send.call_count, 1)
+        self.assertEqual(result, {"planned": 2, "failed": 1, "auth_rejected": 1})
+
     def test_task_plan_unreachable_raises_for_retry(
         self, plan: MagicMock, send: MagicMock
     ) -> None:

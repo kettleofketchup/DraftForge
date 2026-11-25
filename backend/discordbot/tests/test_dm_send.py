@@ -546,7 +546,7 @@ class SendDMTests(SimpleTestCase):
         body = self._final(finalize)
         self.assertEqual((body.status, body.http_status), ("unknown", 503))
 
-    def test_401_failed_and_reraised(
+    def test_401_failed_and_flagged(
         self,
         claim: MagicMock,
         mark: MagicMock,
@@ -558,15 +558,14 @@ class SendDMTests(SimpleTestCase):
         request.side_effect = _discord(
             post=_raises(DiscordAuthError("401", response=resp))
         )
-        with self.assertRaises(DiscordAuthError):
-            send_dm(_req())
+        self.assertTrue(send_dm(_req()).auth_rejected)
         body = self._final(finalize)
         self.assertEqual(
             (body.status, body.error_class, body.http_status),
             ("failed", "pre_send", 401),
         )
 
-    def test_401_on_channel_open_failed_and_reraised(
+    def test_401_on_channel_open_failed_and_flagged(
         self,
         claim: MagicMock,
         mark: MagicMock,
@@ -578,8 +577,7 @@ class SendDMTests(SimpleTestCase):
         request.side_effect = _discord(
             channel=_raises(DiscordAuthError("401", response=resp))
         )
-        with self.assertRaises(DiscordAuthError):
-            send_dm(_req())
+        self.assertTrue(send_dm(_req()).auth_rejected)
         self.assertEqual(self._final(finalize).status, "failed")
 
     def test_html_502_body_parses(

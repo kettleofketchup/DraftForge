@@ -704,9 +704,9 @@ class LobbyInfoTests(TaskTestBase):
         "discordbot.dm._rate_limited_request",
         side_effect=DiscordAuthError("401: Unauthorized"),
     )
-    def test_auth_error_fails_log_and_reraises(self, _request):
-        with self.assertRaises(DiscordAuthError):
-            self.run_task(tasks.send_lobby_info, self.row.pk)
+    def test_auth_error_fails_log_and_stops(self, _request):
+        result = self.run_task(tasks.send_lobby_info, self.row.pk)
+        self.assertIn("rejected the bot token", str(result))
         log = DiscordTournamentLog.objects.get()
         self.assertIs(log.success, False)
         self.assertEqual(log.recipient_count, 0)

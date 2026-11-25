@@ -5,7 +5,7 @@ internal API through ``discordbot.internal_client.dm_ledger``.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 from uuid import uuid4
 
@@ -58,6 +58,7 @@ class DMOutcome:
     message_id: str | None
     channel_id: str | None
     error_code: int | None
+    auth_rejected: bool = False
 
 
 OnClaimed = Callable[[int, DMStatus], None]
@@ -379,7 +380,7 @@ def _deliver(
         except Exception as exc:
             outcome = _channel_failure(req, state, exc)
             if isinstance(exc, DiscordAuthError):
-                raise
+                return replace(outcome, auth_rejected=True)
             return outcome
 
         try:
@@ -430,7 +431,7 @@ def _deliver(
         except Exception as exc:
             outcome = _post_failure(req, state, channel_id, exc)
             if isinstance(exc, DiscordAuthError):
-                raise
+                return replace(outcome, auth_rejected=True)
             return outcome
 
         message_id = data.get("id") if isinstance(data, dict) else None
