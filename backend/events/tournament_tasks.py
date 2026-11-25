@@ -4,7 +4,7 @@ All data reads via internal_client HTTP calls (no ORM).
 All DB writes via internal API POST/PATCH endpoints.
 """
 
-from celery import shared_task
+from celery import Task, shared_task
 from django.conf import settings
 
 from app.internal_client import (
@@ -12,7 +12,9 @@ from app.internal_client import (
     create_tournament_log,
     update_tournament_log,
 )
-from discordbot.utils import sync_send_dm
+from discordbot.dm import DMRequest, send_dm
+from discordbot.dm_keys import tournament_draft_link_key, tournament_herodraft_link_key
+from discordbot.models import DMKind, DMStatus, DMSubject
 from events.discord.tournament_embeds import (
     build_draft_link_components,
     build_draft_link_embed,
@@ -30,9 +32,19 @@ from tournament.internal_client import (
 
 logger = get_logger(__name__)
 
+DELIVERED_STATUSES: frozenset[object] = frozenset(
+    {DMStatus.SENT, DMStatus.SKIPPED_TEST_MODE, "duplicate"}
+)
 
-@shared_task
-def send_tournament_draft_links(tournament_id: int, draft_id: int | None) -> str:
+
+def _task_id(task: Task) -> str:
+    return str(task.request.id or "local")
+
+
+@shared_task(bind=True)
+def send_tournament_draft_links(
+    self: Task, tournament_id: int, draft_id: int | None
+) -> str:
     """DM draft link to all tournament participants."""
 
     tournament = get_tournament_for_task(tournament_id)
@@ -73,16 +85,26 @@ def send_tournament_draft_links(tournament_id: int, draft_id: int | None) -> str
     )
     tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
 
+    task_id = _task_id(self)
     sent = 0
     failed_users = []
     for p in participants:
-        result = sync_send_dm(
-            p.discord_id,
-            embed=embed,
-            components=components,
-            tournament_log_id=tournament_log_id,
+        outcome = send_dm(
+            DMRequest(
+                kind=DMKind.TOURNAMENT_DRAFT_LINK,
+                idempotency_key=tournament_draft_link_key(
+                    task_id=task_id, discord_id=p.discord_id
+                ),
+                discord_user_id=p.discord_id or None,
+                recipient_user_id=p.user_pk,
+                subject=(DMSubject.TOURNAMENT, tournament_id),
+                tournament_log_id=tournament_log_id,
+                context={"draft_id": draft_id, "activity": invite_url is not None},
+                embed=embed,
+                components=components,
+            )
         )
-        if result:
+        if outcome.status in DELIVERED_STATUSES:
             sent += 1
         else:
             failed_users.append(p.username or p.discord_id)
@@ -111,8 +133,9 @@ def send_tournament_draft_links(tournament_id: int, draft_id: int | None) -> str
     return message
 
 
-@shared_task
+@shared_task(bind=True)
 def send_tournament_herodraft_links(
+    self: Task,
     tournament_id: int,
     herodraft_id: int,
     game_id: int,
@@ -155,16 +178,30 @@ def send_tournament_herodraft_links(
     )
     tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
 
+    task_id = _task_id(self)
     sent = 0
     failed_users = []
     for p in participants:
-        result = sync_send_dm(
-            p.discord_id,
-            embed=embed,
-            components=components,
-            tournament_log_id=tournament_log_id,
+        outcome = send_dm(
+            DMRequest(
+                kind=DMKind.TOURNAMENT_HERODRAFT_LINK,
+                idempotency_key=tournament_herodraft_link_key(
+                    task_id=task_id, discord_id=p.discord_id
+                ),
+                discord_user_id=p.discord_id or None,
+                recipient_user_id=p.user_pk,
+                subject=(DMSubject.TOURNAMENT, tournament_id),
+                tournament_log_id=tournament_log_id,
+                context={
+                    "draft_id": herodraft_id,
+                    "game_id": game_id,
+                    "activity": invite_url is not None,
+                },
+                embed=embed,
+                components=components,
+            )
         )
-        if result:
+        if outcome.status in DELIVERED_STATUSES:
             sent += 1
         else:
             failed_users.append(p.username or p.discord_id)

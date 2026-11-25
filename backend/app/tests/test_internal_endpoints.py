@@ -4,13 +4,22 @@ from datetime import date
 from unittest.mock import patch
 
 from django.test import LiveServerTestCase, TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.internal_client import create_message_log, transport
 from app.models import CustomUser
-from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
+from discordbot.models import (
+    DiscordDM,
+    DiscordEvent,
+    DiscordEventDM,
+    DiscordEventMsgSignup,
+    DiscordMessageLog,
+    DMKind,
+    DMType,
+)
 from events.models import Event, EventRepeater
-from org.models import Organization
+from org.models import Organization, OrgUser
 from tournament.models import Game, Team, Tournament
 
 TOKEN = "test-internal-token"
@@ -35,6 +44,48 @@ class InternalAuthGateTest(TestCase):
             HTTP_X_INTERNAL_TOKEN="wrong",
         )
         self.assertEqual(resp.status_code, 403)
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
+class EventDMEndpointTest(TestCase):
+    def test_create_event_dm_idempotent_on_ledger_entry(self) -> None:
+        org = Organization.objects.create(name="Event DM Org")
+        user = CustomUser.objects.create_user(username="event_dm_user", password="x")
+        org_user = OrgUser.objects.create(user=user, organization=org)
+        event = Event.objects.create(
+            organization=org,
+            scheduled_at="2026-12-01T00:00:00Z",
+            name="Event DM Event",
+            state="upcoming",
+        )
+        discord_event = DiscordEvent.objects.create(event=event, guild_id="111")
+        ledger = DiscordDM.objects.create(
+            kind=DMKind.SIGNUP_REMINDER,
+            idempotency_key=f"signup_reminder:event:{event.pk}:user:{user.pk}",
+            discord_user_id="1001",
+            claimed_at=timezone.now(),
+        )
+        body = {
+            "discord_event": discord_event.pk,
+            "org_user": org_user.pk,
+            "dm_type": DMType.SIGNUP_REMINDER,
+            "delivered": False,
+            "ledger_entry": ledger.pk,
+        }
+        c = APIClient()
+
+        first = c.post(
+            "/api/internal/discord/event-dm/", body, format="json", **HEADERS
+        )
+        second = c.post(
+            "/api/internal/discord/event-dm/", body, format="json", **HEADERS
+        )
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["id"], second.json()["id"])
+        dm = DiscordEventDM.objects.get()
+        self.assertEqual(dm.ledger_entry_id, ledger.pk)
 
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)

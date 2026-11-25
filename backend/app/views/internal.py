@@ -732,9 +732,18 @@ def create_or_update_announcement(request: Request) -> Response:
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def create_event_dm(request: Request) -> Response:
-    """Create DiscordEventDM record (crash-safe: create before send)."""
+    """Create DiscordEventDM record (crash-safe: create before send).
 
-    DM_CREATE_FIELDS = {"discord_event", "org_user", "dm_type", "delivered"}
+    Idempotent on ``ledger_entry``: a reclaimed ledger row reuses its record.
+    """
+
+    DM_CREATE_FIELDS = {
+        "discord_event",
+        "org_user",
+        "dm_type",
+        "delivered",
+        "ledger_entry",
+    }
     err = _validate_required(request.data, ["discord_event", "org_user", "dm_type"])
     if err:
         return err
@@ -744,11 +753,20 @@ def create_event_dm(request: Request) -> Response:
         data["discord_event_id"] = data.pop("discord_event")
     if "org_user" in data:
         data["org_user_id"] = data.pop("org_user")
-    dm = DiscordEventDM.objects.create(**data)
-    return Response({"id": dm.pk}, status=status.HTTP_201_CREATED)
+    ledger_entry_id = data.pop("ledger_entry", None)
+    if ledger_entry_id is None:
+        dm = DiscordEventDM.objects.create(**data)
+        return Response({"id": dm.pk}, status=status.HTTP_201_CREATED)
+    dm, created = DiscordEventDM.objects.get_or_create(
+        ledger_entry_id=ledger_entry_id, defaults=data
+    )
+    return Response(
+        {"id": dm.pk},
+        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    )
 
 
-DM_UPDATE_FIELDS = {"message_id", "sent_at", "delivered"}
+DM_UPDATE_FIELDS = {"message_id", "sent_at", "delivered", "ledger_entry"}
 
 
 @api_view(["PATCH"])
@@ -760,7 +778,8 @@ def update_event_dm(request: Request, pk: int) -> Response:
     dm = DiscordEventDM.objects.get(pk=pk)
     for field in DM_UPDATE_FIELDS:
         if field in request.data:
-            setattr(dm, field, request.data[field])
+            attr = "ledger_entry_id" if field == "ledger_entry" else field
+            setattr(dm, attr, request.data[field])
     dm.save()
     return Response({"id": dm.pk})
 

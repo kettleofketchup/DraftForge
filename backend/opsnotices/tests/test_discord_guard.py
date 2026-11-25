@@ -8,6 +8,7 @@ import requests
 from django.conf import settings
 from django.test import SimpleTestCase
 
+from discordbot import dm as discord_dm
 from discordbot import utils as discord_utils
 from events.tests.base import EventTestCase
 from opsnotices.models import OpsNotice
@@ -209,7 +210,6 @@ class EmitNoNetworkTests(EventTestCase):
             for name in dir(discord_utils)
             if _forbidden_name(name) and callable(getattr(discord_utils, name))
         )
-        self.assertIn("sync_send_dm", helper_names)
         self.assertIn("_rate_limited_request", helper_names)
         mocks: dict[str, MagicMock] = {}
         with ExitStack() as stack:
@@ -231,7 +231,15 @@ class EmitNoNetworkTests(EventTestCase):
                 mocks[f"{target.__name__}.{attr}"] = stack.enter_context(
                     patch.object(target, attr, side_effect=AssertionError(attr))
                 )
-            self.assertEqual(len(mocks), len(helper_names) + len(network_targets))
+            dm_targets: tuple[str, ...] = ("send_dm", "_open_dm_channel")
+            for name in dm_targets:
+                mocks[f"dm.{name}"] = stack.enter_context(
+                    patch.object(discord_dm, name, side_effect=AssertionError(name))
+                )
+            self.assertEqual(
+                len(mocks),
+                len(helper_names) + len(network_targets) + len(dm_targets),
+            )
             with self.captureOnCommitCallbacks(execute=True):
                 notice = emit_notice(
                     "test.alert",

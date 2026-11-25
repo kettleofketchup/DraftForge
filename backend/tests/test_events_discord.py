@@ -7,6 +7,7 @@ Test-only endpoints for Discord event lifecycle E2E testing.
 """
 
 import logging
+from uuid import uuid4
 
 import requests
 from django.conf import settings
@@ -23,16 +24,31 @@ from rest_framework.response import Response
 
 from common.game import GameType
 from common.utils import isTestEnvironment
+from discordbot.dm import DMRequest, send_dm
+from discordbot.dm_keys import test_notification_key
+from discordbot.models import DMKind, DMStatus, DMSubject
 from discordbot.utils import (
     DISCORD_API_BASE,
     DiscordAuthError,
     _get_headers,
     _rate_limited_request,
 )
+from events.discord.embeds import build_subscriber_dm_embed
+from events.models import Event
 from org.mmr import OrgMmrError, set_org_mmr
 from org.models import OrgUser
 
 log = logging.getLogger(__name__)
+
+
+def _auth_failed_response() -> Response:
+    return Response(
+        {
+            "error": "discord_auth_failed",
+            "detail": "Discord rejected the bot token (401)",
+        },
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 def discord_auth_failure() -> Response | None:
@@ -44,13 +60,7 @@ def discord_auth_failure() -> Response | None:
             "GET", f"{DISCORD_API_BASE}/users/@me", headers=_get_headers()
         )
     except DiscordAuthError:
-        return Response(
-            {
-                "error": "discord_auth_failed",
-                "detail": "Discord rejected the bot token (401)",
-            },
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
+        return _auth_failed_response()
     except requests.RequestException:
         return None
     return None
@@ -224,16 +234,12 @@ def verify_discord_messages(request, event_pk):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def send_test_notification(request, event_pk):
+def send_test_notification(request: Request, event_pk: int) -> Response:
     """TEST ONLY: Send event notification DM to a specific Discord user."""
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from discordbot.utils import sync_send_dm
-    from events.discord.embeds import build_subscriber_dm_embed
-    from events.models import Event
-
-    discord_user_id = request.data.get("discord_user_id", "")
+    discord_user_id = str(request.data.get("discord_user_id", "") or "")
     if not discord_user_id:
         return Response({"error": "discord_user_id required"}, status=400)
 
@@ -248,16 +254,37 @@ def send_test_notification(request, event_pk):
     dm_data = build_subscriber_dm_embed(event)
     embed = dm_data["embed"]
     components = dm_data.get("components")
-    result = sync_send_dm(discord_user_id, embed=embed, components=components)
+    try:
+        outcome = send_dm(
+            DMRequest(
+                kind=DMKind.TEST_NOTIFICATION,
+                idempotency_key=test_notification_key(
+                    event_pk=event_pk,
+                    discord_id=discord_user_id,
+                    request_id=uuid4().hex,
+                ),
+                discord_user_id=discord_user_id,
+                subject=(DMSubject.EVENT, event_pk),
+                embed=embed,
+                components=components,
+            )
+        )
+    except DiscordAuthError:
+        return _auth_failed_response()
 
-    if result:
+    if outcome.status in (DMStatus.SENT, DMStatus.SKIPPED_TEST_MODE):
         return Response(
             {
                 "success": True,
-                "message_id": result.get("id"),
+                "message_id": outcome.message_id or "test-fake-message-id",
                 "embed": embed,
                 "components": components,
             }
+        )
+    if outcome.status == "ledger_unavailable":
+        return Response(
+            {"error": "dm_ledger_unavailable"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
     auth_failure = discord_auth_failure()
     if auth_failure is not None:

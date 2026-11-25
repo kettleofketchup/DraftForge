@@ -1,21 +1,41 @@
+import itertools
+import json
+from collections.abc import Callable
 from contextlib import ExitStack
 from datetime import time, timedelta
 from itertools import product
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import requests
 from celery.exceptions import Retry
 from django.test import override_settings
+from django.urls import reverse
 from django.utils import timezone
 from requests.exceptions import HTTPError
 from structlog.testing import capture_logs
 
 from app.internal_client import InternalAPIUnavailable
 from app.models import CustomUser, PositionsModel
-from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
+from discordbot import dm as discord_dm
+from discordbot.dm_keys import signup_reminder_key
+from discordbot.dm_ledger import ClaimResult
+from discordbot.models import (
+    DiscordDM,
+    DiscordEvent,
+    DiscordEventDM,
+    DiscordEventMsgSignup,
+    DiscordMessageLog,
+    DMKind,
+    DMStatus,
+    DMSubject,
+)
+from discordbot.schemas import DMClaimBody
+from discordbot.tests.ledger_bridge import ledger_bridge
 from discordbot.utils import DISCORD_API_BASE
 from events.constants import EventState
 from events.models import EventRepeater, RepeaterSubscription
+from events.schemas import RepeaterSubscriberSchema
 from events.tasks import (
     build_announcement_v2,
     check_event_reminders,
@@ -29,6 +49,7 @@ from events.tasks import (
 from events.tests._internal_client_orm import DiscordTestMixin
 from events.tests.base import EventTestCase
 from events.tests.test_signup_post_independence import destination_pairs
+from org.models import OrgUser
 
 
 def _ok_response(payload: dict[str, Any]) -> MagicMock:
@@ -37,6 +58,33 @@ def _ok_response(payload: dict[str, Any]) -> MagicMock:
     resp.json = MagicMock(return_value=payload)
     resp.raise_for_status = MagicMock()
     return resp
+
+
+def _discord_response(status: int, body: dict[str, Any]) -> requests.Response:
+    resp = requests.Response()
+    resp.status_code = status
+    resp.url = "https://discord.com/api/v10/x"
+    resp._content = json.dumps(body).encode()
+    resp.headers["Content-Type"] = "application/json"
+    return resp
+
+
+class FakeDiscord:
+    """Stands in for ``discordbot.dm._rate_limited_request``."""
+
+    def __init__(self) -> None:
+        self._ids = itertools.count(1)
+        self.posts = 0
+        self.post_failures: list[requests.Response] = []
+
+    def __call__(self, method: str, url: str, **kwargs: object) -> requests.Response:
+        n = next(self._ids)
+        if url.endswith("/users/@me/channels"):
+            return _discord_response(200, {"id": str(800000 + n)})
+        self.posts += 1
+        if self.post_failures:
+            return self.post_failures.pop(0)
+        return _discord_response(200, {"id": str(900000 + n)})
 
 
 class _DiscordTaskTestCase(DiscordTestMixin, EventTestCase):
@@ -483,9 +531,18 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
     when ``send_subscriber_notifications`` actually attempts (or sends) a DM.
     That requires a repeater + a subscriber with a Discord ID. Older versions
     of these tests skipped the repeater entirely, so they could never produce
-    the log they were asserting on. We add a repeater + subscriber and stub
-    ``sync_send_dm`` so the reminder pipeline runs without hitting Discord.
+    the log they were asserting on. We add a repeater + subscriber and route
+    ``send_dm`` through the real ledger with Discord stubbed.
     """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.enterContext(override_settings(TEST=False))
+        self.enterContext(ledger_bridge())
+        self.discord = FakeDiscord()
+        self.enterContext(
+            patch("discordbot.dm._rate_limited_request", side_effect=self.discord)
+        )
 
     def _arm_signup_reminder(self) -> None:
         repeater = EventRepeater.objects.create(
@@ -519,32 +576,242 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
         self.event.event_repeater = repeater
         self.event.save()
 
-    @patch("events.tasks.sync_send_dm")
-    def test_signup_reminder_sent_when_due(self, mock_send_dm: MagicMock) -> None:
-        mock_send_dm.return_value = {"id": "dm111"}
+    def test_signup_reminder_sent_when_due(self) -> None:
         self._arm_signup_reminder()
 
         check_event_reminders()
-        mock_send_dm.assert_called_once()
+        self.assertEqual(self.discord.posts, 1)
         log = DiscordMessageLog.objects.get(
             source="signup_reminder", source_id=self.event.pk
         )
         self.assertTrue(log.success)
 
-    @patch("events.tasks.sync_send_dm")
-    def test_signup_reminder_not_sent_twice(self, mock_send_dm: MagicMock) -> None:
-        mock_send_dm.return_value = {"id": "dm222"}
+    def test_signup_reminder_not_sent_twice(self) -> None:
         self._arm_signup_reminder()
 
         check_event_reminders()
         check_event_reminders()  # Run again — should NOT send duplicate
-        mock_send_dm.assert_called_once()
+        self.assertEqual(self.discord.posts, 1)
         self.assertEqual(
             DiscordMessageLog.objects.filter(
                 source="signup_reminder", source_id=self.event.pk
             ).count(),
             1,
         )
+
+
+@override_settings(TEST=False)
+class SubscriberReminderLedgerTest(_DiscordTaskTestCase):
+    """send_subscriber_notifications through ``send_dm`` and the real ledger."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.enterContext(ledger_bridge())
+        self.discord = FakeDiscord()
+        self.enterContext(
+            patch("discordbot.dm._rate_limited_request", side_effect=self.discord)
+        )
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Ledger Repeater",
+            frequency="weekly",
+            time_of_day=time(18, 0),
+            starts_at=timezone.now().date(),
+            created_by=self.admin,
+        )
+        self.discord_event = DiscordEvent.objects.create(
+            event=self.event, guild_id="1467168401805017142"
+        )
+        self.event.event_repeater = self.repeater
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.save()
+        self.member = self._subscriber("ledger_member", "700000001", org_member=True)
+        self.outsider = self._subscriber("ledger_outsider", "700000002")
+
+    def _subscriber(
+        self, username: str, discord_id: str, *, org_member: bool = False
+    ) -> CustomUser:
+        user = CustomUser.objects.create_user(username=username, password="pw")
+        user.discordId = discord_id
+        user.save()
+        RepeaterSubscription.objects.create(event_repeater=self.repeater, user=user)
+        if org_member:
+            OrgUser.objects.get_or_create(user=user, organization=self.org)
+        return user
+
+    def _subscribers_with_org_users(self) -> Callable[[int], list[Any]]:
+        def fetch(repeater_id: int) -> list[RepeaterSubscriberSchema]:
+            out = []
+            for sub in RepeaterSubscription.objects.filter(
+                event_repeater_id=repeater_id
+            ).select_related("user"):
+                org_user = OrgUser.objects.filter(
+                    user=sub.user, organization=self.org
+                ).first()
+                out.append(
+                    RepeaterSubscriberSchema(
+                        user_pk=sub.user_id,
+                        discord_id=sub.user.discordId,
+                        org_user_pk=org_user.pk if org_user else None,
+                    )
+                )
+            return out
+
+        return fetch
+
+    def _run(self) -> str:
+        with patch(
+            "events.tasks.get_repeater_subscribers",
+            side_effect=self._subscribers_with_org_users(),
+        ):
+            return send_subscriber_notifications(self.event.pk)
+
+    def _row(self, user: CustomUser) -> DiscordDM:
+        return DiscordDM.objects.get(
+            idempotency_key=signup_reminder_key(event_id=self.event.pk, user_pk=user.pk)
+        )
+
+    def _lease(self) -> DiscordMessageLog:
+        return DiscordMessageLog.objects.filter(
+            source="signup_reminder", source_id=self.event.pk
+        ).latest("pk")
+
+    def test_reminder_builds_key_and_subject(self) -> None:
+        self._run()
+
+        row = self._row(self.member)
+        self.assertEqual(row.kind, DMKind.SIGNUP_REMINDER)
+        self.assertEqual(row.status, DMStatus.SENT)
+        self.assertEqual(row.subject_type, DMSubject.EVENT)
+        self.assertEqual(row.subject_id, self.event.pk)
+        self.assertEqual(row.recipient_id, self.member.pk)
+        self.assertEqual(row.organization_id, self.org.pk)
+        self.assertTrue(row.has_components)
+        self.assertEqual(
+            row.context,
+            {
+                "discord_event_id": self.discord_event.pk,
+                "repeater_id": self.repeater.pk,
+            },
+        )
+
+    def test_reminder_without_org_user_gets_ledger_row_no_event_dm(self) -> None:
+        self._run()
+
+        row = self._row(self.outsider)
+        self.assertEqual(row.status, DMStatus.SENT)
+        self.assertFalse(DiscordEventDM.objects.filter(ledger_entry=row).exists())
+        self.assertEqual(DiscordEventDM.objects.count(), 1)
+
+    def test_reminder_event_dm_has_ledger_entry(self) -> None:
+        self._run()
+
+        row = self._row(self.member)
+        dm = DiscordEventDM.objects.get()
+        self.assertEqual(dm.ledger_entry_id, row.pk)
+        self.assertTrue(dm.delivered)
+        self.assertEqual(dm.message_id, row.discord_message_id)
+        self.assertIsNotNone(dm.sent_at)
+        self.assertTrue(self._lease().success)
+
+    def test_reminder_retry_after_retryable_failure_one_event_dm(self) -> None:
+        self.outsider.delete()
+        self.discord.post_failures.append(
+            _discord_response(400, {"code": 50035, "message": "Invalid Form Body"})
+        )
+
+        self._run()
+        row = self._row(self.member)
+        self.assertEqual(row.status, DMStatus.FAILED)
+        self.assertTrue(row.retryable)
+        self.assertFalse(self._lease().success)
+
+        self._run()
+
+        row.refresh_from_db()
+        self.assertEqual(row.status, DMStatus.SENT)
+        self.assertEqual(row.attempts, 2)
+        dm = DiscordEventDM.objects.get()
+        self.assertEqual(dm.ledger_entry_id, row.pk)
+        self.assertTrue(dm.delivered)
+        self.assertTrue(self._lease().success)
+
+    def _claim_unavailable_for(self, user: CustomUser) -> Callable[..., Any]:
+        real = discord_dm.claim_dm
+        key = signup_reminder_key(event_id=self.event.pk, user_pk=user.pk)
+
+        def claim(body: DMClaimBody) -> ClaimResult | None:
+            if body.idempotency_key == key:
+                return None
+            return real(body)
+
+        return claim
+
+    def test_reminder_ledger_unavailable_fails_lease(self) -> None:
+        with patch(
+            "discordbot.dm.claim_dm",
+            side_effect=self._claim_unavailable_for(self.outsider),
+        ):
+            self._run()
+
+        lease = self._lease()
+        self.assertFalse(lease.success)
+        self.assertEqual(lease.response_data["ledger_unavailable"], 1)
+        self.assertEqual(lease.response_data["sent"], 1)
+        self.assertEqual(self.discord.posts, 1)
+        self.assertFalse(
+            DiscordDM.objects.filter(
+                idempotency_key=signup_reminder_key(
+                    event_id=self.event.pk, user_pk=self.outsider.pk
+                )
+            ).exists()
+        )
+
+    def test_reminder_ledger_unavailable_retry_sends_only_missing(self) -> None:
+        with patch(
+            "discordbot.dm.claim_dm",
+            side_effect=self._claim_unavailable_for(self.outsider),
+        ):
+            self._run()
+        first_posts = self.discord.posts
+
+        self._run()
+
+        self.assertEqual(self.discord.posts - first_posts, 1)
+        self.assertEqual(self._row(self.member).attempts, 1)
+        self.assertEqual(self._row(self.outsider).status, DMStatus.SENT)
+        lease = self._lease()
+        self.assertTrue(lease.success)
+        self.assertEqual(lease.response_data["duplicate"], 1)
+        self.assertEqual(lease.response_data["sent"], 1)
+        self.assertEqual(DiscordEventDM.objects.count(), 1)
+
+    @override_settings(TEST=True, TEST_DISCORD_USER_ID="999999999")
+    def test_reminder_test_mode_marks_delivered_fake_id(self) -> None:
+        self._run()
+
+        self.assertEqual(self.discord.posts, 0)
+        row = self._row(self.member)
+        self.assertEqual(row.status, DMStatus.SKIPPED_TEST_MODE)
+        dm = DiscordEventDM.objects.get()
+        self.assertEqual(dm.ledger_entry_id, row.pk)
+        self.assertTrue(dm.delivered)
+        self.assertEqual(dm.message_id, "test-fake-message-id")
+        self.assertTrue(self._lease().success)
+
+        internal = self.client.get(
+            f"/api/internal/discord/event-state/{self.event.pk}/",
+            HTTP_X_INTERNAL_TOKEN="ledger-bridge-token",
+        )
+        self.assertTrue(internal.json()["has_dms"])
+        self.client.force_login(self.admin)
+        refire = self.client.post(
+            reverse(
+                "fire_event_task",
+                kwargs={"event_id": self.event.pk, "task_name": "signup_reminder"},
+            )
+        )
+        self.assertEqual(refire.status_code, 409)
 
 
 class SignupReadUnavailableTest(_DiscordTaskTestCase):
@@ -624,7 +891,7 @@ class SignupReadUnavailableTest(_DiscordTaskTestCase):
 
         self._assert_skipped(logs, mock_req)
 
-    @patch("events.tasks.sync_send_dm")
+    @patch("events.tasks.send_dm")
     @patch("discordbot.utils._rate_limited_request")
     def test_subscriber_dms_not_sent_and_no_lease_held(
         self, mock_req: MagicMock, mock_send_dm: MagicMock

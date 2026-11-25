@@ -1,10 +1,19 @@
+import itertools
 from datetime import timedelta
 from unittest import mock
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from structlog.testing import capture_logs
 
-from discordbot.models import DiscordMessageLog, DiscordTournamentLog
+from discordbot.models import (
+    DiscordDM,
+    DiscordMessageLog,
+    DiscordTournamentLog,
+    DMKind,
+    DMStatus,
+    DMSubject,
+)
 from lobby import services, states, tasks
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
 from lobby.models import GameLobby
@@ -605,14 +614,28 @@ class LobbyInfoTests(TaskTestBase):
             external_ref=self.ref, state="waiting", password="pw-from-lobby"
         )
 
-    @mock.patch("lobby.tasks.sync_send_dm", return_value={"id": "1"})
-    def test_sends_dm_with_password_and_logs_without_it(self, send_dm):
+    def _discord(self) -> mock.MagicMock:
+        counter = itertools.count(1)
+
+        def fake(method: str, url: str, **kwargs: object) -> mock.MagicMock:
+            resp = mock.MagicMock(status_code=200)
+            resp.json.return_value = {"id": str(900000 + next(counter))}
+            return resp
+
+        patcher = mock.patch("discordbot.dm._rate_limited_request", side_effect=fake)
+        started = patcher.start()
+        self.addCleanup(patcher.stop)
+        return started
+
+    @override_settings(TEST=False)
+    def test_sends_dm_with_password_and_logs_without_it(self):
+        request = self._discord()
         result = self.run_task(tasks.send_lobby_info, self.row.pk)
-        self.assertEqual(send_dm.call_count, 10)
+        posts = [c for c in request.call_args_list if c.args[1].endswith("/messages")]
+        self.assertEqual(len(posts), 10)
         self.assertIn("10/10", result)
-        embed = send_dm.call_args.kwargs["embed"]
+        embed = posts[-1].kwargs["json"]["embeds"][0]
         self.assertIn("||pw-from-lobby||", str(embed["fields"]))
-        self.assertNotIn("tournament_log_id", send_dm.call_args.kwargs)
         log = DiscordTournamentLog.objects.get()
         self.assertEqual(
             (log.notification_type, log.success, log.recipient_count),
@@ -621,7 +644,34 @@ class LobbyInfoTests(TaskTestBase):
         self.assertNotIn("pw-from-lobby", log.message)
         self.assertFalse(DiscordMessageLog.objects.exists())
 
-    @mock.patch("lobby.tasks.sync_send_dm")
+    @override_settings(TEST=False)
+    def test_lobby_info_passes_tournament_log_id(self):
+        self._discord()
+        self.run_task(tasks.send_lobby_info, self.row.pk)
+        log = DiscordTournamentLog.objects.get()
+        rows = DiscordDM.objects.all()
+        self.assertEqual(rows.count(), 10)
+        for row in rows:
+            self.assertEqual(row.tournament_log_id, log.pk)
+            self.assertEqual(row.kind, DMKind.LOBBY_INFO)
+            self.assertEqual(row.status, DMStatus.SENT)
+            self.assertEqual(row.subject_type, DMSubject.GAME_LOBBY)
+            self.assertEqual(row.subject_id, self.row.pk)
+
+    @override_settings(TEST=False)
+    def test_lobby_info_password_not_in_ledger(self):
+        self._discord()
+        with capture_logs() as logs:
+            self.run_task(tasks.send_lobby_info, self.row.pk)
+        rows = list(DiscordDM.objects.values())
+        self.assertEqual(len(rows), 10)
+        for row in rows:
+            self.assertIn(row["context"], ({"side": "radiant"}, {"side": "dire"}))
+            for value in row.values():
+                self.assertNotIn("pw-from-lobby", str(value))
+        self.assertNotIn("pw-from-lobby", str(logs))
+
+    @mock.patch("lobby.tasks.send_dm")
     def test_disabled_by_tournament(self, send_dm):
         tournament = self.game.tournament
         tournament.discord_send_lobby_info = False

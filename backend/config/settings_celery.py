@@ -28,9 +28,9 @@ def _env_bool(key: str, default: bool = False) -> bool:
 
 
 # Test-mode flag for Discord DM safety in tasks.
-# When TEST=true, sync_send_dm only sends DMs to TEST_DISCORD_USER_ID and
-# returns fake-success for everyone else (so recipient_count > 0 in tests
-# without spamming real users).
+# When TEST=true, discordbot.dm.send_dm only sends DMs to TEST_DISCORD_USER_ID
+# and records everyone else as skipped_test_mode in the ledger (callers count
+# it as delivered, so recipient_count > 0 in tests without spamming real users).
 DISCORD_ACTIVITY_ENABLED = _env_bool("DISCORD_ACTIVITY_ENABLED")
 TEST = _env_bool("TEST")
 RELEASE = _env_bool("RELEASE")
@@ -79,7 +79,8 @@ DOTA_LOBBY_REF_PREFIX = _dota_lobby.ref_prefix
 DOTA_LOBBY_WEBHOOK_TOLERANCE_SECONDS = _dota_lobby.webhook_tolerance_seconds
 DOTA_LOBBY_REGION = _dota_lobby.region
 
-# Discord bot token — required by discordbot.utils.sync_send_dm and friends.
+# Discord bot token — required by discordbot.dm.send_dm and the discordbot.utils
+# REST helpers.
 # In TEST mode we still need this for the matching TEST_DISCORD_USER_ID path,
 # and in production for real DMs from Celery tasks. Read the same env var
 # the Daphne backend uses.
