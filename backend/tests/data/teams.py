@@ -5,7 +5,7 @@ Pre-defined teams for test tournaments.
 Teams reference users by TestUser objects from tests/data/users.py.
 """
 
-from tests.data.models import TestTeam
+from tests.data.models import TestTeam, TestUser
 from tests.data.users import TOURNAMENT_USERS
 
 # =============================================================================
@@ -144,6 +144,32 @@ BRACKET_UNSET_WINNER_TEAMS: list[TestTeam] = [
     UNSET_BETA_TEAM,
     UNSET_GAMMA_TEAM,
     UNSET_DELTA_TEAM,
+]
+
+# =============================================================================
+# Placement Reopen Conflict Teams (#922)
+# Feature-isolated users created on demand by the populate function.
+# =============================================================================
+
+PLACEMENT_REOPEN_CONFLICT_USER_PREFIX: str = "reopen_conflict_"
+
+
+def _reopen_conflict_team(letter: str, draft_order: int) -> TestTeam:
+    members = [
+        TestUser(username=f"{PLACEMENT_REOPEN_CONFLICT_USER_PREFIX}{letter}{n}")
+        for n in range(1, 6)
+    ]
+    return TestTeam(
+        name=f"Reopen {letter.upper()}",
+        captain=members[0],
+        members=members,
+        draft_order=draft_order,
+        tournament_name="bracket:placement Reopen Conflict Tournament",
+    )
+
+
+PLACEMENT_REOPEN_CONFLICT_TEAMS: list[TestTeam] = [
+    _reopen_conflict_team(letter, order) for order, letter in enumerate("abcd", start=1)
 ]
 
 # =============================================================================

@@ -145,9 +145,7 @@ class RelinkUsersEndpointTest(TestCase):
             lobby_type=1,
             league_id=LEAGUE_ID,
         )
-        from steam.models import PlayerMatchStats
-
-        stats = PlayerMatchStats.objects.create(
+        PlayerMatchStats.objects.create(
             match=match,
             steam_id=76561198000000001,
             player_slot=0,
@@ -330,6 +328,7 @@ class AutoLinkEndpointTest(TestCase):
         mock_auto_link.return_value = {
             "auto_linked_count": 5,
             "suggestions_created_count": 3,
+            "skipped_roster_conflict_count": 0,
         }
 
         self.client.force_authenticate(user=self.staff_user)

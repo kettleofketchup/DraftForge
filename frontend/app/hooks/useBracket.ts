@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AxiosError } from 'axios';
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
@@ -12,33 +11,11 @@ import type {
   BracketResponseDTO,
 } from '~/components/bracket/schemas';
 import type { BracketMatch } from '~/components/bracket/types';
+import { parseBracketError } from '~/lib/bracketError';
 import { getLogger } from '~/lib/logger';
 import { mapApiMatchToMatch, useBracketStore } from '~/store/bracketStore';
 
 const log = getLogger('bracket:save');
-
-/**
- * Pulls a user-facing message out of a save_bracket / advance_winner
- * error response. Backend returns { error, code, details? } on 4xx.
- */
-function parseBracketError(error: unknown): {
-  message: string;
-  code?: string;
-  details?: unknown;
-} {
-  if (error instanceof AxiosError) {
-    const data = error.response?.data as
-      | { error?: string; detail?: string; code?: string; details?: unknown }
-      | undefined;
-    const message =
-      data?.error || data?.detail || error.message || 'Bracket request failed';
-    return { message, code: data?.code, details: data?.details };
-  }
-  if (error instanceof Error) {
-    return { message: error.message };
-  }
-  return { message: 'Bracket request failed' };
-}
 
 /**
  * Fetches bracket data via TanStack Query and seeds the Zustand bracketStore.

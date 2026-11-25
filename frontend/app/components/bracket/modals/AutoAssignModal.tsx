@@ -1,5 +1,5 @@
 import { Loader2, Wand2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '~/components/api/axios';
 import { Badge } from '~/components/ui/badge';
@@ -12,7 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { parseBracketError } from '~/lib/bracketError';
+import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
+
+const log = getLogger('bracket:auto-assign');
 
 interface Assignment {
   game_id: number;
@@ -32,9 +36,17 @@ interface Assignment {
   match_method: string;
 }
 
+interface SkippedRosterConflict {
+  game_id: number;
+  match_id: number;
+  team_id: number;
+  user_ids: number[];
+}
+
 interface AutoAssignResult {
   assignments: Assignment[];
   linked_count?: number;
+  skipped_roster_conflicts?: SkippedRosterConflict[];
   tournament_date: string;
   total_unlinked_games: number;
   total_candidate_matches: number;
@@ -66,23 +78,6 @@ export function AutoAssignModal({
   const [isApplying, setIsApplying] = useState(false);
   const [result, setResult] = useState<AutoAssignResult | null>(null);
 
-  const fetchPreview = async () => {
-    setIsLoading(true);
-    try {
-      const response = await api.post('/steam/auto-assign/', {
-        tournament_id: tournamentId,
-        preview: true,
-        min_overlap: 4,
-      });
-      setResult(response.data);
-    } catch (error) {
-      console.error('Failed to fetch auto-assign preview:', error);
-      toast.error('Failed to fetch auto-assign preview');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const applyAssignments = async () => {
     setIsApplying(true);
     try {
@@ -91,25 +86,62 @@ export function AutoAssignModal({
         apply: true,
         min_overlap: 4,
       });
-      toast.success(`Linked ${response.data.linked_count} matches`);
+      const data: AutoAssignResult = response.data;
+      const skipped = data.skipped_roster_conflicts?.length ?? 0;
+      if (skipped > 0) {
+        toast.warning(
+          `Linked ${data.linked_count} matches; skipped ${skipped}: a player would be on two live teams`,
+        );
+      } else {
+        toast.success(`Linked ${data.linked_count} matches`);
+      }
       onAssignComplete();
       onClose();
     } catch (error) {
-      console.error('Failed to apply auto-assign:', error);
+      log.error('bracket_auto_assign_failed', {
+        tournamentId,
+        message: parseBracketError(error).message,
+      });
       toast.error('Failed to apply auto-assign. Are you logged in as staff?');
     } finally {
       setIsApplying(false);
     }
   };
 
-  // Fetch preview when modal opens
-  const handleOpenChange = (open: boolean) => {
-    if (open) {
-      fetchPreview();
-    } else {
+  useEffect(() => {
+    if (!isOpen) {
       setResult(null);
-      onClose();
+      return;
     }
+    let cancelled = false;
+    setIsLoading(true);
+    api
+      .post('/steam/auto-assign/', {
+        tournament_id: tournamentId,
+        preview: true,
+        min_overlap: 4,
+      })
+      .then((response) => {
+        if (!cancelled) setResult(response.data);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        log.error('bracket_auto_assign_preview_failed', {
+          tournamentId,
+          message: parseBracketError(error).message,
+        });
+        toast.error('Failed to fetch auto-assign preview');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, tournamentId]);
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) onClose();
   };
 
   return (
