@@ -54,6 +54,7 @@ from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import ActorRole, Commitment, EventState, SignupAction
 from events.discord import notify_create_discord_event, notify_signup_changed
+from events.discord.state import signup_list_queryset
 from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
@@ -1728,23 +1729,9 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self) -> QuerySet[EventSignup]:
-        # EventSignupSerializer's `username` (display name) reads
-        # user.nickname, and it ships user.avatar — both resolve through the
-        # CustomUser @property to base_profile. Without user__base_profile this
-        # is N+1 cold-cache on busy events.
-        qs = with_user_profiles(
-            EventSignup.objects.select_related(
-                "event__tournament__league__organization", "event_team"
-            ),
-            "user",
-            steam_verified_org=True,
+        return signup_list_queryset(
+            self.request.query_params.get("event"), for_list=self.action == "list"
         )
-        event_id = self.request.query_params.get("event")
-        if event_id:
-            qs = qs.filter(event_id=event_id)
-        if self.action == "list":
-            qs = qs.annotate_line_rank()
-        return qs
 
     @action(detail=True, methods=["post"])
     def approve(self, request: Request, pk: str | None = None) -> Response:
