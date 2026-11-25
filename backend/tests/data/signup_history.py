@@ -1,6 +1,6 @@
 """Signup history E2E test data.
 
-Used by frontend/tests/playwright/e2e/20-signup-history/. Created by
+Used by frontend/tests/playwright/e2e/29-signup-history/. Created by
 tests.populate.signup_history.populate_signup_history_data.
 
 - Org 60 "Signup History Org" (no league).
