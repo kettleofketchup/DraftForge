@@ -645,7 +645,13 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
     @patch("discordbot.utils._rate_limited_request")
     def test_blank_channel_burns_no_lease(self, mock_req: MagicMock) -> None:
         self.target.discord_announcement_channel_id = ""
-        self.target.save(update_fields=["discord_announcement_channel_id"])
+        self.target.discord_new_event_channel_id = ""
+        self.target.save(
+            update_fields=[
+                "discord_announcement_channel_id",
+                "discord_new_event_channel_id",
+            ]
+        )
 
         result = send_new_event_notification(self.target.pk)
 
@@ -653,7 +659,42 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
         self.assertEqual(
             DiscordMessageLog.objects.filter(source="new_event").count(), 0
         )
-        self.assertEqual(result, "Skipped: no announcement channel")
+        self.assertEqual(result, "Skipped: no channel")
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_posts_to_new_event_channel_when_set(self, mock_req: MagicMock) -> None:
+        self.target.discord_new_event_channel_id = "333333333333333333"
+        self.target.save(update_fields=["discord_new_event_channel_id"])
+        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+
+        send_new_event_notification(self.target.pk)
+
+        log = DiscordMessageLog.objects.get(
+            source="new_event", source_id=self.target.pk, success=True
+        )
+        self.assertEqual(log.channel_id, "333333333333333333")
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_posts_with_only_own_channel(self, mock_req: MagicMock) -> None:
+        self.target.discord_announcement = False
+        self.target.discord_announcement_channel_id = ""
+        self.target.discord_new_event_channel_id = "333333333333333333"
+        self.target.save(
+            update_fields=[
+                "discord_announcement",
+                "discord_announcement_channel_id",
+                "discord_new_event_channel_id",
+            ]
+        )
+        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+
+        send_new_event_notification(self.target.pk)
+
+        mock_req.assert_called_once()
+        log = DiscordMessageLog.objects.get(
+            source="new_event", source_id=self.target.pk, success=True
+        )
+        self.assertEqual(log.channel_id, "333333333333333333")
 
 
 class NotifyNewEventDispatchTest(EventTestCase):
@@ -678,11 +719,32 @@ class NotifyNewEventDispatchTest(EventTestCase):
     @patch("events.tasks.send_new_event_notification")
     def test_skips_when_channel_blank(self, mock_task: MagicMock) -> None:
         self.target.discord_announcement_channel_id = ""
-        self.target.save(update_fields=["discord_announcement_channel_id"])
+        self.target.discord_new_event_channel_id = ""
+        self.target.save(
+            update_fields=[
+                "discord_announcement_channel_id",
+                "discord_new_event_channel_id",
+            ]
+        )
 
         notify_new_event(self.target)
 
         mock_task.delay.assert_not_called()
+
+    @patch("events.tasks.send_new_event_notification")
+    def test_queues_on_own_channel_alone(self, mock_task: MagicMock) -> None:
+        self.target.discord_announcement_channel_id = ""
+        self.target.discord_new_event_channel_id = "333333333333333333"
+        self.target.save(
+            update_fields=[
+                "discord_announcement_channel_id",
+                "discord_new_event_channel_id",
+            ]
+        )
+
+        notify_new_event(self.target)
+
+        mock_task.delay.assert_called_once_with(self.target.pk, interaction_id=ANY)
 
 
 class NewEventProducerTest(_DiscordTaskTestCase):

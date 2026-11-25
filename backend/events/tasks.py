@@ -49,10 +49,14 @@ from discordbot.utils import (
     sync_send_embed_with_components_no_log,
 )
 from events.discord import (
+    attendance_reminder_channel,
     build_attendance_reminder_embed,
     build_new_event_embed,
     build_profile_reminder_embed,
     build_signup_reminder_embed,
+    new_event_channel,
+    profile_reminder_channel,
+    reminder_channel,
 )
 from events.discord.embeds import (
     build_announcement_notice,
@@ -674,7 +678,9 @@ def _send_event_announcement_impl(event_id: int) -> str:
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
 def send_attendance_reminder(event_id: int) -> str:
-    """Post the attendance-confirmation embed to the announcement channel.
+    """Post the attendance-confirmation embed to its channel.
+
+    A blank channel falls back to the announcement channel.
 
     Idempotency is provided by sync_send_embed_with_components's internal
     claim/finalize lease pattern (one HTTP send per (source, source_id)).
@@ -683,7 +689,8 @@ def send_attendance_reminder(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Event {event_id} not found"
-    if not event.discord_announcement_channel_id:
+    channel = attendance_reminder_channel(event)
+    if not channel:
         return f"No channel for event {event_id}"
     if not event.discord_confirm_attendance:
         return f"Attendance reminder disabled for event {event_id}"
@@ -693,7 +700,7 @@ def send_attendance_reminder(event_id: int) -> str:
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("send_attendance_reminder", event_id, exc)
     response = sync_send_embed_with_components(
-        channel_id=event.discord_announcement_channel_id,
+        channel_id=channel,
         embed=result["embed"],
         components=result.get("components"),
         source="attendance_reminder",
@@ -721,7 +728,9 @@ def send_attendance_reminder(event_id: int) -> str:
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
 def send_profile_reminder(event_id: int) -> str:
-    """Post the profile-completion reminder embed to the announcement channel.
+    """Post the profile-completion reminder embed to its channel.
+
+    A blank channel falls back to the announcement channel.
 
     Idempotency via sync_send_embed_with_components's lease pattern.
     """
@@ -729,7 +738,8 @@ def send_profile_reminder(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Event {event_id} not found"
-    if not event.discord_announcement_channel_id:
+    channel = profile_reminder_channel(event)
+    if not channel:
         return f"No channel for event {event_id}"
     if not event.discord_profile_reminder:
         return f"Profile reminder disabled for event {event_id}"
@@ -739,7 +749,7 @@ def send_profile_reminder(event_id: int) -> str:
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("send_profile_reminder", event_id, exc)
     response = sync_send_embed_with_components(
-        channel_id=event.discord_announcement_channel_id,
+        channel_id=channel,
         embed=result["embed"],
         components=result.get("components"),
         source="profile_reminder",
@@ -1149,14 +1159,15 @@ def _send_new_event_notification_impl(event_id: int) -> str:
     event = get_event_for_task(event_id)
     if not event:
         return f"Failed: event {event_id} not found"
-    if not event.discord_announcement_channel_id:
-        return "Skipped: no announcement channel"
+    channel = new_event_channel(event)
+    if not channel:
+        return "Skipped: no channel"
 
     embed = build_new_event_embed(event)
     # Lease-wrapped send: claims (new_event, event_id) before the HTTP POST, so a
     # retry or double dispatch can't double-post the embed.
     response = sync_send_embed_with_components(
-        channel_id=event.discord_announcement_channel_id,
+        channel_id=channel,
         embed=embed,
         source="new_event",
         source_id=event.pk,
@@ -1500,15 +1511,16 @@ def fire_event_reminder(
     if not event:
         return f"Event {event_id} not found"
 
-    if not event.discord_announcement_channel_id:
-        return f"No announcement channel configured for event {event_id}"
+    channel = reminder_channel(event, reminder_type)
+    if not channel:
+        return f"No channel configured for event {event_id}"
 
     try:
         result = builder(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("fire_event_reminder", event_id, exc)
     response = sync_send_embed_with_components(
-        channel_id=event.discord_announcement_channel_id,
+        channel_id=channel,
         embed=result["embed"],
         components=result.get("components"),
         source=source,
