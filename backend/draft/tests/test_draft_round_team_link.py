@@ -2,9 +2,10 @@
 
 from django.db import connection
 from django.db.models import Max
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from draft.models import Draft, DraftRound
@@ -17,6 +18,7 @@ from tournament.models.team_log import TeamLogVia
 from tournament.serializers.draft import DraftRoundForDraftSerializer
 from tournament.services.team_management import replace_captain
 from tournament.state import tournament_state_queryset
+from user.tests.test_cacheops_integration import _redis_reachable
 
 
 class DraftRoundTeamAccessorTests(TestCase):
@@ -297,3 +299,59 @@ class TakeoverPickTests(TestCase):
         self.assertEqual(linked_teams, null_teams)
         self.assertNotIn(None, linked_teams)
         self.assertLessEqual(linked_count, null_count)
+
+
+class TeamDeleteCacheTests(TransactionTestCase):
+    def setUp(self) -> None:
+        if not _redis_reachable():
+            self.skipTest("Cacheops Redis not reachable")
+        self.fx = TimedDraftFixture(
+            style="snake", num_teams=2, timer_enabled=False, prefix="tdc"
+        )
+        self.draft = self.fx.draft
+        self.kept, self.doomed = self.fx.teams
+
+    def cached_rounds(self) -> dict[int, int | None]:
+        return {
+            r.pk: r.drafting_team_id
+            for r in DraftRound.objects.filter(draft=self.draft)
+        }
+
+    def detail_teams(self, client: APIClient) -> dict[int, int | None]:
+        response = client.get(f"/api/drafts/{self.draft.pk}/")
+        self.assertEqual(response.status_code, 200)
+        return {
+            r["pk"]: r["team"]["pk"] if r["team"] else None
+            for r in response.json()["draft_rounds"]
+        }
+
+    def test_team_delete_with_warm_cache_serializes(self) -> None:
+        client = APIClient()
+        before = self.cached_rounds()
+        doomed_rounds = {pk for pk, t in before.items() if t == self.doomed.pk}
+        kept_rounds = {pk for pk, t in before.items() if t == self.kept.pk}
+        self.assertTrue(doomed_rounds)
+        self.assertEqual(doomed_rounds | kept_rounds, set(before))
+        self.detail_teams(client)
+
+        self.doomed.delete()
+
+        cached = self.cached_rounds()
+        for pk in doomed_rounds:
+            self.assertIsNone(cached[pk])
+        for pk in kept_rounds:
+            self.assertEqual(cached[pk], self.kept.pk)
+
+        teams = self.detail_teams(client)
+        for pk in doomed_rounds:
+            self.assertIsNone(teams[pk])
+        for pk in kept_rounds:
+            self.assertEqual(teams[pk], self.kept.pk)
+
+        fresh = dict(
+            DraftRound.objects.nocache()
+            .filter(draft=self.draft)
+            .values_list("pk", "drafting_team_id")
+        )
+        for pk in doomed_rounds:
+            self.assertIsNone(fresh[pk])
