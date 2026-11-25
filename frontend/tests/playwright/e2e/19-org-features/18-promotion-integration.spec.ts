@@ -7,6 +7,7 @@ import type {
 } from '@playwright/test';
 import {
   expect,
+  leaderboardByUser,
   loginOrgFeatures,
   orgFeaturesApi,
   postWithCsrf,
@@ -97,58 +98,58 @@ async function expectTicked(page: Page, ref: Ref): Promise<void> {
   await expect(page.getByTestId(`promo-candidate-record-${id}`)).toBeDisabled();
 }
 
-interface Subject {
-  user_id: string | null;
-  org_user_id: string | null;
-  discord_id: string | null;
+function contactDateNy(at: Date): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+  }).format(at);
 }
 
+/** Post one guild-wide batch, as the adaptor would, holding a single invitation. */
 async function importContact(
   request: APIRequestContext,
   token: string,
   orgPk: number,
-  eventPk: number,
+  guildId: string,
   discordId: string,
+  promoterDiscordId: string,
 ): Promise<void> {
-  const headers = { Authorization: `Bearer ${token}` };
-  const base = `${API_URL}/organizations/${orgPk}/integration/v1`;
-  let cursor: string | null = null;
-  let version = '';
-  let subject: Subject | undefined;
-  do {
-    const url = new URL(`${base}/events/${eventPk}/recipients/`);
-    if (cursor) url.searchParams.set('cursor', cursor);
-    const page = await request.get(url.toString(), { headers });
-    expect(page.status()).toBe(200);
-    const body = await page.json();
-    version = body.mapping_version;
-    subject ??= (body.recipients as Subject[]).find(
-      (s) => s.discord_id === discordId,
-    );
-    cursor = body.next_cursor;
-  } while (cursor);
-  expect(subject).toBeDefined();
-  const imported = await request.post(`${base}/contact-receipts/`, {
-    headers,
-    data: {
-      source: 'contact_log',
-      mapping_version: version,
-      entries: [
-        {
-          source_contact_id: '8199',
-          event_id: String(eventPk),
-          user_id: subject!.user_id,
-          org_user_id: subject!.org_user_id,
-          discord_id: discordId,
-          recorded_at: new Date(Date.now() - 60_000).toISOString(),
-          contact_method: 'DISCORD_DM',
-          linkage: 'occasion',
-        },
-      ],
+  const recordedAt = new Date(Date.now() - 60_000);
+  const imported = await request.post(
+    `${API_URL}/organizations/${orgPk}/integration/v1/contact-receipts/`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        source: 'contact_log',
+        guild_id: guildId,
+        scan_started_at: new Date().toISOString(),
+        // Above the seeded contacts, so none of them is retracted.
+        range: { after: '8104', through: '8199' },
+        skipped_ids: [],
+        entries: [
+          {
+            source_contact_id: '8199',
+            target_discord_id: discordId,
+            promoter_discord_id: promoterDiscordId,
+            recorded_at: recordedAt.toISOString(),
+            contact_date_ny: contactDateNy(recordedAt),
+            contact_method: 'DISCORD_DM',
+            contact_reason: 'EVENT_INVITE',
+            occasion_id: '7001',
+            event_date: null,
+            forced: false,
+          },
+        ],
+      },
     },
-  });
+  );
   expect(imported.status()).toBe(200);
-  expect((await imported.json()).applied).toBe(1);
+  const body = await imported.json();
+  expect(body.applied).toBe(1);
+  expect(body.credited).toBe(1);
+  expect(body.results).toEqual([
+    { index: 0, status: 'applied', point: 'credited', voided_local: false },
+  ]);
 }
 
 test.describe('Promotion external contact history @cicd', () => {
@@ -285,7 +286,7 @@ test.describe('Promotion external contact history @cicd', () => {
       `/organizations/${data.orgs.features.pk}/api-tokens/`,
       {
         name: 'Contact log adaptor e2e',
-        operations: ['promotion:read', 'promotion:import'],
+        operations: ['promotion:import'],
       },
     );
     await admin.close();
@@ -301,8 +302,9 @@ test.describe('Promotion external contact history @cicd', () => {
       request,
       created.token,
       data.orgs.features.pk,
-      data.events.upcoming.pk,
+      data.external_guild_id!,
       fresh.discord_id,
+      data.external_contacts!.external.promoter_discord_id!,
     );
     // The open list polls every 30 seconds while the integration is set up.
     test.setTimeout(90_000);
@@ -414,6 +416,45 @@ test.describe('Promotion external contact history @cicd', () => {
     await shoot(page, 'error-outage', page.getByTestId('promo-candidate-list'));
   });
 
+  test("the promoter's breakdown shows the external credit and the voided local point", async ({
+    page,
+    context,
+  }) => {
+    const pk = data.orgs.features.pk;
+    await loginOrgFeatures(context, 'admin');
+    const promoter = (await leaderboardByUser(context, pk)).get(
+      data.users.promoter.pk,
+    );
+    expect(promoter).toBeDefined();
+    await page.setViewportSize(VIEWPORTS[0][1]);
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${pk}?tab=contributions`,
+    );
+    await page
+      .getByTestId(`contributions-row-${promoter!.org_user_pk}`)
+      .click();
+    const breakdown = page.getByTestId('contributions-breakdown');
+    await expect(breakdown).toBeVisible();
+
+    const entries = breakdown.locator('[data-testid^="contributions-entry-"]');
+    const credit = entries.filter({
+      hasText: 'Recorded in the external contact log',
+    });
+    await expect(credit).toHaveCount(1);
+    await expect(credit).toContainText('Promotion message');
+    await expect(credit).toContainText('+1');
+
+    const voided = entries.filter({ hasText: 'Promotion point voided' });
+    await expect(voided).toHaveCount(1);
+    await expect(voided).toContainText(
+      'Voided: the external contact log holds this point',
+    );
+    await expect(voided).toContainText('-1');
+    await expect(voided).not.toContainText('+');
+    await shoot(page, 'member-breakdown-void', breakdown);
+  });
+
   test('a locked org keeps its existing promotion lockout', async ({
     page,
     context,
@@ -456,12 +497,22 @@ test.describe('Promotion external contact history @cicd', () => {
     await expect(
       page.getByTestId('api-token-op-contributions:read'),
     ).toHaveCount(0);
-    for (const op of ['promotion:read', 'promotion:import']) {
-      const toggle = page.getByTestId(`api-token-op-${op}`);
-      await expect(toggle).toHaveAttribute('aria-checked', 'false');
-      await toggle.click();
-      await expect(toggle).toHaveAttribute('aria-checked', 'true');
-    }
+    // The recipients read and the totals export are gone.
+    await expect(page.getByTestId('api-token-op-promotion:read')).toHaveCount(
+      0,
+    );
+    const importToggle = page.getByTestId('api-token-op-promotion:import');
+    await expect(importToggle).toHaveAttribute('aria-checked', 'false');
+    await importToggle.click();
+    await expect(importToggle).toHaveAttribute('aria-checked', 'true');
+    await expect(dialog).toContainText(
+      'Import external contact history and promotion points',
+    );
+    await expect(
+      page.getByTestId('api-token-op-promotion:import-description'),
+    ).toHaveText(
+      'Records external contacts and awards and voids promotion points.',
+    );
     await page.getByTestId('api-token-name').fill('Contact log adaptor');
     await shoot(page, 'api-access-create', dialog);
 
@@ -475,14 +526,14 @@ test.describe('Promotion external contact history @cicd', () => {
     expect(response.status()).toBe(201);
     expect(response.request().postDataJSON()).toEqual({
       name: 'Contact log adaptor',
-      operations: ['promotion:read', 'promotion:import'],
+      operations: ['promotion:import'],
     });
     const created = (await response.json()) as {
       id: number;
       token: string;
       operations: string[];
     };
-    expect(created.operations).toEqual(['promotion:import', 'promotion:read']);
+    expect(created.operations).toEqual(['promotion:import']);
     await expect(page.getByTestId('api-token-secret')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('api-token-secret')).toHaveCount(0);
@@ -490,8 +541,10 @@ test.describe('Promotion external contact history @cicd', () => {
     await expect(page.getByTestId('api-token-create-dialog')).toHaveCount(0);
 
     const ops = page.getByTestId(`api-token-operations-${created.id}`);
-    await expect(ops).toContainText('Read promotion recipients');
-    await expect(ops).toContainText('Import external contact history');
+    await expect(ops).toHaveText(
+      /Import external contact history and promotion points/,
+    );
+    await expect(ops).not.toContainText('recipients');
     // The name keeps a readable width next to the token and its operations,
     // and no cell's content is clipped or spills into its neighbour, at both
     // screenshot sizes.

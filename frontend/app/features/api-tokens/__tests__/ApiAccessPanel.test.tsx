@@ -251,15 +251,21 @@ describe('ApiAccessPanel', () => {
       screen.getByTestId(`api-token-op-${value}`) as HTMLButtonElement;
     expect(op('mmr:read').getAttribute('aria-checked')).toBe('true');
     expect(op('mmr:write').getAttribute('aria-checked')).toBe('true');
-    expect(op('promotion:read').getAttribute('aria-checked')).toBe('false');
     expect(op('promotion:import').getAttribute('aria-checked')).toBe('false');
     expect(screen.queryByTestId('api-token-op-contributions:read')).toBeNull();
-    expect(screen.getByText('Import external contact history')).toBeTruthy();
+    expect(screen.queryByTestId('api-token-op-promotion:read')).toBeNull();
+    expect(
+      screen.getByText('Import external contact history and promotion points'),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId('api-token-op-promotion:import-description')
+        .textContent,
+    ).toBe('Records external contacts and awards and voids promotion points.');
   });
 
   it('creates a promotion-only token while MMR sync is locked', async () => {
     vi.mocked(createApiToken).mockResolvedValue(
-      createdApiToken({ operations: ['promotion:import', 'promotion:read'] }),
+      createdApiToken({ operations: ['promotion:import'] }),
     );
     renderPanel(promotionOnly);
     const create = (await screen.findByTestId(
@@ -276,7 +282,6 @@ describe('ApiAccessPanel', () => {
     expect(screen.getByTestId('api-token-op-mmr:read-locked').textContent).toBe(
       'MMR sync API is locked for this organization.',
     );
-    fireEvent.click(screen.getByTestId('api-token-op-promotion:read'));
     fireEvent.click(screen.getByTestId('api-token-op-promotion:import'));
     fireEvent.change(screen.getByTestId('api-token-name'), {
       target: { value: 'Contact log adaptor' },
@@ -285,7 +290,7 @@ describe('ApiAccessPanel', () => {
     await screen.findByTestId('api-token-secret');
     expect(createApiToken).toHaveBeenCalledWith(ORG, {
       name: 'Contact log adaptor',
-      operations: ['promotion:read', 'promotion:import'],
+      operations: ['promotion:import'],
     });
   });
 
@@ -343,7 +348,7 @@ describe('ApiAccessPanel', () => {
       apiToken({
         id: 3,
         name: 'Contact log adaptor',
-        operations: ['promotion:import', 'promotion:read'],
+        operations: ['promotion:import'],
       }),
     ]);
     renderPanel(fullAccess);
@@ -351,8 +356,9 @@ describe('ApiAccessPanel', () => {
     expect(mmr.textContent).toContain('Read member MMRs');
     expect(mmr.textContent).toContain('Update member MMRs');
     const adaptorRow = screen.getByTestId('api-token-operations-3');
-    expect(adaptorRow.textContent).toContain('Read promotion recipients');
-    expect(adaptorRow.textContent).toContain('Import external contact history');
+    expect(adaptorRow.textContent).toContain(
+      'Import external contact history and promotion points',
+    );
     expect(adaptorRow.textContent).not.toContain('MMR');
   });
 

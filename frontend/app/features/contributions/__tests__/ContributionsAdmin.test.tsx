@@ -256,6 +256,22 @@ describe('contributions admin section', () => {
     expect(screen.getByTestId('ledger-row-31')).toHaveTextContent('Casting');
   });
 
+  it('lists a promotion point void with negative points and no edit actions', async () => {
+    vi.mocked(getEntries).mockResolvedValue({
+      count: 1,
+      limit: 50,
+      offset: 0,
+      results: [{ ...entry(41, 'promo_void'), points: -1 }],
+    });
+    renderTab(admin);
+    const row = await screen.findByTestId('ledger-row-41');
+    expect(row).toHaveTextContent('Promotion point voided');
+    expect(row).toHaveTextContent('-1');
+    expect(row).not.toHaveTextContent('+');
+    expect(screen.queryByTestId('ledger-edit-41')).toBeNull();
+    expect(screen.queryByTestId('ledger-delete-41')).toBeNull();
+  });
+
   it('names ledger members by their org server nickname on the org page', async () => {
     vi.mocked(getEntries).mockResolvedValue({
       count: 1,

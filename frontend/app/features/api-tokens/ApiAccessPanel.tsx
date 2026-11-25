@@ -446,6 +446,14 @@ function CreateTokenDialog({
                       <code className="font-mono text-xs text-muted-foreground">
                         {op.value}
                       </code>
+                      {op.description && (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          data-testid={`api-token-op-${op.value}-description`}
+                        >
+                          {op.description}
+                        </span>
+                      )}
                       {!enabled && (
                         <span
                           id={`${id}-locked`}

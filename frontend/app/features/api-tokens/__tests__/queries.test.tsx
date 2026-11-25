@@ -100,7 +100,7 @@ describe('mutations', () => {
     const { result } = renderHook(() => useCreateApiToken(ORG, access), {
       wrapper,
     });
-    const input = { name: 'bot', operations: ['promotion:read'] };
+    const input = { name: 'bot', operations: ['promotion:import'] };
     await act(() => result.current.mutateAsync(input));
     expect(createApiToken).toHaveBeenCalledWith(ORG, input);
     expect(invalid(key)).toBe(true);

@@ -58,7 +58,7 @@ class PromotionIntegrationFixtureTests(TestCase):
         )
         return {r["discordId"]: r for r in rows}
 
-    def test_seeds_bound_event_receipts_without_sends_awards_or_accounts(
+    def test_seeds_bound_event_receipts_without_new_sends_or_accounts(
         self,
     ) -> None:
         with patch("discordbot.services.discord_members.requests.get") as fetch:
@@ -82,17 +82,29 @@ class PromotionIntegrationFixtureTests(TestCase):
             receipts = ExternalPromotionReceipt.objects.filter(event=event)
             self.assertEqual(receipts.count(), 4)
             self.assertEqual(
-                {(r.point_status, r.holds_point) for r in receipts},
-                {("uncredited", True)},
+                {
+                    key: (r.point_status, r.holds_point)
+                    for key, ref in refs.items()
+                    for r in receipts
+                    if str(r.source_contact_id) == ref["source_contact_id"]
+                },
+                {
+                    "external": ("credited", True),
+                    "local_and_external": ("uncredited", True),
+                    "discord_only": ("uncredited", True),
+                    "non_member": ("uncredited", True),
+                },
             )
+            self.assertEqual(
+                refs["external"]["promoter_discord_id"], OF_PROMOTER.discord_id
+            )
+            self.assertIsNone(refs["local_and_external"]["promoter_discord_id"])
+            self.assertEqual(data["external_guild_id"], str(binding.guild_id))
             for receipt in receipts:
                 self.assertEqual(receipt.source_hash, self._hash(receipt))
             self.assertEqual(
                 PromoSend.objects.filter(event=event).count(), 1
             )  # the audience fixture's seeded local send only
-            self.assertFalse(
-                ContributionEntry.objects.filter(promo_send__event=event).exists()
-            )
             self.assertFalse(
                 OrgUser.objects.filter(
                     organization=org, user_id=refs["non_member"]["pk"]
@@ -120,6 +132,39 @@ class PromotionIntegrationFixtureTests(TestCase):
             self.assertIsNone(only["user_pk"])
             self.assertIsNotNone(only["external_contact"])
             fetch.assert_not_called()
+
+    def test_seeds_an_external_credit_and_a_voided_local_point(self) -> None:
+        with patch("discordbot.services.discord_members.requests.get"):
+            data = reset_org_features_data(external_contacts=True)
+        refs = data["external_contacts"]
+        event = Event.objects.get(pk=data["events"]["upcoming"]["pk"])
+        promoter = OrgUser.objects.get(
+            organization_id=FEATURES_ORG.pk, user_id=OF_PROMOTER.pk
+        )
+        entries = ContributionEntry.objects.filter(org_user=promoter, event=event)
+
+        credit = entries.get(external_contact__isnull=False, kind="promo_message")
+        self.assertEqual(
+            str(credit.external_contact.source_contact_id),
+            refs["external"]["source_contact_id"],
+        )
+        self.assertFalse(credit.voided)
+        self.assertGreater(credit.points, 0)
+
+        send = PromoSend.objects.get(event=event)
+        self.assertEqual(send.recipient_id, refs["local_and_external"]["pk"])
+        self.assertFalse(send.earns_points)
+        local = entries.get(promo_send=send)
+        self.assertTrue(local.voided)
+        void = entries.get(kind="promo_void")
+        self.assertEqual(void.reversal_of_id, local.pk)
+        self.assertEqual(void.points, -local.points)
+        self.assertEqual(
+            str(void.external_contact.source_contact_id),
+            refs["local_and_external"]["source_contact_id"],
+        )
+        # The credit and the voided local point net to one live point.
+        self.assertEqual(sum(entries.values_list("points", flat=True)), credit.points)
 
     def test_ordinary_reset_restores_bindings_and_clears_evidence(self) -> None:
         with patch("discordbot.services.discord_members.requests.get"):

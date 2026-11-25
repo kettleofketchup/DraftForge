@@ -16,7 +16,6 @@ export type ApiUserRef = z.infer<typeof ApiUserRefSchema>;
 export const TOKEN_OPERATION_VALUES = [
   'mmr:read',
   'mmr:write',
-  'promotion:read',
   'promotion:import',
 ] as const;
 export type TokenOperation = (typeof TOKEN_OPERATION_VALUES)[number];
@@ -27,6 +26,8 @@ export type TokenFeature = 'mmr_sync' | 'promotion';
 export interface TokenOperationInfo {
   value: TokenOperation;
   label: string;
+  /** Shown under the label in the create dialog when the label alone is not enough. */
+  description?: string;
   feature: TokenFeature;
 }
 
@@ -34,13 +35,10 @@ export const TOKEN_OPERATIONS: readonly TokenOperationInfo[] = [
   { value: 'mmr:read', label: 'Read member MMRs', feature: 'mmr_sync' },
   { value: 'mmr:write', label: 'Update member MMRs', feature: 'mmr_sync' },
   {
-    value: 'promotion:read',
-    label: 'Read promotion recipients',
-    feature: 'promotion',
-  },
-  {
     value: 'promotion:import',
-    label: 'Import external contact history',
+    label: 'Import external contact history and promotion points',
+    description:
+      'Records external contacts and awards and voids promotion points.',
     feature: 'promotion',
   },
 ];

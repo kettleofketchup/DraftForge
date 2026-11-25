@@ -24,6 +24,7 @@ import {
   ApiLimitsFormSchema,
   CreateTokenFormSchema,
   DEFAULT_TOKEN_OPERATIONS,
+  operationLabel,
   TOKEN_OPERATIONS,
 } from '../schemas';
 import { apiToken, apiUsage, createdApiToken } from './fixtures';
@@ -72,17 +73,17 @@ describe('api-tokens api', () => {
   it('sends promotion-only operations unchanged', async () => {
     post.mockResolvedValue({
       data: createdApiToken({
-        operations: ['promotion:import', 'promotion:read'],
+        operations: ['promotion:import'],
       }),
     });
     const created = await createApiToken(7, {
       name: 'Contact log adaptor',
-      operations: ['promotion:read', 'promotion:import'],
+      operations: ['promotion:import'],
     });
-    expect(created.operations).toEqual(['promotion:import', 'promotion:read']);
+    expect(created.operations).toEqual(['promotion:import']);
     expect(post).toHaveBeenCalledWith('/organizations/7/api-tokens/', {
       name: 'Contact log adaptor',
-      operations: ['promotion:read', 'promotion:import'],
+      operations: ['promotion:import'],
     });
   });
 
@@ -163,9 +164,21 @@ describe('form schemas', () => {
     expect(TOKEN_OPERATIONS.map((op) => op.value)).toEqual([
       'mmr:read',
       'mmr:write',
-      'promotion:read',
       'promotion:import',
     ]);
+  });
+
+  it('describes the import grant as recording contacts and promotion points', () => {
+    const importOp = TOKEN_OPERATIONS.find(
+      (op) => op.value === 'promotion:import',
+    );
+    expect(importOp?.label).toBe(
+      'Import external contact history and promotion points',
+    );
+    expect(importOp?.description).toBe(
+      'Records external contacts and awards and voids promotion points.',
+    );
+    expect(operationLabel('promotion:read')).toBe('promotion:read');
   });
 
   it('matches the backend limit ranges', () => {

@@ -85,6 +85,7 @@ from tests.data.org_features import (
     ORG_FEATURES_USERS,
     PRIVATE_FEATURES_ORG,
 )
+from tests.populate.promotion_audiences import GUILD_ID as PROMOTION_GUILD_ID
 from tests.populate.promotion_audiences import (
     restore_promotion_audience_settings,
     seed_promotion_audiences,
@@ -530,6 +531,7 @@ def reset_org_features_data(
             data["external_contacts"] = seed_promotion_integration(
                 org, event, data["audiences"]
             )
+            data["external_guild_id"] = PROMOTION_GUILD_ID
             invalidate_model(OrgUser)
             invalidate_obj(org)
     return data

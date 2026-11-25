@@ -57,8 +57,16 @@ export interface OrgFeaturesTestData {
   /** Synthetic imported contacts (resetOrgFeatures({ externalContacts: true })). */
   external_contacts?: Record<
     'external' | 'local_and_external' | 'discord_only' | 'non_member',
-    { pk: number | null; discord_id: string; source_contact_id: string }
+    {
+      pk: number | null;
+      discord_id: string;
+      source_contact_id: string;
+      /** The promoter the contact names, or null when it names nobody. */
+      promoter_discord_id: string | null;
+    }
   >;
+  /** The Discord guild the external contact log is bound to. */
+  external_guild_id?: string;
   conduct: {
     ranked_org_user_pks: number[];
     new_member_org_user_pk: number;

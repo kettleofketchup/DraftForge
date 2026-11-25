@@ -12,6 +12,8 @@ export const CONTRIBUTION_KINDS = [
   'event_host',
   'event_helper',
   'manual',
+  'promo_void',
+  'promo_restore',
 ] as const;
 export const ContributionKindSchema = z.enum(CONTRIBUTION_KINDS);
 export type ContributionKind = z.infer<typeof ContributionKindSchema>;
@@ -21,7 +23,14 @@ export const KIND_LABELS: Record<ContributionKind, string> = {
   event_host: 'Event host',
   event_helper: 'Event helper',
   manual: 'Manual award',
+  promo_void: 'Promotion point voided',
+  promo_restore: 'Promotion point restored',
 };
+
+/** Ledger points with their sign: a void is negative, everything else positive. */
+export function signedPoints(points: number): string {
+  return points < 0 ? `-${Math.abs(points)}` : `+${points}`;
+}
 
 export const ContributionEntrySchema = z.object({
   pk: z.number(),

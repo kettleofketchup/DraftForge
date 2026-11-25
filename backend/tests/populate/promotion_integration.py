@@ -2,20 +2,21 @@
 
 Builds on the audience fixture (its Discord guild cache and members) and
 binds the Features Test Org's upcoming event to a synthetic external occasion, so
-the candidate list reports the integration as configured. It then stores
-imported external receipts exactly as the import endpoint would, for four kinds of
-candidate:
+the candidate list reports the integration as configured. It then posts one
+guild-wide batch through the real import, for four kinds of candidate:
 
-- ``external``: a member contacted in the external contact log only.
+- ``external``: a member contacted in the external contact log only. The
+  contact names the Features Promoter, so it credits them a promotion point.
 - ``local_and_external``: the audience fixture's locally messaged member, also
-  contacted in the external contact log.
+  contacted in the external contact log. The local send is made to earn its
+  point first, so the import voids that point with a ``promo_void`` reversal.
 - ``discord_only``: a guild member without a DraftForge account.
 - ``non_member``: a recent tournament player who is not an org member.
 
-None names a promoter, so each holds its (event, player) promotion point
-uncredited, as the import would settle it. No PromoSend, award, account or
-membership is created for any of them, and no real contact log, adaptor or
-Discord endpoint is contacted. All IDs are synthetic.
+The last three name no promoter, so each holds its (event, player) point
+uncredited. The import creates no PromoSend, account or membership, and no
+real contact log, adaptor or Discord endpoint is contacted. All IDs are
+synthetic.
 """
 
 from datetime import timedelta
@@ -26,21 +27,22 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.utils import timezone
 
+from app.models import CustomUser
 from config.promotion_sync import OrgPromotionBinding, PromotionSyncConfig
 from events.models import Event
-from org.integration.receipts import import_source_hash
-from org.models import Organization, OrgUser
+from org.contributions.kinds import ContributionKind
+from org.contributions.services import award_entry
+from org.integration.contacts import import_contact_receipts
+from org.integration.receipts import format_timestamp
+from org.models import Organization, OrgUser, PromoSend
 from org.models_promotion_sync import (
-    AssociationState,
     ContactMethod,
     ContactReason,
     ExternalPromotionReceipt,
-    PointReason,
-    PointStatus,
     PromotionContactOutbox,
     ReceiptSource,
 )
-from tests.data.org_features import FEATURES_ORG, ORG_FEATURES_PLAYERS
+from tests.data.org_features import FEATURES_ORG, OF_PROMOTER, ORG_FEATURES_PLAYERS
 from tests.populate.promotion_audiences import GUILD_ID
 
 OCCASION_ID: Final[int] = 7001
@@ -49,12 +51,13 @@ NON_MEMBER = ORG_FEATURES_PLAYERS[9]
 _NOT_SET: Final = object()
 _original_sync: Any = _NOT_SET
 
-# key, audience ref (or None for the non-member), source contact ID, hours ago
-RECEIPTS: Final[tuple[tuple[str, str | None, int, int], ...]] = (
-    ("external", "week", 8101, 3),
-    ("local_and_external", "messaged", 8102, 30),
-    ("discord_only", "unlinked", 8103, 5),
-    ("non_member", None, 8104, 50),
+# key, audience ref (or None for the non-member), source contact ID, hours
+# ago, promoter Discord ID (or None when the contact names nobody)
+RECEIPTS: Final[tuple[tuple[str, str | None, int, int, str | None], ...]] = (
+    ("external", "week", 8101, 3, OF_PROMOTER.discord_id),
+    ("local_and_external", "messaged", 8102, 30, None),
+    ("discord_only", "unlinked", 8103, 5, None),
+    ("non_member", None, 8104, 50, None),
 )
 
 
@@ -84,58 +87,65 @@ def seed_promotion_integration(
         )
     )
     OrgUser.objects.nocache().filter(organization=org, user_id=NON_MEMBER.pk).delete()
+    _earn_local_point(org, event)
     now = timezone.now()
     refs: dict[str, Any] = {}
-    for key, audience, contact_id, hours in RECEIPTS:
+    entries: list[dict[str, Any]] = []
+    for key, audience, contact_id, hours, promoter in RECEIPTS:
         if audience is None:
             ref = {"pk": NON_MEMBER.pk, "discord_id": NON_MEMBER.discord_id}
         else:
             ref = dict(audiences[audience])
         recorded_at = now - timedelta(hours=hours)
-        contact_date_ny = recorded_at.astimezone(CONTACT_TZ).date()
-        entry = {
+        entries.append(
+            {
+                "source_contact_id": str(contact_id),
+                "target_discord_id": ref["discord_id"],
+                "promoter_discord_id": promoter,
+                "recorded_at": format_timestamp(recorded_at),
+                "contact_date_ny": recorded_at.astimezone(CONTACT_TZ)
+                .date()
+                .isoformat(),
+                "contact_method": ContactMethod.DISCORD_DM.value,
+                "contact_reason": ContactReason.EVENT_INVITE.value,
+                "occasion_id": str(OCCASION_ID),
+                "event_date": None,
+                "forced": False,
+            }
+        )
+        refs[key] = {
+            **ref,
             "source_contact_id": str(contact_id),
-            "recorded_at": recorded_at,
-            "contact_date_ny": contact_date_ny.isoformat(),
-            "contact_method": ContactMethod.DISCORD_DM.value,
-            "contact_reason": ContactReason.EVENT_INVITE.value,
-            "occasion_id": str(OCCASION_ID),
-            "event_date": None,
-            "forced": False,
+            "promoter_discord_id": promoter,
         }
-        org_user = (
-            OrgUser.objects.nocache()
-            .filter(organization=org, user_id=ref["pk"])
-            .first()
-            if ref["pk"] is not None
-            else None
-        )
-        ExternalPromotionReceipt.objects.create(
-            organization=org,
-            source=ReceiptSource.CONTACT_LOG,
-            source_contact_id=contact_id,
-            event=event,
-            discord_id=ref["discord_id"],
-            recorded_at=recorded_at,
-            contact_date_ny=contact_date_ny,
-            contact_method=ContactMethod.DISCORD_DM,
-            contact_reason=ContactReason.EVENT_INVITE,
-            occasion_id=OCCASION_ID,
-            forced=False,
-            source_hash=import_source_hash(entry),
-            first_imported_at=now - timedelta(minutes=5),
-            user_id=ref["pk"],
-            org_user=org_user,
-            association_state=(
-                AssociationState.LINKED
-                if ref["pk"] is not None
-                else AssociationState.UNRESOLVED
-            ),
-            association_updated_at=now - timedelta(minutes=5),
-            # No promoter is named, so each holds its point uncredited.
-            point_status=PointStatus.UNCREDITED,
-            point_reason=PointReason.PROMOTER_UNRESOLVED,
-            holds_point=True,
-        )
-        refs[key] = {**ref, "source_contact_id": str(contact_id)}
+    ids = [contact_id for _, _, contact_id, _, _ in RECEIPTS]
+    result = import_contact_receipts(
+        org,
+        {
+            "source": ReceiptSource.CONTACT_LOG.value,
+            "guild_id": GUILD_ID,
+            "scan_started_at": format_timestamp(now),
+            "range": {"after": str(min(ids) - 1), "through": str(max(ids))},
+            "skipped_ids": [],
+            "entries": entries,
+        },
+    )
+    assert result["applied"] == len(RECEIPTS), result
+    assert result["credited"] == 1 and result["voided_local"] == 1, result
     return refs
+
+
+def _earn_local_point(org: Organization, event: Event) -> None:
+    """Make the audience fixture's local send earn its point, as a send
+    recorded before the external contact was imported would."""
+    send = PromoSend.objects.nocache().get(organization=org, event=event)
+    send.earns_points = True
+    send.save(update_fields=["earns_points"])
+    award_entry(
+        org=org,
+        user=CustomUser.objects.get(pk=send.sender_id),
+        kind=ContributionKind.PROMO_MESSAGE,
+        occurred_at=send.sent_at,
+        event=event,
+        promo_send=send,
+    )

@@ -36,6 +36,7 @@ populate_imports=(
     backend/org/contributions/kinds.py
     backend/org/contributions/services.py
     backend/org/features.py
+    backend/org/integration/contacts.py
     backend/org/integration/receipts.py
     backend/org/leadership/lifecycle.py
     backend/org/leadership/reviews.py
