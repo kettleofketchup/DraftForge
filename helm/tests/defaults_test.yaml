@@ -47,6 +47,7 @@ tests:
       - equal: {path: data.CELERY_RESULT_BACKEND, value: "redis://redis:6379/3"}
       - equal: {path: data.REDIS_HOST, value: redis}
       - equal: {path: data.SQLITE_PATH, value: /data/db.sqlite3}
+      - equal: {path: data.MEDIA_ROOT, value: /data/media}
       - equal: {path: data.EXTRA_ALLOWED_HOSTS, value: dota.kettle.sh}
       - equal: {path: data.EXTRA_CSRF_TRUSTED_ORIGINS, value: "https://dota.kettle.sh"}
       - equal: {path: data.TRUST_X_FORWARDED_PROTO, value: "true"}

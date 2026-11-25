@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from cacheops import cached_as
+from django.conf import settings
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponseRedirect
@@ -32,9 +33,9 @@ def logout(request: HttpRequest) -> HttpResponseRedirect:
 
 @render_to("home.html")
 def home(request: HttpRequest) -> HttpResponseRedirect | None:
-    """Home view, displays login mechanism"""
+    """Render the login page; redirect signed-in users to the frontend root."""
     if request.user.is_authenticated:
-        return redirect("done")
+        return redirect(f"{settings.SITE_URL}/")
     return None
 
 

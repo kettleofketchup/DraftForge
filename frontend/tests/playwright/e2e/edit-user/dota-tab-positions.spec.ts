@@ -7,8 +7,8 @@
  * position-persistence.spec.ts, which guards the legacy userCard
  * `/users/<id>/` shim path — do NOT merge the two.
  *
- * Login: the per-user fixture loginAsUser(pk) as edit_user_positions
- * (PK 2057, backend/tests/data/users.py). loginAdmin is wrong here —
+ * Login: the per-user fixture loginAsUser(pk) as edit_user_dota_positions
+ * (PK 2062, backend/tests/data/users.py). loginAdmin is wrong here —
  * the /profile Dota tab edits whoever is logged in, and we want a
  * dedicated user so concurrent suites don't fight over the row.
  *
@@ -28,8 +28,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '../../fixtures';
 
-// edit_user_positions — see EDIT_USER_USERS in backend/tests/data/users.py.
-const EDIT_USER_POSITIONS_PK = 2057;
+// edit_user_dota_positions — see USER_EDIT_USERS in backend/tests/data/users.py.
+const EDIT_USER_POSITIONS_PK = 2062;
 
 type PositionRole =
   | 'carry'

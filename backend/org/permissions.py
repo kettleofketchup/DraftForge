@@ -125,30 +125,42 @@ def can_view_org_members(
     if user.is_staff or user.is_superuser:
         return True
     org_pk = organization if isinstance(organization, int) else organization.pk
-    uid = user.pk
+    return (
+        Organization.objects.nocache()
+        .filter(pk=org_pk)
+        .filter(org_members_visible_q(user.pk))
+        .exists()
+    )
+
+
+def org_staff_q(uid: int) -> Q:
+    """Organization rows where `uid` is owner, admin or staff (no site-admin shortcut)."""
+    return (
+        Q(owner_id=uid)
+        | Exists(
+            Organization.admins.through.objects.filter(
+                organization_id=OuterRef("pk"), customuser_id=uid
+            )
+        )
+        | Exists(
+            Organization.staff.through.objects.filter(
+                organization_id=OuterRef("pk"), customuser_id=uid
+            )
+        )
+    )
+
+
+def org_members_visible_q(uid: int) -> Q:
+    """Organization rows whose member list `uid` may view (can_view_org_members
+    without the site-admin shortcut)."""
     league_staff = League.objects.filter(organization_id=OuterRef("pk")).filter(
         Q(admins__pk=uid) | Q(staff__pk=uid)
     )
     member = OrgUser.objects.filter(organization_id=OuterRef("pk"), user_id=uid)
     return (
-        Organization.objects.nocache()
-        .filter(pk=org_pk)
-        .filter(
-            Q(owner_id=uid)
-            | Exists(
-                Organization.admins.through.objects.filter(
-                    organization_id=OuterRef("pk"), customuser_id=uid
-                )
-            )
-            | Exists(
-                Organization.staff.through.objects.filter(
-                    organization_id=OuterRef("pk"), customuser_id=uid
-                )
-            )
-            | Exists(league_staff)
-            | (Q(members_private=False) & Exists(member))
-        )
-        .exists()
+        org_staff_q(uid)
+        | Exists(league_staff)
+        | (Q(members_private=False) & Exists(member))
     )
 
 

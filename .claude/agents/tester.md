@@ -170,6 +170,6 @@ just test::cicd::all
 # Playwright only (with setup)
 just test::cicd::playwright
 
-# Backend only
+# Backend only (the CI test groups in this worktree's test stack)
 just test::cicd::backend
 ```

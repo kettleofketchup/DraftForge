@@ -215,6 +215,16 @@ export {
   type OrgFeaturesTestData,
 } from './org-features';
 
+// MMR update request utilities (org-mmr/mmr-update-requests)
+export {
+  MMR_SCREENSHOT_PATH,
+  getMmrRequestsData,
+  resetMmrRequests,
+  type MmrRequestsData,
+  type MmrRequestsRole,
+  type MmrRequestsUser,
+  type ResetMmrRequestsOptions,
+} from './mmr-requests';
 // MMR sync API utilities (org-features/mmr-sync-api spec)
 export {
   loginMmrSync,

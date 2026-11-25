@@ -42,6 +42,10 @@ vi.mock('~/hooks/useMemberAccess', () => ({
   useMemberAccess: () => ({ canView: false, settled: false }),
 }));
 vi.mock('~/hooks/usePageNav', () => ({ usePageNav: () => undefined }));
+vi.mock('~/features/mmr-requests', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/features/mmr-requests')>()),
+  useMmrPendingCount: () => ({ data: undefined }),
+}));
 
 const ORG_PK = 7;
 const ADMIN_PK = 11;

@@ -63,6 +63,7 @@ from .test_herodraft import (
     reset_herodraft,
     warp_herodraft_round,
 )
+from .test_mmr_requests import mmr_requests_data, mmr_requests_reset
 from .test_mmr_sync import login_mmr_sync, reset_mmr_sync
 from .test_org_features import login_org_features, org_features_data, reset_org_features
 from .test_signup_history import reset_signup_history, signup_history_data
@@ -384,6 +385,8 @@ urlpatterns = [
         game_org_mmr_approve_setup,
         name="test-game-org-mmr-approve-setup",
     ),
+    path("mmr-requests/data/", mmr_requests_data, name="test-mmr-requests-data"),
+    path("mmr-requests/reset/", mmr_requests_reset, name="test-mmr-requests-reset"),
     path(
         "signup-history/data/",
         signup_history_data,

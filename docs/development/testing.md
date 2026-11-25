@@ -181,7 +181,7 @@ cy.loginAdmin().then(() => {
 ## Backend Tests
 
 ```bash
-just test::run 'python manage.py test -v 2'                   # whole suite, same as CI
+just test::backend::all                                       # whole suite, as CI runs it
 just test::run 'python manage.py test app.tests -v 2'         # one package
 just test::run 'python manage.py test tournament.tests.test_bracket -v 2'  # one module
 ```
@@ -207,8 +207,11 @@ Vitest, the promotion fixture check and the slot guards run in the
 without the Docker stack. The frontend typecheck runs in its own `Typecheck (frontend)`
 job in the same workflow.
 
-`just py::test` runs the same modules with pytest on the host (`backend/pytest.ini`,
-`backend/conftest.py`): same temp-file test DB and `DOTA_LOBBY_*` defaults as
+`just test::backend::all` runs each group in turn in this worktree's test stack, with the
+same `--parallel auto`, and prints a pass/fail and wall-time line per group.
+
+`just py::test` (or `just test::backend::pytest`) runs the same modules with pytest on
+the host (`backend/pytest.ini`, `backend/conftest.py`): same temp-file test DB and `DOTA_LOBBY_*` defaults as
 `BackendDiscoverRunner`, with `docker/.env.test` loaded. Like the container it needs
 Redis, on `localhost:6379`. `just test::run 'python -m pytest'` runs it in the container.
 

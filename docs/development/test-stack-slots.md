@@ -239,6 +239,25 @@ Other cookies stay shared on purpose:
 In Playwright fixtures, find cookies with `isCsrfCookie` / `isSessionCookie` from
 `fixtures/cookies.ts` rather than comparing against `csrftoken` or `sessionid`.
 
+## Resource limits
+
+Local tests share one CPU and memory budget, the `df-tests.slice` systemd user
+slice, so concurrent sessions can't saturate the host. Test-stack containers
+(compose `cgroup_parent`), `just test::run`, `just test::pw::*` and `just py::test`
+all run inside it; `scripts/test-limits.sh` applies the limits.
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `DF_TEST_CPUS` | `16` | Cores the slice may use in total |
+| `DF_TEST_MEM` | `40G` | Memory cap; going over OOM-kills inside the slice, not the desktop |
+| `DF_TEST_LIMITS` | `1` | `0` disables the slice |
+| `DJANGO_TEST_PROCESSES` | `6` | Workers for `--parallel auto` under `just test::run` |
+| `VITEST_MAX_WORKERS` | `4` | Vitest workers when `CI` is unset |
+
+`just test::limits` prints the cap and current usage. CI sets none of these. Redis
+stays outside the slice because it is shared across worktrees. Containers created
+before the change keep running unlimited until they are recreated.
+
 ## CI
 
 CI has no slot file and never allocates. With `GITHUB_ACTIONS=true` the helper uses a

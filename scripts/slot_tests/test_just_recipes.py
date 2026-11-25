@@ -152,6 +152,7 @@ def run(tmp_path: Path) -> Runner:
         "DF_SLOT_FILE": str(tmp_path / "env.slot"),
         "DF_BACKEND_ENV_FILE": str(tmp_path / "backend.env"),
         "DF_PW_RESULTS_DIR": str(tmp_path / "test-results"),
+        "DF_TEST_LIMITS": "0",
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
     for key in (
@@ -165,6 +166,7 @@ def run(tmp_path: Path) -> Runner:
         "DF_PW_KEEP_RUNS",
         "CI",
         "GITHUB_ACTIONS",
+        "DJANGO_TEST_PROCESSES",
     ):
         env.pop(key, None)
     return Runner(log, env)
@@ -189,6 +191,8 @@ def test_test_run_keeps_shell_semantics(run: Runner, cmd: str) -> None:
         "--rm",
         "--entrypoint",
         "",
+        "-e",
+        "DJANGO_TEST_PROCESSES=6",
         "backend",
         "sh",
         "-c",
@@ -199,7 +203,25 @@ def test_test_run_keeps_shell_semantics(run: Runner, cmd: str) -> None:
 def test_test_run_empty_cmd_uses_image_default(run: Runner) -> None:
     assert run("test::run", "").returncode == 0
     [call] = run.calls()
-    assert call.argv == [*SLOTS, "run", "--rm", "--entrypoint", "", "backend"]
+    assert call.argv == [
+        *SLOTS,
+        *("run", "--rm", "--entrypoint", ""),
+        *("-e", "DJANGO_TEST_PROCESSES=6", "backend"),
+    ]
+
+
+def test_test_run_respects_django_test_processes(run: Runner) -> None:
+    run.env["DJANGO_TEST_PROCESSES"] = "2"
+    assert run("test::run", "true").returncode == 0
+    [call] = run.calls()
+    assert "DJANGO_TEST_PROCESSES=2" in call.argv
+
+
+def test_test_run_leaves_django_test_processes_alone_in_ci(run: Runner) -> None:
+    run.env["CI"] = "true"
+    assert run("test::run", "true").returncode == 0
+    [call] = run.calls()
+    assert not any("DJANGO_TEST_PROCESSES" in a for a in call.argv)
 
 
 def test_test_run_other_service(run: Runner) -> None:

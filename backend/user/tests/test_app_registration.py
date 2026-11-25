@@ -81,6 +81,7 @@ class UserAppRegistrationTests(SimpleTestCase):
                 "discordbot_draftactivityinstance",
                 "org_orguser",
                 "org_orgusergamemmr",
+                "org_mmrchangerequest",
                 "org_orgfeature",
                 "org_orgsettings",
                 "org_orgapitoken",
