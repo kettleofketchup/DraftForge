@@ -207,6 +207,20 @@ class OpenTests(ReadyCheckServiceTestCase):
         self.assertEqual([asked[s.pk] for s in waiting], [1, 2, 3])
         self.assertIsNone(asked[approved.pk])
 
+    def test_cancel_records_computed_waitlist_rank(self) -> None:
+        event = self.make_event(ready_check_scope=ReadyCheckScope.MAIN_AND_FILL)
+        approved = self._signup(SignupStatus.APPROVED, event=event)
+        waiting = self._stale_waitlist(event, 3)
+        self._open(event)
+        with mock.patch(NOTIFY):
+            cancel_ready_check(event, actor=self.staff_actor, reason="test")
+        withdrawn = {
+            r.signup_id: r.after["waitlist_position"]
+            for r in self._rows(SignupAction.READY_CHECK_WITHDRAWN, event)
+        }
+        self.assertEqual([withdrawn[s.pk] for s in waiting], [1, 2, 3])
+        self.assertIsNone(withdrawn[approved.pk])
+
     def _open_query_count(self, approved: int, waitlisted: int) -> int:
         event = self.make_event(ready_check_scope=ReadyCheckScope.MAIN_AND_FILL)
         for _ in range(approved):

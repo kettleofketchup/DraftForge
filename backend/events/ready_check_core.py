@@ -16,6 +16,7 @@ from events.ledger import (
     record_signup_change,
     snapshot,
 )
+from events.line import ranks_if_waitlisted, waitlist_rank
 from events.models import Event, EventSignup, ReadyCheck, ReadyCheckEntry, RollCallMode
 from events.ready_check_constants import (
     ReadyCheckConfirmVia,
@@ -119,6 +120,7 @@ def cancel_ready_check(event: Event, *, actor: SignupActor, reason: str) -> bool
             "user", "signup"
         )
     )
+    ranks = ranks_if_waitlisted(locked, [entry.signup for entry in pending])
     for entry in pending:
         record_signup_change(
             event=locked,
@@ -126,7 +128,11 @@ def cancel_ready_check(event: Event, *, actor: SignupActor, reason: str) -> bool
             actor=actor,
             action=SignupAction.READY_CHECK_WITHDRAWN,
             signup=entry.signup,
-            after=snapshot(entry.signup) if entry.signup is not None else None,
+            after=(
+                snapshot(entry.signup, waitlist_rank=ranks.get(entry.signup.pk))
+                if entry.signup is not None
+                else None
+            ),
             reason=reason,
             correlation_id=correlation_id,
         )
@@ -231,7 +237,7 @@ def enrol_signup_if_live(
         actor=actor,
         action=SignupAction.READY_CHECK_ASKED,
         signup=signup,
-        after=snapshot(signup),
+        after=snapshot(signup, waitlist_rank=waitlist_rank(signup)),
         reason="ready_check_late_enrolment",
         correlation_id=f"rc{check.pk}:enrol",
     )

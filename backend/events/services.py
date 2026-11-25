@@ -574,7 +574,7 @@ def decline_signup(
 
     if existing.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError("Already declined")
-    before = snapshot(existing)
+    before = _ranked_snapshot(existing)
     prior_status = _withdraw(existing, by_member=_by_member(actor))
     entry = _record_leaf(
         existing,
@@ -827,7 +827,7 @@ def approve_signup(
     in_roll_call = signup.event.state == EventState.ROLL_CALL
     if in_roll_call:
         lock_event(signup.event)
-    before = snapshot(signup)
+    before = _ranked_snapshot(signup)
     extra: dict[str, Any] | None = None
 
     # Apply MMR override when provided by an admin

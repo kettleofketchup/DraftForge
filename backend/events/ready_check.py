@@ -25,7 +25,7 @@ from events.ledger import (
     record_signup_change,
     snapshot,
 )
-from events.line import waitlist_rank, waitlist_ranks
+from events.line import ranks_if_waitlisted, waitlist_rank
 from events.models import (
     Event,
     EventSignup,
@@ -173,14 +173,6 @@ def _snapshot_settings(event: Event) -> dict[str, Any]:
     }
 
 
-def _ranks_if_waitlisted(
-    locked: Event, signups: Collection[EventSignup | None]
-) -> dict[int, int]:
-    if any(s is not None and s.status == SignupStatus.WAITLISTED for s in signups):
-        return waitlist_ranks(locked)
-    return {}
-
-
 def _reset_confirmed(
     locked: Event, signup: EventSignup, *, actor: SignupActor, correlation_id: str
 ) -> None:
@@ -308,7 +300,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
         entries.append(entry)
     ReadyCheckEntry.objects.bulk_create(entries)
 
-    ranks = _ranks_if_waitlisted(locked, signups)
+    ranks = ranks_if_waitlisted(locked, signups)
     for signup in signups:
         record_signup_change(
             event=locked,
@@ -582,7 +574,7 @@ def _record_member_rows(
     seat: bool = False,
 ) -> list[EventSignup]:
     seated: list[EventSignup] = []
-    ranks = _ranks_if_waitlisted(locked, [entry.signup for entry in entries])
+    ranks = ranks_if_waitlisted(locked, [entry.signup for entry in entries])
     for entry in entries:
         signup = entry.signup
         rank = ranks.get(signup.pk) if signup is not None else None
@@ -723,7 +715,7 @@ def _drop(
     dropped_user_ids: list[int] = []
     dropped_signups: list[EventSignup] = []
     first_drop: SignupLedgerEntry | None = None
-    ranks = _ranks_if_waitlisted(locked, [entry.signup for entry in entries])
+    ranks = ranks_if_waitlisted(locked, [entry.signup for entry in entries])
     dropped_ranks: list[int] = []
     for entry in entries:
         signup = entry.signup

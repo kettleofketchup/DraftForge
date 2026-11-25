@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Self
 
@@ -156,6 +156,14 @@ def waitlist_ranks(event: Event) -> dict[int, int]:
         .values_list("pk", flat=True)
     )
     return {pk: rank for rank, pk in enumerate(pks, start=1)}
+
+
+def ranks_if_waitlisted(
+    event: Event, signups: Collection[EventSignup | None]
+) -> dict[int, int]:
+    if any(s is not None and s.status == SignupStatus.WAITLISTED for s in signups):
+        return waitlist_ranks(event)
+    return {}
 
 
 def waitlist_rank(signup: EventSignup) -> int | None:
