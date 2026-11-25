@@ -554,6 +554,7 @@ _TOURNAMENT_RETIRED_DEFS = {
     ),
     "app.tests.test_team_roster_signal": ("TeamRosterSignalTests",),
     "app.tests.test_team_references": (
+        "DraftRestartWithLinkedRoundsTests",
         "TeamReferencesFixture",
         "TeamReferencesTests",
         "TeamUsageTests",

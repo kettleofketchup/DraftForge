@@ -9,6 +9,7 @@ from django.db import models
 from django.db.models import Q, QuerySet
 
 from draft.models import (
+    DraftRound,
     DraftTeam,
     HeroDraft,
     HeroDraftChatMembership,
@@ -17,10 +18,16 @@ from draft.models import (
 from tournament.models import Game, Team, TeamLog, Tournament
 
 _COUNTED_ON_DELETE = (models.CASCADE, models.SET_NULL)
-# Audit rows outlive the team (SET_NULL); chat dies with it. Neither blocks a reset or delete.
+# Audit rows and pick history outlive the team (SET_NULL); chat dies with it.
+# None of them blocks a reset or delete.
 _EXCLUDED_KEYS = frozenset(
-    f"{model._meta.label}.team"
-    for model in (TeamLog, HeroDraftChatMessage, HeroDraftChatMembership)
+    {
+        *(
+            f"{model._meta.label}.team"
+            for model in (TeamLog, HeroDraftChatMessage, HeroDraftChatMembership)
+        ),
+        f"{DraftRound._meta.label}.drafting_team",
+    }
 )
 
 

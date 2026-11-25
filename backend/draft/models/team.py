@@ -786,6 +786,13 @@ class DraftRound(models.Model):
         null=True,
         blank=True,
     )
+    drafting_team = models.ForeignKey(
+        Team,
+        related_name="drafted_rounds",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     pick_number = models.IntegerField(
         default=1,
         blank=True,
@@ -845,6 +852,14 @@ class DraftRound(models.Model):
 
         tournament = self.draft.tournament
         prefetched = getattr(tournament, "_prefetched_objects_cache", {}).get("teams")
+        if self.drafting_team_id is not None:
+            if prefetched is not None:
+                for t in prefetched:
+                    if t.pk == self.drafting_team_id:
+                        return t
+            stored = Team.objects.filter(pk=self.drafting_team_id).first()
+            if stored is not None:
+                return stored
         if prefetched is not None:
             matches = [t for t in prefetched if t.captain_id == self.captain_id]
             if len(matches) <= 1:
@@ -857,6 +872,10 @@ class DraftRound(models.Model):
             .order_by(*ORIGINAL_CAPTAINCY_FIRST)
             .first()
         )
+
+    def assign_team(self, team: Team | None) -> None:
+        self.captain = team.captain if team else None
+        self.drafting_team = team
 
     def pick_player(self, user: CustomUser) -> None:
         if self.choice:
