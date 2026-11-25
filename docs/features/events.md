@@ -110,6 +110,8 @@ Deleting a series (`events.services.teardown_event_repeater`) also deletes its `
 
 The pre-day announcement, attendance reminder, profile reminder and series new-event posts share one **announcement channel**. The event form shows its picker whenever any of them is on.
 
+Each message toggle has a **Preview** button that shows exactly what Discord will receive for the values in the form, without sending or saving anything. See [Discord Message Preview](events/discord-message-preview.md).
+
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
 
 ### RSVP & Signups
