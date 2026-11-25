@@ -53,9 +53,10 @@ class Command(BaseCommand):
         for user in users:
             try:
                 if check_only:
-                    # Just check if current avatar URL is valid
-                    current_url = f"https://cdn.discordapp.com/avatars/{user.discordId}/{user.avatar}"
-                    if not user._is_avatar_url_valid(current_url):
+                    current_url = user.discord_avatar_cdn_url
+                    if current_url is None or not user._is_avatar_url_valid(
+                        current_url
+                    ):
                         invalid_count += 1
                         self.stdout.write(
                             self.style.WARNING(
