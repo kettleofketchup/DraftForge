@@ -12,9 +12,10 @@ from app.internal_client import (
     create_tournament_log,
     update_tournament_log,
 )
-from discordbot.dm import DMRequest, send_dm
+from discordbot.dm import DELIVERED_OUTCOMES, DMRequest, send_dm, task_run_id
 from discordbot.dm_keys import tournament_draft_link_key, tournament_herodraft_link_key
-from discordbot.models import DMKind, DMStatus, DMSubject
+from discordbot.models import DMKind, DMSubject
+from discordbot.utils import DiscordAuthError
 from events.discord.tournament_embeds import (
     build_draft_link_components,
     build_draft_link_embed,
@@ -32,13 +33,20 @@ from tournament.internal_client import (
 
 logger = get_logger(__name__)
 
-DELIVERED_STATUSES: frozenset[object] = frozenset(
-    {DMStatus.SENT, DMStatus.SKIPPED_TEST_MODE, "duplicate"}
-)
 
-
-def _task_id(task: Task) -> str:
-    return str(task.request.id or "local")
+def _fail_log_on_auth_error(
+    tournament_log_id: int | None, sent: int, total: int, label: str
+) -> None:
+    if tournament_log_id:
+        update_tournament_log(
+            tournament_log_id,
+            recipient_count=sent,
+            message=(
+                f"Stopped sending {label} after {sent}/{total}: "
+                "Discord rejected the bot token"
+            ),
+            success=False,
+        )
 
 
 @shared_task(bind=True)
@@ -85,29 +93,36 @@ def send_tournament_draft_links(
     )
     tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
 
-    task_id = _task_id(self)
+    task_id = task_run_id(self)
     sent = 0
     failed_users = []
-    for p in participants:
-        outcome = send_dm(
-            DMRequest(
-                kind=DMKind.TOURNAMENT_DRAFT_LINK,
-                idempotency_key=tournament_draft_link_key(
-                    task_id=task_id, discord_id=p.discord_id
-                ),
-                discord_user_id=p.discord_id or None,
-                recipient_user_id=p.user_pk,
-                subject=(DMSubject.TOURNAMENT, tournament_id),
-                tournament_log_id=tournament_log_id,
-                context={"draft_id": draft_id, "activity": invite_url is not None},
-                embed=embed,
-                components=components,
+    try:
+        for p in participants:
+            outcome = send_dm(
+                DMRequest(
+                    kind=DMKind.TOURNAMENT_DRAFT_LINK,
+                    idempotency_key=tournament_draft_link_key(
+                        task_id=task_id, discord_id=p.discord_id
+                    ),
+                    discord_user_id=p.discord_id or None,
+                    recipient_user_id=p.user_pk,
+                    organization_id=tournament.organization_id,
+                    subject=(DMSubject.TOURNAMENT, tournament_id),
+                    tournament_log_id=tournament_log_id,
+                    context={"draft_id": draft_id, "activity": invite_url is not None},
+                    embed=embed,
+                    components=components,
+                )
             )
+            if outcome.status in DELIVERED_OUTCOMES:
+                sent += 1
+            else:
+                failed_users.append(p.username or p.discord_id)
+    except DiscordAuthError:
+        _fail_log_on_auth_error(
+            tournament_log_id, sent, len(participants), "draft links"
         )
-        if outcome.status in DELIVERED_STATUSES:
-            sent += 1
-        else:
-            failed_users.append(p.username or p.discord_id)
+        raise
 
     message = f"Sent draft link to {sent}/{len(participants)} participants"
     if failed_users:
@@ -178,33 +193,40 @@ def send_tournament_herodraft_links(
     )
     tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
 
-    task_id = _task_id(self)
+    task_id = task_run_id(self)
     sent = 0
     failed_users = []
-    for p in participants:
-        outcome = send_dm(
-            DMRequest(
-                kind=DMKind.TOURNAMENT_HERODRAFT_LINK,
-                idempotency_key=tournament_herodraft_link_key(
-                    task_id=task_id, discord_id=p.discord_id
-                ),
-                discord_user_id=p.discord_id or None,
-                recipient_user_id=p.user_pk,
-                subject=(DMSubject.TOURNAMENT, tournament_id),
-                tournament_log_id=tournament_log_id,
-                context={
-                    "draft_id": herodraft_id,
-                    "game_id": game_id,
-                    "activity": invite_url is not None,
-                },
-                embed=embed,
-                components=components,
+    try:
+        for p in participants:
+            outcome = send_dm(
+                DMRequest(
+                    kind=DMKind.TOURNAMENT_HERODRAFT_LINK,
+                    idempotency_key=tournament_herodraft_link_key(
+                        task_id=task_id, discord_id=p.discord_id
+                    ),
+                    discord_user_id=p.discord_id or None,
+                    recipient_user_id=p.user_pk,
+                    organization_id=tournament.organization_id,
+                    subject=(DMSubject.TOURNAMENT, tournament_id),
+                    tournament_log_id=tournament_log_id,
+                    context={
+                        "draft_id": herodraft_id,
+                        "game_id": game_id,
+                        "activity": invite_url is not None,
+                    },
+                    embed=embed,
+                    components=components,
+                )
             )
+            if outcome.status in DELIVERED_OUTCOMES:
+                sent += 1
+            else:
+                failed_users.append(p.username or p.discord_id)
+    except DiscordAuthError:
+        _fail_log_on_auth_error(
+            tournament_log_id, sent, len(participants), "hero draft links"
         )
-        if outcome.status in DELIVERED_STATUSES:
-            sent += 1
-        else:
-            failed_users.append(p.username or p.discord_id)
+        raise
 
     message = (
         f"Sent hero draft link to {sent}/{len(participants)} players ({team_names})"

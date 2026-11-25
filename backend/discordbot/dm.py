@@ -10,7 +10,7 @@ from typing import Literal
 from uuid import uuid4
 
 import requests
-from celery import current_task
+from celery import Task, current_task
 from django.conf import settings
 
 from discordbot.dm_ledger import PERMANENT_DM_ERROR_CODES, ErrorClass
@@ -60,6 +60,14 @@ class DMOutcome:
 
 
 OnClaimed = Callable[[int, DMStatus], None]
+
+DELIVERED_OUTCOMES: frozenset[DMStatus | Literal["duplicate", "ledger_unavailable"]] = (
+    frozenset({DMStatus.SENT, DMStatus.SKIPPED_TEST_MODE, "duplicate"})
+)
+
+
+def task_run_id(task: Task) -> str:
+    return str(task.request.id or "local")
 
 
 class _PayloadError(Exception):

@@ -19,12 +19,15 @@ from discordbot.models import (
 )
 from discordbot.schemas import DMClaimBody
 from discordbot.tests.ledger_bridge import ledger_bridge
+from discordbot.utils import DiscordAuthError
 from events.models import Event, EventRepeater, OrgEventDefaults
 from events.tournament_tasks import (
     send_tournament_draft_links,
     send_tournament_herodraft_links,
     sweep_auto_herodrafts,
 )
+from league.models import League
+from org.models import Organization
 from tournament.models import Tournament
 from tournament.schemas import (
     AutoHeroDraftGameSchema,
@@ -745,3 +748,124 @@ class TournamentLinkLedgerRowTest(TestCase):
         self.assertEqual(row.tournament_log_id, self.tlog.pk)
         self.assertEqual(row.recipient_id, self.user.pk)
         self.assertEqual(row.discord_message_id, "900200")
+
+
+@override_settings(TEST=False)
+class TournamentLinkAuthErrorTest(TestCase):
+    def setUp(self) -> None:
+        self.enterContext(
+            patch(
+                "events.tournament_tasks.create_activity_notification_invite",
+                return_value=None,
+            )
+        )
+        self.enterContext(
+            patch(
+                "discordbot.dm._rate_limited_request",
+                side_effect=DiscordAuthError("401: Unauthorized"),
+            )
+        )
+        self.mock_update = self.enterContext(
+            patch("events.tournament_tasks.update_tournament_log")
+        )
+        self.org = Organization.objects.create(name="Auth Org")
+        league = League.objects.create(
+            name="Auth League", organization=self.org, steam_league_id=77401
+        )
+        self.tournament = Tournament.objects.create(
+            name="Auth", state="in_progress", date_played=timezone.now(), league=league
+        )
+        self.tlog = DiscordTournamentLog.objects.create(
+            tournament=self.tournament, notification_type="draft_link", message="..."
+        )
+        self.task = TournamentTaskSchema(
+            id=self.tournament.pk,
+            name="Auth",
+            state="in_progress",
+            discord_send_draft_link=True,
+            discord_send_herodraft_link=True,
+            organization_id=self.org.pk,
+        )
+        users = [
+            CustomUser.objects.create_user(username=f"auth_p{i}", password="x")
+            for i in (1, 2)
+        ]
+        self.participants = [
+            TournamentParticipantSchema(
+                user_pk=u.pk, discord_id=f"{i}11", username=u.username
+            )
+            for i, u in enumerate(users, start=1)
+        ]
+
+    def _assert_failed_log(self) -> None:
+        self.mock_update.assert_called_once()
+        kwargs = self.mock_update.call_args.kwargs
+        self.assertEqual(self.mock_update.call_args.args, (self.tlog.pk,))
+        self.assertIs(kwargs["success"], False)
+        self.assertEqual(kwargs["recipient_count"], 0)
+        self.assertIn("Discord rejected the bot token", kwargs["message"])
+        row = DiscordDM.objects.get()
+        self.assertEqual(row.status, DMStatus.FAILED)
+        self.assertEqual(row.organization_id, self.org.pk)
+
+    def test_draft_links_fail_log_and_reraise(self) -> None:
+        with (
+            patch(
+                "events.tournament_tasks.get_tournament_for_task",
+                return_value=self.task,
+            ),
+            patch(
+                "events.tournament_tasks.get_tournament_participants",
+                return_value=self.participants,
+            ),
+            patch(
+                "events.tournament_tasks.create_tournament_log",
+                return_value=MagicMock(ok=True, json=lambda: {"id": self.tlog.pk}),
+            ),
+            ledger_bridge(),
+            self.assertRaises(DiscordAuthError),
+        ):
+            send_tournament_draft_links(self.tournament.pk, 42)
+        self._assert_failed_log()
+
+    def test_herodraft_links_fail_log_and_reraise(self) -> None:
+        with (
+            patch(
+                "events.tournament_tasks.get_tournament_for_task",
+                return_value=self.task,
+            ),
+            patch(
+                "events.tournament_tasks.get_match_participants",
+                return_value=self.participants,
+            ),
+            patch(
+                "events.tournament_tasks.create_tournament_log",
+                return_value=MagicMock(ok=True, json=lambda: {"id": self.tlog.pk}),
+            ),
+            ledger_bridge(),
+            self.assertRaises(DiscordAuthError),
+        ):
+            send_tournament_herodraft_links(self.tournament.pk, 7, 3, "A", "B")
+        self._assert_failed_log()
+
+
+class TournamentTaskOrganizationTest(TestCase):
+    def test_internal_view_returns_league_org(self) -> None:
+        org = Organization.objects.create(name="Task Org")
+        league = League.objects.create(
+            name="Task League", organization=org, steam_league_id=77402
+        )
+        with_league = Tournament.objects.create(
+            name="T1", state="future", date_played=timezone.now(), league=league
+        )
+        without = Tournament.objects.create(
+            name="T2", state="future", date_played=timezone.now()
+        )
+        client = APIClient()
+        client.credentials(HTTP_X_INTERNAL_TOKEN="org-token")
+        with override_settings(INTERNAL_SERVICE_TOKEN="org-token"):
+            got = [
+                client.get(f"/api/internal/tournaments/{t.pk}/full/").json()
+                for t in (with_league, without)
+            ]
+        self.assertEqual([g.get("organization_id") for g in got], [org.pk, None])

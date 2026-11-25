@@ -264,6 +264,7 @@ def send_test_notification(request: Request, event_pk: int) -> Response:
                     request_id=uuid4().hex,
                 ),
                 discord_user_id=discord_user_id,
+                organization_id=event.organization_id,
                 subject=(DMSubject.EVENT, event_pk),
                 embed=embed,
                 components=components,

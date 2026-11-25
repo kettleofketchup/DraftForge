@@ -14,6 +14,8 @@ from discordbot.models import (
     DMStatus,
     DMSubject,
 )
+from discordbot.utils import DiscordAuthError
+from league.models import League
 from lobby import services, states, tasks
 from lobby.client import DotaLobbyError, DotaLobbyUnavailable
 from lobby.models import GameLobby
@@ -28,6 +30,7 @@ from lobby.tests.helpers import (
     make_tournament,
     make_user,
 )
+from org.models import Organization
 from tournament.choices import GameMode
 
 
@@ -680,3 +683,32 @@ class LobbyInfoTests(TaskTestBase):
             self.run_task(tasks.send_lobby_info, self.row.pk), "Config disabled"
         )
         send_dm.assert_not_called()
+
+    @override_settings(TEST=False)
+    def test_lobby_info_rows_carry_tournament_org(self):
+        org = Organization.objects.create(name="Lobby Info Org")
+        tournament = self.game.tournament
+        tournament.league = League.objects.create(
+            name="Lobby Info League", organization=org, steam_league_id=77301
+        )
+        tournament.save()
+        self._discord()
+        self.run_task(tasks.send_lobby_info, self.row.pk)
+        self.assertEqual(
+            set(DiscordDM.objects.values_list("organization_id", flat=True)),
+            {org.pk},
+        )
+
+    @override_settings(TEST=False)
+    @mock.patch(
+        "discordbot.dm._rate_limited_request",
+        side_effect=DiscordAuthError("401: Unauthorized"),
+    )
+    def test_auth_error_fails_log_and_reraises(self, _request):
+        with self.assertRaises(DiscordAuthError):
+            self.run_task(tasks.send_lobby_info, self.row.pk)
+        log = DiscordTournamentLog.objects.get()
+        self.assertIs(log.success, False)
+        self.assertEqual(log.recipient_count, 0)
+        self.assertIn("Discord rejected the bot token", log.message)
+        self.assertEqual(DiscordDM.objects.count(), 1)

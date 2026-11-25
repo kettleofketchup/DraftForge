@@ -27,11 +27,12 @@ def get_tournament_for_task(request: Request, tournament_id: int) -> Response:
     """Get tournament config data for Celery tasks."""
 
     try:
-        t = Tournament.objects.get(pk=tournament_id)
+        t = Tournament.objects.select_related("league").get(pk=tournament_id)
     except Tournament.DoesNotExist:
         return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
     return Response(
         {
+            "organization_id": t.league.organization_id if t.league else None,
             "id": t.pk,
             "name": t.name,
             "state": t.state,
