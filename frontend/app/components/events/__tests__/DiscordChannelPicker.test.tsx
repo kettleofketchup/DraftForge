@@ -169,3 +169,118 @@ describe('DiscordChannelPicker kind', () => {
     expect(screen.queryByText('general')).not.toBeInTheDocument();
   });
 });
+
+const WITH_ANNOUNCEMENTS: DiscordChannel[] = [
+  { id: '1', name: 'general', type: 0, type_label: 'text' },
+  { id: '222', name: 'announcements', type: 0, type_label: 'text' },
+];
+
+describe('DiscordChannelPicker clearable', () => {
+  it('shows the clear label with the fallback channel name', async () => {
+    mockedGetChannels.mockResolvedValue(WITH_ANNOUNCEMENTS);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        clearable={{
+          label: 'Use announcement channel',
+          fallbackChannelId: '222',
+        }}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('picker')).toHaveTextContent(
+        'Use announcement channel (#announcements)',
+      ),
+    );
+  });
+
+  it('shows the bare clear label when the fallback is not in the list', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        clearable={{
+          label: 'Use announcement channel',
+          fallbackChannelId: '999',
+        }}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.getByTestId('picker')).toHaveTextContent(
+      /^Use announcement channel$/,
+    );
+  });
+
+  it('clear button calls onChange with empty string', async () => {
+    mockedGetChannels.mockResolvedValue(WITH_ANNOUNCEMENTS);
+    const onChange = vi.fn();
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value="1"
+        onChange={onChange}
+        clearable={{ label: 'No channel selected' }}
+        data-testid="picker"
+      />,
+    );
+    const clear = screen.getByTestId('picker-clear');
+    expect(clear).toHaveAccessibleName('Clear channel');
+    fireEvent.click(clear);
+    expect(onChange).toHaveBeenCalledWith('');
+  });
+
+  it('no clear button when value is empty', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        clearable={{ label: 'No channel selected' }}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.queryByTestId('picker-clear')).not.toBeInTheDocument();
+    expect(screen.getByTestId('picker')).toHaveTextContent(
+      'No channel selected',
+    );
+  });
+
+  it('no clear button when not clearable', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value="1"
+        onChange={vi.fn()}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.queryByTestId('picker-clear')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Clear channel' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps "Select channel" without clearable', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.getByTestId('picker')).toHaveTextContent('Select channel');
+  });
+});
