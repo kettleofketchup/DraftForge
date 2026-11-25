@@ -483,8 +483,8 @@ other teams. These requests can reopen a placed team by clearing its placement:
   reopens the team that lost before;
 - `POST /api/bracket/tournaments/{tid}/save/` (the bracket toolbar's Save), when the saved
   bracket clears or removes a result;
-- `POST /api/steam/games/{id}/link-match/`, `DELETE /api/steam/games/{id}/unlink-match/`
-  and `POST /api/steam/suggestions/{id}/confirm/`, when linking or unlinking a Steam match
+- `DELETE /api/steam/games/{id}/unlink-match/` and
+  `POST /api/steam/suggestions/{id}/confirm/`, when unlinking or confirming a Steam match
   changes or clears the game's winner;
 - `PATCH /api/teams/{id}/` with `placement: null`.
 
