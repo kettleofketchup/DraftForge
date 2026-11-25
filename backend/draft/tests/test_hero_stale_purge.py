@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from draft.models import (
     DraftTeam,
     HeroDraft,
@@ -31,6 +31,7 @@ from draft.models import (
     HeroDraftState,
 )
 from tournament.models import Game, Team, Tournament
+from user.models import PositionsModel
 
 
 def _make_user(username):

@@ -5,12 +5,13 @@ from django.utils import timezone
 from django.utils import timezone as tz
 from rest_framework.exceptions import ValidationError
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event, EventRepeater
 from events.serializers import EventSerializer
 from league.models import League
 from org.models import Organization
+from user.models import PositionsModel
 
 
 class EventRepeaterNameSerializerTest(TestCase):

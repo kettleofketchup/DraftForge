@@ -11,7 +11,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from draft.models import Draft, DraftEvent, DraftRound, TeamDraftState
 from tournament.models import Game, Team, TeamLog, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
@@ -19,6 +19,7 @@ from tournament.serializers.team import TeamSerializer
 from tournament.services.team_leadership import teams_with_leadership_problems
 from tournament.services.team_signals import TeamRosterChange, team_roster_changed
 from tournament.tests.test_team_management import TeamManagementFixture
+from user.models import PositionsModel
 
 _discord_ids = itertools.count(571000)
 

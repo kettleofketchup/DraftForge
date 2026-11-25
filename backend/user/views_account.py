@@ -16,7 +16,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from app.permissions import IsStaff
 from draft.models import DraftRound, DraftTeam
 from events.eligibility import (
@@ -36,7 +36,7 @@ from user.cache import serialize_user_core
 # nickname/avatar/positions MUST list both as dependencies, otherwise PATCH
 # /api/users/me/profile/base/ or /game/dota/ won't invalidate the cached
 # response. See backend/user/tests/test_cacheops.py for the grep guardrail.
-from user.models import BaseUserProfile, DotaUserProfile
+from user.models import BaseUserProfile, DotaUserProfile, ProfileClaimRequest
 from user.querysets import with_user_profiles
 from user.serializers import UserSerializer
 from user.steam_accounts import steam_account_id_holder, steam_account_id_identity

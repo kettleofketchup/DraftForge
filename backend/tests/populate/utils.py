@@ -16,12 +16,13 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from discordbot.services.users import get_discord_members_data
 from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_for, validate_org_mmr
 from org.models import Organization, OrgUser, OrgUserGameMmr, PromoSend
 from org.standing import api as standing
+from user.models import PositionsModel
 
 from .avatars import apply_committed_avatars
 from .constants import (

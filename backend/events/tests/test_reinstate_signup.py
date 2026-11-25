@@ -20,12 +20,13 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import reinstate_signup
 from events.tests.actors import SYSTEM
 from org.models import Organization
+from user.models import PositionsModel
 
 
 class ReinstateSignupTest(TestCase):
