@@ -764,6 +764,7 @@ class Draft(models.Model):
         draft_round = DraftRound.objects.create(
             draft=self,
             captain=next_team.captain,
+            drafting_team=next_team,
             pick_number=pick_number,
             pick_phase=phase,
             was_tie=bool(tie_resolution),

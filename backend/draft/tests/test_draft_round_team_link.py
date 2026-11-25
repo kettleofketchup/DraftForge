@@ -6,6 +6,8 @@ from django.utils import timezone
 
 from app.models import CustomUser
 from draft.models import Draft, DraftRound
+from draft.services.shuffle import reassign_round_captain
+from draft.tests.team_fixtures import TimedDraftFixture
 from league.models import League
 from org.models import Organization
 from tournament.models import Team, Tournament
@@ -143,3 +145,59 @@ class BuildRoundsTeamTests(TestCase):
                     self.assertEqual(
                         rnd.drafting_team.tournament_id, draft.tournament_id
                     )
+
+
+class ShuffleTeamLinkTests(TestCase):
+    def setUp(self) -> None:
+        self.fx = TimedDraftFixture(
+            style="shuffle",
+            num_teams=3,
+            timer_enabled=False,
+            prefix="shl",
+            captain_mmrs=[3000, 5000, 7000],
+        )
+        self.draft = self.fx.draft
+        self.teams = self.fx.teams
+
+    def rounds(self) -> list[DraftRound]:
+        return list(
+            DraftRound.objects.nocache()
+            .filter(draft=self.draft)
+            .order_by("pick_number")
+        )
+
+    def test_build_shuffle_rounds_first_round_has_team(self) -> None:
+        first, *rest = self.rounds()
+        self.assertEqual(first.captain_id, self.teams[0].captain_id)
+        self.assertEqual(first.drafting_team_id, self.teams[0].pk)
+        for rnd in rest:
+            self.assertIsNone(rnd.captain_id)
+            self.assertIsNone(rnd.drafting_team_id)
+
+    def test_create_next_shuffle_round_sets_team(self) -> None:
+        result = self.draft.create_next_shuffle_round()
+        rnd = DraftRound.objects.nocache().get(pk=result["round"].pk)
+        self.assertEqual(rnd.drafting_team_id, self.teams[0].pk)
+        self.assertEqual(rnd.drafting_team_id, rnd.team.pk)
+
+    def test_reassign_round_captain_replaces_team(self) -> None:
+        rnd = self.rounds()[0]
+        self.assertEqual(rnd.drafting_team_id, self.teams[0].pk)
+        reassign_round_captain(self.draft, rnd, exclude_team_ids={self.teams[0].pk})
+        fresh = DraftRound.objects.nocache().get(pk=rnd.pk)
+        self.assertEqual(fresh.drafting_team_id, self.teams[1].pk)
+        self.assertEqual(fresh.captain_id, self.teams[1].captain_id)
+
+    def test_undo_resets_next_shuffle_round_team(self) -> None:
+        first = self.rounds()[0]
+        response = self.fx.pick(first, self.fx.staff, self.fx.players[0])
+        self.assertEqual(response.status_code, 201, response.data)
+        second = self.rounds()[1]
+        self.assertIsNotNone(second.drafting_team_id)
+        self.assertEqual(second.drafting_team.captain_id, second.captain_id)
+
+        response = self.fx.undo(self.fx.staff)
+        self.assertEqual(response.status_code, 200, response.data)
+        second = self.rounds()[1]
+        self.assertIsNone(second.captain_id)
+        self.assertIsNone(second.drafting_team_id)
