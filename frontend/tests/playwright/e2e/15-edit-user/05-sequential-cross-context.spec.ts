@@ -29,9 +29,8 @@ let leaguePk: number;
 
 // Sequential: this spec edits a user on the league page and then asserts
 // the new value is visible on the org page. Any parallel write on the
-// same user would invalidate the read. `.serial` forces tests within this
-// file to run in order; we also share `edit_user_alpha` with spec
-// 07-sequential-multi-user (which is also `.serial`) — see USER_EDIT_USERS.
+// same user would invalidate the read, so no other spec may use
+// `edit_user_alpha` — see USER_EDIT_USERS.
 const TARGET_USERNAME = 'edit_user_alpha';
 
 test.describe.serial('Cross-Context Cache Invalidation (@cicd)', () => {
