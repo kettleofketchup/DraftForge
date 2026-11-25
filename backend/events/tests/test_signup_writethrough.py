@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from events.constants import SignupStatus
 from events.eligibility import claim_friend_id
@@ -24,6 +24,7 @@ from org.mmr import org_mmr_for, set_org_mmr
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
 from steam.services.account_lookup import SteamLookupRateLimited
+from user.models import PositionsModel
 
 
 class SignupWritethroughTest(TestCase):

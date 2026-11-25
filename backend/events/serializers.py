@@ -588,6 +588,9 @@ class EventSerializer(
     user_can_manage_event_staff = serializers.BooleanField(
         read_only=True, default=False
     )
+    manage_viewer_pk = serializers.IntegerField(
+        read_only=True, allow_null=True, default=None
+    )
     user_is_event_operator = serializers.BooleanField(read_only=True, default=False)
     host = EventStaffUserSerializer(read_only=True)
     helpers = EventStaffUserSerializer(many=True, read_only=True)
@@ -719,6 +722,7 @@ class EventSerializer(
             "dota_lobby_password",
             "user_can_manage",
             "user_can_manage_event_staff",
+            "manage_viewer_pk",
             "user_is_event_operator",
             "is_off_schedule",
         ]
@@ -849,15 +853,9 @@ class EventSerializer(
                 "event_repeater",
                 self.instance.event_repeater if self.instance else None,
             )
-            # On create, fall back to False when the field is absent — matches
-            # original behavior so callers that don't explicitly set this field
-            # aren't surprised. The model default of True remains a latent
-            # inconsistency (events get saved with reminder=True but the
-            # validator silently allows it on create); fix is out of scope here
-            # since correcting it would require a model migration + sweep of
-            # ~10 Playwright tests that don't pass this field. Tracked
-            # separately. The validator still rejects explicit signup_reminder=True
-            # on a single event.
+            # On create an absent field is validated as False, but the model
+            # default (True) is what gets saved, so a single event can still end
+            # up with reminder=True. An explicit True on a single event is rejected.
             default_reminder = (
                 self.instance.discord_signup_reminder if self.instance else False
             )

@@ -4,13 +4,14 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from draft.models import HeroDraft, HeroDraftChatMembership, HeroDraftChatMessage
 from draft.services.hero import new_herodraft_for_game
 from draft.services.hero_chat import repoint_chat_attribution
 from org.models import Organization
 from tournament.models import Game, Team, Tournament
 from user.discord_accounts import merge_discord_accounts
+from user.models import ProfileClaimRequest
 
 Channel = HeroDraftChatMessage.Channel
 

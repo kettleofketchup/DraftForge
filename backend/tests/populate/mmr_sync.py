@@ -11,7 +11,7 @@ from typing import Any
 from django.db import transaction
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from org.features import FeatureKey, set_org_feature
 from org.mmr import set_org_mmr
@@ -34,6 +34,7 @@ from tests.data.mmr_sync import (
 )
 from tests.data.models import TestOrganization, TestUser
 from tests.populate.utils import ensure_org_user
+from user.models import PositionsModel
 
 
 def _ensure_org(data: TestOrganization) -> Organization:

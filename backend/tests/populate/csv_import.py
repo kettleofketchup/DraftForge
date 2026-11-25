@@ -20,7 +20,7 @@ import os
 
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from league.models import League
 from org.models import Organization
 from tests.data.leagues import CSV_LEAGUE
@@ -29,6 +29,7 @@ from tests.data.tournaments import CSV_IMPORT_TOURNAMENT
 from tests.data.users import ADMIN_USER, CSV_IMPORT_USERS
 from tests.populate.utils import delete_ledger_for_users
 from tournament.models import Tournament
+from user.models import PositionsModel
 
 # Path for CSV fixture files (repo_root/frontend/tests/playwright/fixtures/csv/)
 # __file__ = backend/tests/populate/csv_import.py → 4 levels up to repo root

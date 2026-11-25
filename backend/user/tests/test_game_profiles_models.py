@@ -1,7 +1,7 @@
 from django.test import TestCase
 
-from app.models import CustomUser, PositionsModel
-from user.models import DeadlockUserProfile, DotaUserProfile
+from app.models import CustomUser
+from user.models import DeadlockUserProfile, DotaUserProfile, PositionsModel
 
 
 class GameProfileModelTests(TestCase):
