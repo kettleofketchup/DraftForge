@@ -1,9 +1,10 @@
 """DM-with-ephemeral-fallback helper for signup-flow Discord interactions.
 
 Issues #191, #192: signup messages should land as DMs (persistent, notification-
-generating) rather than ephemerals that auto-dismiss after 60 seconds. When a
-user has DMs disabled (Discord 50007), fall back to ephemeral and prefix with
-<@user_id> so they get a notification badge.
+generating) rather than ephemerals that auto-dismiss after 60 seconds. The DM
+goes through the ledger (``discordbot.gateway_dm``). When it is not delivered
+(DMs disabled, ledger unreachable, Discord error), fall back to ephemeral and
+prefix with <@user_id> so they get a notification badge.
 
 CRITICAL — `thinking=True` on defer for component interactions:
 
@@ -24,13 +25,19 @@ CRITICAL — `thinking=True` on defer for component interactions:
 """
 
 from enum import Enum
+from typing import Literal
 
 import discord
 from discord.utils import MISSING
 
+from discordbot.dm_keys import signup_confirmation_key
+from discordbot.gateway_dm import send_interaction_dm
+from discordbot.models import DMKind, DMSubject
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+
+SignupResult = Literal["signed_up", "tentative", "declined", "screenshot_saved"]
 
 
 class ResponseChannel(Enum):
@@ -46,17 +53,19 @@ def _message_id(interaction: discord.Interaction) -> str | None:
 async def respond_to_signup_user(
     interaction: discord.Interaction,
     *,
+    event_id: int,
+    result: SignupResult,
     content: str | None = None,
     embed: discord.Embed | None = None,
     view: discord.ui.View | None = None,
-    event=None,
 ) -> ResponseChannel:
-    """Try DM → fall back to ephemeral with <@user_id> prefix on Forbidden(50007)."""
+    """DM the user through the ledger; fall back to an ephemeral <@user> reply."""
     user_id = interaction.user.id
-    event_id = getattr(event, "pk", None)
     source_message_id = _message_id(interaction)
     channel_id = (
-        str(interaction.channel_id) if getattr(interaction, "channel_id", None) else None
+        str(interaction.channel_id)
+        if getattr(interaction, "channel_id", None)
+        else None
     )
 
     if not interaction.response.is_done():
@@ -73,9 +82,18 @@ async def respond_to_signup_user(
             source_message_id=source_message_id,
         )
 
-    try:
-        dm_channel = await interaction.user.create_dm()
-        await dm_channel.send(content=content, embed=embed, view=view)
+    outcome = await send_interaction_dm(
+        interaction,
+        kind=DMKind.SIGNUP_CONFIRMATION,
+        idempotency_key=signup_confirmation_key(interaction_id=interaction.id),
+        subject=(DMSubject.EVENT, event_id),
+        context={"result": result, "interaction_id": interaction.id},
+        content=content,
+        embed=embed,
+        view=view,
+    )
+
+    if outcome in ("sent", "duplicate"):
         try:
             await interaction.delete_original_response()
             log.info(
@@ -90,21 +108,8 @@ async def respond_to_signup_user(
         except discord.NotFound:
             pass
         channel = ResponseChannel.DM
-    except discord.Forbidden as e:
-        if getattr(e, "code", None) == 50007:
-            mention = f"<@{user_id}>"
-            text = f"{mention} {content}".strip() if content else mention
-            # Webhook.send (followup) rejects a literal None view/embed — it is
-            # not MISSING and lacks __discord_ui_view__. Pass MISSING instead.
-            # (The DM path above is Messageable.send, which tolerates None.)
-            await interaction.followup.send(
-                content=text,
-                embed=embed if embed is not None else MISSING,
-                view=view if view is not None else MISSING,
-                ephemeral=True,
-            )
-            channel = ResponseChannel.EPHEMERAL
-        else:
+    else:
+        if outcome in ("failed", "unknown"):
             log.error(
                 "signup_response_failed",
                 system="discord",
@@ -115,9 +120,18 @@ async def respond_to_signup_user(
                 event_id=event_id,
                 channel_id=channel_id,
                 source_message_id=source_message_id,
-                error=str(e),
+                dm_outcome=outcome,
             )
-            raise
+        mention = f"<@{user_id}>"
+        text = f"{mention} {content}".strip() if content else mention
+        # Webhook.send (followup) rejects a literal None view/embed: pass MISSING.
+        await interaction.followup.send(
+            content=text,
+            embed=embed if embed is not None else MISSING,
+            view=view if view is not None else MISSING,
+            ephemeral=True,
+        )
+        channel = ResponseChannel.EPHEMERAL
 
     log.info(
         "signup_response_sent",
@@ -127,6 +141,7 @@ async def respond_to_signup_user(
         tags_csv="events,signup",
         channel=channel.value,
         fallback_to_ephemeral=(channel == ResponseChannel.EPHEMERAL),
+        dm_outcome=outcome,
         user_id=user_id,
         event_id=event_id,
         channel_id=channel_id,

@@ -16,6 +16,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, ValidationError
 
+LEADERSHIP_REVIEW_PREFIX = "lr:"
+
 
 class CustomId(BaseModel):
     """Base codec: ``<PREFIX>:<event_id>``.
