@@ -77,6 +77,7 @@ import {
   SignupHistoryButton,
   SignupHistorySheet,
 } from '~/components/events/SignupHistorySheet';
+import { SignupInLineSince } from '~/components/events/SignupInLineSince';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import {
@@ -696,6 +697,7 @@ export default function EventPage() {
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -707,6 +709,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -718,6 +721,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -729,6 +733,7 @@ export default function EventPage() {
               signupActions={signupActions}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -965,9 +970,11 @@ function SignupsTab({
   autoApprove = true,
   conductMemberFor,
   onShowHistory,
+  eventTimezone,
 }: {
   conductMemberFor?: ConductMemberLookup;
   onShowHistory?: (user: HistorySubject) => void;
+  eventTimezone?: string;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
@@ -1259,6 +1266,10 @@ function SignupsTab({
                 </span>
                 <EventStateBadge state={signup.status} />
               </span>
+              <SignupInLineSince
+                signup={signup}
+                eventTimezone={eventTimezone}
+              />
               <ConductBadge member={conductMemberFor?.(signup.user)} />
               {holdReason && (
                 <span
