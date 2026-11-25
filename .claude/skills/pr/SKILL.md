@@ -10,7 +10,7 @@ Drive a PR from "branch pushed" to an actionable report without the user babysit
 1. Resolve PR state (reuse the open PR or create one).
 2. Check every feature the PR adds has Playwright E2E coverage; flag gaps and offer a subagent to write the specs.
 3. Post before/after screenshots as a PR comment whenever the diff touches non-test frontend code; a skip comment only when it touches none.
-4. Monitor main conflicts and PR CI/CD every 30 minutes in a progressive diagnose → repair → verify → push → recheck loop; keep watching after green checks until the PR closes or monitoring is stopped.
+4. Monitor main conflicts and PR CI/CD every 30 minutes, and the PR author's unresolved review comments every five minutes, in a progressive diagnose → repair → verify → push → recheck loop; keep watching after green checks until the PR closes or monitoring is stopped. Comment checks run in code (`.claude/skills/pr/scripts/pr-comments.sh`) and only wake the session for unresolved threads where the comment author, PR author and logged-in `gh` user are the same account, matched by immutable ID.
 5. Pull the failed jobs' error lines and report findings with next steps.
 6. Offer pre-existing problems the branch found as GitHub issues and separate fix PRs.
 
@@ -33,14 +33,14 @@ pr_json=$(gh pr view --json number,state,headRefName,baseRefName,url,comments 2>
 ```
 
 - Empty `pr_json` → Phase 2 (create).
-- `OPEN` → start the [30-minute conflict and CI/CD monitor](references/monitoring-main.md), then Phase 3 (E2E coverage).
+- `OPEN` → start the [30-minute conflict and CI/CD monitor, with five-minute review-comment checks,](references/monitoring-main.md), then Phase 3 (E2E coverage).
 - `MERGED` / `CLOSED` → report and stop; ask whether to open a new one.
 
 ### Phase 2 — Create the PR (if missing)
 
 Title/body from commits when the branch has 1–3 commits; otherwise ask the user once for a title. HEREDOC body with `## Summary` and `## Test plan`. Add a `changelog.d/` fragment first if the change is user- or operator-visible ([changelog skill](../changelog/SKILL.md)). Exact commands: [references/creating-the-pr.md](references/creating-the-pr.md).
 
-After creating the PR, start the [30-minute conflict and CI/CD monitor](references/monitoring-main.md). Reuse one active monitor per PR; run it alongside the remaining phases.
+After creating the PR, start the [30-minute conflict and CI/CD monitor, with five-minute review-comment checks,](references/monitoring-main.md). Reuse one active monitor per PR; run it alongside the remaining phases.
 
 ### Phase 3 — E2E coverage
 
@@ -93,6 +93,7 @@ Always run this, even when CI is green. Collect every problem the branch's work 
 - [creating-the-pr.md](references/creating-the-pr.md) — `gh pr create` pre-flight, title/body autofill
 - [e2e-coverage.md](references/e2e-coverage.md) — behaviour list, spec mapping, gap report, spec-writing subagent brief
 - [screenshots.md](references/screenshots.md) — before/after capture, test stack slots, `pr-assets/<n>` branch, comment format
+- [monitoring-main.md](references/monitoring-main.md) — 30-minute conflict and CI/CD monitor, five-minute review-comment checks, repair loops
 - [monitoring-ci.md](references/monitoring-ci.md) — watch/poll loop, timeout
 - [analyzing-results.md](references/analyzing-results.md) — CI log extraction, root-cause table, report format
 - [preexisting-problems.md](references/preexisting-problems.md) — pre-existing bugs → reviewed GitHub issues and `Closes #N` fix PRs
