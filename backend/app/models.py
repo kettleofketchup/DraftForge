@@ -535,7 +535,7 @@ class CustomUser(AbstractUser):
 
     @property
     def discord_avatar_cdn_url(self) -> str | None:
-        """CDN URL of the stored avatar hash, or None without discordId and hash."""
+        """CDN URL of the stored avatar hash; None unless discordId and avatar are both set."""
         if not self.discordId or not self.avatar:
             return None
         extension = "gif" if self.avatar.startswith("a_") else "png"
@@ -557,7 +557,7 @@ class CustomUser(AbstractUser):
             # Discord default avatar, indexed by user ID
             return f"https://cdn.discordapp.com/embed/avatars/{(int(self.discordId) >> 22) % 6}.png"
 
-        return "https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
+        return "https://cdn.discordapp.com/embed/avatars/0.png"
 
     class Meta:
         indexes = [
