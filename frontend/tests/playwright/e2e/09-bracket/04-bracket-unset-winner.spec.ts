@@ -290,11 +290,9 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     const matchPk = matchPkAttr ? Number(matchPkAttr) : NaN;
     expect(Number.isFinite(matchPk)).toBe(true);
 
-    // Force the production stuck state via test endpoint: Game.status
-    // becomes 'completed' but winning_team is a team that isn't currently
-    // in either slot, so mapApiMatchToMatch can't derive match.winner. This
-    // is exactly the prod state that hid the Unset Winner button before
-    // PR #236.
+    // Force the stuck state via test endpoint: Game.status becomes
+    // 'completed' but winning_team is in neither slot, so
+    // mapApiMatchToMatch can't derive match.winner.
     const forced = await page
       .context()
       .request.post('/api/tests/bracket/force-mismatched-winning-team/', {
@@ -316,9 +314,8 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       node.locator('[data-testid="bracket-winner-check-dire"]'),
     ).toHaveCount(0);
 
-    // Modal: PR #236 surfaces Unset Winner even when winner is undefined
-    // (gate is now `status === 'completed' || match.winner`). Without the
-    // fix this assertion fails — the regression we want CI to catch.
+    // Modal: Unset Winner must show even with no derivable winner
+    // (gate is `status === 'completed' || match.winner`).
     const dialog = await openTargetModal(page);
     await expect(
       dialog.locator('[data-testid="unsetWinnerButton"]'),
