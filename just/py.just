@@ -59,6 +59,13 @@ gen-message-types *args:
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/lib/notifications/messageTypes.generated.ts")}} "$@"
 
+# Regenerate frontend/app/features/mmr-requests/summary.generated.ts from org/mmr_requests/schemas.py; --check fails instead of writing when stale
+[group('py')]
+gen-mmr-summary-types *args:
+    {{quote(python)}} -I {{quote(backend / "org/mmr_requests/export_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/mmr-requests/summary.generated.ts")}} "$@"
+
 # Regenerate frontend/app/features/steam-verification/api.generated.ts from backend/app/steam_verification_schemas.py; --check fails instead of writing when stale
 [group('py')]
 gen-steam-verification *args:

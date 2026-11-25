@@ -54,6 +54,9 @@ from org.api_tokens.views import (
     org_mmr_sync,
     revoke_org_api_token,
 )
+from org.mmr_requests.urls import league_urlpatterns as mmr_league_urlpatterns
+from org.mmr_requests.urls import org_urlpatterns as mmr_org_urlpatterns
+from org.mmr_requests.views import UserMmrSummaryView
 from org.ssr import OrganizationSSRView
 from org.views import ClaimRequestViewSet
 from org.views_admin_team import (
@@ -170,6 +173,11 @@ urlpatterns = [
         name="steam_account_id_lookup",
     ),
     path(
+        "api/users/<int:pk>/mmrs/",
+        UserMmrSummaryView.as_view(),
+        name="user-mmr-summary",
+    ),
+    path(
         "api/users/<int:pk>/steam-verification/",
         steam_verification,
         name="user_steam_verification",
@@ -197,6 +205,7 @@ urlpatterns = [
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),
     path("api/events/", include("events.urls")),
+    path("api/mmr-requests/", include("org.mmr_requests.urls")),
     # Hero and team draft endpoints
     path("", include("draft.urls")),
     # dota_lobby in-game lobby for a game (lobby app)
@@ -291,6 +300,14 @@ urlpatterns = [
     path(
         "api/organizations/<int:org_id>/promotion/",
         include("org.promotion.urls"),
+    ),
+    path(
+        "api/organizations/<int:org_id>/mmr-requests/",
+        include(mmr_org_urlpatterns),
+    ),
+    path(
+        "api/leagues/<int:league_id>/mmr-requests/",
+        include(mmr_league_urlpatterns),
     ),
     # League admin team
     path(

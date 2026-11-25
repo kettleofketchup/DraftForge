@@ -138,6 +138,14 @@ class LeagueUser(models.Model):
         related_name="members",
     )
     mmr = models.IntegerField(default=0, db_index=True)
+    mmr_verified_at = models.DateTimeField(null=True, blank=True)
+    mmr_verified_by = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -161,6 +169,7 @@ class LeagueLog(models.Model):
         ("create", "Create League"),
         ("update", "Update League"),
         ("delete", "Delete League"),
+        ("set_mmr", "Set MMR"),
     ]
 
     league = models.ForeignKey(
