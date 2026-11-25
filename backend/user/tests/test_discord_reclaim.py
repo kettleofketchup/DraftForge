@@ -335,7 +335,7 @@ class MergeDiscardedRowsTest(TestCase):
             merge_discord_accounts(keep=keep, drop=drop)
 
         rows = _discarded(spy)
-        joke = [r for r in rows if r["model"] == "app.Joke"]
+        joke = [r for r in rows if r["model"] == Joke._meta.label]
         self.assertEqual(len(joke), 1)
         self.assertEqual(joke[0]["pk"], dropped_joke_pk)
         self.assertEqual(joke[0]["kept_user_id"], keep.pk)
@@ -353,7 +353,7 @@ class MergeDiscardedRowsTest(TestCase):
         with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
-        self.assertNotIn("app.Joke", {r["model"] for r in _discarded(spy)})
+        self.assertNotIn(Joke._meta.label, {r["model"] for r in _discarded(spy)})
 
     def test_nickname_carried_when_kept_account_has_none(self) -> None:
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
