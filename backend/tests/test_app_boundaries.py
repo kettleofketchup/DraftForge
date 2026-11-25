@@ -656,6 +656,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "_unset_winner",
         "advance_winner",
         "set_team_placement",
+        "_foreign_team_ids",
     ),
     "app.views.csv_import": (
         "_parse_int",
