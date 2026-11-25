@@ -169,7 +169,7 @@ export {
   type EventInfo,
 } from './events';
 
-// dota_lobby utilities (22-dota-lobby specs, simulated dota_lobby)
+// dota_lobby utilities (dota-lobby specs, simulated dota_lobby)
 export {
   SIMULATOR_SKIP_REASON,
   bracketNode,
@@ -199,7 +199,7 @@ export {
   type SimulatorStatus,
 } from './dota-lobby';
 
-// Org locked features utilities (19-org-features specs)
+// Org locked features utilities (org-features specs)
 export {
   expectNoSessionToast,
   getOrgFeaturesData,
@@ -215,7 +215,7 @@ export {
   type OrgFeaturesTestData,
 } from './org-features';
 
-// MMR sync API utilities (19-org-features/13-mmr-sync-api spec)
+// MMR sync API utilities (org-features/mmr-sync-api spec)
 export {
   loginMmrSync,
   mmrSyncRequest,
@@ -224,7 +224,7 @@ export {
   type MmrSyncTestData,
 } from './mmr-sync';
 
-// Discord Activity harness (27-activity specs)
+// Discord Activity harness (activity specs)
 export {
   ACTIVITY_HARNESS_PATH,
   harnessCommands,

@@ -96,7 +96,7 @@ def populate_user_edit_data(force=False):
         print(f"  Added {admin_user.username} as admin of {USER_EDIT_ORG.name}")
 
     # 4b. Add the existing non-staff org-admin test user (pk=1020) as admin of
-    #     User Edit Org so 09-scope-permissions.spec can verify the scope-aware
+    #     User Edit Org so scope-permissions.spec can verify the scope-aware
     #     permission gate (org admin can edit on org page, cannot on profile page).
     #     ORG_ADMIN_USER is created by populate.users.populate_users_data().
     org_admin_user = CustomUser.objects.filter(pk=ORG_ADMIN_USER.pk).first()

@@ -118,7 +118,7 @@ slot URL (`DF_BASE_URL`), flushes the test Redis, then runs `npx playwright test
 just test::pw::run <args>       # npx playwright test <args> against this slot
 just test::pw::headless [args]  # chromium, herodraft and events-sequential projects
 just test::pw::ui | debug | report | install
-just test::pw::spec <pattern>   # Spec files whose path matches, --no-deps
+just test::pw::spec <name>      # Spec files by name (roll-call), path (events/roll-call) or directory (events), --no-deps; else every spec whose path contains it
 just test::pw::grep '<title>'   # Tests whose title matches, --no-deps
 just test::pw::navigation | tournament | draft | bracket | league | herodraft | all
 just test::pw::cicd             # @cicd tests across every project

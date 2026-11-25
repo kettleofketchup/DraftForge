@@ -43,7 +43,7 @@ test.describe('AddUserModal Smoke Tests', () => {
         : leagueData.organization;
 
     // Any tournament no spec resets: a reset deletes and recreates it under a
-    // new pk, and 09-bracket/04 resets bracket_unset_winner in parallel.
+    // new pk, and bracket/bracket-unset-winner resets bracket_unset_winner in parallel.
     const tournament = await getTournamentByKey(context, 'completed_bracket');
     if (!tournament) throw new Error('No completed_bracket tournament found');
     tournamentPk = tournament.pk;

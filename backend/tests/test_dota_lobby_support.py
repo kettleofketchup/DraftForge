@@ -1,6 +1,6 @@
 """The dota_lobby E2E test data and the test endpoints that serve it.
 
-Guards what the 22-dota-lobby Playwright specs rely on: the populated data
+Guards what the dota-lobby Playwright specs rely on: the populated data
 (tests.populate.dota_lobby), the reset between spec files, and the endpoints
 in tests.test_dota_lobby, including the simulator proxy.
 """

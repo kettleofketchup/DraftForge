@@ -141,19 +141,17 @@ just test::pw::headless
 ### Run Specific Test Categories
 
 ```bash
-# By category
-just test::pw::spec draft         # Draft tests (07-draft, 08-shuffle-draft)
-just test::pw::spec tournament   # Tournament tests (03, 04)
-just test::pw::spec bracket      # Bracket tests (09)
-just test::pw::spec league       # League tests (10)
-just test::pw::spec navigation   # Navigation tests (00, 01)
-just test::pw::spec mobile       # Mobile tests (06)
+# By directory
+just test::pw::spec draft        # Captain draft tests
+just test::pw::spec tournament   # Tournament detail tests
+just test::pw::spec bracket      # Bracket tests
+just test::pw::spec leagues      # League tests
+just test::pw::spec mobile       # Mobile tests
 just test::pw::headless          # All tests
 
-# By spec pattern
-just test::pw::spec draft        # Draft tests
-just test::pw::spec tournament   # Tournament tests
-just test::pw::spec 01           # Tests matching "01"
+# By file name or path
+just test::pw::spec navigation         # e2e/navigation.spec.ts
+just test::pw::spec events/roll-call   # e2e/events/roll-call.spec.ts
 ```
 
 ### Parallel Execution

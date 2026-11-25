@@ -37,7 +37,7 @@ just test::pw::spec navigation    # Navigation tests
 just test::pw::spec tournament    # Tournament tests
 just test::pw::spec draft         # Draft tests
 just test::pw::spec bracket       # Bracket tests
-just test::pw::spec league        # League tests
+just test::pw::spec leagues       # League tests
 just test::pw::spec herodraft     # HeroDraft tests
 just test::pw::spec mobile        # Mobile responsive tests
 just test::pw::dota-lobby         # dota_lobby integration (needs `just test::dota-lobby up`)

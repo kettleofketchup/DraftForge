@@ -234,7 +234,7 @@ just test::pw::install   # Install Playwright browsers
 just test::pw::headless  # Run all tests headless
 just test::pw::ui        # Open Playwright UI mode
 just test::pw::debug     # Debug mode with inspector
-just test::pw::spec <pattern>  # Run tests matching pattern
+just test::pw::spec <name>     # Run spec files by name, path or directory
 ```
 
 Run `just --list --list-submodules` for all available commands.
@@ -289,7 +289,7 @@ just test::pw::headless
 just test::pw::ui
 
 # Run specific test file
-just test::pw::spec 01-navigation
+just test::pw::spec navigation
 ```
 
 ### Playwright Performance
@@ -314,7 +314,7 @@ Each shard runs approximately 1/4 of the test suite.
 ```bash
 just test::pw::spec navigation    # Navigation tests only
 just test::pw::spec tournament    # Tournament tests only
-just test::pw::spec league        # League tests only
+just test::pw::spec leagues       # League tests only
 just test::pw::spec herodraft     # HeroDraft tests only
 ```
 

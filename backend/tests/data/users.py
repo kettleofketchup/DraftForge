@@ -137,7 +137,7 @@ EVENT_LEAGUE_STAFF_USER: TestUser = TestUser(
 
 # =============================================================================
 # Auth Matrix Role Test Users (pk=1090-1096)
-# Dedicated to the role-context matrix at /tests/playwright/e2e/17-auth/.
+# Dedicated to the role-context matrix at /tests/playwright/e2e/auth/.
 # Scoped to AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9) so the
 # matrix is fully isolated from DTX-using suites — neither side can flap
 # the other by mutating org/league memberships.
@@ -486,13 +486,13 @@ CSV_IMPORT_USERS: list[TestUser] = [
 # 2050 | edit_user_alpha           | sequential specs (05, 07)
 # 2051 | edit_user_bravo           | sequential specs (07 needs A+B)
 # 2052 | edit_user_charlie         | sequential reserve
-# 2053 | edit_user_org             | 01-org-edit
-# 2054 | edit_user_tournament      | 02-tournament-edit
-# 2055 | edit_user_league          | 03-league-edit
-# 2056 | edit_user_mmr             | 04-org-mmr-edit
-# 2057 | edit_user_positions       | 08-position-persistence
-# 2058 | edit_user_cache           | 10-cache-merge
-# 2059 | edit_user_tourn_mmr       | 12-tournament-mmr-edit
+# 2053 | edit_user_org             | org-edit
+# 2054 | edit_user_tournament      | tournament-edit
+# 2055 | edit_user_league          | league-edit
+# 2056 | edit_user_mmr             | org-mmr-edit
+# 2057 | edit_user_positions       | position-persistence
+# 2058 | edit_user_cache           | cache-merge
+# 2059 | edit_user_tourn_mmr       | tournament-mmr-edit
 # =============================================================================
 
 USER_EDIT_USERS: list[TestUser] = [
