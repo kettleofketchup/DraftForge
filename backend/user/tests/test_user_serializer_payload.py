@@ -1,8 +1,9 @@
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from tournament.models import Team, Tournament
+from user.models import PositionsModel
 from user.serializers import UserSerializer
 
 

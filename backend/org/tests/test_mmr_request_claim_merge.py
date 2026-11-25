@@ -2,11 +2,12 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel, ProfileClaimRequest
+from app.models import CustomUser
 from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME
 from org.models import MmrChangeRequest, Organization, OrgUser, OrgUserGameMmr
 from org.tests.mmr_request_mixin import MmrRequestTestMixin
+from user.models import PositionsModel, ProfileClaimRequest
 
 
 def _user(name: str, **kwargs: object) -> CustomUser:

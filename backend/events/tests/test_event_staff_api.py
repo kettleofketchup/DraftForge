@@ -10,7 +10,7 @@ from django.utils import timezone as tz
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.completion import CloseSource, close_event
 from events.constants import EventState
 from events.models import Event
@@ -21,6 +21,7 @@ from org.contributions.kinds import ContributionKind
 from org.feature_keys import FeatureKey
 from org.features import org_has_feature
 from org.models import ContributionEntry, OrgLog, OrgUser
+from user.models import PositionsModel
 
 
 class EventStaffApiTestBase(EventTestCase):

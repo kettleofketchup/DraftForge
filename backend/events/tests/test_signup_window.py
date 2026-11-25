@@ -4,7 +4,7 @@ from typing import Any
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from events.services import process_rsvp
@@ -13,6 +13,7 @@ from events.tests.actors import SYSTEM
 from league.models import League
 from org.models import Organization
 from tournament.models import Tournament
+from user.models import PositionsModel
 
 
 @override_settings(CACHEOPS_ENABLED=False)

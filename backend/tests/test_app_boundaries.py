@@ -1018,6 +1018,8 @@ USER = MovedSlice(
             ("app.pipelines", "associate_by_discord_id"),
             ("app.pipelines", "associate_by_discord_username"),
             ("app.management.commands.reclaim_discord_accounts", "Command"),
+            ("app.models", "PositionsModel"),
+            ("app.models", "ProfileClaimRequest"),
             ("app.tests.test_discord_pipeline_names", "_social"),
             ("app.tests.test_discord_pipeline_names", "SaveDiscordGlobalNameTest"),
             ("app.tests.test_discord_reclaim", "_social"),
@@ -1079,8 +1081,8 @@ USER = MovedSlice(
             "app.management.commands.reclaim_discord_accounts",
         }
     ),
-    model_labels=frozenset(),
-    move_migration=("app", "0116_move_user_models_to_user"),
+    model_labels=frozenset({"positionsmodel", "profileclaimrequest"}),
+    move_migration=("app", "0117_move_user_models_to_user"),
     cached_labels=frozenset(),
 )
 
@@ -1171,9 +1173,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     },
     "user": {
         "app/models.py": BackEdge(
-            frozenset({"BaseUserProfile", "DotaUserProfile"}),
+            frozenset({"BaseUserProfile", "DotaUserProfile", "PositionsModel"}),
             "CustomUser profile accessors",
-            type_only=frozenset({"DotaUserProfile"}),
         ),
     },
     "tournament": {

@@ -14,7 +14,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
@@ -40,8 +40,9 @@ from tests.data.game_org_mmr import (
     GAME_MMR_TOURNAMENT_USERS,
 )
 from tests.data.models import TestUser
-from tests.populate.utils import ensure_org_user
+from tests.populate.utils import delete_events, ensure_org_user
 from tournament.models import Tournament
+from user.models import PositionsModel
 
 _APPROVE_RANK_DATE = date(2026, 1, 15)
 
@@ -112,7 +113,7 @@ def _deadlock_event(
 
 
 def _delete_events(org: Organization, event_name: str, tournament_name: str) -> None:
-    Event.objects.nocache().filter(organization=org, name=event_name).delete()
+    delete_events(Event.objects.nocache().filter(organization=org, name=event_name))
     Tournament.objects.nocache().filter(
         league__organization=org, name=tournament_name
     ).delete()

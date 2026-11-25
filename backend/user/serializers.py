@@ -5,14 +5,19 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.eligibility.steam import (
     STEAM_ACCOUNT_ID_RANGE,
     apply_admin_steam_account_id,
 )
 from org.models import Organization
 from telemetry.logging import get_logger
-from user.models import BaseUserProfile, DeadlockUserProfile, DotaUserProfile
+from user.models import (
+    BaseUserProfile,
+    DeadlockUserProfile,
+    DotaUserProfile,
+    PositionsModel,
+)
 from user.steam_accounts import log_steam_verification_change
 
 log = get_logger(__name__)

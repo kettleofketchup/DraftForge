@@ -12,7 +12,7 @@ from typing import Any
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from league.models import League, LeagueUser
 from org.mmr import LEAGUE_GAME
@@ -32,6 +32,7 @@ from tests.data.mmr_requests import (
 )
 from tests.data.models import TestUser
 from tests.populate.utils import ensure_league_user, ensure_org_user
+from user.models import PositionsModel
 
 MEMBER_PKS: frozenset[int] = frozenset(u.pk for u in MMR_REQ_MEMBERS if u.pk)
 

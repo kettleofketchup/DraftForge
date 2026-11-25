@@ -6,13 +6,14 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from events.models import Event
 from events.services import create_tournament_for_event
 from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 from tournament.models import Tournament
+from user.models import PositionsModel
 from user.tests.test_cacheops_integration import _redis_reachable
 
 _discord_ids = itertools.count(920_000_000_000_000_000)

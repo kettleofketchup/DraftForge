@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from league.models import League, LeagueUser
 from org import mmr as org_mmr
 from org.mmr import org_mmr_for
@@ -15,6 +15,7 @@ from steam.models import LeaguePlayerStats
 from tests.populate.utils import ensure_org_user
 from tournament.models import Team, Tournament
 from tournament.services.team_leadership import teams_with_leadership_problems
+from user.models import PositionsModel
 
 
 class TournamentCSVImportTest(TestCase):
