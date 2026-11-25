@@ -12,11 +12,6 @@ from django.utils import timezone
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from app.permissions_steam import VerifyGrant, can_verify_steam_account
-from app.steam_accounts import (
-    log_steam_verification_change,
-    mark_steam_account_verified,
-    steam_account_id_holder,
-)
 from events.models import Event
 from org.permissions import has_org_staff_access
 from steam.services.account_lookup import (
@@ -25,6 +20,11 @@ from steam.services.account_lookup import (
     steam_account_exists,
 )
 from telemetry.logging import get_logger
+from user.steam_accounts import (
+    log_steam_verification_change,
+    mark_steam_account_verified,
+    steam_account_id_holder,
+)
 
 log = get_logger(__name__)
 

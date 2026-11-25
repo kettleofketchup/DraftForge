@@ -3,7 +3,6 @@ from rest_framework import serializers
 
 from app.models import CustomUser, GameType
 from app.permissions import request_user
-from app.serializers import TournamentUserSerializer, UserPkField
 from draft.models import DraftOptions
 from league.mmr_sync import league_mmr_seeds
 from league.models import League, LeagueUser
@@ -26,6 +25,7 @@ from tournament.serializers.team import (
 )
 from tournament.serializers.users import tournament_organization
 from tournament.services.team_references import team_references
+from user.serializers import TournamentUserSerializer, UserPkField
 
 log = get_logger(__name__)
 

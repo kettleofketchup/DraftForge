@@ -4,12 +4,12 @@ from django.test import TestCase
 from django.utils import timezone
 
 from app.models import CustomUser
-from app.steam_accounts import (
+from org.models import Organization
+from user.steam_accounts import (
     clear_steam_account_verification,
     mark_steam_account_verified,
     steam_verification_payload,
 )
-from org.models import Organization
 
 BASE = CustomUser.STEAM_ID_64_BASE
 
@@ -131,8 +131,8 @@ class SteamVerificationHelperTests(TestCase):
 
     def test_mutators_invalidate_and_log(self) -> None:
         with (
-            patch("app.steam_accounts.invalidate_after_commit") as inv,
-            patch("app.steam_accounts.log") as log,
+            patch("user.steam_accounts.invalidate_after_commit") as inv,
+            patch("user.steam_accounts.log") as log,
         ):
             mark_steam_account_verified(self.user, self.actor, org_id=self.org.pk)
             inv.assert_called_once_with(self.user)
@@ -152,7 +152,7 @@ class SteamVerificationHelperTests(TestCase):
             self.assertFalse(log.info.call_args.kwargs["verified"])
 
     def test_failed_compare_and_set_does_not_invalidate(self) -> None:
-        with patch("app.steam_accounts.invalidate_after_commit") as inv:
+        with patch("user.steam_accounts.invalidate_after_commit") as inv:
             mark_steam_account_verified(
                 self.user, self.actor, org_id=None, expected_id=999
             )

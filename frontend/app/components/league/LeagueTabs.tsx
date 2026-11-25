@@ -7,6 +7,7 @@ import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { useLeagueStore } from '~/store/leagueStore';
 import type { LeagueType } from './schemas';
 import { InfoTab } from './tabs/InfoTab';
+import { LobbyBotsTab } from './tabs/LobbyBotsTab';
 import { MatchesTab } from './tabs/MatchesTab';
 import { TournamentsTab } from './tabs/TournamentsTab';
 import { UsersTab } from './tabs/UsersTab';
@@ -19,12 +20,15 @@ interface Props {
   canViewMembers: boolean;
   memberAccessSettled: boolean;
   canReviewMmr?: boolean;
+  canManageLobbyBots: boolean;
+  lobbyBotsAccessSettled: boolean;
 }
 
 const GRID_COLS: Record<number, string> = {
   3: 'grid-cols-3',
   4: 'grid-cols-4',
   5: 'grid-cols-5',
+  6: 'grid-cols-6',
 };
 
 export const LeagueTabs: React.FC<Props> = ({
@@ -35,6 +39,8 @@ export const LeagueTabs: React.FC<Props> = ({
   canViewMembers,
   memberAccessSettled,
   canReviewMmr = false,
+  canManageLobbyBots,
+  lobbyBotsAccessSettled,
 }) => {
   const leagueUserPks = useLeagueStore((state) => state.leagueUserPks);
   const leagueUsersLoading = useLeagueStore(
@@ -55,7 +61,11 @@ export const LeagueTabs: React.FC<Props> = ({
   const mmrPendingCount =
     useMmrPendingCount({ league: leaguePk }, canReviewMmr && leaguePk > 0).data
       ?.count ?? 0;
-  const tabCount = 3 + (canViewMembers ? 1 : 0) + (canReviewMmr ? 1 : 0);
+  const tabCount =
+    3 +
+    (canViewMembers ? 1 : 0) +
+    (canReviewMmr ? 1 : 0) +
+    (canManageLobbyBots ? 1 : 0);
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
@@ -93,6 +103,11 @@ export const LeagueTabs: React.FC<Props> = ({
             )}
           </TabsTrigger>
         )}
+        {canManageLobbyBots && (
+          <TabsTrigger value="lobby-bots" data-testid="league-tab-lobby-bots">
+            Lobby bots
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="info" className="mt-6">
@@ -118,6 +133,17 @@ export const LeagueTabs: React.FC<Props> = ({
       {canReviewMmr && league.pk && (
         <TabsContent value="mmr-requests" className="mt-6">
           <MmrRequestsTab scope={{ league: league.pk }} />
+        </TabsContent>
+      )}
+
+      {canManageLobbyBots && (
+        <TabsContent value="lobby-bots" className="mt-6">
+          {league.pk && (
+            <LobbyBotsTab
+              leaguePk={league.pk}
+              enabled={lobbyBotsAccessSettled}
+            />
+          )}
         </TabsContent>
       )}
     </Tabs>

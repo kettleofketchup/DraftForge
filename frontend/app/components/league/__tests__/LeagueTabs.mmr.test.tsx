@@ -9,6 +9,7 @@ vi.mock('../tabs/InfoTab', () => ({ InfoTab: () => null }));
 vi.mock('../tabs/MatchesTab', () => ({ MatchesTab: () => null }));
 vi.mock('../tabs/TournamentsTab', () => ({ TournamentsTab: () => null }));
 vi.mock('../tabs/UsersTab', () => ({ UsersTab: () => null }));
+vi.mock('../tabs/LobbyBotsTab', () => ({ LobbyBotsTab: () => null }));
 vi.mock('~/features/mmr-requests', () => ({
   MmrRequestsTab: ({ scope }: { scope: { league: number } }) => (
     <div data-testid="mmr-requests-tab-stub">{scope.league}</div>
@@ -24,7 +25,11 @@ beforeEach(() => {
   } as ReturnType<typeof useMmrPendingCount>);
 });
 
-function renderTabs(canReviewMmr: boolean, activeTab = 'info') {
+function renderTabs(
+  canReviewMmr: boolean,
+  activeTab = 'info',
+  canManageLobbyBots = false,
+) {
   render(
     <LeagueTabs
       league={LEAGUE}
@@ -34,6 +39,8 @@ function renderTabs(canReviewMmr: boolean, activeTab = 'info') {
       canViewMembers
       memberAccessSettled
       canReviewMmr={canReviewMmr}
+      canManageLobbyBots={canManageLobbyBots}
+      lobbyBotsAccessSettled
     />,
   );
 }
@@ -62,5 +69,14 @@ describe('LeagueTabs MMR requests tab', () => {
       screen.queryByTestId('mmr-requests-tab-stub'),
     ).not.toBeInTheDocument();
     expect(useMmrPendingCount).toHaveBeenCalledWith({ league: 5 }, false);
+  });
+
+  it('fits six columns when MMR requests and lobby bots both show', () => {
+    renderTabs(true, 'info', true);
+    expect(screen.getByTestId('league-tab-mmr-requests')).toBeInTheDocument();
+    expect(screen.getByTestId('league-tab-lobby-bots')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('league-tab-info').parentElement?.className,
+    ).toContain('grid-cols-6');
   });
 });

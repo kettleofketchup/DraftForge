@@ -22,7 +22,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { EventStateBadge } from '~/components/events';
 import { RepeaterCard } from '~/components/events/RepeaterCard';
-import type { EventType } from '~/components/events/schemas';
+import type { EventListItem } from '~/components/events/schemas';
 import { useOrganization, useOrganizations } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -75,7 +75,7 @@ const EmptyEvents = ({ hasFilter }: { hasFilter: boolean }) => (
 );
 
 /** Individual event card */
-function EventCard({ event }: { event: EventType }) {
+function EventCard({ event }: { event: EventListItem }) {
   const scheduledDate = new Date(event.scheduled_at);
   const formattedDate = scheduledDate.toLocaleDateString(undefined, {
     weekday: 'short',

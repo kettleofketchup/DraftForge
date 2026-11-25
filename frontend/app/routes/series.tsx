@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Bell,
   BellOff,
@@ -23,7 +23,7 @@ import { SubscriberList } from '~/components/events/SubscriberList';
 import {
   DAY_LABELS,
   FREQUENCY_LABELS,
-  type EventType,
+  type EventListItem,
 } from '~/components/events/schemas';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -39,6 +39,7 @@ import {
   repeaterKeys,
   useDeleteEventRepeaterMutation,
   useEventRepeater,
+  useEvents,
   useRepeaterSubscriptionMutation,
 } from '~/hooks/useEvent';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
@@ -65,20 +66,11 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-function useRepeaterEvents(repeaterId: number | null) {
-  return useQuery<EventType[]>({
-    queryKey: repeaterKeys.events(repeaterId),
-    queryFn: () =>
-      api.get(`/events/?event_repeater=${repeaterId}`).then((r) => r.data),
-    enabled: !!repeaterId,
-  });
-}
-
 function EventGrid({
   events,
   opacity,
 }: {
-  events: EventType[];
+  events: EventListItem[];
   opacity?: boolean;
 }) {
   if (events.length === 0) return null;
@@ -133,7 +125,10 @@ export default function SeriesPage() {
   const queryClient = useQueryClient();
 
   const { data: repeater, isLoading } = useEventRepeater(id);
-  const { data: events } = useRepeaterEvents(id);
+  const { data: events } = useEvents(
+    { event_repeater: id ?? undefined },
+    { enabled: !!id },
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [showDeleteSeries, setShowDeleteSeries] = useState(false);
   const [oneOffOpen, setOneOffOpen] = useState(false);
@@ -153,7 +148,6 @@ export default function SeriesPage() {
     onSuccess: (data) => {
       toast.success(data.detail);
       queryClient.invalidateQueries({ queryKey: repeaterKeys.detail(id) });
-      queryClient.invalidateQueries({ queryKey: repeaterKeys.events(id) });
       queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       setShowReactivate(false);
@@ -446,9 +440,6 @@ export default function SeriesPage() {
             if (!open) {
               queryClient.invalidateQueries({
                 queryKey: repeaterKeys.detail(id),
-              });
-              queryClient.invalidateQueries({
-                queryKey: repeaterKeys.events(id),
               });
             }
           }}

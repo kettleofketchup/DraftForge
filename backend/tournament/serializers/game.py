@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
-from app.serializers import TournamentUserSerializer
 from tournament.models import Game, Team, Tournament
 from tournament.serializers.team import TeamSerializerForTournament, TeamSerializerSlim
+from user.serializers import TournamentUserSerializer
 
 
 class GameSerializerForTournament(serializers.ModelSerializer):
