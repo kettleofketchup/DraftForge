@@ -55,6 +55,7 @@ import {
   SIGNUP_OPEN_DEFAULTS,
   type ReadyCheckFields,
 } from './schemas';
+import { signupLineFrom } from './signupLine';
 import { signupOpenFrom } from './signupOpen';
 import { SERIES_IMMEDIATE_HELP, SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
@@ -156,6 +157,7 @@ export function CreateEventModal({
         ...signupOpenFrom(orgDefaults),
         ...discordResetValues(orgDefaults),
         ...signupRulesFrom(orgDefaults),
+        ...signupLineFrom(orgDefaults),
         is_recurring: false,
         frequency: Frequency.WEEKLY,
         generate_days_ahead: 7,

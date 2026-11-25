@@ -205,6 +205,30 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       description: 'When off, only organizers can add players.',
       keywords: ['self signup'],
     },
+    line_withdraw_forfeits: {
+      label: 'Withdrawing gives up your place',
+      description:
+        'A member who withdraws, declines or is rejected and signs up again goes to the back of the line. When off, they get their old place back.',
+      keywords: [
+        'line',
+        'line order',
+        'back of the line',
+        'waitlist',
+        'withdraw',
+      ],
+    },
+    line_switch_restamps: {
+      label: 'Switching Main/Maybe gives up your place',
+      description:
+        'Moving between Main and Maybe sends the signup to the back of the line. When off, it keeps its place.',
+      keywords: [
+        'line',
+        'line order',
+        'back of the line',
+        'maybe',
+        'tentative',
+      ],
+    },
   },
   ready: {
     roll_call_enabled: {

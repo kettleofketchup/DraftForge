@@ -215,6 +215,8 @@ export const eventSchema = z
     start_cull_enabled: z.boolean().optional(),
     start_cull_minutes_after: z.number().int().optional(),
     post_cull_fill_mode: z.enum(POST_CULL_FILL_MODES).optional(),
+    line_withdraw_forfeits: z.boolean().optional(),
+    line_switch_restamps: z.boolean().optional(),
     event_voice_channel_id: z.string().optional(),
     voice_presence_confirms: z.boolean().optional(),
     is_off_schedule: z.boolean().optional(),
@@ -333,6 +335,8 @@ export const eventResponseSchema = z.object({
   start_cull_enabled: z.boolean(),
   start_cull_minutes_after: z.number(),
   post_cull_fill_mode: z.enum(POST_CULL_FILL_MODES),
+  line_withdraw_forfeits: z.boolean().optional(),
+  line_switch_restamps: z.boolean().optional(),
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
   discord_event_title: z.string(),
@@ -718,6 +722,19 @@ export const SIGNUP_RULES_DEFAULTS = {
   allow_user_signups: true,
 } as const;
 
+/** Whether withdrawing or switching Main/Maybe sends a signup to the back of the line. */
+export const signupLineSchema = z.object({
+  line_withdraw_forfeits: z.boolean(),
+  line_switch_restamps: z.boolean(),
+});
+
+export type SignupLineFields = z.infer<typeof signupLineSchema>;
+
+export const SIGNUP_LINE_DEFAULTS = {
+  line_withdraw_forfeits: true,
+  line_switch_restamps: true,
+} as const;
+
 export const discordConfigSchema = z
   .object({
     discord_create_event: z.boolean(),
@@ -758,7 +775,8 @@ export const discordConfigSchema = z
     require_mmr_verified: z.boolean(),
     require_profile_complete: z.boolean(),
   })
-  .merge(signupRulesSchema);
+  .merge(signupRulesSchema)
+  .merge(signupLineSchema);
 
 export const DISCORD_CONFIG_DEFAULTS = {
   discord_create_event: false,
@@ -794,6 +812,7 @@ export const DISCORD_CONFIG_DEFAULTS = {
   require_mmr_verified: false,
   require_profile_complete: false,
   ...SIGNUP_RULES_DEFAULTS,
+  ...SIGNUP_LINE_DEFAULTS,
 } as const;
 
 /**

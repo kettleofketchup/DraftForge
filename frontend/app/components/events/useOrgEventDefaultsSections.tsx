@@ -66,6 +66,8 @@ import {
   SIGNUP_OPEN_DEFAULTS,
   signupOpenSchema,
 } from './schemas';
+import { signupLineFrom } from './signupLine';
+import { SignupLineConfigSection } from './SignupLineConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import { SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
@@ -145,6 +147,7 @@ function valuesFrom(defaults: OrgDefaults): OrgDefaultsFormInput {
     auto_approve: defaults.auto_approve,
     ...discordResetValues(defaults),
     ...signupRulesFrom(defaults),
+    ...signupLineFrom(defaults),
     ...eventFieldsToDraftSettingsFormInput(defaults),
     ...readyCheckResetValues(defaults),
     ...signupOpenFrom(defaults),
@@ -380,6 +383,7 @@ function defaultsContent({
         </div>
         <SignupOpenSection control={form.control} />
         <SignupRulesSection control={form.control} />
+        <SignupLineConfigSection control={form.control} />
       </>,
     ),
     tournament: wrap(

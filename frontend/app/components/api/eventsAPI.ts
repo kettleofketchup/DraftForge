@@ -272,6 +272,8 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   signup_deadline_hours: number | null;
   allow_team_signups: boolean;
   allow_user_signups: boolean;
+  line_withdraw_forfeits: boolean;
+  line_switch_restamps: boolean;
   auto_approve: boolean;
   auto_confirm: boolean;
   require_mmr_verified: boolean;
@@ -419,6 +421,8 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   signup_deadline_hours: number | null;
   allow_team_signups: boolean;
   allow_user_signups: boolean;
+  line_withdraw_forfeits: boolean;
+  line_switch_restamps: boolean;
   auto_approve: boolean;
   auto_confirm: boolean;
   require_mmr_verified: boolean;
