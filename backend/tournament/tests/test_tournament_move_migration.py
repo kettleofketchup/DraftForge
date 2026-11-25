@@ -62,6 +62,9 @@ RETARGETS = (
     ("org", "0022_retarget_tournament_models"),
     ("steam", "0009_retarget_tournament_models"),
 )
+AFTER_MOVE: list[tuple[str, str | None]] = [
+    ("events", "0040_retarget_tournament_to_tournament"),
+]
 MIGRATED_APPS = (
     "app",
     "tournament",
@@ -227,7 +230,10 @@ class TournamentMoveMigrationTests(TransactionTestCase):
                 "app_team_league_users": 1,
             },
         )
+        schema_leaf = _schema_rows()
+        self._migrate(AFTER_MOVE)
         schema_before = _schema_rows()
+        self._forward()
         self.assertEqual(
             {row[2] for row in schema_before},
             set(MOVED_TABLES + M2M_TABLES + REFERRING_TABLES),
@@ -251,7 +257,7 @@ class TournamentMoveMigrationTests(TransactionTestCase):
             )
             self._assert_grant(perm, user, group, ids["team"])
             self.assertEqual(_row_counts(), counts)
-            self.assertEqual(_schema_rows(), schema_before)
+            self.assertEqual(_schema_rows(), schema_leaf)
             self._assert_links(tournament)
 
     def test_grants_follow_relabelled_contenttypes(self) -> None:

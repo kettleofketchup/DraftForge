@@ -52,6 +52,10 @@ RETARGETS = (
     ("org", "0017_retarget_default_league_to_league"),
     ("events", "0036_retarget_tournament_league_to_league"),
 )
+AFTER_MOVE = [
+    MOVE_LEAGUE_STATE,
+    ("events", "0036_retarget_tournament_league_to_league"),
+]
 MIGRATED_APPS = ("app", "league", "org", "events")
 APP = "app"
 LEAGUE = "league"
@@ -219,7 +223,7 @@ class LeagueMoveMigrationTests(TransactionTestCase):
                 "league_leagueuser": 1,
             },
         )
-        self._migrate([MOVE_LEAGUE_STATE])
+        self._migrate(AFTER_MOVE)
         schema_before = _schema_rows()
         self.assertEqual(
             {row[2] for row in schema_before}, set(MOVED_TABLES + REFERRING_TABLES)
@@ -242,8 +246,9 @@ class LeagueMoveMigrationTests(TransactionTestCase):
         self._assert_grant(perm, user, group, ids["league"])
         self._assert_grant(member_perm, member_user, member_group, member_ct)
         self.assertEqual(_row_counts(), counts)
-        self._migrate([MOVE_LEAGUE_STATE])
+        self._migrate(AFTER_MOVE)
         self.assertEqual(_schema_rows(), schema_before)
+        self._forward()
         self._assert_links(league)
 
     def test_duplicate_contenttypes_survive_both_directions(self) -> None:
