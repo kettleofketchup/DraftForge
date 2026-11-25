@@ -21,7 +21,6 @@ fi
 cd "${1:-$(git -C "$(dirname "${BASH_SOURCE[0]}")/.." rev-parse --show-toplevel)}"
 
 populate_imports=(
-    backend/app/steam_accounts.py
     backend/common/game.py
     backend/discordbot/services/users.py
     backend/events/constants.py
@@ -47,6 +46,7 @@ populate_imports=(
     backend/tests/helpers/steam_match.py
     backend/tests/test_auth.py
     backend/tournament/choices.py
+    backend/user/steam_accounts.py
 )
 
 # Tracked and untracked-but-not-ignored files only: git never descends into

@@ -5,8 +5,9 @@ from django.db import connection
 from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient, APITestCase
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from steam.services.account_lookup import SteamLookupRateLimited, cached_exists_key
+from user.models import PositionsModel
 from user.steam_accounts import mark_steam_account_verified
 
 URL = "/api/profile_update"

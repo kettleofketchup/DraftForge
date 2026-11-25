@@ -24,6 +24,15 @@ vi.mock('~/hooks/useLobbyPassword', () => ({
   useRepeaterLobbyPassword: () => ({ data: savedPassword.current }),
 }));
 
+vi.mock('../DiscordChannelPicker', () => ({
+  DiscordChannelPicker: (p: { 'data-testid'?: string }) => (
+    <div data-testid={p['data-testid'] ?? 'channel-picker'} />
+  ),
+}));
+vi.mock('../DiscordRolePicker', () => ({
+  DiscordRolePicker: () => <div data-testid="role-picker" />,
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

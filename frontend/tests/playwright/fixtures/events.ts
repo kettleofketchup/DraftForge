@@ -1,17 +1,14 @@
 /**
  * Event E2E test fixtures.
  *
- * Infrastructure (created by populate_events_data):
- * - Events Test Org (pk=7) - dedicated org
- * - Events Test League (steam_league_id=17935) - under Events org
+ * Infrastructure (created by populate_events_data; pks from
+ * GET /api/tests/events/data/):
+ * - Events Test Org - dedicated org
+ * - Events Test League and Events Test League B - under Events org
  * - E2E Signup Event - standalone event in signups_open state
  * - Weekly Inhouse - EventRepeater for generation tests
- *
- * Test users:
- * - event_org_admin (pk=5000) - org admin
- * - event_player_1 (pk=5001) - regular player
- * - event_player_2 (pk=5002) - regular player
- * - event_player_3 (pk=5003) - regular player
+ * - Users: event_org_admin (org admin), event_player_1, event_player_4
+ *   (rank_status="never", battle_cup_tier=5), event_player_no_profile
  */
 
 import type { BrowserContext } from '@playwright/test';
@@ -60,55 +57,70 @@ export async function patchWithCsrf(
   });
 }
 
+export interface EventsTestData {
+  org_pk: number;
+  event_pk: number;
+  events_league_pk: number;
+  alt_league_pk: number;
+  alt_league_name: string;
+  users: {
+    admin: number;
+    player: number;
+    player_2: number;
+    player_4: number;
+    no_profile: number;
+  };
+}
+
+/** The seeded events pks, looked up by name on the backend. */
+export async function getEventsSeedData(
+  context: BrowserContext,
+): Promise<EventsTestData> {
+  const resp = await context.request.get(`${API_URL}/tests/events/data/`);
+  if (!resp.ok()) {
+    throw new Error(
+      `events data (run just db::populate::all) failed: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  return resp.json() as Promise<EventsTestData>;
+}
+
 export interface EventInfo {
   pk: number;
   orgPk: number;
   leaguePk: number;
   name: string;
   state: string;
-  /** Stable PK of the events test league (pk=7) — does not change even if the seeded event swaps leagues. */
+  /** The events test league; stays put even if the seeded event swaps leagues. */
   eventsLeaguePk: number;
-  /** PK of the secondary "Events Test League B" (pk=8) — used as the same-org swap target. */
+  /** "Events Test League B", the same-org swap target. */
   altLeaguePk: number;
   /** Name of the secondary league. */
   altLeagueName: string;
 }
 
-/** Look up the Events Test Org and E2E Signup Event by name. */
+/** The seeded Events Test Org and E2E Signup Event, with its live state. */
 export async function getEventsTestData(
   context: BrowserContext,
 ): Promise<EventInfo> {
-  // Find org
-  const orgsResp = await context.request.get(`${API_URL}/organizations/`);
-  const orgs = await orgsResp.json();
-  const eventsOrg = orgs.find(
-    (o: { name: string }) => o.name === EVENTS_ORG_NAME,
-  );
-  if (!eventsOrg)
-    throw new Error(`${EVENTS_ORG_NAME} not found. Run just db::populate::all`);
-
-  // Find event
-  const eventsResp = await context.request.get(
-    `${API_URL}/events/?organization=${eventsOrg.pk}`,
-  );
-  const events = await eventsResp.json();
-  const signupEvent = events.find(
-    (e: { name: string }) => e.name === EVENTS_EVENT_NAME,
-  );
-  if (!signupEvent)
+  const seed = await getEventsSeedData(context);
+  const resp = await context.request.get(`${API_URL}/events/${seed.event_pk}/`);
+  if (!resp.ok()) {
     throw new Error(
-      `${EVENTS_EVENT_NAME} not found. Run just db::populate::all`,
+      `${EVENTS_EVENT_NAME} fetch failed: ${resp.status()} ${await resp.text()}`,
     );
+  }
+  const event = await resp.json();
 
   return {
-    pk: signupEvent.id,
-    orgPk: eventsOrg.pk,
-    leaguePk: signupEvent.tournament_league,
-    name: signupEvent.name,
-    state: signupEvent.state,
-    eventsLeaguePk: 7,
-    altLeaguePk: 8,
-    altLeagueName: 'Events Test League B',
+    pk: seed.event_pk,
+    orgPk: seed.org_pk,
+    leaguePk: event.tournament_league,
+    name: event.name,
+    state: event.state,
+    eventsLeaguePk: seed.events_league_pk,
+    altLeaguePk: seed.alt_league_pk,
+    altLeagueName: seed.alt_league_name,
   };
 }
 
@@ -120,14 +132,24 @@ export async function resetEventsData(context: BrowserContext): Promise<void> {
   }
 }
 
-/** Login as the dedicated event org admin (pk=5000). */
-export async function loginEventAdmin(context: BrowserContext) {
+/** Login as one of the seeded events users, by role. */
+export async function loginEventUser(
+  context: BrowserContext,
+  role: keyof EventsTestData['users'],
+  label: string,
+) {
+  const { users } = await getEventsSeedData(context);
   const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
-    data: { user_pk: 5000 },
+    data: { user_pk: users[role] },
     headers: { 'Content-Type': 'application/json' },
   });
-  if (!resp.ok()) throw new Error(`Login event admin failed: ${resp.status()}`);
+  if (!resp.ok()) throw new Error(`Login ${label} failed: ${resp.status()}`);
   return resp.json();
+}
+
+/** Login as the dedicated event org admin. */
+export async function loginEventAdmin(context: BrowserContext) {
+  return loginEventUser(context, 'admin', 'event admin');
 }
 
 /** Trigger event generation synchronously (calls the Celery task directly). */
@@ -142,26 +164,14 @@ export async function triggerEventGeneration(
   return data.message;
 }
 
-/** Login as an event player (pk=5001). */
+/** Login as event_player_1. */
 export async function loginEventPlayer(context: BrowserContext) {
-  const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
-    data: { user_pk: 5001 },
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!resp.ok())
-    throw new Error(`Login event player failed: ${resp.status()}`);
-  return resp.json();
+  return loginEventUser(context, 'player', 'event player');
 }
 
-/** Login as event_player_4 (pk=5004) — rank_status="never", battle_cup_tier=5. */
+/** Login as event_player_4 (rank_status="never", battle_cup_tier=5). */
 export async function loginEventPlayer4(context: BrowserContext) {
-  const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
-    data: { user_pk: 5004 },
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!resp.ok())
-    throw new Error(`Login event player 4 failed: ${resp.status()}`);
-  return resp.json();
+  return loginEventUser(context, 'player_4', 'event player 4');
 }
 
 /**
@@ -190,15 +200,9 @@ export async function setApprovedMmr(
   return resp.json();
 }
 
-/** Login as the no-profile event player (pk=5099). Mirrors loginEventPlayer. */
+/** Login as event_player_no_profile (no PlayerDotaProfile). */
 export async function loginEventPlayerNoProfile(context: BrowserContext) {
-  const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
-    data: { user_pk: 5099 },
-    headers: { 'Content-Type': 'application/json' },
-  });
-  if (!resp.ok())
-    throw new Error(`Login event_player_no_profile failed: ${resp.status()}`);
-  return resp.json();
+  return loginEventUser(context, 'no_profile', 'event_player_no_profile');
 }
 
 /** Whether the backend has a Discord bot token; without one nothing posts. */

@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.internal_client import auto_close_event
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.completion import CloseResult, close_event
 from events.constants import EventState
 from events.models import Event
@@ -20,6 +20,7 @@ from events.tasks import cleanup_stale_events, create_discord_scheduled_event
 from events.tests.base import EventTestCase
 from org.contributions.kinds import ContributionKind
 from org.models import ContributionEntry
+from user.models import PositionsModel
 
 TOKEN = "test-internal-token"
 HEADERS = {"HTTP_X_INTERNAL_TOKEN": TOKEN}
