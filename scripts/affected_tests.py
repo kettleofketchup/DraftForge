@@ -34,7 +34,7 @@ BACKEND_FULL = (
     re.compile(r"^(pyproject\.toml|poetry\.lock)$"),
     re.compile(r"^backend/(Dockerfile|requirements[^/]*\.txt)$"),
     re.compile(r"^docker/\.env\.test$"),
-    re.compile(r"^docker/docker-compose\.test\.yaml$"),
+    re.compile("^" + re.escape("docker/docker-compose.test.yaml") + "$"),
 )
 # Modules Django loads by name; a change there reaches the owning app's tests.
 BY_NAME = re.compile(
