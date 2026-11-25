@@ -42,6 +42,7 @@ from tests.data.tournaments import (
     BRACKET_PLACEMENT_DOUBLE_TOURNAMENT,
     BRACKET_PLACEMENT_SINGLE_TOURNAMENT,
     BRACKET_UNSET_WINNER_TOURNAMENT,
+    PLACEMENT_REOPEN_CONFLICT_TOURNAMENT,
     SHUFFLE_TIE_TOURNAMENT,
 )
 from tests.data.users import (
@@ -83,6 +84,7 @@ from tests.populate.bracket import (
     populate_bracket_placement_double,
     populate_bracket_placement_single,
     populate_bracket_unset_winner_tournament,
+    populate_placement_reopen_conflict_tournament,
 )
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.utils import ensure_org_user
@@ -1024,6 +1026,7 @@ def reset_tournament_by_key(request, key: str):
         "captain_takeover": populate_captain_takeover_tournament,
         "captain_removal": populate_captain_removal_tournament,
         "knocked_out_roster": populate_knocked_out_roster_tournament,
+        "placement_reopen_conflict": populate_placement_reopen_conflict_tournament,
     }
 
     def clear_existing_draft_redis(name: str) -> None:
@@ -1046,6 +1049,7 @@ def reset_tournament_by_key(request, key: str):
         "captain_takeover": CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
         "captain_removal": CAPTAIN_REMOVAL_TOURNAMENT_NAME,
         "knocked_out_roster": KNOCKED_OUT_ROSTER_TOURNAMENT_NAME,
+        "placement_reopen_conflict": PLACEMENT_REOPEN_CONFLICT_TOURNAMENT.name,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)
