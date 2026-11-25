@@ -74,6 +74,10 @@ npm --prefix <main>/.worktrees/pr-<n>-base/frontend ci       # else the frontend
 setfacl -R -m u:100999:rwX -m d:u:100999:rwX <main>/.worktrees/pr-<n>-base/frontend <main>/.worktrees/pr-<n>-base/backend
 ```
 
+Run `setfacl` after `npm ci` so `node_modules` gets the ACL too. If the frontend
+already started without them, restart it with nginx:
+`cd <base-wt> && just test::compose restart frontend nginx  # allow-cd`.
+
 Then, in the base worktree (cd form for each):
 
 ```bash

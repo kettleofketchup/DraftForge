@@ -76,6 +76,9 @@ Read `steps` in `populate_all()` for the exact current order.
 | `populate_league_stats_data` | league_stats.py | Strip Stats Org/League (pk=20, steam=17938): 10 users with exact ticket-game sequences for rank, tie, streak, unranked and zero-game cases. The fixture the league-stats tests assert against |
 | `populate_league_stats_showcase` | league_stats.py | League Stats Showcase Org/League (pk=21, steam=17939): 60 seeded users, 160 5v5 ticket matches (54 ranked, 3 newcomers, 3 idle) and an untimed 8-captain draft. For demos and manual checks; tests assert its shape, not exact values |
 
+`fixtures/events.ts` reads the events org, signup event, league and user pks from GET
+`/api/tests/events/data/` (`tests/test_events_data.py`) instead of hardcoding them.
+
 ### Shared Utilities (`backend/tests/populate/utils.py`)
 
 - `create_user(user_data, organization=None)` - Create user from Discord data, optionally with OrgUser
