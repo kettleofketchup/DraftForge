@@ -1,5 +1,11 @@
 import { RefreshCw, Volume2, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from 'react';
 import { getDiscordChannels, type DiscordChannel } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import {
@@ -10,7 +16,12 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 
-interface DiscordChannelPickerProps {
+type TriggerA11yProps = Pick<
+  ComponentPropsWithoutRef<'button'>,
+  'id' | 'aria-describedby' | 'aria-invalid' | 'aria-labelledby'
+>;
+
+interface DiscordChannelPickerProps extends TriggerA11yProps {
   organizationId: number;
   value: string;
   onChange: (channelId: string) => void;
@@ -28,6 +39,7 @@ export function DiscordChannelPicker({
   kind = 'text',
   clearable,
   'data-testid': testId,
+  ...triggerProps
 }: DiscordChannelPickerProps) {
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [channelsKind, setChannelsKind] = useState(kind);
@@ -78,7 +90,11 @@ export function DiscordChannelPicker({
         onValueChange={onChange}
         disabled={disabled || loading}
       >
-        <SelectTrigger className="w-full min-w-0" data-testid={testId}>
+        <SelectTrigger
+          {...triggerProps}
+          className="w-full min-w-0"
+          data-testid={testId}
+        >
           <SelectValue placeholder={loading ? 'Loading...' : emptyLabel} />
         </SelectTrigger>
         <SelectContent>

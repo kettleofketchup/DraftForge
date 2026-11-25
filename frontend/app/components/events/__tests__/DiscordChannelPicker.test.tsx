@@ -6,10 +6,16 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
+import { useForm } from 'react-hook-form';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getDiscordChannels, type DiscordChannel } from '~/components/api/api';
+import { Form } from '~/components/ui/form';
 import { DiscordChannelPicker } from '../DiscordChannelPicker';
+import type { DiscordFields } from '../DiscordConfigSection';
+import { PostChannelField } from '../PostChannelField';
+import { NO_CHANNEL_WARNING } from '../postChannelState';
+import { DISCORD_CONFIG_DEFAULTS } from '../schemas';
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/components/api/api')>()),
@@ -282,5 +288,56 @@ describe('DiscordChannelPicker clearable', () => {
     );
     await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
     expect(screen.getByTestId('picker')).toHaveTextContent('Select channel');
+  });
+});
+
+function LabelledPickers() {
+  const form = useForm<DiscordFields>({
+    defaultValues: DISCORD_CONFIG_DEFAULTS,
+  });
+  const fallback = { kind: 'fallback', channelId: '1' } as const;
+  return (
+    <Form {...form}>
+      <PostChannelField
+        control={form.control}
+        name="discord_confirm_attendance_channel_id"
+        label="Attendance reminder channel"
+        description="Where the attendance reminder posts"
+        organizationId={7}
+        blankState={fallback}
+        noChannelWarning={NO_CHANNEL_WARNING}
+        data-testid="attendance"
+      />
+      <PostChannelField
+        control={form.control}
+        name="discord_profile_reminder_channel_id"
+        label="Profile reminder channel"
+        organizationId={7}
+        blankState={fallback}
+        noChannelWarning={NO_CHANNEL_WARNING}
+        data-testid="profile"
+      />
+    </Form>
+  );
+}
+
+describe('DiscordChannelPicker form labelling', () => {
+  it('names each combobox by its FormLabel and links the description', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(<LabelledPickers />);
+    await waitFor(() => expect(screen.getByTestId('attendance')).toBeEnabled());
+
+    const attendance = screen.getByRole('combobox', {
+      name: 'Attendance reminder channel',
+    });
+    const profile = screen.getByRole('combobox', {
+      name: 'Profile reminder channel',
+    });
+    expect(attendance).toBe(screen.getByTestId('attendance'));
+    expect(profile).toBe(screen.getByTestId('profile'));
+    expect(attendance).toHaveAccessibleDescription(
+      'Where the attendance reminder posts',
+    );
+    expect(attendance).toHaveAttribute('aria-invalid', 'false');
   });
 });
