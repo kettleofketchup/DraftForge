@@ -33,7 +33,7 @@ def logout(request: HttpRequest) -> HttpResponseRedirect:
 
 @render_to("home.html")
 def home(request: HttpRequest) -> HttpResponseRedirect | None:
-    """Home view, displays login mechanism"""
+    """Render the login page; redirect signed-in users to the frontend root."""
     if request.user.is_authenticated:
         return redirect(f"{settings.SITE_URL}/")
     return None

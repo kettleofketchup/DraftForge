@@ -412,7 +412,6 @@ class CustomUser(AbstractUser):
         if force or not self.avatar:
             return self._fetch_and_update_avatar_from_discord()
 
-        # Construct current avatar URL
         extension = "gif" if self.avatar.startswith("a_") else "png"
         current_url = f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
 
@@ -475,11 +474,9 @@ class CustomUser(AbstractUser):
                 new_avatar = user_data.get("avatar")
 
                 if new_avatar != self.avatar:
-                    # The avatar setter persists to base_profile.avatar via
-                    # bp.save(update_fields=["avatar"]) inside the setter, so
-                    # an explicit CustomUser.save(update_fields=["avatar"])
-                    # here would crash now that `avatar` is a property, not a
-                    # model field.
+                    # The setter persists to base_profile; an explicit
+                    # CustomUser.save(update_fields=["avatar"]) would crash
+                    # because `avatar` is a property, not a model field.
                     self.avatar = new_avatar
                     log.info(
                         "avatar_updated",
@@ -600,9 +597,8 @@ class CustomUser(AbstractUser):
             extension = "gif" if self.avatar.startswith("a_") else "png"
             return f"https://cdn.discordapp.com/avatars/{self.discordId}/{self.avatar}.{extension}"
 
-        # Default avatar logic
         if self.discordId:
-            # New default avatar URL logic based on user ID
+            # Discord default avatar, indexed by user ID
             return f"https://cdn.discordapp.com/embed/avatars/{(int(self.discordId) >> 22) % 6}.png"
 
         return "https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
