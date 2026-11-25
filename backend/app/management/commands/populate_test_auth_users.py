@@ -6,8 +6,12 @@ If you update these users, also update the documentation!
 """
 
 import logging
+from typing import Any
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
+
+from tests.populate import populate_test_auth_users
+from tests.populate.utils import without_task_publishing
 
 logger = logging.getLogger(__name__)
 
@@ -15,21 +19,20 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
     help = "Populate test authentication users for E2E testing"
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--force",
             action="store_true",
             help="Force populate even if users already exist",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: Any, **options: Any) -> None:
         force = options.get("force", False)
-
-        from tests.populate import populate_test_auth_users
 
         try:
             self.stdout.write("Starting test auth user population...")
-            populate_test_auth_users(force=force)
+            with without_task_publishing():
+                populate_test_auth_users(force=force)
             self.stdout.write(
                 self.style.SUCCESS("Successfully populated test auth users!")
             )

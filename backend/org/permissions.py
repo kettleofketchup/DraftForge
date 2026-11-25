@@ -12,6 +12,7 @@ from app.models import CustomUser
 from league.models import League
 from org.features import FeatureKey, org_has_feature
 from org.models import Organization, OrgUser
+from user.permissions import is_site_admin
 
 
 def is_org_owner(user: CustomUser | AnonymousUser, obj: Any) -> bool:
@@ -71,10 +72,6 @@ def has_org_staff_access(user: CustomUser | AnonymousUser, obj: Any) -> bool:
         has_org_admin_access(user, obj)
         or organization.staff.filter(pk=user.pk).exists()
     )
-
-
-def is_site_admin(user: CustomUser | AnonymousUser) -> bool:
-    return bool(user.is_authenticated and (user.is_staff or user.is_superuser))
 
 
 def is_org_role_holder(

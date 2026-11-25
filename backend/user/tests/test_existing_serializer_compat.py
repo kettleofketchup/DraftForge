@@ -1,5 +1,5 @@
 """
-Pins compatibility of existing app/serializers.py with the
+Pins compatibility of user/serializers.py with the
 BaseUserProfile migration: legacy serializers that exposed
 `nickname` / `avatar` as CustomUser model fields must keep
 emitting the same JSON shape now that those fields live on
@@ -18,7 +18,7 @@ CustomUser. Either way, the output shape must be preserved.
 from django.test import TestCase
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer, UserSerializer
+from user.serializers import TournamentUserSerializer, UserSerializer
 
 
 class UserSerializerNicknameAvatarTests(TestCase):

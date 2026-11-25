@@ -1,5 +1,4 @@
 from datetime import timedelta
-from unittest import skipUnless
 
 from django.utils import timezone as tz
 
@@ -31,8 +30,6 @@ from org.conduct.sources import _voice_user_ids, automatic_outcomes
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.tests.conduct_base import ConductTestCase
-
-HAS_CULL = hasattr(SignupMeans, "CULL")
 
 
 class AutomaticOutcomesTest(ConductTestCase):
@@ -68,12 +65,12 @@ class AutomaticOutcomesTest(ConductTestCase):
     def _member(self, status: str = SignupStatus.APPROVED) -> EventSignup:
         return self.signup(self.event, self.make_user(), status)
 
-    def _cull(self, signup: EventSignup) -> None:
+    def _system_drop(self, signup: EventSignup) -> None:
         record_signup_change(
             event=self.event,
             subject=signup.user,
             actor=SignupActor(
-                user=None, role=ActorRole.SYSTEM, means=getattr(SignupMeans, "CULL")
+                user=None, role=ActorRole.SYSTEM, means=SignupMeans.SYSTEM
             ),
             action=SignupAction.REJECTED,
             signup=signup,
@@ -202,26 +199,18 @@ class AutomaticOutcomesTest(ConductTestCase):
 
         self.assertEqual(self._run(signup), {})
 
-    @skipUnless(HAS_CULL, "SignupMeans has no CULL member yet")
-    def test_confirmed_then_culled_is_no_show(self) -> None:
+    def test_system_dropped_signup_is_not_attributed_to_cull(self) -> None:
         signup = self._member(SignupStatus.DROPPED)
         self._entry(self._check(), signup, ReadyCheckEntryState.CONFIRMED)
-        self._cull(signup)
+        self._system_drop(signup)
 
-        self.assertEqual(
-            self._run(signup),
-            {self._key(signup.user): (Outcome.NO_SHOW, OutcomeSource.CULL)},
-        )
+        self.assertEqual(self._run(signup), {})
 
-    @skipUnless(HAS_CULL, "SignupMeans has no CULL member yet")
-    def test_dropped_with_ledger_cull_attribution(self) -> None:
-        signup = self._member(SignupStatus.DROPPED)
-        self._cull(signup)
-
-        self.assertEqual(
-            self._run(signup),
-            {self._key(signup.user): (Outcome.NO_SHOW, OutcomeSource.CULL)},
-        )
+    def test_no_signup_means_marks_a_cull_yet(self) -> None:
+        # #533 adds the start cull. Its means must feed automatic_outcomes
+        # (OutcomeSource.CULL) before this assertion is dropped.
+        self.assertNotIn("cull", SignupMeans.values)
+        self.assertFalse(hasattr(SignupMeans, "CULL"))
 
     def test_voice_upgrades_only(self) -> None:
         present = self._member()

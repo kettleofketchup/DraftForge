@@ -102,4 +102,5 @@ call module func *flags:
             *) echo "db::populate: unknown option $flag (only --force)" >&2; exit 2 ;;
         esac
     done
-    exec {{just}} db::manage test shell -c "from $1 import $2; $2(force=$force)"
+    code="from $1 import $2; from tests.populate.utils import without_task_publishing"
+    exec {{just}} db::manage test shell -c "$code"$'\n'"with without_task_publishing(): $2(force=$force)"

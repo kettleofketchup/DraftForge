@@ -165,7 +165,7 @@ per guild, 1-hour TTL (constant: `DISCORD_MEMBER_CACHE_TTL_S` in
 - `search_discord_members` — admin-search-by-name on org pages
 - `get_organization_discord_members` — full org-member list
 - `get_discord_voice_channel_activity` — voice-channel staffing
-- `app.tasks.avatar_refresh.refresh_avatars_batched` — daily Celery
+- `user.tasks.avatar_refresh.refresh_avatars_batched` — daily Celery
   beat. Reads the cache, builds a `discord_id → avatar_hash` map,
   posts diffed rows to the internal endpoint
   `POST /api/internal/users/avatars/bulk-update/` (defined in

@@ -56,12 +56,12 @@ _beat_schedule = {
         "schedule": 60.0,  # 60s cadence: keeps worker-crash recovery <1.5 min
     },
     "refresh-discord-avatars": {
-        "task": "app.tasks.avatar_refresh.refresh_discord_avatars",
+        "task": "user.tasks.avatar_refresh.refresh_discord_avatars",
         "schedule": 300.0,
         "kwargs": {"batch_size": 50},
     },
     "refresh-all-discord-data-daily": {
-        "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
+        "task": "user.tasks.avatar_refresh.refresh_all_discord_data",
         "schedule": crontab(hour=4, minute=0),
     },
     # Daily batched avatar refresh. One guild-member fetch per org guild
@@ -69,7 +69,7 @@ _beat_schedule = {
     # process-local LocMem, not Daphne's Redis), then bulk-updates
     # User.avatar via a single CASE/WHEN UPDATE per 500-row batch.
     "refresh-avatars-batched-daily": {
-        "task": "app.tasks.avatar_refresh.refresh_avatars_batched",
+        "task": "user.tasks.avatar_refresh.refresh_avatars_batched",
         "schedule": crontab(hour=4, minute=15),  # 15 min after the daily sweep
     },
     "purge-mmr-screenshots-nightly": {
@@ -77,7 +77,7 @@ _beat_schedule = {
         "schedule": crontab(hour=3, minute=30),
     },
     "sync-active-org-discord-names": {
-        "task": "app.tasks.discord_name_sync.sync_active_org_discord_names",
+        "task": "user.tasks.discord_name_sync.sync_active_org_discord_names",
         "schedule": 1800.0,
     },
 }

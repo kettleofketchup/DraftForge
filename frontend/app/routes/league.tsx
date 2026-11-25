@@ -142,6 +142,18 @@ export default function LeaguePage() {
   const mmrPendingCount =
     useMmrPendingCount({ league: pk ?? 0 }, canReviewMmr && !!pk).data?.count ??
     0;
+  const currentUserStatus = useUserStore((s) => s.currentUserStatus);
+  const leagueOrgPk = league?.organization?.pk;
+  const lobbyBotsAccessSettled =
+    !!league &&
+    currentUserStatus === 'resolved' &&
+    (!leagueOrgPk || currentOrg?.pk === leagueOrgPk);
+
+  useEffect(() => {
+    if (lobbyBotsAccessSettled && !canEdit && activeTab === 'lobby-bots') {
+      setActiveTab('info');
+    }
+  }, [lobbyBotsAccessSettled, canEdit, activeTab]);
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!league) return [];
@@ -193,6 +205,7 @@ export default function LeaguePage() {
             },
           ]
         : []),
+      ...(canEdit ? [{ value: 'lobby-bots', label: 'Lobby bots' }] : []),
     ],
     [
       leagueTournaments.length,
@@ -200,6 +213,7 @@ export default function LeaguePage() {
       canViewMembers,
       canReviewMmr,
       mmrPendingCount,
+      canEdit,
     ],
   );
 
@@ -273,6 +287,8 @@ export default function LeaguePage() {
           canViewMembers={canViewMembers}
           memberAccessSettled={memberAccessSettled}
           canReviewMmr={canReviewMmr}
+          canManageLobbyBots={canEdit}
+          lobbyBotsAccessSettled={lobbyBotsAccessSettled}
         />
       </div>
 

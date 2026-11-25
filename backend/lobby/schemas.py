@@ -177,9 +177,69 @@ class InviteResult(_Model):
     )
 
 
+class LeagueHolder(_Model):
+    bot: str
+    source: str
+    verified: bool = False
+    refreshed_at: datetime | None = None
+
+
+class LeagueBot(_Model):
+    name: str
+    stale: bool = False
+
+
 class LeagueView(_Model):
     league_id: int
     name: str | None = None
+    holders: Annotated[list[LeagueHolder], BeforeValidator(_none_to_list)] = Field(
+        default_factory=list
+    )
+    bots: Annotated[list[LeagueBot], BeforeValidator(_none_to_list)] = Field(
+        default_factory=list
+    )
     holders_total: int = 0
     # Holders that could take a new lobby right now.
     holders_free: int = 0
+
+
+class BotView(_Model):
+    """A bot from GET /v1/bots, without its login, errors or token details."""
+
+    name: str
+    state: str
+    ready: bool = False
+    steam_id: str | None = None
+    leagues: IntList = Field(default_factory=list)
+    lobby: str | None = None
+    lobby_stale: bool = False
+
+
+class BotLeagueEntry(_Model):
+    league_id: int
+    source: str
+    verified: bool = False
+    refreshed_at: datetime | None = None
+    stale: bool = False
+
+
+class BotLeaguesRefresh(_Model):
+    ok_at: datetime | None = None
+
+
+class BotLeagues(_Model):
+    leagues: Annotated[list[BotLeagueEntry], BeforeValidator(_none_to_list)] = Field(
+        default_factory=list
+    )
+    refresh: BotLeaguesRefresh = Field(default_factory=BotLeaguesRefresh)
+
+
+class LeagueRefreshItem(_Model):
+    bot: str
+    status: str
+
+
+class LeagueRefreshResult(_Model):
+    results: Annotated[list[LeagueRefreshItem], BeforeValidator(_none_to_list)] = Field(
+        default_factory=list
+    )

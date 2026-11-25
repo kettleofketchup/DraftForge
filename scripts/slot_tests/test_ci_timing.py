@@ -44,3 +44,15 @@ def test_segments_gaps_and_builds() -> None:
 def test_family_strips_matrix_suffix() -> None:
     assert ci_timing.family("Playwright chromium (shard 3/4)") == "Playwright chromium"
     assert ci_timing.family("Backend tests (migrations)") == "Backend tests"
+    assert ci_timing.family("Backend tests (migrations-draft)") == "Backend tests"
+    assert ci_timing.family("Backend tests (migrations-user)") == "Backend tests"
+
+
+def test_normalize_backend_group_commands() -> None:
+    for group in ("app", "rest", "migrations", "migrations-draft", "migrations-user"):
+        assert ci_timing.norm_cmd(f"just ci::backend-test-labels {group}") == (
+            "just ci::backend-test-labels <group>"
+        )
+        assert ci_timing.norm_cmd(f"Run backend tests ({group})") == (
+            "Run backend tests (<group>)"
+        )

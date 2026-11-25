@@ -49,7 +49,11 @@ import {
   updateEventRepeater as updateEventRepeaterAPI,
   updateOrgEventDefaults,
 } from '~/components/api/api';
-import type { EventSignupType, EventType } from '~/components/events/schemas';
+import type {
+  EventListItem,
+  EventSignupType,
+  EventType,
+} from '~/components/events/schemas';
 import type {
   PendingSignupAction,
   SignupAction,
@@ -63,7 +67,8 @@ import {
 import type { GameTypeValue } from '~/components/game/constants';
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
 import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
-import type { UserType } from '~/components/user/types';
+import { PositionSchema } from '~/components/user/schemas';
+import type { PositionsType, UserType } from '~/components/user/types';
 import {
   invalidateConductQueries,
   invalidateOrgContributionQueries,
@@ -78,23 +83,24 @@ import { useUserStore } from '~/store/userStore';
 export async function invalidateEventLists(
   queryClient: QueryClient,
 ): Promise<void> {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: ['events'] }),
-    queryClient.invalidateQueries({ queryKey: ['repeater-events'] }),
-  ]);
+  await queryClient.invalidateQueries({ queryKey: ['events'] });
 }
 
-export function useEvents(params?: {
-  organization?: number;
-  state?: string;
-  states?: string[];
-  search?: string;
-  ordering?: string;
-  event_repeater?: number;
-}) {
-  return useQuery<EventType[]>({
+export function useEvents(
+  params?: {
+    organization?: number;
+    state?: string;
+    states?: string[];
+    search?: string;
+    ordering?: string;
+    event_repeater?: number;
+  },
+  options?: { enabled?: boolean },
+) {
+  return useQuery<EventListItem[]>({
     queryKey: ['events', params],
     queryFn: () => getEvents(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -162,14 +168,27 @@ export function removeSignupHistoryQueries(
   queryClient.removeQueries({ queryKey: ['event-signup-history', eventId] });
 }
 
-/** The server fills an empty `steam_account_id` from the signup; mirror it. */
-export function syncCurrentUserFriendId(body: SignupBody): void {
-  const submitted = String(body.profile?.steam_account_id ?? '').trim();
+const SignupPositionsSchema = PositionSchema.omit({ pk: true }).partial();
+
+/** Mirror what a signup writes to the user (Friend ID, positions) into the stores. */
+export function syncCurrentUserFromSignup(body: SignupBody): void {
   const { currentUser, patchCurrentUser } = useUserStore.getState();
-  if (!submitted || !currentUser || currentUser.steam_account_id != null) {
-    return;
+  if (!currentUser?.pk) return;
+  const submitted = String(body.profile?.steam_account_id ?? '').trim();
+  if (submitted && currentUser.steam_account_id == null) {
+    patchCurrentUser({ steam_account_id: Number(submitted) });
   }
-  patchCurrentUser({ steam_account_id: Number(submitted) });
+  const raw = body.profile?.positions;
+  const parsed = raw == null ? null : SignupPositionsSchema.safeParse(raw);
+  if (!parsed?.success) return;
+  const positions = {
+    ...currentUser.positions,
+    ...parsed.data,
+  } as PositionsType;
+  patchCurrentUser({ positions });
+  const cache = useUserCacheStore.getState();
+  const base = cache.getById(currentUser.pk) ?? currentUser;
+  cache.upsert({ ...base, positions } as UserType);
 }
 
 export function useSignupMutation(eventId: number) {
@@ -180,7 +199,7 @@ export function useSignupMutation(eventId: number) {
   return useMutation({
     mutationFn: (body: SignupBody) => signupForEvent(eventId, body),
     onSuccess: (_signup, body) => {
-      syncCurrentUserFriendId(body);
+      syncCurrentUserFromSignup(body);
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
       void invalidateEventLists(queryClient);
@@ -195,6 +214,13 @@ export function useSignupMutation(eventId: number) {
         queryClient.invalidateQueries({
           queryKey: ['user-dota-profile', currentUserPk],
         });
+        if (body.profile?.positions != null) {
+          // Edit Profile seeds its form once from cached data; drop it so the next open refetches.
+          queryClient.removeQueries({
+            queryKey: ['userProfile', currentUserPk],
+          });
+          queryClient.invalidateQueries({ queryKey: ['user', currentUserPk] });
+        }
       }
       const orgId = queryClient.getQueryData<EventType>([
         'event',
@@ -315,13 +341,16 @@ export const repeaterKeys = {
     ['event-repeaters', params] as const,
   detail: (id: number | null) => ['repeater', id] as const,
   subscribers: (id: number) => ['repeater-subscribers', id] as const,
-  events: (id: number | null) => ['repeater-events', id] as const,
 };
 
-export function useEventRepeaters(params?: { organization?: number }) {
+export function useEventRepeaters(
+  params?: { organization?: number },
+  options?: { enabled?: boolean },
+) {
   return useQuery<EventRepeaterListItem[]>({
     queryKey: repeaterKeys.list(params),
     queryFn: () => getEventRepeaters(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -389,7 +418,6 @@ export function useDeleteEventRepeaterMutation() {
       deleteEventRepeaterAPI(repeater.id),
     onSuccess: (_data, repeater) => {
       queryClient.removeQueries({ queryKey: repeaterKeys.detail(repeater.id) });
-      queryClient.removeQueries({ queryKey: repeaterKeys.events(repeater.id) });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
       void invalidateConductQueries(queryClient, repeater.organization);

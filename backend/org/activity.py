@@ -8,9 +8,9 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from app.tasks.discord_name_sync import sync_org_discord_names
 from org.models import Organization
 from telemetry.logging import get_logger
+from user.tasks.discord_name_sync import sync_org_discord_names
 
 log = get_logger(__name__)
 

@@ -6,9 +6,9 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from app.steam_accounts import mark_steam_account_verified
 from org.models import Organization
 from tests.populate.utils import ensure_org_user
+from user.steam_accounts import mark_steam_account_verified
 
 VERIFIED_ID = 765353
 OTHER_ID = 111222333
