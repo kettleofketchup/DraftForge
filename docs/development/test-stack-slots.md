@@ -130,11 +130,11 @@ so they prove nothing about Discord:
 
 | Spec | What it needs |
 |---|---|
-| `e2e/16-events/03-roll-call.spec.ts` | Discord announcement; the "no re-announcement" check is vacuous without one |
-| `e2e/16-events/04-discord-integration.spec.ts` | Announcement and signup posts in the test channels |
-| `e2e/16-events/06-full-lifecycle.spec.ts` | Announcement posting and Discord activity logs |
-| `e2e/16-events/07-notification-dm.spec.ts` | Sends a real DM through the bot token |
-| `e2e/16-events/08-tournament-discord-lifecycle.spec.ts` | Draft and herodraft link DMs (Discord tournament logs) |
+| `e2e/events/roll-call.spec.ts` | Discord announcement; the "no re-announcement" check is vacuous without one |
+| `e2e/events/discord-integration.spec.ts` | Announcement and signup posts in the test channels |
+| `e2e/events/full-lifecycle.spec.ts` | Announcement posting and Discord activity logs |
+| `e2e/events/notification-dm.spec.ts` | Sends a real DM through the bot token |
+| `e2e/events/tournament-discord-lifecycle.spec.ts` | Draft and herodraft link DMs (Discord tournament logs) |
 
 Other specs mention Discord only through populated Discord IDs, `loginAsDiscordId` or the
 "Login with Discord" label, and need no external service. No e2e spec calls the real
@@ -142,7 +142,7 @@ Steam API; Steam match specs use populated data.
 
 ### Simulated dota_lobby
 
-The dota_lobby integration specs (`e2e/22-dota-lobby/`) run against the real dota_lobby
+The dota_lobby integration specs (`e2e/dota-lobby/`) run against the real dota_lobby
 service in simulation mode: simulated bots, players and matches, no Steam logon. It is
 the `dota-lobby` service in `docker-compose.test.yaml`, behind the `dota-lobby` compose
 profile, so `just test::up`, `test::setup` and CI never start or pull it.
@@ -151,7 +151,7 @@ profile, so `just test::up`, `test::setup` and CI never start or pull it.
 # Until a dota_lobby release with simulation mode exists, build it in dota_lobby
 # (`just docker::build`, tag ghcr.io/kettleofketchup/dota_lobby:local) and use that:
 DOTA_LOBBY_IMAGE=ghcr.io/kettleofketchup/dota_lobby:local just test::dota-lobby up
-just test::pw::dota-lobby          # the 22-dota-lobby specs, in order
+just test::pw::dota-lobby          # the dota-lobby specs, in order
 just test::dota-lobby logs         # follow it; also down, restart, ps
 ```
 
@@ -179,7 +179,7 @@ just test::dota-lobby logs         # follow it; also down, restart, ps
   running, so a simulator that is up but never becomes available within 60 s (bots not
   ready, test league not verified) fails the run rather than skipping it. CI sets it
   unconditionally on the dota-lobby step, so a simulator that is missing there fails too.
-  `03-password-visibility` falls back to a seeded lobby row and `05-modal-fit` needs
+  `password-visibility` falls back to a seeded lobby row and `modal-fit` needs
   only lobbies on: both always run, CI included.
 
 ### Backend suites that skip without tokens

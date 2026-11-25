@@ -1,19 +1,25 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { AxiosError, AxiosHeaders } from 'axios';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BracketMatchDTO } from '~/components/bracket/schemas';
 import { useBracketStore } from '~/store/bracketStore';
-import { useBracketQuery } from '../useBracket';
+import { useBracketQuery, useSaveBracket } from '../useBracket';
 
-const { loadBracket } = vi.hoisted(() => ({ loadBracket: vi.fn() }));
+const { loadBracket, saveBracket, toast } = vi.hoisted(() => ({
+  loadBracket: vi.fn(),
+  saveBracket: vi.fn(),
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock('~/components/api/bracketAPI', () => ({
   loadBracket,
-  saveBracket: vi.fn(),
+  saveBracket,
   advanceWinner: vi.fn(),
 }));
+vi.mock('sonner', () => ({ toast }));
 
 const apiMatch = (
   overrides: Partial<BracketMatchDTO> = {},
@@ -93,5 +99,48 @@ describe('useBracketQuery store seeding', () => {
     await refetchWith(result, apiMatch());
 
     expect(useBracketStore.getState().matches).toBe(before);
+  });
+});
+
+describe('useSaveBracket', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useBracketStore.setState({ matches: [], isDirty: true });
+  });
+
+  it('shows the roster conflict and keeps edits when Save is refused', async () => {
+    const error =
+      'ko_p1 also play for Team C. Resolve that before reopening this team.';
+    const config = { headers: new AxiosHeaders() };
+    saveBracket.mockRejectedValue(
+      new AxiosError(
+        'Request failed with status code 409',
+        '409',
+        config,
+        null,
+        {
+          status: 409,
+          statusText: 'Conflict',
+          headers: {},
+          config,
+          data: {
+            code: 'roster_conflict',
+            error,
+            details: { team_id: 1, user_ids: [2] },
+          },
+        },
+      ),
+    );
+    const { result } = renderHook(() => useSaveBracket(7), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync([]).catch(() => undefined);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(
+      `Failed to save bracket: ${error}`,
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(useBracketStore.getState().isDirty).toBe(true);
   });
 });

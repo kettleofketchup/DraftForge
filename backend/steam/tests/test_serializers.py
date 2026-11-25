@@ -189,7 +189,11 @@ class ResponseSerializersTest(TestCase):
 
     def test_auto_link_result_serializer(self):
         """Test AutoLinkResultSerializer."""
-        data = {"auto_linked_count": 5, "suggestions_created_count": 3}
+        data = {
+            "auto_linked_count": 5,
+            "suggestions_created_count": 3,
+            "skipped_roster_conflict_count": 1,
+        }
         serializer = AutoLinkResultSerializer(data=data)
         self.assertTrue(serializer.is_valid())
 
