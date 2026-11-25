@@ -40,7 +40,7 @@ from tests.data.game_org_mmr import (
     GAME_MMR_TOURNAMENT_USERS,
 )
 from tests.data.models import TestUser
-from tests.populate.utils import ensure_org_user
+from tests.populate.utils import delete_events, ensure_org_user
 from tournament.models import Tournament
 from user.models import PositionsModel
 
@@ -113,7 +113,7 @@ def _deadlock_event(
 
 
 def _delete_events(org: Organization, event_name: str, tournament_name: str) -> None:
-    Event.objects.nocache().filter(organization=org, name=event_name).delete()
+    delete_events(Event.objects.nocache().filter(organization=org, name=event_name))
     Tournament.objects.nocache().filter(
         league__organization=org, name=tournament_name
     ).delete()
