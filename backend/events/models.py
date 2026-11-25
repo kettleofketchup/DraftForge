@@ -215,6 +215,16 @@ class EventConfigMixin(models.Model):
         default=PostCullFillMode.LINE_ORDER,
         help_text="How freed seats are filled after drops",
     )
+    line_withdraw_forfeits = models.BooleanField(
+        default=True,
+        db_default=True,
+        help_text="A member who withdraws, declines or is rejected and signs up again goes to the back of the line.",
+    )
+    line_switch_restamps = models.BooleanField(
+        default=True,
+        db_default=True,
+        help_text="Switching between Main and Maybe moves the signup to the back of the line.",
+    )
     # Approval Requirements — which rank types are allowed
     allow_active_mmr = models.BooleanField(
         default=True,

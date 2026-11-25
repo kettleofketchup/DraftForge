@@ -107,3 +107,31 @@ class SyncFutureEventsSignupPolicyTest(_DiscordTaskTestCase):
         sync_future_events(repeater)
         event.refresh_from_db()
         self.assertEqual(event.signups_open_at, hand_set)
+
+
+class SyncFutureEventsLineRulesTest(_DiscordTaskTestCase):
+    def test_line_rules_cascade_to_future_events(self) -> None:
+        repeater = EventRepeater.objects.create(
+            organization=self.event.organization,
+            name="Line Repeater",
+            day_of_week=1,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date(),
+            line_withdraw_forfeits=False,
+            line_switch_restamps=False,
+        )
+        event = Event.objects.create(
+            organization=self.event.organization,
+            event_repeater=repeater,
+            name="Line Future",
+            scheduled_at=tz.now() + timedelta(days=6),
+            state="upcoming",
+        )
+        self.assertTrue(event.line_withdraw_forfeits)
+
+        sync_future_events(repeater)
+
+        event.refresh_from_db()
+        self.assertFalse(event.line_withdraw_forfeits)
+        self.assertFalse(event.line_switch_restamps)
