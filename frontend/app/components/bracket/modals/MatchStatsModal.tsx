@@ -65,6 +65,7 @@ export function MatchStatsModal({
   const setMatchWinner = useBracketStore((state) => state.setMatchWinner);
   const advanceWinner = useBracketStore((state) => state.advanceWinner);
   const unsetMatchWinner = useBracketStore((state) => state.unsetMatchWinner);
+  const holdResultForSave = useBracketStore((state) => state.holdResultForSave);
   const queryClient = useQueryClient();
   const persistMatchResult = usePersistMatchResult(tournament?.pk ?? undefined);
 
@@ -95,10 +96,10 @@ export function MatchStatsModal({
   const isGameComplete = match.status === 'completed';
   const hasMatchId = !!match.steamMatchId;
 
-  // A saved bracket with no other pending edits persists the result straight
+  // A saved bracket with no structural edits persists the result straight
   // away; otherwise the server's teams may differ, so it rides the next Save.
   const canPersistResult = () =>
-    !!match.gameId && !useBracketStore.getState().isDirty;
+    !!match.gameId && !useBracketStore.getState().hasStructuralEdits;
 
   const handleSetWinner = (winner: 'radiant' | 'dire') => {
     const persist = canPersistResult();
@@ -106,6 +107,8 @@ export function MatchStatsModal({
     advanceWinner(match.id);
     if (persist && match.gameId) {
       persistMatchResult.mutate({ gameId: match.gameId, winner });
+    } else {
+      holdResultForSave();
     }
   };
 
@@ -114,6 +117,8 @@ export function MatchStatsModal({
     unsetMatchWinner(match.id);
     if (persist && match.gameId) {
       persistMatchResult.mutate({ gameId: match.gameId, winner: null });
+    } else {
+      holdResultForSave();
     }
   };
 

@@ -106,6 +106,19 @@ export function mapApiMatchToMatch(
   };
 }
 
+function placeTeam(
+  matches: BracketMatch[],
+  matchId: string,
+  slot: 'radiant' | 'dire',
+  team: TeamType,
+): BracketMatch[] {
+  return matches.map((m) =>
+    m.id === matchId
+      ? { ...m, [slot === 'radiant' ? 'radiantTeam' : 'direTeam']: team }
+      : m,
+  );
+}
+
 interface BracketStore {
   // State
   matches: BracketMatch[];
@@ -113,6 +126,12 @@ interface BracketStore {
   edges: Edge[];
   isDirty: boolean;
   isVirtual: boolean;
+  /** Unsaved edits that only a full Save can persist (teams, seeding, held results). */
+  hasStructuralEdits: boolean;
+  /** Match results sent to advance-winner that haven't settled yet. */
+  pendingResultWrites: number;
+  /** Server bracket version the local copy was loaded from; sent with Save. */
+  baseVersion: string | null;
 
   // Actions
   setMatches: (matches: BracketMatch[]) => void;
@@ -131,6 +150,9 @@ interface BracketStore {
   setMatchWinner: (matchId: string, winner: 'radiant' | 'dire') => void;
   advanceWinner: (matchId: string) => void;
   unsetMatchWinner: (matchId: string) => void;
+  holdResultForSave: () => void;
+  beginResultWrite: () => void;
+  endResultWrite: () => number;
 
   // Persistence
   resetBracket: () => void;
@@ -142,8 +164,12 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
   edges: [],
   isDirty: false,
   isVirtual: true,
+  hasStructuralEdits: false,
+  pendingResultWrites: 0,
+  baseVersion: null,
 
-  setMatches: (matches) => set({ matches, isDirty: true }),
+  setMatches: (matches) =>
+    set({ matches, isDirty: true, hasStructuralEdits: true }),
   setNodes: (nodes) => set({ nodes }),
   setEdges: (edges) => set({ edges }),
 
@@ -153,6 +179,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     set({
       matches: result.matches,
       isDirty: true,
+      hasStructuralEdits: true,
       isVirtual: true,
     });
   },
@@ -163,18 +190,16 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     set({
       matches: reseeded,
       isDirty: true,
+      hasStructuralEdits: true,
     });
   },
 
   assignTeamToSlot: (matchId, slot, team) => {
     log.debug('Assigning team to slot', { matchId, slot, team: team.name });
     set((state) => ({
-      matches: state.matches.map((m) =>
-        m.id === matchId
-          ? { ...m, [slot === 'radiant' ? 'radiantTeam' : 'direTeam']: team }
-          : m,
-      ),
+      matches: placeTeam(state.matches, matchId, slot, team),
       isDirty: true,
+      hasStructuralEdits: true,
     }));
   },
 
@@ -190,6 +215,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
           : m,
       ),
       isDirty: true,
+      hasStructuralEdits: true,
     }));
   },
 
@@ -223,11 +249,11 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
           slot: match.nextMatchSlot,
           team: winningTeam.name,
         });
-        get().assignTeamToSlot(
-          match.nextMatchId,
-          match.nextMatchSlot,
-          winningTeam,
-        );
+        const targetId = match.nextMatchId;
+        const targetSlot = match.nextMatchSlot;
+        set((state) => ({
+          matches: placeTeam(state.matches, targetId, targetSlot, winningTeam),
+        }));
       } else {
         log.warn('bracket_advance_winner_target_missing', {
           matchId,
@@ -255,11 +281,11 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
           slot: match.loserNextMatchSlot,
           team: losingTeam.name,
         });
-        get().assignTeamToSlot(
-          match.loserNextMatchId,
-          match.loserNextMatchSlot,
-          losingTeam,
-        );
+        const targetId = match.loserNextMatchId;
+        const targetSlot = match.loserNextMatchSlot;
+        set((state) => ({
+          matches: placeTeam(state.matches, targetId, targetSlot, losingTeam),
+        }));
       } else {
         log.warn('bracket_advance_loser_target_missing', {
           matchId,
@@ -346,6 +372,20 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     }));
   },
 
+  holdResultForSave: () => set({ isDirty: true, hasStructuralEdits: true }),
+
+  beginResultWrite: () =>
+    set((state) => ({
+      pendingResultWrites: state.pendingResultWrites + 1,
+      isDirty: true,
+    })),
+
+  endResultWrite: () => {
+    const remaining = Math.max(0, get().pendingResultWrites - 1);
+    set({ pendingResultWrites: remaining });
+    return remaining;
+  },
+
   resetBracket: () => {
     log.debug('Resetting bracket');
     set({
@@ -353,6 +393,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       nodes: [],
       edges: [],
       isDirty: true, // Prevents useBracketQuery from re-seeding until user saves or generates
+      hasStructuralEdits: true,
       isVirtual: true,
     });
   },

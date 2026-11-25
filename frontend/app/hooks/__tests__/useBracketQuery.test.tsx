@@ -5,7 +5,7 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BracketMatchDTO } from '~/components/bracket/schemas';
-import { useBracketStore } from '~/store/bracketStore';
+import { mapApiMatchToMatch, useBracketStore } from '~/store/bracketStore';
 import { useBracketQuery, useSaveBracket } from '../useBracket';
 
 const { loadBracket, saveBracket, toast } = vi.hoisted(() => ({
@@ -142,5 +142,72 @@ describe('useSaveBracket', () => {
     );
     expect(toast.success).not.toHaveBeenCalled();
     expect(useBracketStore.getState().isDirty).toBe(true);
+  });
+
+  it('sends the loaded version and offers a reload when Save is stale', async () => {
+    const local = mapApiMatchToMatch(apiMatch(), [apiMatch()]);
+    useBracketStore.setState({
+      matches: [{ ...local, radiantTeam: undefined }],
+      isDirty: true,
+      hasStructuralEdits: true,
+      baseVersion: 'v1',
+    });
+    const config = { headers: new AxiosHeaders() };
+    saveBracket.mockRejectedValue(
+      new AxiosError(
+        'Request failed with status code 409',
+        '409',
+        config,
+        null,
+        {
+          status: 409,
+          statusText: 'Conflict',
+          headers: {},
+          config,
+          data: {
+            code: 'bracket_stale',
+            error: 'The bracket changed since you loaded it.',
+            details: { current_version: 'v2' },
+          },
+        },
+      ),
+    );
+    const fresh = apiMatch({
+      status: 'completed',
+      winning_team: { pk: 1, name: 'Ember Lynx' },
+    });
+    loadBracket.mockResolvedValue({
+      tournamentId: 7,
+      version: 'v2',
+      matches: [fresh],
+    });
+    const { result } = renderHook(() => useSaveBracket(7), { wrapper });
+
+    await act(async () => {
+      await result.current
+        .mutateAsync(useBracketStore.getState().matches)
+        .catch(() => undefined);
+    });
+
+    expect(saveBracket).toHaveBeenCalledWith(7, expect.any(Array), 'v1');
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    const [message, options] = toast.error.mock.calls[0];
+    expect(message).toBe('The bracket changed since you loaded it.');
+    expect(useBracketStore.getState().isDirty).toBe(true);
+    expect(useBracketStore.getState().matches[0].radiantTeam).toBeUndefined();
+
+    await act(async () => {
+      options.action.onClick();
+      await waitFor(() => expect(loadBracket).toHaveBeenCalled());
+    });
+
+    await waitFor(() =>
+      expect(useBracketStore.getState().baseVersion).toBe('v2'),
+    );
+    const state = useBracketStore.getState();
+    expect(state.isDirty).toBe(false);
+    expect(state.hasStructuralEdits).toBe(false);
+    expect(state.matches[0].winner).toBe('radiant');
+    expect(state.matches[0].radiantTeam?.pk).toBe(1);
   });
 });

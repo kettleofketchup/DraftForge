@@ -1,5 +1,8 @@
 """Bracket API views for tournament bracket management."""
 
+import hashlib
+from collections.abc import Iterable
+
 from django.db import transaction
 from django.db.models import Prefetch
 from rest_framework import status
@@ -33,6 +36,33 @@ from tournament.services.team_audit import log_snapshot_fields, write_team_log
 from tournament.services.team_management import live_conflicts, roster_conflict_body
 
 log = get_logger(__name__)
+
+_VERSION_FIELDS = (
+    "pk",
+    "bracket_type",
+    "round",
+    "position",
+    "elimination_type",
+    "status",
+    "radiant_team_id",
+    "dire_team_id",
+    "winning_team_id",
+    "next_game_id",
+    "next_game_slot",
+    "loser_next_game_id",
+    "loser_next_game_slot",
+    "swiss_record_wins",
+    "swiss_record_losses",
+)
+
+
+def bracket_version(games: Iterable[Game]) -> str:
+    """Token over the fields save_bracket writes; any change to them changes it."""
+    rows = sorted(
+        "|".join(str(getattr(game, field)) for field in _VERSION_FIELDS)
+        for game in games
+    )
+    return hashlib.sha256("\n".join(rows).encode()).hexdigest()[:32]
 
 
 @api_view(["GET"])
@@ -87,7 +117,13 @@ def get_bracket(request: Request, tournament_id: int) -> Response:
         tournament_id=tournament_id,
         match_count=len(serializer.data),
     )
-    return Response({"tournamentId": tournament_id, "matches": serializer.data})
+    return Response(
+        {
+            "tournamentId": tournament_id,
+            "matches": serializer.data,
+            "version": bracket_version(games),
+        }
+    )
 
 
 @api_view(["POST"])
@@ -143,7 +179,9 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
     Requires league staff access to the tournament's league.
     """
     try:
-        tournament = Tournament.objects.get(pk=tournament_id)
+        tournament = (
+            Tournament.objects.nocache().select_for_update().get(pk=tournament_id)
+        )
     except Tournament.DoesNotExist:
         log.warning(
             "bracket_save_tournament_missing",
@@ -175,6 +213,37 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
         )
 
     matches = serializer.validated_data["matches"]
+    client_version = serializer.validated_data.get("version")
+    current_version = bracket_version(
+        Game.objects.nocache().filter(tournament=tournament)
+    )
+    if client_version is not None and client_version != current_version:
+        log.warning(
+            "bracket_save_stale",
+            system="bracket",
+            subsystem="save",
+            tournament_id=tournament_id,
+            client_version=client_version,
+            current_version=current_version,
+        )
+        return Response(
+            {
+                "error": (
+                    "The bracket changed since you loaded it. "
+                    "Reload to see the latest results."
+                ),
+                "code": "bracket_stale",
+                "details": {"current_version": current_version},
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    if client_version is None:
+        log.info(
+            "bracket_save_unversioned",
+            system="bracket",
+            subsystem="save",
+            tournament_id=tournament_id,
+        )
     placements_before = tournament_bracket_placements(tournament.pk)
 
     # Build lookup of existing games by (bracket_type, round, position)
@@ -336,7 +405,13 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
     # Invalidate caches after saving bracket
     invalidate_after_commit(*saved_games, tournament)
 
-    return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
+    return Response(
+        {
+            "tournamentId": tournament_id,
+            "matches": result_serializer.data,
+            "version": bracket_version(saved_games),
+        }
+    )
 
 
 def calculate_placement(game: Game) -> int | None:
