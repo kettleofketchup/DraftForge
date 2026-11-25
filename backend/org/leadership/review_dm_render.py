@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Literal
 
-from discordbot.custom_ids import LEADERSHIP_REVIEW_PREFIX
+from discordbot.custom_ids import LeadershipScoreId
 from discordbot.dm import V2_FLAG
 
 MAX_TRAITS_PER_MESSAGE: Final[int] = 5
@@ -69,7 +69,9 @@ def _button_row(snapshot_id: int, trait_id: int, chosen: int | None) -> dict[str
                 "type": BUTTON,
                 "style": PRIMARY if score == chosen else SECONDARY,
                 "label": str(score),
-                "custom_id": f"{LEADERSHIP_REVIEW_PREFIX}{snapshot_id}:{trait_id}:{score}",
+                "custom_id": LeadershipScoreId(
+                    snapshot_id=snapshot_id, trait_id=trait_id, score=score
+                ).encode(),
             }
             for score in SCORES
         ],

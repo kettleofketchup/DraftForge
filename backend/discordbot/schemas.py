@@ -424,3 +424,20 @@ class ReviewDMPlanBody(BaseModel):
 class ReviewDMPlanResponse(BaseModel):
     messages: list[PlannedMessage] = Field(default_factory=list)
     model_config = {"extra": "ignore"}
+
+
+class ReviewClickBody(BaseModel):
+    discord_user_id: DiscordId
+    discord_message_id: DiscordId
+    discord_channel_id: DiscordId
+    interaction_id: DiscordId
+    snapshot_id: Annotated[int, Field(gt=0)]
+    trait_id: Annotated[int, Field(gt=0)]
+    score: Annotated[int, Field(ge=1, le=5)]
+    model_config = {"extra": "ignore"}
+
+
+class ClickResult(BaseModel):
+    message: dict[str, Any] | None = None
+    ephemeral: str | None = None
+    model_config = {"extra": "ignore", "frozen": True}

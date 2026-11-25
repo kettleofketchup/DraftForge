@@ -21,11 +21,13 @@ from discordbot.custom_ids import (
     LEADERSHIP_REVIEW_PREFIX,
     CustomId,
     DeclineId,
+    LeadershipScoreId,
     NotifyId,
     SignupId,
     TentativeId,
 )
 from discordbot.internal_client.dm_ledger import record_dm_click
+from discordbot.leadership_gateway import handle_review_click
 from discordbot.log_context import discord_log_context
 from telemetry.logging import get_logger
 
@@ -62,7 +64,7 @@ def _schedule_dm_click(interaction: discord.Interaction, custom_id: str) -> None
 async def _reject_bad_custom_id(
     interaction: discord.Interaction,
     custom_id: str,
-    codec: type[CustomId],
+    codec: type[CustomId] | type[LeadershipScoreId],
     exc: ValueError,
 ) -> None:
     async with discord_log_context(interaction, custom_id=custom_id) as ctx:
@@ -84,6 +86,15 @@ async def route_component_interaction(
     interaction: discord.Interaction, custom_id: str
 ) -> None:
     _schedule_dm_click(interaction, custom_id)
+
+    if LeadershipScoreId.matches(custom_id):
+        try:
+            score = LeadershipScoreId.decode(custom_id)
+        except ValueError as exc:
+            await _reject_bad_custom_id(interaction, custom_id, LeadershipScoreId, exc)
+            return
+        await handle_review_click(interaction, score)
+        return
 
     if custom_id.startswith("draft_activity:") and custom_id != "draft_activity:launch":
         draft = decode_draft_launch(custom_id)

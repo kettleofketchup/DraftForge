@@ -2,9 +2,11 @@
 """Celery tasks for Discord bot scheduled operations."""
 
 from datetime import datetime, timedelta
+from typing import Any
 
 import requests
 from celery import shared_task
+from pydantic import ValidationError
 
 from app.internal_client import (
     get_due_scheduled_events,
@@ -12,6 +14,8 @@ from app.internal_client import (
     update_scheduled_event,
 )
 from discordbot.activity_launch_gateway import prepare_launch_payload
+from discordbot.internal_client.leadership_actions import SAVE_FAILED, review_click
+from discordbot.schemas import ReviewClickBody
 from discordbot.utils import sync_add_reactions, sync_send_embed
 from telemetry.logging import get_logger
 
@@ -174,3 +178,66 @@ def complete_activity_launch(
         log.warning(
             "activity_launch_followup_failed", system="discord", subsystem="activity"
         )
+
+
+def _interaction_webhook(payload: dict[str, Any]) -> str | None:
+    application_id = str(payload.get("application_id", ""))
+    token = str(payload.get("interaction_token", ""))
+    if not application_id.isdigit() or not token or "/" in token:
+        return None
+    return f"https://discord.com/api/v10/webhooks/{application_id}/{token}"
+
+
+def _review_followup(webhook: str, content: str) -> None:
+    try:
+        requests.post(
+            webhook,
+            json={"content": content, "flags": 64, "allowed_mentions": {"parse": []}},
+            timeout=10,
+        ).raise_for_status()
+    except requests.RequestException:
+        log.warning(
+            "leadership_review_followup_failed",
+            system="discord",
+            subsystem="leadership",
+        )
+
+
+@shared_task
+def complete_review_click(payload: dict[str, Any]) -> None:
+    """HTTP-interactions mode: apply an ``lr:`` click and re-render, without the ORM."""
+    webhook = _interaction_webhook(payload)
+    if webhook is None:
+        return
+    try:
+        body = ReviewClickBody.model_validate(payload.get("click") or {})
+    except ValidationError:
+        log.warning(
+            "leadership_review_click_invalid", system="discord", subsystem="leadership"
+        )
+        _review_followup(webhook, SAVE_FAILED)
+        return
+    result = review_click(body)
+    if result is None:
+        _review_followup(webhook, SAVE_FAILED)
+        return
+    if result.message is not None:
+        try:
+            requests.patch(
+                f"{webhook}/messages/@original",
+                json={
+                    "flags": result.message["flags"],
+                    "components": result.message["components"],
+                    "allowed_mentions": {"parse": []},
+                },
+                timeout=10,
+            ).raise_for_status()
+        except requests.RequestException:
+            # Request exceptions include the URL (and interaction credential).
+            log.warning(
+                "leadership_review_rerender_failed",
+                system="discord",
+                subsystem="leadership",
+            )
+    if result.ephemeral:
+        _review_followup(webhook, result.ephemeral)

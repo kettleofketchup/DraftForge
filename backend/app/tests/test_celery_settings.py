@@ -140,6 +140,7 @@ class CelerySettingsBootTest(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stderr[-3000:])
         registered = set(json.loads(result.stdout.strip().splitlines()[-1]))
         self.assertIn("org.leadership.tasks.send_leadership_review_dms", registered)
+        self.assertIn("discordbot.tasks.complete_review_click", registered)
 
     def test_worker_registers_every_light_beat_task(self) -> None:
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}

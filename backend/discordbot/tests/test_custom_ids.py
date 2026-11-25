@@ -8,6 +8,7 @@ components.py, or persistent components on posted messages break.
 from django.test import SimpleTestCase
 
 from discordbot import custom_ids as cid
+from discordbot.log_context import parse_event_id, resolve_tags
 
 
 class CustomIdRoundTripTest(SimpleTestCase):
@@ -98,3 +99,33 @@ class CustomIdRoundTripTest(SimpleTestCase):
         # spot-check the irregular ones normalize to the bare prefix
         self.assertIn("pos_select", cid.SIGNUP_TAG_PREFIXES)
         self.assertIn("screenshot_url", cid.SIGNUP_TAG_PREFIXES)
+
+
+class LeadershipScoreIdTest(SimpleTestCase):
+    def test_lr_round_trip(self) -> None:
+        obj = cid.LeadershipScoreId(snapshot_id=12, trait_id=34, score=5)
+        self.assertEqual(obj.encode(), "lr:12:34:5")
+        self.assertTrue(cid.LeadershipScoreId.matches("lr:12:34:5"))
+        self.assertEqual(cid.LeadershipScoreId.decode("lr:12:34:5"), obj)
+        self.assertTrue(obj.encode().startswith(cid.LEADERSHIP_REVIEW_PREFIX))
+
+    def test_lr_bounds(self) -> None:
+        for raw in ("lr:1:2:0", "lr:1:2:6", "lr:0:2:3", "lr:1:0:3", "lr:-1:2:3"):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                cid.LeadershipScoreId.decode(raw)
+
+    def test_lr_malformed(self) -> None:
+        for raw in ("lr:", "lr:1:2", "lr:1:2:3:4", "lr:a:2:3", "lr:1:2:x", "xr:1:2:3"):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                cid.LeadershipScoreId.decode(raw)
+        self.assertFalse(cid.LeadershipScoreId.matches("lrx:1:2:3"))
+        self.assertFalse(cid.LeadershipScoreId.matches("event_signup:1"))
+
+    def test_lr_not_in_all_codecs(self) -> None:
+        self.assertNotIn(cid.LeadershipScoreId, cid.ALL_CODECS)
+        self.assertNotIn("lr", cid.SIGNUP_TAG_PREFIXES)
+        self.assertFalse(issubclass(cid.LeadershipScoreId, cid.CustomId))
+
+    def test_lr_log_tags(self) -> None:
+        self.assertEqual(resolve_tags("lr:1:2:3"), ["leadership", "review"])
+        self.assertIsNone(parse_event_id("lr:1:2:3"))

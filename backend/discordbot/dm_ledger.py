@@ -430,6 +430,23 @@ def find_leadership_row(
     return None
 
 
+def leadership_message_of_other(
+    *, snapshot_id: int, discord_message_id: str, discord_user_id: str
+) -> bool:
+    if not discord_message_id:
+        return False
+    return (
+        DiscordDM.objects.filter(
+            kind=DMKind.LEADERSHIP_REVIEW,
+            subject_type=DMSubject.CAPTAIN_SNAPSHOT,
+            subject_id=snapshot_id,
+            discord_message_id=discord_message_id,
+        )
+        .exclude(discord_user_id=discord_user_id)
+        .exists()
+    )
+
+
 def leadership_trait_ids(*, snapshot_id: int, discord_user_id: str) -> set[int]:
     ids: set[int] = set()
     for row in _leadership_rows(
