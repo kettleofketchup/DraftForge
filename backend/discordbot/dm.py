@@ -48,6 +48,7 @@ class DMRequest:
     embed: JSONDict | None = None
     components: list[JSONDict] | None = None
     flags: int | None = None
+    skip_status: DMStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +61,14 @@ class DMOutcome:
 
 
 OnClaimed = Callable[[int, DMStatus], None]
+
+SKIP_STATUSES: frozenset[DMStatus] = frozenset(
+    {
+        DMStatus.SKIPPED_TEST_MODE,
+        DMStatus.SKIPPED_NO_DISCORD,
+        DMStatus.SKIPPED_DISABLED,
+    }
+)
 
 DELIVERED_OUTCOMES: frozenset[DMStatus | Literal["duplicate", "ledger_unavailable"]] = (
     frozenset({DMStatus.SENT, DMStatus.SKIPPED_TEST_MODE, "duplicate"})
@@ -450,7 +459,11 @@ def _deliver(
 
 
 def send_dm(req: DMRequest, *, on_claimed: OnClaimed | None = None) -> DMOutcome:
+    if req.skip_status is not None and req.skip_status not in SKIP_STATUSES:
+        raise ValueError(f"skip_status must be a skip status, not {req.skip_status}")
     token = _claim_token()
+    if req.skip_status is not None:
+        return _record_skip(req, token, req.skip_status, on_claimed)
     if not req.discord_user_id:
         return _record_skip(req, token, DMStatus.SKIPPED_NO_DISCORD, on_claimed)
     if _test_mode_skips(req.discord_user_id):

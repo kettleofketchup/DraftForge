@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
 from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext, override_settings
@@ -440,3 +441,67 @@ class DeleteTest(LeadershipTestCase):
         with transaction.atomic():
             standing.on_event_deleted(self.event, actor=None)
         self.assertFalse(ContributionEntry.objects.filter(track="leadership").exists())
+
+
+@patch("org.leadership.lifecycle.send_leadership_review_dms")
+class ReviewDMEnqueueTest(LeadershipTestCase):
+    def enable(self) -> None:
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org, defaults={"review_dms_enabled": True}
+        )
+
+    def reopen(self) -> None:
+        self.event.refresh_from_db()
+        reopen_event(self.event, actor=self.admin)
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.IN_PROGRESS)
+        self.event.refresh_from_db()
+
+    def test_close_enqueues_on_commit_when_enabled(self, task: MagicMock) -> None:
+        self.enable()
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            self.close()
+        task.delay.assert_not_called()
+        for callback in callbacks:
+            callback()
+        ids = sorted(
+            EventCaptain.objects.filter(event=self.event).values_list("pk", flat=True)
+        )
+        task.delay.assert_called_once_with(self.event.pk, ids)
+
+    def test_snapshot_result_reports_created_ids(self, task: MagicMock) -> None:
+        result = self.run_snapshot()
+        ids = tuple(
+            sorted(
+                EventCaptain.objects.filter(event=self.event).values_list(
+                    "pk", flat=True
+                )
+            )
+        )
+        self.assertEqual(tuple(sorted(result.created_snapshot_ids)), ids)
+        self.assertEqual(self.run_snapshot().created_snapshot_ids, ())
+
+    def test_close_does_not_enqueue_when_disabled(self, task: MagicMock) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_reclose_does_not_enqueue(self, task: MagicMock) -> None:
+        self.enable()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_called_once()
+        task.delay.reset_mock()
+        self.reopen()
+        self.team_b.members.add(self.make_user("ld_late"))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_enqueue_failure_is_logged_not_raised(self, task: MagicMock) -> None:
+        self.enable()
+        task.delay.side_effect = RuntimeError("broker down")
+        with capture_logs() as logs, self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        self.assertIn(
+            "leadership_review_dms_enqueue_failed", [e["event"] for e in logs]
+        )

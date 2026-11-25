@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from django.db import transaction
 from django.db.models import Prefetch
 
 from app.models import CustomUser
@@ -15,6 +16,7 @@ from org.leadership.constants import VoidKind
 from org.leadership.kinds import PLACEMENT_KINDS, RATED_KINDS, LeadershipKind
 from org.leadership.reviews import delete_drafts
 from org.leadership.settings import get_leadership_settings
+from org.leadership.tasks import send_leadership_review_dms
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.models_leadership import CaptainReview, EventCaptain
@@ -30,6 +32,7 @@ log = get_logger(__name__)
 class SnapshotResult:
     captains: int
     awarded: int
+    created_snapshot_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,7 +124,7 @@ def _wanted_awards(
 
 def _write_snapshots(
     event: Event, planned: list[_Planned], *, closes: datetime
-) -> None:
+) -> tuple[int, ...]:
     existing = {
         s.captain_id: s for s in EventCaptain.objects.nocache().filter(event=event)
     }
@@ -162,7 +165,7 @@ def _write_snapshots(
         EventCaptain.objects.bulk_create(create)
     snaps = {s.captain_id: s for s in [*update, *create]}
     if not snaps:
-        return
+        return ()
     through = EventCaptain.teammates.through
     through.objects.filter(eventcaptain_id__in=[s.pk for s in snaps.values()]).delete()
     through.objects.bulk_create(
@@ -170,6 +173,22 @@ def _write_snapshots(
         for plan in planned
         for mate in plan.teammates
     )
+    return tuple(s.pk for s in create)
+
+
+def _enqueue_review_dms(org_id: int, event_id: int, snapshot_ids: list[int]) -> None:
+    try:
+        send_leadership_review_dms.delay(event_id, snapshot_ids)
+    except Exception:
+        log.error(
+            "leadership_review_dms_enqueue_failed",
+            system="org",
+            subsystem="leadership",
+            org_id=org_id,
+            event_id=event_id,
+            snapshots=len(snapshot_ids),
+            exc_info=True,
+        )
 
 
 def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
@@ -201,9 +220,12 @@ def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
         .first()
     )
     settings = get_leadership_settings(locked.organization_id)
-    _write_snapshots(
+    created = _write_snapshots(
         locked, planned, closes=now + timedelta(hours=settings.review_window_hours)
     )
+    if settings.review_dms_enabled and created:
+        org_id, event_id, ids = locked.organization_id, locked.pk, sorted(created)
+        transaction.on_commit(lambda: _enqueue_review_dms(org_id, event_id, ids))
     points = ledger.points_table(locked.organization, RATED_KINDS)
     counts = ledger.sync_event_kinds(
         locked,
@@ -221,8 +243,11 @@ def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
         event_id=locked.pk,
         captains=len(planned),
         awarded=awarded,
+        snapshots_created=len(created),
     )
-    return SnapshotResult(captains=len(planned), awarded=awarded)
+    return SnapshotResult(
+        captains=len(planned), awarded=awarded, created_snapshot_ids=created
+    )
 
 
 def _snapshot_ids(event: Event) -> list[int]:

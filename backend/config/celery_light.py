@@ -25,6 +25,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 app.autodiscover_tasks()
 app.autodiscover_tasks(["events"], related_name="tournament_tasks")
+app.autodiscover_tasks(["org.leadership"], related_name="tasks")
 
 # Beat schedule — copied from config/celery.py
 _beat_schedule = {

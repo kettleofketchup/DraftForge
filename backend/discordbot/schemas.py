@@ -396,3 +396,31 @@ class DMLedgerRowResponse(BaseModel):
     status: DMStatusValue
     attempts: int = 0
     model_config = {"extra": "ignore"}
+
+
+# --- Leadership review DMs (org/leadership/internal_views.py) ----------------
+
+
+class PlannedMessage(BaseModel):
+    snapshot_id: int
+    part: Annotated[int, Field(ge=1)]
+    parts: Annotated[int, Field(ge=1)]
+    trait_ids: list[int]
+    rater_org_user_id: int
+    recipient_user_id: int
+    organization_id: int
+    discord_user_id: DiscordId | None = None
+    skip: Literal["disabled"] | None = None
+    payload: dict[str, Any]
+    model_config = {"extra": "ignore"}
+
+
+class ReviewDMPlanBody(BaseModel):
+    event_id: int
+    snapshot_ids: list[int] = Field(max_length=500)
+    model_config = {"extra": "ignore"}
+
+
+class ReviewDMPlanResponse(BaseModel):
+    messages: list[PlannedMessage] = Field(default_factory=list)
+    model_config = {"extra": "ignore"}

@@ -94,7 +94,6 @@ R6_NAMES: frozenset[str] = frozenset({"DiscordDM", "discordbot.DiscordDM"})
 KIND_DEFINITION_FILES: frozenset[str] = frozenset(
     {"discordbot/models.py", "discordbot/dm_keys.py", "discordbot/dm_context.py"}
 )
-PENDING_KINDS: frozenset[DMKind] = frozenset({DMKind.LEADERSHIP_REVIEW})
 SKIP_DIRS: frozenset[str] = frozenset(
     {".venv", "venv", "node_modules", "migrations", "__pycache__"}
 )
@@ -524,6 +523,4 @@ class RepoGuardTests(SimpleTestCase):
         for kind in DMKind:
             with self.subTest(kind=kind.value):
                 self.assertIn(kind, KEY_BUILDERS)
-                if kind in PENDING_KINDS:
-                    continue
                 self.assertIn(kind.name, refs, f"DMKind.{kind.name} is never sent")

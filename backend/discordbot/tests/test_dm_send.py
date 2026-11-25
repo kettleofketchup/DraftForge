@@ -132,6 +132,46 @@ class SendDMTests(SimpleTestCase):
             "dm_skipped_test_mode", [c.args[0] for c in log.info.call_args_list]
         )
 
+    def test_skip_status_disabled_records_without_send(
+        self,
+        claim: MagicMock,
+        mark: MagicMock,
+        finalize: MagicMock,
+        request: MagicMock,
+        log: MagicMock,
+    ) -> None:
+        hook = MagicMock()
+        outcome = send_dm(
+            _req(
+                kind=DMKind.LEADERSHIP_REVIEW,
+                content=None,
+                components=[{"type": 10, "content": "x"}],
+                flags=V2_FLAG,
+                skip_status=DMStatus.SKIPPED_DISABLED,
+            ),
+            on_claimed=hook,
+        )
+        body = self._claim(claim)
+        self.assertEqual(body.initial_status, DMStatus.SKIPPED_DISABLED)
+        self.assertEqual(body.discord_user_id, "222")
+        request.assert_not_called()
+        mark.assert_not_called()
+        finalize.assert_not_called()
+        self.assertEqual(outcome.status, DMStatus.SKIPPED_DISABLED)
+        hook.assert_called_once_with(LEDGER_ID, DMStatus.SKIPPED_DISABLED)
+
+    def test_skip_status_must_be_a_skip(
+        self,
+        claim: MagicMock,
+        mark: MagicMock,
+        finalize: MagicMock,
+        request: MagicMock,
+        log: MagicMock,
+    ) -> None:
+        with self.assertRaises(ValueError):
+            send_dm(_req(skip_status=DMStatus.SENT))
+        claim.assert_not_called()
+
     @override_settings(TEST=True, TEST_DISCORD_USER_ID="222")
     def test_test_mode_target_user_sends(
         self,

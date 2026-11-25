@@ -506,6 +506,11 @@ urlpatterns += [
     path("api/internal/lobbies/", include("lobby.internal_urls")),
 ]
 
+# Internal API — leadership review DM planning (worker → backend)
+urlpatterns += [
+    path("api/internal/leadership/", include("org.leadership.internal_urls")),
+]
+
 # Internal API — Steam sync endpoints
 urlpatterns += [
     path("api/internal/steam/sync-state/<int:league_id>/", steam_sync_state),
