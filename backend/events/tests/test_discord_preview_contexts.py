@@ -16,8 +16,13 @@ from django.utils import timezone as tz
 
 from app.models import CustomUser
 from discordbot.models import DiscordEvent, DiscordEventLog, DiscordMessageLog
-from events.constants import EventState, RepeatFrequency, SignupStatus
-from events.discord.preview import build_discord_preview
+from events.constants import (
+    EventState,
+    RepeatFrequency,
+    SignupOpenMode,
+    SignupStatus,
+)
+from events.discord.preview import _repeater_source, _Source, build_discord_preview
 from events.discord.preview_schema import (
     DiscordPreviewResponse,
     EventContext,
@@ -189,6 +194,26 @@ class UnsavedSafetyTest(_ContextTestCase):
         )
         self.assertEqual(overridden.scheduled_event.name, "One-off Title")
 
+    def test_one_off_reports_occurrence_collision(self) -> None:
+        tomorrow = datetime.combine(
+            self.today + timedelta(days=1), time(20, 0), tzinfo=dt_tz.utc
+        )
+        taken = self.make_event(
+            name="Daily Series",
+            event_repeater=self.series,
+            scheduled_at=tomorrow + timedelta(hours=1),
+            state=EventState.UPCOMING,
+            is_off_schedule=True,
+        )
+        for when in (tomorrow, taken.scheduled_at):
+            with self.subTest(when=when):
+                response = self.pv(
+                    "signup_post", self.one_off(), {"scheduled_at": when.isoformat()}
+                )
+                self.assertEqual(response.status, "ok")
+                self.assertEqual(response.messages, [])
+                self.assertEqual(response.gate.reasons, ["occurrence_collision"])
+
     def test_open_signups_true_gives_signups_open_state(self) -> None:
         cases: list[tuple[PreviewContext, dict[str, Any]]] = [
             (self.new_event(), {**NEW_EVENT_VALUES, "signup_open_mode": "immediate"}),
@@ -271,13 +296,112 @@ class RepeaterContextTest(_ContextTestCase):
         response = self.pv("signup_post", self.series_ctx())
         self.assertNotIn("next_event_already_open_not_updated", response.notes)
 
-    def test_repeater_paused_gate(self) -> None:
-        self.series_event(3)
+    def test_repeater_paused_without_events_gate(self) -> None:
         response = self.pv("signup_post", self.series_ctx(), {"is_active": False})
         self.assertEqual(response.status, "ok")
         self.assertEqual(response.messages, [])
         self.assertEqual(response.gate.reasons, ["series_paused"])
         self.assertFalse(response.gate.would_send)
+
+    def test_repeater_paused_still_previews_existing_event(self) -> None:
+        upcoming = self.series_event(3)
+        response = self.pv(
+            "scheduled_event",
+            self.series_ctx(),
+            {"is_active": False, "discord_event_title": "Paused Title"},
+        )
+        self.assertTrue(response.saved)
+        self.assertEqual(response.scheduled_event.name, "Paused Title")
+        self.assertEqual(
+            datetime.fromisoformat(response.scheduled_event.scheduled_start_time),
+            upcoming.scheduled_at,
+        )
+        self.assertIn("existing_event_still_posts", response.notes)
+        self.assertEqual(response.note_args["series_gate"], "series_paused")
+
+    def at(self, days: int, hour: int = 20) -> datetime:
+        return datetime.combine(
+            self.today + timedelta(days=days), time(hour, 0), tzinfo=dt_tz.utc
+        )
+
+    def aligned_event(self, days: int, **fields: Any) -> Event:
+        return self.make_event(
+            name="Daily Series",
+            event_repeater=self.series,
+            scheduled_at=self.at(days),
+            state=EventState.UPCOMING,
+            **fields,
+        )
+
+    def test_repeater_time_change_previews_new_occurrence_not_stale_row(
+        self,
+    ) -> None:
+        self.aligned_event(0)
+        self.aligned_event(1)
+        response = self.pv(
+            "scheduled_event", self.series_ctx(), {"time_of_day": "21:00"}
+        )
+        self.assertFalse(response.saved)
+        self.assertEqual(
+            datetime.fromisoformat(response.scheduled_event.scheduled_start_time),
+            self.at(0, hour=21),
+        )
+
+    def test_repeater_schedule_change_keeps_matching_event_and_signups(self) -> None:
+        kept = self.aligned_event(1)
+        self._signup(kept, "kept_player", "200000000000000002", SignupStatus.RSVP)
+        later_start = (self.today + timedelta(days=1)).isoformat()
+        response = self.pv(
+            "start_mention", self.series_ctx(), {"starts_at": later_start}
+        )
+        self.assertTrue(response.saved)
+        self.assertEqual(response.mentions.users, {"200000000000000002": "kept_player"})
+
+    def realigned_source(self) -> _Source:
+        values = {"starts_at": (self.today + timedelta(days=1)).isoformat()}
+        source = _repeater_source(self.series_ctx(), values, self.admin)
+        assert isinstance(source, _Source)
+        return source
+
+    def test_repeater_schedule_change_preserves_manual_signups_open_at(self) -> None:
+        hand_set = self.at(1, hour=10)
+        manual = self.aligned_event(
+            1, signup_open_mode=SignupOpenMode.MANUAL, signups_open_at=hand_set
+        )
+        source = self.realigned_source()
+        self.assertEqual(source.event.pk, manual.pk)
+        self.assertEqual(source.event.signups_open_at, hand_set)
+
+    def test_repeater_schedule_change_recomputes_scheduled_signups_open_at(
+        self,
+    ) -> None:
+        scheduled = self.aligned_event(
+            1,
+            signup_open_mode=SignupOpenMode.SCHEDULED,
+            signups_open_hours_before=2,
+            signups_open_at=self.at(1, hour=10),
+        )
+        source = self.realigned_source()
+        self.assertEqual(source.event.pk, scheduled.pk)
+        self.assertEqual(
+            source.event.signups_open_at, scheduled.scheduled_at - timedelta(hours=2)
+        )
+
+    def test_repeater_without_schedule_change_keeps_scheduled_signups_open_at(
+        self,
+    ) -> None:
+        hand_set = self.at(0, hour=10)
+        self.aligned_event(
+            0,
+            signup_open_mode=SignupOpenMode.SCHEDULED,
+            signups_open_hours_before=2,
+            signups_open_at=hand_set,
+        )
+        source = _repeater_source(
+            self.series_ctx(), {"discord_event_title": "Edited"}, self.admin
+        )
+        assert isinstance(source, _Source)
+        self.assertEqual(source.event.signups_open_at, hand_set)
 
     def test_repeater_ended_gate(self) -> None:
         yesterday = (self.today - timedelta(days=1)).isoformat()

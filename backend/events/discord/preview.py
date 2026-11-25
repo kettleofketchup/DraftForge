@@ -25,7 +25,7 @@ from discordbot.payloads import (
 )
 from discordbot.schemas import DiscordEventStateSchema
 from events.capacity import with_signup_counts
-from events.constants import EventState, RepeatFrequency
+from events.constants import EventState, RepeatFrequency, SignupOpenMode
 from events.discord.embeds import (
     build_announcement_notice,
     build_announcement_v2,
@@ -91,10 +91,12 @@ from events.models import (
 from events.schemas import EventSignupSchema
 from events.services import (
     REPEATER_CREATE_COPY_FIELDS,
+    REPEATER_SCHEDULE_FIELDS,
     _copy_mixin_fields,
     _get_next_occurrences,
     _today,
     apply_repeater_config_to_event,
+    off_schedule_collision,
 )
 from events.signup_schedule import (
     SIGNUP_OPEN_POLICY_FIELDS,
@@ -599,6 +601,8 @@ def _series_one_off_source(
     missing = _missing_event_inputs(event)
     if missing:
         return _Early(status="needs_input", missing=missing)
+    if off_schedule_collision(repeater, event.scheduled_at) is not None:
+        return _Early(status="ok", gate=GateResult(False, ["occurrence_collision"]))
     event.tournament_date = event.scheduled_at
     apply_signup_open_policy(event, timezone.now())
     event.state = initial_state_for_new_event(open_signups)
@@ -613,10 +617,16 @@ def _schedule_complete(repeater: EventRepeater) -> bool:
     return bool(repeater.timezone)
 
 
+def _occurrence_window(
+    repeater: EventRepeater, today: datetime.date
+) -> list[datetime.datetime]:
+    to_date = today + timedelta(days=repeater.generate_days_ahead)
+    return _get_next_occurrences(repeater, today, to_date)
+
+
 def _first_new_occurrence(
     repeater: EventRepeater, today: datetime.date
 ) -> datetime.datetime | None:
-    to_date = today + timedelta(days=repeater.generate_days_ahead)
     taken: set[datetime.datetime] = set()
     if repeater.pk is not None:
         taken = set(
@@ -624,7 +634,7 @@ def _first_new_occurrence(
             .filter(event_repeater_id=repeater.pk)
             .values_list("scheduled_at", flat=True)
         )
-    for occurrence in _get_next_occurrences(repeater, today, to_date):
+    for occurrence in _occurrence_window(repeater, today):
         if occurrence not in taken:
             return occurrence
     return None
@@ -666,40 +676,68 @@ def _earlier_open_event(
     )
 
 
-def _series_source(repeater: EventRepeater, policy_changed: bool) -> _Source | _Early:
+def _first_upcoming_event(
+    repeater: EventRepeater, kept: set[datetime.datetime] | None
+) -> Event | None:
+    if repeater.pk is None:
+        return None
+    events = (
+        Event.objects.nocache()
+        .select_related("organization")
+        .filter(event_repeater_id=repeater.pk, state=EventState.UPCOMING)
+        .exclude(is_off_schedule=True)
+    )
+    if kept is not None:
+        events = events.filter(scheduled_at__in=kept)
+    return with_signup_counts(events.order_by("scheduled_at")).first()
+
+
+def _existing_series_source(
+    repeater: EventRepeater, event: Event, policy_changed: bool, realign: bool
+) -> _Source:
+    event.event_repeater = repeater
+    apply_repeater_config_to_event(repeater, event)
+    event.tournament_date = event.scheduled_at
+    if policy_changed:
+        _copy_mixin_fields(repeater, event, list(SIGNUP_OPEN_POLICY_FIELDS))
+        apply_signup_open_policy(event, timezone.now())
+    elif realign and event.signup_open_mode != SignupOpenMode.MANUAL:
+        apply_signup_open_policy(event, timezone.now())
+    normalize_event_fields(event)
+    return _saved_source(event)
+
+
+def _series_source(
+    repeater: EventRepeater, policy_changed: bool, schedule_changed: bool
+) -> _Source | _Early:
     today = _today()
     generates = repeater_generates(repeater, today)
-    if not generates.would_send:
-        return _Early(status="ok", gate=generates)
-    existing = None
-    if repeater.pk is not None:
-        existing = with_signup_counts(
-            Event.objects.nocache()
-            .select_related("organization")
-            .filter(event_repeater_id=repeater.pk, state=EventState.UPCOMING)
-            .exclude(is_off_schedule=True)
-            .order_by("scheduled_at")
-        ).first()
-    if existing is not None:
-        event = existing
-        event.event_repeater = repeater
-        apply_repeater_config_to_event(repeater, event)
-        event.tournament_date = event.scheduled_at
-        if policy_changed:
-            _copy_mixin_fields(repeater, event, list(SIGNUP_OPEN_POLICY_FIELDS))
-            apply_signup_open_policy(event, timezone.now())
-        normalize_event_fields(event)
-        source = _saved_source(event)
-    else:
+    realign = schedule_changed and repeater.is_active
+    if realign and not _schedule_complete(repeater):
+        return _Early(status="needs_input", missing=["schedule"])
+    kept = set(_occurrence_window(repeater, today)) if realign else None
+    existing = _first_upcoming_event(repeater, kept)
+    occurrence = None
+    if generates.would_send and (existing is None or realign):
         if not _schedule_complete(repeater):
             return _Early(status="needs_input", missing=["schedule"])
         occurrence = _first_new_occurrence(repeater, today)
-        if occurrence is None:
-            return _Early(status="needs_input", missing=["schedule"])
+    if existing is not None and (
+        occurrence is None or existing.scheduled_at < occurrence
+    ):
+        source = _existing_series_source(repeater, existing, policy_changed, realign)
+    elif occurrence is not None:
         source = _unsaved_source(
             _synthesized_event(repeater, occurrence),
             series_pending=repeater.pk is None,
         )
+    elif not generates.would_send:
+        return _Early(status="ok", gate=generates)
+    else:
+        return _Early(status="needs_input", missing=["schedule"])
+    if not generates.would_send:
+        source.notes.append("existing_event_still_posts")
+        source.note_args["series_gate"] = generates.reasons[0]
     earlier = _earlier_open_event(repeater, source.event.scheduled_at)
     if earlier is not None:
         source.notes.append("next_event_already_open_not_updated")
@@ -707,12 +745,21 @@ def _series_source(repeater: EventRepeater, policy_changed: bool) -> _Source | _
     return source
 
 
-def _apply_repeater_values(repeater: EventRepeater, validated: dict[str, Any]) -> bool:
-    before = {name: getattr(repeater, name) for name in SIGNUP_OPEN_POLICY_FIELDS}
+def _apply_repeater_values(
+    repeater: EventRepeater, validated: dict[str, Any]
+) -> tuple[bool, bool]:
+    watched = (*SIGNUP_OPEN_POLICY_FIELDS, *REPEATER_SCHEDULE_FIELDS)
+    before = {name: getattr(repeater, name) for name in watched}
     for attr, value in validated.items():
         setattr(repeater, attr, value)
     normalize_event_fields(repeater)
-    return any(before[name] != getattr(repeater, name) for name in before)
+    policy_changed = any(
+        before[name] != getattr(repeater, name) for name in SIGNUP_OPEN_POLICY_FIELDS
+    )
+    schedule_changed = any(
+        before[name] != getattr(repeater, name) for name in REPEATER_SCHEDULE_FIELDS
+    )
+    return policy_changed, schedule_changed
 
 
 def _repeater_source(
@@ -720,10 +767,10 @@ def _repeater_source(
 ) -> _Source | _Early:
     repeater = _load_repeater(context.repeater_id)
     _authorize(user, repeater.organization)
-    policy_changed = _apply_repeater_values(
+    policy_changed, schedule_changed = _apply_repeater_values(
         repeater, _validated_repeater_values(values)
     )
-    return _series_source(repeater, policy_changed)
+    return _series_source(repeater, policy_changed, schedule_changed)
 
 
 def _new_repeater_source(
@@ -735,7 +782,7 @@ def _new_repeater_source(
     _apply_repeater_values(repeater, _validated_repeater_values(values))
     if not (repeater.name or "").strip():
         return _Early(status="needs_input", missing=["name"])
-    return _series_source(repeater, policy_changed=False)
+    return _series_source(repeater, policy_changed=False, schedule_changed=False)
 
 
 def _event_source(

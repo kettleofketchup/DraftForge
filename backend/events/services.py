@@ -1769,6 +1769,27 @@ class OccurrenceCollision(ValueError):
     """A requested one-off timestamp collides with an existing or generated occurrence."""
 
 
+def off_schedule_collision(
+    repeater: EventRepeater, scheduled_at: datetime.datetime
+) -> str | None:
+    """Why a one-off at `scheduled_at` would be rejected, or None when it is free."""
+    if Event.objects.filter(
+        event_repeater=repeater, scheduled_at=scheduled_at
+    ).exists():
+        return "An event in this series is already scheduled for that time."
+
+    today = _today()
+    horizon = max(
+        scheduled_at.date(), today + timedelta(days=repeater.generate_days_ahead)
+    )
+    if scheduled_at in set(_get_next_occurrences(repeater, today, horizon)):
+        return (
+            "That time is a scheduled occurrence of this series. "
+            "Pick a different time for a one-off event."
+        )
+    return None
+
+
 def create_off_schedule_event(
     repeater: EventRepeater,
     *,
@@ -1784,22 +1805,9 @@ def create_off_schedule_event(
     be "not found". repeater.is_active is deliberately not checked — a paused
     series is a legitimate template.
     """
-    if Event.objects.filter(
-        event_repeater=repeater, scheduled_at=scheduled_at
-    ).exists():
-        raise OccurrenceCollision(
-            "An event in this series is already scheduled for that time."
-        )
-
-    today = _today()
-    horizon = max(
-        scheduled_at.date(), today + timedelta(days=repeater.generate_days_ahead)
-    )
-    if scheduled_at in set(_get_next_occurrences(repeater, today, horizon)):
-        raise OccurrenceCollision(
-            "That time is a scheduled occurrence of this series. "
-            "Pick a different time for a one-off event."
-        )
+    collision = off_schedule_collision(repeater, scheduled_at)
+    if collision is not None:
+        raise OccurrenceCollision(collision)
 
     event = Event(
         organization=repeater.organization,
@@ -1845,6 +1853,14 @@ def create_off_schedule_event(
 
 
 SERIES_SHARED_FIELDS: tuple[str, ...] = ("name", "description")
+REPEATER_SCHEDULE_FIELDS: tuple[str, ...] = (
+    "day_of_week",
+    "time_of_day",
+    "timezone",
+    "starts_at",
+    "frequency",
+    "is_active",
+)
 SERIES_CASCADE_CONFIG_FIELDS = [
     f for f in EVENT_CONFIG_FIELDS if f not in SIGNUP_OPEN_POLICY_FIELDS
 ]

@@ -126,6 +126,7 @@ from events.serializers import (
     VoicePresenceOverrideInputSerializer,
 )
 from events.services import (
+    REPEATER_SCHEDULE_FIELDS,
     OccurrenceCollision,
     apply_signup_input,
     approve_signup,
@@ -567,28 +568,15 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(repeater)
 
     def perform_update(self, serializer: EventRepeaterSerializer) -> None:
-        # Snapshot schedule fields before save so we can detect a change
-        # and tell sync_future_events to realign occurrences. Without this,
-        # editing day_of_week leaves stale UPCOMING rows on the old day
-        # while generate_events_for_repeater creates new rows on the new
-        # day — admins see duplicates. is_active is in the tuple so a plain
-        # PATCH that unpauses a series realigns exactly like the reactivate
-        # button does.
-        schedule_fields = (
-            "day_of_week",
-            "time_of_day",
-            "timezone",
-            "starts_at",
-            "frequency",
-            "is_active",
-        )
+        # A schedule change realigns occurrences; is_active is included so an
+        # unpausing PATCH realigns like the reactivate button.
         before = {
             f: getattr(serializer.instance, f)
-            for f in (*schedule_fields, *SIGNUP_OPEN_POLICY_FIELDS)
+            for f in (*REPEATER_SCHEDULE_FIELDS, *SIGNUP_OPEN_POLICY_FIELDS)
         }
         repeater = serializer.save()
         schedule_changed = any(
-            before[f] != getattr(repeater, f) for f in schedule_fields
+            before[f] != getattr(repeater, f) for f in REPEATER_SCHEDULE_FIELDS
         )
         policy_changed = any(
             before[f] != getattr(repeater, f) for f in SIGNUP_OPEN_POLICY_FIELDS

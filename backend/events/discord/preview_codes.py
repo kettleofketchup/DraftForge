@@ -17,6 +17,7 @@ GateCode = Literal[
     "series_ended",
     "already_sent",
     "no_scheduled_event_yet",
+    "occurrence_collision",
 ]
 
 NoteCode = Literal[
@@ -31,4 +32,5 @@ NoteCode = Literal[
     "signup_post_in_signup_channel",
     "notice_falls_back_if_signup_post_fails",
     "next_event_already_open_not_updated",
+    "existing_event_still_posts",
 ]
