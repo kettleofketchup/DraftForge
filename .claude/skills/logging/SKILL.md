@@ -40,25 +40,27 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `herodraft` | `view` | — | `draft/views/hero.py` | HeroDraft HTTP actions: create, roll, choice/pick submit, abandon, reset |
 | `celery` | `task` | — | `telemetry/celery.py` | Generic Celery task lifecycle bookends (started/completed/failed) |
 | `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
+| `events` | `voice_presence` | — | `events/voice_presence.py` | State/snapshot applied, channel missing, heartbeat unavailable, manual set, confirm skipped |
+| `discord` | `voice` | — | `discordbot/voice_feed.py`, `discordbot/bot.py` | Watched refresh, state reports, snapshots posted/skipped, queue full, worker failures |
 | `events` | `scheduling` | — | `events/tasks.py`, `events/management/` | Event generation, signup opening, repeaters |
 | `events` | `eligibility` | — | `events/eligibility/evaluate.py` | `eligibility_evaluated`: reason `codes` and `admissible` for every signup evaluation |
 | `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
 | `avatars` | `endpoint` | — | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
-| `avatars` | `refresh` | — | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
-| `avatars` | `single` | — | `app/tasks/avatar_refresh.py::refresh_single_user_avatar` + helpers | Single-user refresh: Discord API fetch + per-user `update_user_avatar` |
-| `avatars` | `legacy` | — | `app/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
+| `avatars` | `refresh` | — | `user/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
+| `avatars` | `single` | — | `user/tasks/avatar_refresh.py::refresh_single_user_avatar` + helpers | Single-user refresh: Discord API fetch + per-user `update_user_avatar` |
+| `avatars` | `legacy` | — | `user/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
 | `discord` | `lease` | — | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
 | `discord` | `interaction` | `["events","signup"]` | `discordbot/components/{base,dota,deadlock,default,registry}.py`, `discordbot/signup_responses.py`, `discordbot/log_context.py`, `events/discord/providers/`, `events/discord/handlers.py`, `events/discord/_shared.py` | Discord-bot UI plumbing (per-game provider modules) + response delivery + signup-flow business logic: button/modal/select callbacks and their handlers. Per-game flows are tag-differentiated, NOT new subsystems. |
-| `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py`, `events/signup_post_lock.py` (mark/clear pending) | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
+| `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py`, `events/signup_post_lock.py` (mark/clear pending), `discordbot/internal_voice_views.py` | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
 | `discord` | `celery` | `["events","signup"]` | `events/tasks.py` (Discord-dispatching tasks), `events/signup_post_lock.py` (acquire/release lock) | `celery_task_started/finished/failed/retry` bookend logs |
 | `cache` | `invalidate` | — | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |
 | `websocket` | `broadcast` | — | `draft/services/team_broadcast.py`, `draft/services/hero_broadcast.py` | Draft / herodraft event + state broadcast to channel groups (`kind` field distinguishes draft/herodraft/herodraft_state) |
 | `auth` | `internal` | — | `app/auth.py` | Internal-service auth (X-Internal-Token): IP-allowlist rejects, invalid-token failures |
-| `auth` | `social` | — | `app/pipelines.py` | Discord OAuth social-auth pipeline: account reclaim/merge, username matching |
-| `auth` | `merge` | — | `app/discord_accounts.py` | Discord account de-dup / merge |
-| `tournament` | `draft`, `registration`, `user` | — | `app/models.py`, `tournament/functions.py`, `draft/models/team.py`, `draft/views/team_setup.py`, `draft/views/team_picks.py` | Draft build/pick/rebuild, captain/team registration, per-user avatar refresh |
-| `api` | `serializer`, `routing`, `main`, `csv_import`, `joke` | — | `app/serializers.py`, `app/views*.py`, `tournament/serializers/*.py`, `tournament/views/*.py`, `tournament/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
-| `user` | `functions` | — | `app/functions/user.py` | Profile-update request/validate/apply |
+| `auth` | `social` | — | `user/pipelines.py` | Discord OAuth social-auth pipeline: account reclaim/merge, username matching |
+| `auth` | `merge` | — | `user/discord_accounts.py` | Discord account de-dup / merge |
+| `tournament` | `draft`, `registration`, `user` | — | `app/models.py`, `tournament/functions.py`, `user/views_avatar.py`, `draft/models/team.py`, `draft/views/team_setup.py`, `draft/views/team_picks.py` | Draft build/pick/rebuild, captain/team registration, per-user avatar refresh |
+| `api` | `serializer`, `routing`, `main`, `csv_import`, `joke` | — | `app/serializers.py`, `user/serializers.py`, `user/views_account.py`, `app/views*.py`, `tournament/serializers/*.py`, `tournament/views/*.py`, `tournament/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
+| `user` | `functions` | — | `user/views_profile.py` | Profile-update request/validate/apply |
 | `app` | `signals` | — | `tournament/signals.py`, `draft/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |
 | `internal_client` | `http` | — | `app/internal_client/` (`transport.py` and per-domain modules) | Internal HTTP client errors and JSON-parse failures |
 | `discord` | `bot`, `utils`, `views`, `channels`, `roles`, `users` | — | `discordbot/**` | Bot lifecycle, message utils, slash views, channel/role/user services |
@@ -81,6 +83,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `lobby` | `api`, `webhook`, `events`, `broadcast`, `signals` | — | `lobby/views_internal.py`, `lobby/events.py`, `lobby/broadcast.py`, `lobby/signals.py` | Internal lobby API (claim/accepted/conflict), webhook receiver (bad signature, ignored, applied), event application (`lobby_gameid_conflict`), websocket broadcast failures, auto-create/close/flip triggers. Never the lobby password |
 | `lobby` | `views` | — | `lobby/views.py` | Organizer and player lobby API: create/close/launch/invite requests and dota_lobby errors they hit (problem `code`, upstream status). Never the lobby password |
 | `lobby` | `tasks`, `reconcile` | — | `lobby/tasks.py` | Create/close/flip/backfill tasks with the dota_lobby problem `code`; the 60 s reconcile sweep (`lobby_reconcile_summary` counts) |
+| `lobby` | `bot_access` | — | `lobby/bot_access/` | Bot league access reads and refreshes: upstream failure `code`/status, refresh counts (`bot_access_refreshed`), provider fallback (`bot_access_provider_fallback`), unknown bot states, throttled requests (`bot_access_throttled`). Never bot names, usernames or Steam IDs; failed per-bot calls log `lobby/client` `http_path` as the template `/v1/bots/{name}/leagues` |
 | `common` | `utils` | — | `common/utils.py` | Shared utility warnings (CI/IP detection) |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).

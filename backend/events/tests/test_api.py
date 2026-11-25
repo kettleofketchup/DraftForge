@@ -7,7 +7,7 @@ from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import create_tournament_for_event
@@ -15,6 +15,7 @@ from events.tests.base import EventTestCase
 from league.models import League
 from org.models import Organization
 from tests.cache import flush_run_cache
+from user.models import PositionsModel
 
 
 class EventAPITests(EventTestCase):
@@ -386,6 +387,22 @@ class UserCanManageRetrieveTest(EventTestCase):
         self.client.force_authenticate(self.league_staff)
         resp = self.client.get(f"/api/events/{no_league_event.pk}/")
         assert resp.json()["user_can_manage"] is False
+
+    def test_manage_viewer_pk_names_the_viewer_per_request(self) -> None:
+        self.client.force_authenticate(self.admin)
+        url = f"/api/events/{self.event.pk}/"
+        assert self.client.get(url).json()["manage_viewer_pk"] == self.admin.pk
+
+        self.client.force_authenticate(None)
+        anon = self.client.get(url).json()
+        assert anon["manage_viewer_pk"] is None
+        assert anon["user_can_manage"] is False
+
+        self.client.force_authenticate(self.unrelated_user)
+        listed = self.client.get("/api/events/").json()
+        items = listed["results"] if isinstance(listed, dict) else listed
+        assert items
+        assert {e["manage_viewer_pk"] for e in items} == {self.unrelated_user.pk}
 
 
 class EventPatchTournamentLeagueTest(TestCase):

@@ -22,7 +22,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { EventStateBadge } from '~/components/events';
 import { RepeaterCard } from '~/components/events/RepeaterCard';
-import type { EventType } from '~/components/events/schemas';
+import type { EventListItem } from '~/components/events/schemas';
 import { useOrganization, useOrganizations } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -75,7 +75,7 @@ const EmptyEvents = ({ hasFilter }: { hasFilter: boolean }) => (
 );
 
 /** Individual event card */
-function EventCard({ event }: { event: EventType }) {
+function EventCard({ event }: { event: EventListItem }) {
   const scheduledDate = new Date(event.scheduled_at);
   const formattedDate = scheduledDate.toLocaleDateString(undefined, {
     weekday: 'short',
@@ -100,7 +100,7 @@ function EventCard({ event }: { event: EventType }) {
           <div className="flex items-end justify-between gap-2">
             <div className="flex flex-col gap-1 text-sm text-muted-foreground min-w-0">
               <span>{formattedDate}</span>
-              <span>
+              <span data-testid="event-card-signup-count">
                 {event.signup_count} signup{event.signup_count !== 1 ? 's' : ''}
                 {' / '}
                 {event.confirmed_count} confirmed

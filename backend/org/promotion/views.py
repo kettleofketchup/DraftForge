@@ -15,6 +15,7 @@ from org.feature_errors import not_permitted, require_org_staff, require_promote
 from org.features import FeatureKey, org_has_feature
 from org.integration.contacts import contact_sync_status
 from org.integration.outbox import outbox_summary
+from org.mmr import game_for_event
 from org.models import Organization, PromoSend, PromoTemplate
 from org.permissions import has_org_staff_access
 from org.promotion.recipients import (
@@ -214,6 +215,8 @@ def promotion_candidates(request: Request, org_id: int, event_id: int) -> Respon
         hide_signed_up=params["hide_signed_up"],
         hide_messaged=params["hide_messaged"],
         q=params["q"],
+        min_mmr=params.get("min_mmr"),
+        max_mmr=params.get("max_mmr"),
     )
     _fill_can_undo(rows, request.user, org)
     return Response(
@@ -221,6 +224,9 @@ def promotion_candidates(request: Request, org_id: int, event_id: int) -> Respon
             "source": source,
             "n": n,
             "days": days,
+            "game_type": game_for_event(event),
+            "min_mmr": params.get("min_mmr"),
+            "max_mmr": params.get("max_mmr"),
             "rows": rows,
             "contact_sync": contact_sync_status(org, event),
         }
@@ -260,6 +266,7 @@ def promotion_discord_member(request: Request, org_id: int, event_id: int) -> Re
         days=MAX_DAYS,
         hide_signed_up=False,
         hide_messaged=False,
+        user_pk=user.pk,
     )
     row = next((r for r in rows if r["user_pk"] == user.pk), None)
     if row is None:

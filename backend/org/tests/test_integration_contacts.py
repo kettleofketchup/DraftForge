@@ -24,7 +24,6 @@ from django.db import IntegrityError
 from django.test import override_settings
 from django.utils import timezone
 
-from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser
 from discordbot.services.discord_members import DiscordMembersFetchError
 from events.constants import EventState
@@ -54,6 +53,7 @@ from org.tests.test_integration_recipients import (
 )
 from org.tests.test_promotion_api import base
 from tournament.models import Tournament
+from user.discord_accounts import merge_discord_accounts
 
 RECORDED = "2026-11-01T10:00:00Z"
 SECOND_GUILD_ID = "990000000000000003"

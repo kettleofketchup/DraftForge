@@ -1,66 +1,23 @@
+from collections.abc import Iterable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, ClassVar, Self
 
 import requests
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
 from common.game import GameType  # noqa: F401
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
-
-if TYPE_CHECKING:
-    from user.models import DotaUserProfile
+from user.models import BaseUserProfile, DotaUserProfile, PositionsModel
 
 User = settings.AUTH_USER_MODEL
 
 log = get_logger(__name__)
-
-
-class PositionsModel(models.Model):
-    carry = models.IntegerField(
-        default=0,
-        help_text="Rank of the carry position from 0 (No play) to 5 (best)",
-    )
-    mid = models.IntegerField(
-        default=0, help_text="Rank of the mid position from 0 (No play) to 5 (best)"
-    )
-    offlane = models.IntegerField(
-        default=0,
-        help_text="Rank of the offlane position from 0 (No play) to 5 (best)",
-    )
-    soft_support = models.IntegerField(
-        default=0,
-        help_text="Rank of the soft support position from 0 (No play) to 5 (best)",
-    )
-    hard_support = models.IntegerField(
-        default=0,
-        help_text="Rank of the hard support position from 0 (No play) to 5 (best)",
-    )
-
-    def __str__(self) -> str:
-        return f"Carry: {self.carry}, Mid: {self.mid}, Offlane: {self.offlane}, Soft Support: {self.soft_support}, Hard Support: {self.hard_support}"
-
-    def save(self, *args: object, **kwargs: object) -> None:
-        super().save(*args, **kwargs)
-        # Positions live on user.DotaUserProfile (default reverse accessor
-        # dotauserprofile_set). Walk it + bubbled parents. Org positions are
-        # pos_1..5 booleans on org.PlayerDotaProfile (no PositionsModel FK) —
-        # cacheops auto-invalidates that model; not this loop.
-        # .nocache(): invalidation must walk the live rows — a cached join
-        # (invalidated only on DotaUserProfile) could miss a freshly linked
-        # profile and skip its parents.
-        dota_profiles = list(
-            self.dotauserprofile_set.select_related("base_profile__user").nocache()
-        )
-        targets = []
-        for dp in dota_profiles:
-            targets += [dp, dp.base_profile, dp.base_profile.user]
-        if targets:
-            invalidate_after_commit(*targets)
 
 
 class CustomUser(AbstractUser):
@@ -95,6 +52,170 @@ class CustomUser(AbstractUser):
         blank=True,
         related_name="default_for_users",
     )
+
+    steam_account_verified_at = models.DateTimeField(null=True, blank=True)
+    steam_account_verified_by = models.ForeignKey(
+        "app.CustomUser",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    # None with verified_at set == verified by site staff
+    steam_account_verified_org = models.ForeignKey(
+        "org.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    steam_account_exists_checked_at = models.DateTimeField(null=True, blank=True)
+
+    STEAM_VERIFICATION_FIELDS: ClassVar[tuple[str, ...]] = (
+        "steam_account_verified_at",
+        "steam_account_verified_by",
+        "steam_account_verified_org",
+        "steam_account_exists_checked_at",
+    )
+    _STEAM_SNAPSHOT_ATTNAMES: ClassVar[tuple[str, ...]] = (
+        "steam_account_id",
+        "steamid",
+        "steam_account_verified_at",
+        "steam_account_verified_by_id",
+        "steam_account_verified_org_id",
+        "steam_account_exists_checked_at",
+    )
+
+    _steam_snapshot: dict[str, Any]
+
+    @property
+    def steam_account_verified(self) -> bool:
+        return self.steam_account_verified_at is not None
+
+    @property
+    def steam_account_exists_checked(self) -> bool:
+        return self.steam_account_exists_checked_at is not None
+
+    @property
+    def steam_account_verified_org_name(self) -> str | None:
+        """Needs select_related("steam_account_verified_org") in list paths."""
+        if (
+            not self.steam_account_verified
+            or self.steam_account_verified_org_id is None
+        ):
+            return None
+        return self.steam_account_verified_org.name
+
+    @classmethod
+    def from_db(
+        cls, db: str | None, field_names: Iterable[str], values: Iterable[Any]
+    ) -> Self:
+        instance = super().from_db(db, field_names, values)
+        instance._steam_snapshot = {
+            a: instance.__dict__[a]
+            for a in cls._STEAM_SNAPSHOT_ATTNAMES
+            if a in instance.__dict__
+        }
+        return instance
+
+    def refresh_from_db(
+        self,
+        using: str | None = None,
+        fields: Iterable[str] | None = None,
+        from_queryset: QuerySet[Any] | None = None,
+    ) -> None:
+        fields = list(fields) if fields is not None else None
+        super().refresh_from_db(using=using, fields=fields, from_queryset=from_queryset)
+        snapshot = self.__dict__.setdefault("_steam_snapshot", {})
+        for attname in self._STEAM_SNAPSHOT_ATTNAMES:
+            if attname not in self.__dict__:
+                continue
+            name = self._meta.get_field(attname).name
+            if fields is None or attname in fields or name in fields:
+                snapshot[attname] = self.__dict__[attname]
+
+    def _take_steam_snapshot(self) -> None:
+        self._steam_snapshot = {
+            a: self.__dict__[a]
+            for a in self._STEAM_SNAPSHOT_ATTNAMES
+            if a in self.__dict__
+        }
+
+    def _sync_steam_ids_and_verification(self, kwargs: dict[str, Any]) -> None:
+        """Section 1 of save(): sync the id pair, reset verification on change,
+        and narrow update_fields so a stale instance cannot overwrite them."""
+        current_id = self.steam_account_id
+        current_steamid = self.steamid
+        current = {
+            a: getattr(self, a) if a in self.__dict__ else None
+            for a in self._STEAM_SNAPSHOT_ATTNAMES[2:]
+        }
+        snap: dict[str, Any] = (
+            {} if self._state.adding else self.__dict__.get("_steam_snapshot", {})
+        )
+        loaded_id = snap.get("steam_account_id")
+        loaded_steamid = snap.get("steamid")
+        touched = {a: current[a] != snap.get(a) for a in current}
+
+        if current_id != loaded_id:
+            self.steamid = (
+                None if current_id is None else current_id + self.STEAM_ID_64_BASE
+            )
+        elif current_steamid != loaded_steamid:
+            self.steam_account_id = (
+                None
+                if current_steamid is None
+                else current_steamid - self.STEAM_ID_64_BASE
+            )
+        elif self.steam_account_id is not None:
+            self.steamid = self.steam_account_id + self.STEAM_ID_64_BASE
+        elif self.steamid is not None:
+            self.steam_account_id = self.steamid - self.STEAM_ID_64_BASE
+
+        final_changed = self.steam_account_id != loaded_id
+        cleared = self.steam_account_id is None
+        if cleared or (final_changed and not touched["steam_account_verified_at"]):
+            self.steam_account_verified_at = None
+            self.steam_account_verified_by = None
+            self.steam_account_verified_org = None
+        if cleared or (
+            final_changed and not touched["steam_account_exists_checked_at"]
+        ):
+            self.steam_account_exists_checked_at = None
+
+        if self._state.adding or self.pk is None or kwargs.get("force_insert"):
+            return
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            names = set(update_fields)
+            if names & {"steam_account_id", "steamid"} and (
+                final_changed or any(touched.values())
+            ):
+                names |= {
+                    "steam_account_id",
+                    "steamid",
+                    *self.STEAM_VERIFICATION_FIELDS,
+                }
+            kwargs["update_fields"] = names
+            return
+        if final_changed or any(touched.values()):
+            return
+        excluded = set(self.STEAM_VERIFICATION_FIELDS)
+        if (
+            self.steam_account_id == loaded_id
+            and self.steamid == loaded_steamid
+            and "steam_account_id" in snap
+            and "steamid" in snap
+        ):
+            excluded |= {"steam_account_id", "steamid"}
+        deferred = self.get_deferred_fields()
+        kwargs["update_fields"] = [
+            f.name
+            for f in self._meta.concrete_fields
+            if not f.primary_key
+            and f.name not in excluded
+            and f.attname not in deferred
+        ]
 
     # Steam ID conversion constant
     # steamid (64-bit) = steam_account_id (32-bit) + STEAM_ID_64_BASE
@@ -149,7 +270,7 @@ class CustomUser(AbstractUser):
         invalidate_after_commit(bp)
 
     @property
-    def dota_user_profile(self) -> "DotaUserProfile | None":
+    def dota_user_profile(self) -> DotaUserProfile | None:
         """Convenience accessor — the user-wide Dota profile lives one hop
         away on base_profile. Transitional sugar for the shims below and
         writers still phrasing reads as `user.dota_user_profile`. None-safe
@@ -363,23 +484,15 @@ class CustomUser(AbstractUser):
         Keep this the only save() on CustomUser: a second definition in the
         class body silently replaces this one, dropping the steam id sync.
         """
-        # 1. Steam id 32-bit / 64-bit sync.
-        if self.steam_account_id is not None:
-            self.steamid = self.steam_account_id + self.STEAM_ID_64_BASE
-        elif self.steamid is not None:
-            self.steam_account_id = self.steamid - self.STEAM_ID_64_BASE
-        else:
-            self.steamid = None
-            self.steam_account_id = None
+        # 1. Steam id 32-bit / 64-bit sync and verification reset.
+        self._sync_steam_ids_and_verification(kwargs)
 
         super().save(*args, **kwargs)
+        self._take_steam_snapshot()
         # Cacheops auto-fires invalidation for `self` via post_save signal
         # (model is registered with ops="all"). No explicit call needed.
 
         # 2. BaseUserProfile auto-create. Idempotent via get_or_create.
-        # local: user app is not in celery MODEL_APPS
-        from user.models import BaseUserProfile
-
         bp, _ = BaseUserProfile.objects.get_or_create(user=self)
 
         # 3. Flush pending nickname/avatar values buffered by the property
@@ -468,80 +581,3 @@ class Joke(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.username} - {self.tangoes_purchased} tangoes"
-
-
-class ProfileClaimRequest(models.Model):
-    """
-    Request to claim a profile (merge a Steam-only profile into a Discord account).
-
-    Flow:
-    1. User with Discord ID sees profile with Steam ID but no Discord
-    2. User clicks "Claim" which creates a pending request
-    3. Org admin reviews and approves/rejects
-    4. If approved, the merge happens and target profile is deleted
-    """
-
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        APPROVED = "approved", "Approved"
-        REJECTED = "rejected", "Rejected"
-
-    claimer = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.CASCADE,
-        related_name="claim_requests_made",
-        help_text="User requesting to claim the profile (has Discord ID)",
-    )
-    target_user = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="claim_requests_received",
-        help_text="Profile being claimed (has Steam ID, no Discord). NULL after merge.",
-    )
-    organization = models.ForeignKey(
-        "org.Organization",
-        on_delete=models.CASCADE,
-        related_name="claim_requests",
-        help_text="Organization where the target profile is a member",
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.PENDING,
-        db_index=True,
-    )
-    reviewed_by = models.ForeignKey(
-        "CustomUser",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="claim_requests_reviewed",
-        help_text="Admin who approved/rejected the request",
-    )
-    rejection_reason = models.TextField(
-        blank=True,
-        help_text="Reason for rejection (if rejected)",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["organization", "status", "-created_at"]),
-            models.Index(fields=["claimer", "status"]),
-        ]
-        # Prevent duplicate pending requests for same claimer+target
-        constraints = [
-            models.UniqueConstraint(
-                fields=["claimer", "target_user"],
-                condition=models.Q(status="pending"),
-                name="unique_pending_claim_request",
-            )
-        ]
-
-    def __str__(self) -> str:
-        target = self.target_user
-        label = (target.nickname or target.steamid) if target else "(deleted profile)"
-        return f"{self.claimer.username} -> {label} ({self.status})"

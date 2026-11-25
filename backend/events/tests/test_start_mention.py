@@ -8,7 +8,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from app.schemas import TournamentUserSchema
 from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
 from events.constants import Commitment, SignupStatus, StartMentionScope
 from events.models import EventSignup
@@ -21,8 +20,16 @@ from events.start_mention import (
 from events.tasks import send_start_mention
 from events.tests.base import EventTestCase
 from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
+from user.schemas import TournamentUserSchema
 
 HEADER = "Weekly Inhouse starts <t:1900000000:R>."
+MISCONFIGURED_DESCRIPTION = (
+    'Needs a signup post: enable "Post event signup embed" with a channel, '
+    "or a pre-day announcement with a channel"
+)
+CONFIGURED_DESCRIPTION = (
+    "Mentions signed-up members on the signup post 30m before event"
+)
 
 
 def _ids(count: int, digits: int = 18) -> list[str]:
@@ -326,3 +333,78 @@ class FireStartMentionEndpointTest(EventTestCase):
             task["fires_at"],
             (self.event.scheduled_at - timedelta(minutes=30)).isoformat(),
         )
+        self.assertEqual(task["description"], CONFIGURED_DESCRIPTION)
+
+    def _schedule_entry(self) -> dict[str, Any]:
+        resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        return next(t for t in resp.json() if t["task"] == "start_mention")
+
+    def _configure(
+        self,
+        *,
+        post_signups: bool,
+        signup_channel: str,
+        announcement: bool,
+        announcement_channel: str,
+    ) -> None:
+        self.event.discord_start_mention = True
+        self.event.discord_start_mention_minutes = 30
+        self.event.discord_post_signups = post_signups
+        self.event.discord_post_signups_channel_id = signup_channel
+        self.event.discord_announcement = announcement
+        self.event.discord_announcement_channel_id = announcement_channel
+        self.event.save()
+
+    def _assert_misconfigured(self) -> None:
+        task = self._schedule_entry()
+        self.assertEqual(task["status"], "misconfigured")
+        self.assertIs(task["can_fire"], False)
+        self.assertEqual(task["description"], MISCONFIGURED_DESCRIPTION)
+
+    def test_schedule_start_mention_misconfigured_when_signup_posts_off(
+        self,
+    ) -> None:
+        self._configure(
+            post_signups=False,
+            signup_channel="",
+            announcement=False,
+            announcement_channel="",
+        )
+        self._assert_misconfigured()
+
+    def test_schedule_start_mention_misconfigured_without_signup_channel(
+        self,
+    ) -> None:
+        self._configure(
+            post_signups=True,
+            signup_channel="",
+            announcement=False,
+            announcement_channel="",
+        )
+        self._assert_misconfigured()
+
+    def test_schedule_start_mention_misconfigured_when_signup_off_with_stored_channel(
+        self,
+    ) -> None:
+        self._configure(
+            post_signups=False,
+            signup_channel="5550001",
+            announcement=False,
+            announcement_channel="",
+        )
+        self._assert_misconfigured()
+
+    def test_schedule_start_mention_announcement_fallback_is_configured(
+        self,
+    ) -> None:
+        self._configure(
+            post_signups=False,
+            signup_channel="",
+            announcement=True,
+            announcement_channel="5550009",
+        )
+        task = self._schedule_entry()
+        self.assertNotEqual(task["status"], "misconfigured")
+        self.assertIs(task["can_fire"], True)
+        self.assertEqual(task["description"], CONFIGURED_DESCRIPTION)

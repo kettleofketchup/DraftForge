@@ -30,6 +30,7 @@ from events.constants import (  # noqa: F401 — re-exported for backward compat
     SignupStatus,
     SignupType,
     StartMentionScope,
+    VoicePresenceSource,
 )
 from events.exceptions import ImmutableFieldError, LedgerAppendOnlyError
 from events.ready_check_constants import (
@@ -705,6 +706,7 @@ class EventSignup(models.Model):
         null=True,
         db_default=RsvpClass.STANDARD,
     )
+    self_made = models.BooleanField(default=False, db_default=False)
 
     objects = line.EventSignupQuerySet.as_manager()
 
@@ -1250,6 +1252,11 @@ class EventVoicePresence(models.Model):
         max_length=20, blank=True, default="", validators=[discord_id_validator]
     )
     present = models.BooleanField(default=False)
+    source = models.CharField(
+        max_length=16,
+        choices=VoicePresenceSource.choices,
+        default=VoicePresenceSource.FEED,
+    )
     first_joined_at = models.DateTimeField(null=True, blank=True)
     last_joined_at = models.DateTimeField(null=True, blank=True)
     last_left_at = models.DateTimeField(null=True, blank=True)

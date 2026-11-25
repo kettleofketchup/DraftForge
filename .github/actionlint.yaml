@@ -1,5 +1,8 @@
-# Custom label of the ARC runner scale set on the home cluster (only playwright.yml
-# `prepare` may use it; scripts/check-runs-on.sh enforces that).
+# Custom labels of the ARC runner scale sets on the home cluster: draftforge-home for the
+# small jobs, draftforge-home-prepare for playwright.yml `prepare`. Only the jobs
+# allowlisted in scripts/check-runs-on.sh may use them, each its own label, behind the
+# same guard.
 self-hosted-runner:
   labels:
     - draftforge-home
+    - draftforge-home-prepare

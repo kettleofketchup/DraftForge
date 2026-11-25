@@ -153,6 +153,7 @@ import {
 } from '~/features/org-features';
 import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
+  invalidateEventLists,
   invalidateSignupHistory,
   removeSignupHistoryQueries,
   useEvent,
@@ -979,6 +980,9 @@ function SignupsTab({
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(
     null,
   );
+  const liveApprovalSignup = approvalSignup
+    ? (signups.find((s) => s.id === approvalSignup.id) ?? approvalSignup)
+    : null;
   const [removeSignup, setRemoveSignup] = useState<{
     signup: EventSignupType;
     name: string;
@@ -1010,6 +1014,8 @@ function SignupsTab({
       }
       const resp = await adminAddSignup(eventId!, payload.user_id);
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      void invalidateEventLists(queryClient);
       invalidateSignupHistory(queryClient, eventId!);
       void invalidateConductQueries(queryClient, orgId);
       // Backend adds the user as an OrgUser when an admin signs them up;
@@ -1321,7 +1327,7 @@ function SignupsTab({
         })}
       </div>
       <MmrApprovalModal
-        signup={approvalSignup}
+        signup={liveApprovalSignup}
         open={!!approvalSignup}
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);

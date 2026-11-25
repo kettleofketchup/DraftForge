@@ -10,13 +10,20 @@ from datetime import time, timedelta
 from cacheops import invalidate_obj
 from django.utils import timezone as tz
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from discordbot.models import DiscordEvent
-from events.constants import EventState, RepeatFrequency, SignupStatus
+from events.constants import (
+    EventState,
+    RepeatFrequency,
+    SignupStatus,
+    VoicePresenceSource,
+)
+from events.ledger import SignupActor
 from events.models import (
     Event,
     EventRepeater,
     EventSignup,
+    EventVoicePresence,
     OrgEventDefaults,
     RepeaterSubscription,
     RollCallMode,
@@ -26,6 +33,7 @@ from events.ready_check_constants import (
     ReadyCheckLowCompletionAction,
     ReadyCheckScope,
 )
+from events.services import process_rsvp
 from league.models import League
 from org.models import Organization
 from org.models_profiles import PlayerDotaProfile
@@ -37,16 +45,26 @@ from tests.data import (
     EVENTS_ORG,
     EVENTS_USERS,
 )
-from tests.data.users import EVENT_LEAGUE_STAFF_USER
+from tests.data.models import TestUser
+from tests.data.users import (
+    EVENT_LEAGUE_STAFF_USER,
+    STEAM_VERIFY_UNVERIFIED_USER,
+    STEAM_VERIFY_VERIFIED_USER,
+)
+from tests.populate.constants import STEAM_VERIFY_EVENT_NAME
 from tests.populate.utils import ensure_league_user, ensure_org_user
 from tournament.models import Team, Tournament
+from user.models import PositionsModel
+from user.steam_accounts import (
+    clear_steam_account_verification,
+    mark_steam_account_verified,
+)
 
 
-def populate_events_data(force=False):
+def populate_events_data(force: bool = False) -> None:
     """Create dedicated Events Test Org, League, users, and a sample event."""
     print("  Populating events E2E data...")
 
-    # 1. Create org
     org, _ = Organization.objects.update_or_create(
         name=EVENTS_ORG.name,
         defaults={
@@ -57,7 +75,6 @@ def populate_events_data(force=False):
         },
     )
 
-    # 2. Create league
     league, _ = League.objects.update_or_create(
         steam_league_id=EVENTS_LEAGUE.steam_league_id,
         defaults={
@@ -77,7 +94,6 @@ def populate_events_data(force=False):
         },
     )
 
-    # 3. Create admin user
     admin_positions = PositionsModel.objects.create(
         carry=EVENT_ADMIN_USER.positions.carry if EVENT_ADMIN_USER.positions else 3,
         mid=EVENT_ADMIN_USER.positions.mid if EVENT_ADMIN_USER.positions else 3,
@@ -106,7 +122,6 @@ def populate_events_data(force=False):
     admin_org_user = ensure_org_user(admin_user, org, mmr=EVENT_ADMIN_USER.mmr or 4500)
     ensure_league_user(admin_user, admin_org_user, league)
 
-    # 3b. Create player users with varied MMR
     for i, user_data in enumerate(EVENTS_USERS):
         positions = PositionsModel.objects.create(
             carry=user_data.positions.carry if user_data.positions else 3,
@@ -195,7 +210,6 @@ def populate_events_data(force=False):
         )
     print(f"    Created {len(dota_profiles)} Dota 2 profiles with rank data")
 
-    # 4. Grant admin access
     event_admin = CustomUser.objects.filter(pk=EVENT_ADMIN_USER.pk).first()
     site_admin = CustomUser.objects.filter(pk=ADMIN_USER.pk).first()
     org.admins.clear()
@@ -307,7 +321,6 @@ def populate_events_data(force=False):
         event=demo_signup_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add signups from first 6 players
     for user_data in EVENTS_USERS[:6]:
         user = CustomUser.objects.get(pk=user_data.pk)
         EventSignup.objects.update_or_create(
@@ -385,7 +398,6 @@ def populate_events_data(force=False):
         event=demo_rollcall_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add signups — 6 confirmed, 4 approved (waiting)
     for i, user_data in enumerate(EVENTS_USERS[:10]):
         user = CustomUser.objects.get(pk=user_data.pk)
         status = SignupStatus.CONFIRMED if i < 6 else SignupStatus.APPROVED
@@ -423,6 +435,7 @@ def populate_events_data(force=False):
             "start_cull_minutes_after": 1,
             "post_cull_fill_mode": PostCullFillMode.LINE_ORDER,
             "event_voice_channel_id": "100000000000000528",
+            "voice_presence_confirms": True,
         },
     )
     for i, user_data in enumerate(EVENTS_USERS[:7]):
@@ -432,6 +445,23 @@ def populate_events_data(force=False):
             event=demo_ready_check_event,
             user=user,
             defaults={"status": status},
+        )
+
+    presence_now = tz.now()
+    for i, user_data in enumerate(EVENTS_USERS[:2]):
+        EventVoicePresence.objects.update_or_create(
+            event=demo_ready_check_event,
+            user_id=user_data.pk,
+            defaults={
+                "guild_id": org.discord_server_id,
+                "channel_id": "100000000000000528",
+                "present": i == 0,
+                "source": VoicePresenceSource.FEED,
+                "first_joined_at": presence_now,
+                "last_joined_at": presence_now,
+                "last_seen_at": presence_now,
+                "last_left_at": None if i == 0 else presence_now,
+            },
         )
 
     demo_past_event, _ = Event.objects.update_or_create(
@@ -457,7 +487,6 @@ def populate_events_data(force=False):
         event=demo_past_event,
         defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
-    # Add past signups — all confirmed
     for user_data in EVENTS_USERS[:8]:
         user = CustomUser.objects.get(pk=user_data.pk)
         EventSignup.objects.update_or_create(
@@ -559,12 +588,10 @@ def populate_events_data(force=False):
             "draft_order": 2,
         },
     )
-    # Add captains as team members
     team_a.members.add(site_admin)
     team_b.members.add(CustomUser.objects.get(pk=EVENTS_USERS[0].pk))
     print("    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
 
-    # 6. Create org event defaults
     OrgEventDefaults.objects.update_or_create(
         organization=org,
         defaults={
@@ -585,6 +612,8 @@ def populate_events_data(force=False):
         },
     )
 
+    populate_steam_verification_data(org, league, admin_user)
+
     print(
         f"    Created org={org.name} (pk={org.pk}), league={league.name} (pk={league.pk})"
     )
@@ -592,3 +621,70 @@ def populate_events_data(force=False):
         f"    Created repeater={repeater.name}, event={event.name} (state={event.state})"
     )
     print("    Created org event defaults with discord channels")
+
+
+def _ensure_steam_verify_user(
+    data: TestUser, org: Organization, league: League
+) -> CustomUser:
+    user = CustomUser.objects.filter(pk=data.pk).first()
+    if user is None:
+        user = CustomUser(pk=data.pk, positions=PositionsModel.objects.create())
+        user.set_unusable_password()
+    user.username = data.username
+    user.nickname = data.nickname
+    user.discordId = data.discord_id
+    user.steamid = data.steam_id_64
+    user.has_active_dota_mmr = True
+    user.save()
+    org_user = ensure_org_user(user, org, mmr=data.mmr)
+    ensure_league_user(user, org_user, league)
+    return user
+
+
+def _ensure_self_made_signup(event: Event, user: CustomUser) -> None:
+    signup = EventSignup.objects.filter(event=event, user=user).first()
+    if signup is None:
+        process_rsvp(event, user, actor=SignupActor.system())
+        return
+    if signup.status != SignupStatus.RSVP or not signup.self_made:
+        signup.status = SignupStatus.RSVP
+        signup.self_made = True
+        signup.save(update_fields=["status", "self_made"])
+
+
+def populate_steam_verification_data(
+    org: Organization, league: League, verifier: CustomUser
+) -> None:
+    """One self-signed-up member with an unverified Friend ID, one verified by org staff."""
+    event, _ = Event.objects.update_or_create(
+        organization=org,
+        name=STEAM_VERIFY_EVENT_NAME,
+        defaults={
+            "description": "Pending self signups for Friend ID verification E2E.",
+            "scheduled_at": tz.now() + timedelta(days=10),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": verifier,
+            "tournament_name": "Steam Friend ID Verify Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": False,
+            "max_players": 10,
+        },
+    )
+
+    unverified = _ensure_steam_verify_user(STEAM_VERIFY_UNVERIFIED_USER, org, league)
+    if unverified.steam_account_verified:
+        clear_steam_account_verification(unverified, actor=verifier)
+    _ensure_self_made_signup(event, unverified)
+
+    verified = _ensure_steam_verify_user(STEAM_VERIFY_VERIFIED_USER, org, league)
+    mark_steam_account_verified(verified, verifier, org_id=org.pk)
+    _ensure_self_made_signup(event, verified)
+
+    invalidate_obj(event)
+    print(f"    Created {event.name} with an unverified and a verified Friend ID")

@@ -5,7 +5,6 @@ from rest_framework import serializers
 from rest_framework.utils.serializer_helpers import ReturnList
 
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer, UserPkField
 from events.overrides import (
     REASON_MAX_LENGTH,
     OverrideReasonRequired,
@@ -21,6 +20,7 @@ from tournament.serializers.users import (
     serialize_user_with_mmr,
 )
 from tournament.services.team_references import team_references
+from user.serializers import TournamentUserSerializer, UserPkField
 
 
 class TournamentSerializerBase(serializers.ModelSerializer):
@@ -449,6 +449,11 @@ class TeamSubInRequestSerializer(TeamActionRequestSerializer):
         allow_null=True,
         default=None,
     )
+
+
+class TeamReplaceCaptainRequestSerializer(TeamActionRequestSerializer):
+    user_id = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
+    mark_outgoing_dropout = serializers.BooleanField(required=False, default=True)
 
 
 class TeamRenameRequestSerializer(TeamActionRequestSerializer):

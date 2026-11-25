@@ -17,9 +17,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, PositionsModel, ProfileClaimRequest
+from app.models import CustomUser
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
+from events.eligibility import apply_admin_steam_account_id
 from events.ledger import ActorRole, SignupActor, SignupMeans
 from events.merge import merge_user_signups
 from events.models import Event
@@ -41,6 +42,8 @@ from org.standing import api as standing
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 from telemetry.logging import get_logger
 from tournament.models import Team
+from user.models import PositionsModel, ProfileClaimRequest
+from user.steam_accounts import log_steam_verification_change
 
 log = get_logger(__name__)
 
@@ -241,8 +244,7 @@ class ClaimRequestViewSet(
         - All foreign key references
         - Then deletes target_user
         """
-        # Copy Friend ID from target to claimer
-        claimer.steam_account_id = target_user.steam_account_id
+        stub_steam_id = target_user.steam_account_id
 
         if target_user.nickname and not claimer.nickname:
             claimer.nickname = target_user.nickname
@@ -415,5 +417,15 @@ class ClaimRequestViewSet(
         target_user.steamid = None
         target_user.save(update_fields=["steam_account_id", "steamid"])
 
+        verify_grant = (
+            apply_admin_steam_account_id(claimer, stub_steam_id, actor=actor.user)
+            if stub_steam_id is not None
+            else None
+        )
+
         claimer.save()
+        if verify_grant is not None:
+            log_steam_verification_change(
+                claimer, actor.user, verify_grant.org_id, True
+            )
         target_user.delete()

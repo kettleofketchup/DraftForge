@@ -234,7 +234,7 @@ prepare-images *flags:
         { echo '```'; cat "$dir/summary"; echo "done in $((SECONDS - start))s"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
     fi
 
-# Create or reuse the `home` remote buildx builder (the home cluster's BuildKit) and bootstrap it; the draftforge-home runner has no Docker daemon. Unreachable is an ::error:: and exit 1.
+# Create or reuse the `home` remote buildx builder (the home cluster's BuildKit) and bootstrap it; the draftforge-home-prepare runner has no Docker daemon. Unreachable is an ::error:: and exit 1.
 [group('ci')]
 home-builder:
     #!/usr/bin/env bash
@@ -369,9 +369,9 @@ changelog-check:
     fi
     exit "$fail"
 
-# Test labels for one `Backend tests` CI group: `app`; `migrations` (every
-# `test*migration*.py` module outside app); or `rest` (every other module in the other
-# top-level packages). Together they cover what an unlabelled `manage.py test` discovers.
+# Test labels for `Backend tests`: app, migrations-user (org/user migration modules),
+# migrations-draft (all other non-app migration modules), rest (remaining modules).
+# Together they cover what an unlabelled `manage.py test` discovers.
 [group('ci')]
 backend-test-labels group:
     #!/usr/bin/env bash
@@ -401,7 +401,7 @@ backend-test-labels group:
     is_migration() { [[ "${1##*.}" == test*migration* ]]; }
     case "$group" in
         app) echo app ;;
-        migrations|rest)
+        migrations-draft|migrations-user|rest)
             labels=()
             for init in */__init__.py; do
                 pkg="${init%/__init__.py}"
@@ -411,8 +411,14 @@ backend-test-labels group:
                 for m in "${mods[@]}"; do
                     if is_migration "$m"; then mig+=("$m"); else other+=("$m"); fi
                 done
-                if [ "$group" = migrations ]; then
-                    labels+=("${mig[@]}")
+                if [ "$group" != rest ]; then
+                    case "$pkg" in
+                        org|user) migration_group=migrations-user ;;
+                        *) migration_group=migrations-draft ;;
+                    esac
+                    if [ "$group" = "$migration_group" ]; then
+                        labels+=("${mig[@]}")
+                    fi
                 elif [ "${#mig[@]}" -eq 0 ]; then
                     labels+=("$pkg")
                 else
@@ -421,7 +427,7 @@ backend-test-labels group:
             done
             echo "${labels[*]}"
             ;;
-        *) echo "unknown group: $group (app, migrations or rest)" >&2; exit 2 ;;
+        *) echo "unknown group: $group (app, migrations-draft, migrations-user or rest)" >&2; exit 2 ;;
     esac
 
 # Pull queue waits, step and per-command timings, and buildx layer reports for recent runs into .ci-timing/summary.md; e.g. ci::timing --runs 20 --workflows playwright.yml
@@ -430,7 +436,7 @@ backend-test-labels group:
 timing *args:
     cd {{quote(root)}} && python3 -I scripts/ci_timing.py "$@"
 
-# Check which jobs may use the draftforge-home runner, plus the checker's tests (the `runs-on-guard` CI job); needs mikefarah yq
+# Check which jobs may use the home runner labels (draftforge-home, draftforge-home-prepare), plus the checker's tests (the `runs-on-guard` CI job); needs mikefarah yq
 [group('ci')]
 check-runs-on:
     #!/usr/bin/env bash

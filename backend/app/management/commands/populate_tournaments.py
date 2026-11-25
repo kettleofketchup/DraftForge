@@ -4,6 +4,7 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandParser
 
 from tests.populate import populate_tournaments
+from tests.populate.utils import without_task_publishing
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,8 @@ class Command(BaseCommand):
 
         try:
             self.stdout.write("Starting tournament population...")
-            populate_tournaments(force=force)
+            with without_task_publishing():
+                populate_tournaments(force=force)
             self.stdout.write(self.style.SUCCESS("Successfully populated tournaments!"))
 
         except Exception as e:

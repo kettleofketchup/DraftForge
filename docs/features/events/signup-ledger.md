@@ -71,6 +71,7 @@ Each signup change writes one entry (moving a signup to another event writes one
 | `promoted` | A waitlisted signup takes a freed seat |
 | `account_merged` | A signup moves to another account in an account merge |
 | `moved_event` | The stale repeater cleanup moves a signup to another event |
+| `voice_presence_set` | An operator sets presence by hand, with a required reason; a resulting confirmation links to this entry through `caused_by` |
 
 The role and means show who acted and how:
 
@@ -80,6 +81,8 @@ The role and means show who acted and how:
 | A staff member on someone else's signup, on the website | `staff` | `web` |
 | A member using a Discord button (sign up, decline, tentative) | `member` | `discord_button` |
 | A member adding or removing a Discord reaction | `member` | `discord_reaction` |
+| A member confirmed through the bot's voice feed | `member` | `discord_voice` |
+| An operator setting voice presence by hand | `staff` | `web` |
 | The system (waitlist promotion, Discord account merge, cleanup script, test setup) | `system` | `system` |
 
 A staff member acting on their own signup is recorded as `member`. When they used a staff-only action to do it (approve, reject, confirm, unconfirm, demote, a staff add, or a reinstate that bypasses the member rules), the after snapshot carries `extra.staff_power: true`. Approving a profile claim is recorded as the approving staff member, with means `web`.
@@ -102,7 +105,10 @@ The correlation id groups entries that belong to one action:
 | Profile claim approval | `claim-<id>`, one per approval |
 | Stale repeater cleanup | `cleanup-<id>`, one per run |
 | Ready check | `rc<check id>:<step>`, for example `rc12:close`, on every entry the step writes |
+| Manual voice presence | `vp<event id>:<user id>`; any resulting confirmation uses `rc<check id>:confirm` and links back through `caused_by` |
 | Website | Empty |
+
+Feed joins and leaves do not write ledger entries; their presence rows hold the evidence. Only confirmations and manual overrides are recorded here.
 
 ### Approve with an MMR override
 

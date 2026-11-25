@@ -59,9 +59,23 @@ gen-message-types *args:
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/lib/notifications/messageTypes.generated.ts")}} "$@"
 
+# Regenerate frontend/app/features/steam-verification/api.generated.ts from backend/app/steam_verification_schemas.py; --check fails instead of writing when stale
+[group('py')]
+gen-steam-verification *args:
+    {{quote(python)}} -I {{quote(backend / "app/export_steam_verification_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/steam-verification/api.generated.ts")}} "$@"
+
 # Regenerate frontend/app/features/discord-connect/api.generated.ts from backend/discordbot/install_schemas.py; --check fails instead of writing when stale
 [group('py')]
 gen-discord-connect-api *args:
     {{quote(python)}} -I {{quote(backend / "discordbot/export_install_schema.py")}} \
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/features/discord-connect/api.generated.ts")}} "$@"
+
+# Regenerate frontend/app/features/bot-access/schemas.generated.ts from backend/lobby/bot_access/schemas.py; --check fails instead of writing when stale
+[group('py')]
+gen-bot-access-api *args:
+    {{quote(python)}} -I {{quote(backend / "lobby/export_bot_access_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/bot-access/schemas.generated.ts")}} "$@"

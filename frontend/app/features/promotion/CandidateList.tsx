@@ -1,6 +1,7 @@
-import { Copy, Info, Undo2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Info } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { GAME_LABEL, toGameType } from '~/components/game/constants';
 import { Alert, AlertDescription, AlertTitle } from '~/components/ui/alert';
 import { Badge } from '~/components/ui/badge';
 import {
@@ -15,43 +16,53 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
-import { UserAvatar } from '~/components/user/UserAvatar';
-import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { cn } from '~/lib/utils';
-import { ContactRecordedStatus } from './ContactRecordedStatus';
 import {
   relativeFromIso,
   reportPromoError,
   undoToastDescription,
   usePreviewOptions,
 } from './feedback';
-import {
-  useCandidates,
-  useResolveDiscordMember,
-  useUndoPromoSend,
-} from './queries';
+import { parseMmrBound, validateMmrRange } from './mmrFilter';
+import type { ComposeMode } from './promotionColumns';
+import { PromotionTable } from './PromotionTable';
+import { useCandidates, useUndoPromoSend } from './queries';
 import {
   DAYS_OPTIONS,
+  DEFAULT_CANDIDATE_FILTERS,
   MAX_POOL_N,
-  isLinked,
   type CandidateFilters,
   type CandidateRow,
   type CandidateSource,
   type ContactSync,
-  type LinkedCandidate,
 } from './schemas';
 
 const log = getLogger('CandidateList');
 
 const POOL_OPTIONS = Array.from({ length: MAX_POOL_N }, (_, i) => i + 1);
 
-const SOURCE_TABS: readonly { value: CandidateSource; label: string }[] = [
-  { value: 'recent', label: 'Recent players' },
-  { value: 'active', label: 'Active members' },
-  { value: 'discord', label: 'New on Discord' },
+const SOURCE_TABS: readonly {
+  value: CandidateSource;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: 'recent',
+    label: 'Recent players',
+    hint: "Played in the org's latest tournaments",
+  },
+  {
+    value: 'active',
+    label: 'Active members',
+    hint: 'Signed up or played lately',
+  },
+  {
+    value: 'discord',
+    label: 'New on Discord',
+    hint: 'Joined the Discord server lately',
+  },
 ];
 
 const EMPTY_MESSAGE: Record<CandidateSource, string> = {
@@ -63,12 +74,20 @@ const EMPTY_MESSAGE: Record<CandidateSource, string> = {
     'No new Discord members match. The organization needs a linked Discord server.',
 };
 
-function rowTestId(row: CandidateRow): string {
-  return row.user_pk != null
-    ? String(row.user_pk)
-    : `discord-${row.discordId ?? ''}`;
+const DEBOUNCE_MS = 300;
+
+/** Commits `value` through `commit` once it stops changing. */
+function useDebouncedCommit<T>(
+  value: T,
+  committed: T,
+  commit: (value: T) => void,
+): void {
+  useEffect(() => {
+    if (Object.is(value, committed)) return;
+    const timer = setTimeout(() => commit(value), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [value, committed, commit]);
 }
-const SEARCH_DEBOUNCE_MS = 300;
 
 /**
  * SFG contact history arrives by import, so it can lag or miss contacts. The
@@ -106,10 +125,53 @@ export interface CandidateListProps {
   eventId: number;
   filters: CandidateFilters;
   onFiltersChange: (filters: CandidateFilters) => void;
-  selectedPk: number | null;
-  onSelect: (row: LinkedCandidate) => void;
-  /** A send shown elsewhere with its own undo; its row button is hidden to avoid duplicates. */
+  onCompose: (row: CandidateRow, mode: ComposeMode) => void;
+  /** Row whose Discord member is being prepared for a message. */
+  pendingRowId: string | null;
+  /** A send shown in the open composer with its own undo; its row action is hidden. */
   hideUndoFor: number | null;
+}
+
+function activeFilterLabels(
+  filters: CandidateFilters,
+  gameLabel: string,
+): { key: string; label: string }[] {
+  const labels: { key: string; label: string }[] = [];
+  if (filters.source === 'recent')
+    labels.push({ key: 'window', label: `Last ${filters.n} tournaments` });
+  else labels.push({ key: 'window', label: `Last ${filters.days} days` });
+  if (filters.minMmr != null && filters.maxMmr != null)
+    labels.push({
+      key: 'mmr',
+      label: `${gameLabel} MMR ${filters.minMmr}–${filters.maxMmr}`,
+    });
+  else if (filters.minMmr != null)
+    labels.push({ key: 'mmr', label: `${gameLabel} MMR ≥ ${filters.minMmr}` });
+  else if (filters.maxMmr != null)
+    labels.push({ key: 'mmr', label: `${gameLabel} MMR ≤ ${filters.maxMmr}` });
+  labels.push({
+    key: 'signed-up',
+    label: filters.hideSignedUp ? 'Hiding signed up' : 'Showing signed up',
+  });
+  labels.push({
+    key: 'messaged',
+    label: filters.hideMessaged ? 'Hiding messaged' : 'Showing messaged',
+  });
+  if (filters.q) labels.push({ key: 'search', label: `Search “${filters.q}”` });
+  return labels;
+}
+
+function isDefaultFilters(filters: CandidateFilters): boolean {
+  const d = DEFAULT_CANDIDATE_FILTERS;
+  return (
+    filters.n === d.n &&
+    filters.days === d.days &&
+    filters.hideSignedUp === d.hideSignedUp &&
+    filters.hideMessaged === d.hideMessaged &&
+    filters.q === d.q &&
+    filters.minMmr === d.minMmr &&
+    filters.maxMmr === d.maxMmr
+  );
 }
 
 export function CandidateList({
@@ -118,125 +180,133 @@ export function CandidateList({
   eventId,
   filters,
   onFiltersChange,
-  selectedPk,
-  onSelect,
+  onCompose,
+  pendingRowId,
   hideUndoFor,
 }: CandidateListProps) {
-  const { data, isLoading, isError, error } = useCandidates(
+  const { data, isLoading, isError, error, isFetching } = useCandidates(
     orgId,
     access,
     eventId,
     filters,
   );
   const undo = useUndoPromoSend(orgId, access);
-  const resolve = useResolveDiscordMember(orgId, access, eventId);
   const previewOptions = usePreviewOptions();
   const [search, setSearch] = useState(filters.q);
+  const [minText, setMinText] = useState(filters.minMmr?.toString() ?? '');
+  const [maxText, setMaxText] = useState(filters.maxMmr?.toString() ?? '');
 
-  useEffect(() => {
-    if (search === filters.q) return;
-    const timer = setTimeout(
-      () => onFiltersChange({ ...filters, q: search }),
-      SEARCH_DEBOUNCE_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [search, filters, onFiltersChange]);
+  const commitSearch = useCallback(
+    (q: string) => onFiltersChange({ ...filters, q }),
+    [filters, onFiltersChange],
+  );
+  useDebouncedCommit(search, filters.q, commitSearch);
 
-  const copyDiscord = async (username: string): Promise<void> => {
+  const minMmr = parseMmrBound(minText);
+  const maxMmr = parseMmrBound(maxText);
+  const mmrError = validateMmrRange(minMmr, maxMmr);
+  const commitMmr = useCallback(
+    (range: string) => {
+      const [low, high] = range.split(':');
+      onFiltersChange({
+        ...filters,
+        minMmr: low ? Number(low) : null,
+        maxMmr: high ? Number(high) : null,
+      });
+    },
+    [filters, onFiltersChange],
+  );
+  const wantedRange =
+    mmrError == null
+      ? `${minMmr.value ?? ''}:${maxMmr.value ?? ''}`
+      : `${filters.minMmr ?? ''}:${filters.maxMmr ?? ''}`;
+  useDebouncedCommit(
+    wantedRange,
+    `${filters.minMmr ?? ''}:${filters.maxMmr ?? ''}`,
+    commitMmr,
+  );
+
+  const resetFilters = (): void => {
+    setSearch('');
+    setMinText('');
+    setMaxText('');
+    onFiltersChange({ ...DEFAULT_CANDIDATE_FILTERS, source: filters.source });
+  };
+
+  const copyDiscord = useCallback(async (username: string): Promise<void> => {
     try {
       await navigator.clipboard.writeText(username);
       toast.success('Discord username copied');
     } catch {
       toast.error('Could not copy the username');
     }
-  };
+  }, []);
 
   const syncConfigured = data?.contact_sync.configured ?? false;
 
-  const onUndo = (sendId: number): void => {
-    undo.mutate(sendId, {
-      onSuccess: (result) =>
-        toast.success('Send undone', {
-          description: undoToastDescription(result, syncConfigured),
-        }),
-      onError: (err) => {
-        const message = reportPromoError(log, 'promo_undo_failed', err, {
-          orgId,
-          sendId,
-        });
-        toast.error(message || 'Could not undo the send');
-      },
-    });
-  };
+  const onUndo = useCallback(
+    (sendId: number): void => {
+      undo.mutate(sendId, {
+        onSuccess: (result) =>
+          toast.success('Send undone', {
+            description: undoToastDescription(result, syncConfigured),
+          }),
+        onError: (err) => {
+          const message = reportPromoError(log, 'promo_undo_failed', err, {
+            orgId,
+            sendId,
+          });
+          toast.error(message || 'Could not undo the send');
+        },
+      });
+    },
+    [undo, orgId, syncConfigured],
+  );
 
-  const onMessage = (row: CandidateRow): void => {
-    if (row.external_contact) return;
-    if (isLinked(row)) {
-      onSelect(row);
-      return;
-    }
-    if (!row.discordId) return;
-    resolve.mutate(row.discordId, {
-      onSuccess: (resolved) => {
-        if (resolved.external_contact) {
-          toast.info('A contact with this player is already recorded in SFG');
-          return;
-        }
-        if (isLinked(resolved)) onSelect(resolved);
-      },
-      onError: (err) => {
-        const message = reportPromoError(
-          log,
-          'promo_resolve_member_failed',
-          err,
-          { orgId, eventId },
-        );
-        toast.error(message || 'Could not prepare this member');
-      },
-    });
-  };
-
-  const poolN = data?.n ?? filters.n;
-
-  const detail = (row: CandidateRow): string | null => {
-    if (filters.source === 'recent' && row.recent_count != null)
-      return `Played ${row.recent_count} of the last ${poolN}`;
-    if (filters.source === 'active' && row.last_active_at)
-      return `Active ${relativeFromIso(row.last_active_at, previewOptions)}`;
-    if (filters.source === 'discord' && row.discord_joined_at)
-      return `Joined Discord ${relativeFromIso(row.discord_joined_at, previewOptions)}`;
-    return null;
-  };
+  const gameLabel = data ? GAME_LABEL[toGameType(data.game_type)] : 'Game';
+  const mmrBounded = filters.minMmr != null || filters.maxMmr != null;
+  const rows = data?.rows ?? [];
+  const audience = SOURCE_TABS.find((t) => t.value === filters.source)!;
 
   return (
-    <section className="flex flex-col gap-3" data-testid="promo-candidate-list">
+    <section
+      className="flex w-full flex-col gap-4"
+      data-testid="promo-candidate-list"
+    >
       <ToggleGroup
         type="single"
         variant="outline"
-        size="sm"
         value={filters.source}
         onValueChange={(next) => {
           if (next)
             onFiltersChange({ ...filters, source: next as CandidateSource });
         }}
-        aria-label="Who to show"
-        className="flex-wrap justify-start"
+        aria-label="Audience"
+        className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3"
         data-testid="promo-source"
       >
         {SOURCE_TABS.map((tab) => (
           <ToggleGroupItem
             key={tab.value}
             value={tab.value}
+            className="h-auto min-h-11 flex-col items-start gap-0.5 rounded-md border px-4 py-3 text-left whitespace-normal first:rounded-md last:rounded-md data-[state=on]:border-primary data-[state=on]:bg-primary/15 data-[state=on]:text-foreground data-[variant=outline]:border-l"
             data-testid={`promo-source-${tab.value}`}
           >
-            {tab.label}
+            <span className="text-base font-semibold">{tab.label}</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              {tab.hint}
+            </span>
           </ToggleGroupItem>
         ))}
       </ToggleGroup>
-      <div className="flex flex-wrap items-end gap-3">
+
+      <div
+        className="grid grid-cols-2 items-end gap-3 rounded-lg border border-border bg-base-900/40 p-3 sm:flex sm:flex-wrap"
+        data-testid="promo-filters"
+      >
         {filters.source === 'recent' ? (
           <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">
+            <Label htmlFor="promo-pool-n" className="text-xs">
               Recent tournaments
             </Label>
             <BrandSelect
@@ -246,8 +316,8 @@ export function CandidateList({
               }
             >
               <BrandSelectTrigger
-                className="w-24"
-                aria-label="Recent tournaments"
+                id="promo-pool-n"
+                className="min-h-11 w-full sm:min-h-9 sm:w-24"
                 data-testid="promo-pool-n"
               >
                 <SelectValue />
@@ -267,7 +337,7 @@ export function CandidateList({
           </div>
         ) : (
           <div className="flex flex-col gap-1">
-            <Label className="text-xs text-muted-foreground">
+            <Label htmlFor="promo-days" className="text-xs">
               {filters.source === 'active' ? 'Active within' : 'Joined within'}
             </Label>
             <BrandSelect
@@ -277,8 +347,8 @@ export function CandidateList({
               }
             >
               <BrandSelectTrigger
-                className="w-28"
-                aria-label="Days"
+                id="promo-days"
+                className="min-h-11 w-full sm:min-h-9 sm:w-28"
                 data-testid="promo-days"
               >
                 <SelectValue />
@@ -297,7 +367,47 @@ export function CandidateList({
             </BrandSelect>
           </div>
         )}
-        <div className="flex items-center gap-2 min-h-11">
+        <div className="col-span-2 grid grid-cols-2 gap-3 sm:contents">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="promo-min-mmr" className="text-xs">
+              Min {gameLabel} MMR
+            </Label>
+            <Input
+              id="promo-min-mmr"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={100}
+              value={minText}
+              onChange={(e) => setMinText(e.target.value)}
+              placeholder="Any"
+              aria-invalid={minMmr.error != null || mmrError != null}
+              aria-describedby="promo-mmr-help"
+              className="min-h-11 w-full sm:min-h-9 sm:w-28"
+              data-testid="promo-min-mmr"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="promo-max-mmr" className="text-xs">
+              Max {gameLabel} MMR
+            </Label>
+            <Input
+              id="promo-max-mmr"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={100}
+              value={maxText}
+              onChange={(e) => setMaxText(e.target.value)}
+              placeholder="Any"
+              aria-invalid={maxMmr.error != null || mmrError != null}
+              aria-describedby="promo-mmr-help"
+              className="min-h-11 w-full sm:min-h-9 sm:w-28"
+              data-testid="promo-max-mmr"
+            />
+          </div>
+        </div>
+        <div className="col-span-2 flex min-h-11 items-center gap-2 sm:col-span-1">
           <Switch
             id="promo-hide-signed-up"
             checked={filters.hideSignedUp}
@@ -308,7 +418,7 @@ export function CandidateList({
           />
           <Label htmlFor="promo-hide-signed-up">Hide signed up</Label>
         </div>
-        <div className="flex items-center gap-2 min-h-11">
+        <div className="col-span-2 flex min-h-11 items-center gap-2 sm:col-span-1">
           <Switch
             id="promo-hide-messaged"
             checked={filters.hideMessaged}
@@ -319,21 +429,57 @@ export function CandidateList({
           />
           <Label htmlFor="promo-hide-messaged">Hide messaged</Label>
         </div>
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search players..."
-          className="w-full sm:w-56"
-          aria-label="Search players"
-          data-testid="promo-search"
-        />
+        <p
+          id="promo-mmr-help"
+          className="col-span-2 text-xs text-muted-foreground sm:basis-full"
+          data-testid="promo-mmr-help"
+        >
+          {mmrError ? (
+            <span className="text-destructive" data-testid="promo-mmr-error">
+              {mmrError}
+            </span>
+          ) : mmrBounded ? (
+            <span data-testid="promo-mmr-unknown-hint">
+              Players without an org {gameLabel} MMR (shown as Unknown),
+              including Discord members without an account, are hidden while an
+              MMR filter is set.
+            </span>
+          ) : (
+            `MMR is this organization's ${gameLabel} rating; Unknown means none is set.`
+          )}
+        </p>
+      </div>
+
+      <div
+        className="flex flex-wrap items-center gap-2"
+        data-testid="promo-active-filters"
+        aria-label="Active filters"
+      >
+        <Badge variant="default">{audience.label}</Badge>
+        {activeFilterLabels(filters, gameLabel).map((f) => (
+          <Badge
+            key={f.key}
+            variant="outline"
+            data-testid={`promo-active-filter-${f.key}`}
+          >
+            {f.label}
+          </Badge>
+        ))}
+        {!isDefaultFilters(filters) && (
+          <SecondaryButton
+            type="button"
+            size="sm"
+            className="min-h-11 sm:min-h-8"
+            onClick={resetFilters}
+            data-testid="promo-filters-reset"
+          >
+            Reset filters
+          </SecondaryButton>
+        )}
       </div>
 
       {data?.contact_sync.configured && (
         <ContactSyncNotice sync={data.contact_sync} />
-      )}
-      {isLoading && (
-        <p className="text-sm text-muted-foreground">Loading players...</p>
       )}
       {isError && (
         <p
@@ -343,114 +489,43 @@ export function CandidateList({
           {extractApiError(error) ?? 'Could not load players.'}
         </p>
       )}
-      {data && data.rows.length === 0 && (
-        <p
-          className="text-sm text-muted-foreground"
-          data-testid="promo-candidates-empty"
-        >
-          {EMPTY_MESSAGE[filters.source]}
-        </p>
-      )}
 
-      <ul className="flex flex-col gap-2">
-        {data?.rows.map((row) => {
-          const last = row.last_messaged;
-          const external = row.external_contact;
-          const selected = row.user_pk != null && row.user_pk === selectedPk;
-          const testId = rowTestId(row);
-          const info = detail(row);
-          return (
-            <li
-              key={testId}
-              className={cn(
-                'flex flex-wrap items-center gap-3 rounded-md border p-3',
-                selected
-                  ? 'border-primary bg-primary/10'
-                  : 'border-border bg-base-900/40',
-              )}
-              data-testid={`promo-candidate-${testId}`}
-            >
-              <UserAvatar
-                user={{ ...row, pk: row.user_pk ?? undefined }}
-                size="sm"
-              />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{DisplayName(row)}</span>
-                  {row.signed_up && (
-                    <Badge variant="secondary">Signed up</Badge>
-                  )}
-                  {!isLinked(row) && (
-                    <Badge variant="outline">No account yet</Badge>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  {row.discordUsername && (
-                    <span className="inline-flex items-center gap-1">
-                      {/* eslint-disable-next-line draftforge/use-display-name -- the Discord @handle shown next to its copy button */}
-                      @{row.discordUsername}
-                      <SecondaryButton
-                        type="button"
-                        size="icon"
-                        className="size-6"
-                        onClick={() => copyDiscord(row.discordUsername!)}
-                        aria-label="Copy Discord username"
-                        data-testid={`promo-copy-discord-${testId}`}
-                      >
-                        <Copy className="size-3" />
-                      </SecondaryButton>
-                    </span>
-                  )}
-                  {info && <span>{info}</span>}
-                  <ContactRecordedStatus
-                    externalContact={external}
-                    localLastMessaged={last}
-                    testId={testId}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {last?.can_undo && last.send_id !== hideUndoFor && (
-                  <SecondaryButton
-                    type="button"
-                    size="sm"
-                    onClick={() => onUndo(last.send_id)}
-                    disabled={undo.isPending}
-                    data-testid={`promo-undo-${last.send_id}`}
-                  >
-                    <Undo2 className="h-4 w-4 mr-1" />
-                    Undo
-                  </SecondaryButton>
-                )}
-                <SecondaryButton
-                  type="button"
-                  size="sm"
-                  onClick={() => onMessage(row)}
-                  disabled={
-                    external != null || (!isLinked(row) && resolve.isPending)
-                  }
-                  aria-pressed={selected}
-                  aria-describedby={
-                    external ? `promo-message-blocked-${testId}` : undefined
-                  }
-                  data-testid={`promo-select-${testId}`}
-                >
-                  {selected ? 'Selected' : 'Message'}
-                </SecondaryButton>
-                {external && (
-                  <span
-                    id={`promo-message-blocked-${testId}`}
-                    className="sr-only"
-                  >
-                    Contact recorded in SFG, so messaging is off for this
-                    player.
-                  </span>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <PromotionTable
+        rows={rows}
+        source={filters.source}
+        poolN={data?.n ?? filters.n}
+        previewOptions={previewOptions}
+        onCompose={onCompose}
+        onUndo={onUndo}
+        onCopyHandle={copyDiscord}
+        pendingRowId={pendingRowId}
+        undoPending={undo.isPending}
+        hideUndoFor={hideUndoFor}
+        search={{
+          value: search,
+          onChange: setSearch,
+          label: 'Search players',
+          placeholder: 'Name, Discord or guild nickname',
+        }}
+        toolbarStart={
+          <span data-testid="promo-candidate-count" aria-live="polite">
+            {isLoading
+              ? 'Loading players...'
+              : `${rows.length} ${rows.length === 1 ? 'player' : 'players'}${isFetching ? ' · updating...' : ''}`}
+          </span>
+        }
+        emptyMessage={
+          isLoading ? (
+            'Loading players...'
+          ) : (
+            <span data-testid="promo-candidates-empty">
+              {mmrBounded
+                ? `No players with a known ${gameLabel} MMR in this range. Clear the MMR filter to include Unknown.`
+                : EMPTY_MESSAGE[filters.source]}
+            </span>
+          )
+        }
+      />
     </section>
   );
 }

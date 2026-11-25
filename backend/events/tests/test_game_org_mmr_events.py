@@ -15,7 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient, APIRequestFactory
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from events.constants import SignupStatus
 from events.models import Event, EventSignup
@@ -27,6 +27,7 @@ from tests.populate.utils import ensure_org_user
 from tests.test_auth import get_user_org_membership
 from tests.test_events_discord import set_org_user_approved_mmr
 from tournament.models import Tournament
+from user.models import PositionsModel
 from user.tests.test_cacheops_integration import _redis_reachable
 
 _discord_ids = itertools.count(930_000_000_000_000_000)

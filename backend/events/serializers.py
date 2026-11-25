@@ -7,11 +7,9 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from app.auth import InternalServiceUser
-from app.display_names import user_display_name
 from app.models import CustomUser
 from app.permissions import request_user
-from app.serializers import TournamentUserSerializer
-from app.user_cache import serialize_users_core
+from app.permissions_steam import VOUCH_EXCLUDED_STATUSES
 from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
@@ -58,6 +56,9 @@ from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from org.permissions import can_view_org_members
 from tournament.serializers.users import _serialize_users_with_mmr
+from user.cache import serialize_users_core
+from user.display_names import user_display_name
+from user.serializers import TournamentUserSerializer
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and
@@ -507,6 +508,14 @@ class ReadyCheckResolveInputSerializer(serializers.Serializer):
     )
 
 
+class VoicePresenceOverrideInputSerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    present = serializers.BooleanField()
+    reason = serializers.CharField(
+        max_length=500, allow_blank=False, trim_whitespace=True
+    )
+
+
 class ReadyCheckConfirmInputSerializer(serializers.Serializer):
     user_id = serializers.IntegerField()
 
@@ -578,6 +587,9 @@ class EventSerializer(
     user_can_manage = serializers.BooleanField(read_only=True, default=False)
     user_can_manage_event_staff = serializers.BooleanField(
         read_only=True, default=False
+    )
+    manage_viewer_pk = serializers.IntegerField(
+        read_only=True, allow_null=True, default=None
     )
     user_is_event_operator = serializers.BooleanField(read_only=True, default=False)
     host = EventStaffUserSerializer(read_only=True)
@@ -710,6 +722,7 @@ class EventSerializer(
             "dota_lobby_password",
             "user_can_manage",
             "user_can_manage_event_staff",
+            "manage_viewer_pk",
             "user_is_event_operator",
             "is_off_schedule",
         ]
@@ -840,15 +853,9 @@ class EventSerializer(
                 "event_repeater",
                 self.instance.event_repeater if self.instance else None,
             )
-            # On create, fall back to False when the field is absent — matches
-            # original behavior so callers that don't explicitly set this field
-            # aren't surprised. The model default of True remains a latent
-            # inconsistency (events get saved with reminder=True but the
-            # validator silently allows it on create); fix is out of scope here
-            # since correcting it would require a model migration + sweep of
-            # ~10 Playwright tests that don't pass this field. Tracked
-            # separately. The validator still rejects explicit signup_reminder=True
-            # on a single event.
+            # On create an absent field is validated as False, but the model
+            # default (True) is what gets saved, so a single event can still end
+            # up with reminder=True. An explicit True on a single event is rejected.
             default_reminder = (
                 self.instance.discord_signup_reminder if self.instance else False
             )
@@ -993,6 +1000,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     unmet_requirements = serializers.SerializerMethodField()
     eligibility_reasons = serializers.SerializerMethodField()
     line_rank = serializers.SerializerMethodField()
+    can_verify_steam_account = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -1020,6 +1028,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "holds_seat",
             "unmet_requirements",
             "eligibility_reasons",
+            "can_verify_steam_account",
             "created_at",
             "updated_at",
             "signed_up_at",
@@ -1163,7 +1172,23 @@ class EventSignupSerializer(serializers.ModelSerializer):
                 "game_mmrs",
             ):
                 data.pop(key, None)
+        data["steam_account_verified_org_name"] = (
+            obj.user.steam_account_verified_org_name
+            if self._viewer_sees_eligibility(obj)
+            else None
+        )
         return data
+
+    def get_can_verify_steam_account(self, signup: EventSignup) -> bool:
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        viewer = request.user
+        if viewer.pk == signup.user_id or not self._viewer_sees_eligibility(signup):
+            return False
+        if viewer.is_staff or viewer.is_superuser:
+            return True
+        return signup.self_made and signup.status not in VOUCH_EXCLUDED_STATUSES
 
     def get_holds_seat(self, signup: EventSignup) -> bool:
         return signup.status in seat_holding_statuses(signup.event)

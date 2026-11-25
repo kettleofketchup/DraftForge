@@ -157,7 +157,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    *MODEL_APPS,
+    # Preserve web admin autodiscovery order independently of the worker's apps.
+    *(app for app in MODEL_APPS if app != "user.apps.UserConfig"),
     "social_django",
     "rest_framework",
     "django_jinja",
@@ -286,14 +287,14 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.user.get_username",
     "social_core.pipeline.mail.mail_validation",
     "social_core.pipeline.social_auth.associate_by_email",
-    "app.pipelines.associate_by_discord_id",
-    "app.pipelines.associate_by_discord_username",
+    "user.pipelines.associate_by_discord_id",
+    "user.pipelines.associate_by_discord_username",
     "social_core.pipeline.user.create_user",
     "social_core.pipeline.social_auth.associate_user",
     "social_core.pipeline.debug.debug",
     "social_core.pipeline.social_auth.load_extra_data",
     "social_core.pipeline.user.user_details",
-    "app.pipelines.save_discord",
+    "user.pipelines.save_discord",
 )
 
 # Database
@@ -339,6 +340,10 @@ SFG_PROMOTION_SYNC = PromotionSyncConfig.from_env()
 # Where dispatch_promotion_contacts sends outbox receipts (PROMOTION_ADAPTOR_*).
 # Off by default; while off nothing is sent and no credential is read.
 PROMOTION_ADAPTOR = PromotionAdaptorConfig.from_env()
+# Friend ID existence check against Steam (steam/services/account_lookup.py).
+STEAM_ACCOUNT_LOOKUP_ENABLED: bool = env_bool(
+    "STEAM_ACCOUNT_LOOKUP_ENABLED", default=not RUNNING_TESTS and NODE_ENV != "test"
+)
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):

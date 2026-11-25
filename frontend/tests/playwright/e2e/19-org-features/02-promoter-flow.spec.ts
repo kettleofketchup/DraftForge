@@ -42,12 +42,20 @@ test.describe('Org features: promoter flow @cicd', () => {
       'true',
     );
 
-    const firstSelect = page.locator('[data-testid^="promo-select-"]').first();
-    await expect(firstSelect).toBeVisible();
-    const selectTestId = await firstSelect.getAttribute('data-testid');
-    const recipientPk = Number(selectTestId?.replace('promo-select-', ''));
+    const firstMessage = page
+      .locator('[data-testid^="promo-candidate-message-"]')
+      .first();
+    await expect(firstMessage).toBeVisible();
+    const messageTestId = await firstMessage.getAttribute('data-testid');
+    const recipientPk = Number(
+      messageTestId?.replace('promo-candidate-message-', ''),
+    );
     expect(recipientPk).toBeGreaterThan(0);
-    await firstSelect.click();
+    await expect(
+      page.getByTestId(`promo-candidate-mmr-${recipientPk}`),
+    ).toBeVisible();
+    await firstMessage.click();
+    await expect(page.getByTestId('promo-message-dialog')).toBeVisible();
 
     await page.getByTestId('promo-template-select').click();
     await page.getByTestId(`promo-template-option-${template!.pk}`).click();
@@ -111,15 +119,21 @@ test.describe('Org features: promoter flow @cicd', () => {
       await expect(staffPage.getByTestId('promo-candidate-list')).toBeVisible();
       await expect(staffPage.getByText('Loading players...')).toHaveCount(0);
       await expect(
-        staffPage.getByTestId(`promo-candidate-${recipientPk}`),
+        staffPage.getByTestId(`promo-candidate-row-${recipientPk}`),
       ).toHaveCount(0);
       await staffPage.getByTestId('promo-hide-messaged').click();
       await expect(
         staffPage.getByTestId(`promo-last-messaged-${recipientPk}`),
       ).toBeVisible();
-      await staffPage.getByTestId(`promo-select-${recipientPk}`).click();
+      await staffPage
+        .getByTestId(`promo-candidate-message-${recipientPk}`)
+        .click();
       await expect(staffPage.getByTestId('promo-no-points-note')).toBeVisible();
       await expect(staffPage.getByTestId('promo-earn-points-note')).toHaveCount(
+        0,
+      );
+      await staffPage.getByTestId('promo-dialog-close').click();
+      await expect(staffPage.getByTestId('promo-message-dialog')).toHaveCount(
         0,
       );
 
@@ -147,7 +161,9 @@ test.describe('Org features: promoter flow @cicd', () => {
           r.request().method() === 'DELETE' &&
           r.url().includes(`/promotion/sends/${send.id}/`),
       );
-      await staffPage.getByTestId(`promo-undo-${send.id}`).click();
+      await staffPage
+        .getByTestId(`promo-candidate-undo-${recipientPk}`)
+        .click();
       // Undo reports the DM's SFG receipt, which outlives the local send.
       const undone = await undoResponse;
       expect(undone.status()).toBe(200);

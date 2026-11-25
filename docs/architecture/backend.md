@@ -17,10 +17,21 @@ backend/
 │   ├── migrations/         # Database migrations
 │   ├── templatetags/       # Custom template tags
 │   ├── admin.py           # Django admin configuration
-│   ├── models.py          # Database models (CustomUser, Tournament, etc.)
-│   ├── permissions.py     # DRF permissions
-│   ├── serializers.py     # DRF serializers
-│   └── views.py           # API views
+│   ├── models.py          # CustomUser, Joke
+│   ├── permissions.py     # Shared DRF permissions
+│   ├── serializers.py     # JokeSerializer
+│   └── views_main.py      # Auth pages and cross-domain home stats
+├── user/                  # User profiles and account operations
+│   ├── models.py          # Profiles, positions and claim requests
+│   ├── serializers.py     # User and positions payloads
+│   ├── cache.py           # Shared user payload cache
+│   ├── pipelines.py       # Discord social-auth steps
+│   ├── tasks/             # Avatar refresh and Discord-name sync
+│   ├── internal/          # Internal avatar and name endpoints
+│   ├── internal_client.py # User-domain internal HTTP client
+│   ├── management/        # User import, account reclaim, avatar commands
+│   ├── views_*.py         # Account, profile update, avatar and search endpoints
+│   └── ssr.py             # User SSR view and serializer
 ├── draft/                 # Draft app: hero draft and team draft
 │   ├── models/            # hero.py: HeroDraft, DraftTeam, rounds, events; team.py: Draft, DraftRound, DraftEvent, DraftOptions
 │   ├── services/          # hero_* and team_* logic, state querysets, broadcasts; shuffle.py, team_timeout.py, team_reset.py
@@ -166,8 +177,10 @@ CELERY_RESULT_BACKEND = "redis://redis:6379/1"
 | `open_scheduled_signups` | Every 60s | Transition events to `signups_open` at scheduled times |
 | `generate_upcoming_events` | Hourly | Generate next-window occurrences for active repeaters |
 | `cleanup_stale_events` | Hourly | Drop abandoned event rows past their window |
-| `refresh_discord_avatars` | Every 5 min | Batch refresh Discord avatars (50 users) |
-| `refresh_all_discord_data` | Daily at 4 AM | Full Discord data refresh for all users |
+| `user.tasks.avatar_refresh.refresh_discord_avatars` | Every 5 min | Batch refresh Discord avatars (50 users) |
+| `user.tasks.avatar_refresh.refresh_all_discord_data` | Daily at 4 AM | Full Discord data refresh for all users |
+| `user.tasks.avatar_refresh.refresh_avatars_batched` | Daily at 4:15 AM | Diff cached guild members and bulk-update changed avatars through the internal API |
+| `user.tasks.discord_name_sync.sync_active_org_discord_names` | Every 30 min | Refresh Discord names for active orgs through the internal API |
 
 ### Task Functions
 
@@ -176,9 +189,12 @@ CELERY_RESULT_BACKEND = "redis://redis:6379/1"
 - **`update_all_league_stats_task`**: Recalculates all player statistics and league MMR
 
 **Discord Tasks:**
-- **`refresh_discord_avatars`**: Batch checks avatar URLs for validity, updates stale avatars
-- **`refresh_single_user_avatar`**: On-demand single user avatar refresh (triggered on login)
-- **`refresh_all_discord_data`**: Comprehensive refresh iterating all users with Discord IDs
+- **`user.tasks.avatar_refresh.refresh_discord_avatars`**: Batch checks avatar URLs for validity, updates stale avatars
+- **`user.tasks.avatar_refresh.refresh_single_user_avatar`**: Legacy single-user avatar refresh (currently no callers)
+- **`user.tasks.avatar_refresh.refresh_all_discord_data`**: Comprehensive refresh iterating all users with Discord IDs
+- **`user.tasks.avatar_refresh.refresh_avatars_batched`**: Daily bulk refresh using cached guild members
+- **`user.tasks.discord_name_sync.sync_active_org_discord_names`**: Finds active orgs and dispatches their name syncs
+- **`user.tasks.discord_name_sync.sync_org_discord_names`**: Syncs one org, including after a Discord server change; recovery command: `manage.py sync_discord_names --org <id>`
 
 ### League MMR Calculation
 

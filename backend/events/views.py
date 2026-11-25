@@ -58,6 +58,7 @@ from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
     has_registered_steam_id,
+    precheck_friend_id,
     recheck_signup,
 )
 from events.history import (
@@ -75,6 +76,7 @@ from events.models import (
     EventRepeater,
     EventSignup,
     EventTeam,
+    EventVoicePresence,
     OrgEventDefaults,
     ReadyCheck,
     ReadyCheckEntry,
@@ -119,6 +121,7 @@ from events.serializers import (
     ReadyCheckSerializer,
     RepeaterSubscriptionSerializer,
     SignupLedgerEntrySerializer,
+    VoicePresenceOverrideInputSerializer,
 )
 from events.services import (
     OccurrenceCollision,
@@ -154,6 +157,7 @@ from events.services import (
 )
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
+from events.voice_presence import set_presence_manually, voice_feed_age_seconds
 from lobby.passwords import PasswordMode
 from org.display_names import guild_nicknames
 from org.feature_errors import not_permitted
@@ -194,16 +198,21 @@ def with_event_staff(qs: QuerySet[Event]) -> QuerySet[Event]:
 def _attach_user_can_manage(
     payload: dict[str, Any] | list[dict[str, Any]], user: CustomUser | AnonymousUser
 ) -> dict[str, Any] | list[dict[str, Any]]:
-    """Mutate a serialized Event payload (or list of them) to set per-request user flags.
+    """Set per-request viewer fields on a serialized Event payload (or list of them).
+
+    Sets user_can_manage, user_can_manage_event_staff and user_is_event_operator,
+    plus manage_viewer_pk: the viewer the flags were computed for (None for
+    anonymous, who keep the serializer's False defaults).
 
     Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
     The Event instances are looked up by id from the payload; one batched query
     covers both list and single-item cases.
     """
-    if not user or not user.is_authenticated:
-        return payload  # default False already set by serializer
     items = payload if isinstance(payload, list) else [payload]
-    if not items:
+    viewer_pk = user.pk if user and user.is_authenticated else None
+    for p in items:
+        p["manage_viewer_pk"] = viewer_pk
+    if viewer_pk is None or not items:
         return payload
     events_by_pk = {
         e.pk: e
@@ -266,6 +275,10 @@ def _roster_sync_payload(
 NO_READY_CHECK_MESSAGE = "There is no ready check for this event."
 SELF_NOT_IN_CHECK_MESSAGE = "You are not in the ready check for this event."
 MEMBER_NOT_IN_CHECK_MESSAGE = "That member is not in the ready check for this event."
+START_MENTION_NO_SIGNUP_POST_DESCRIPTION = (
+    'Needs a signup post: enable "Post event signup embed" with a channel, '
+    "or a pre-day announcement with a channel"
+)
 
 
 def _ready_check_data(check_pk: int | None) -> dict[str, Any] | None:
@@ -583,7 +596,6 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             realign_schedule=schedule_changed,
             policy_changed=policy_changed,
         )
-        # Single batched invalidation — repeater + every cascaded child
         invalidate_after_commit(repeater, *future_events)
 
     @action(
@@ -907,7 +919,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return serializer.data
 
         # cacheops returns a fresh deserialization on every hit; safe to mutate in place.
-        data = list(get_data())  # shallow-copy the outer container
+        data = list(get_data())
         _attach_user_can_manage(data, request.user)
         return Response(data)
 
@@ -933,7 +945,7 @@ class EventViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             return self.get_serializer(instance).data
 
-        data = dict(get_data())  # shallow-copy
+        data = dict(get_data())
         _attach_user_can_manage(data, request.user)
         data.update(
             standing.event_viewer_flags(data["id"], data["organization"], request.user)
@@ -950,7 +962,6 @@ class EventViewSet(viewsets.ModelViewSet):
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
-        # Auto-open signups if requested via query param
         if self.request.query_params.get("open_signups") == "true":
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
@@ -1194,6 +1205,11 @@ class EventViewSet(viewsets.ModelViewSet):
             return _signup_refusal(event, request.user, intent, msg)
 
         try:
+            precheck_friend_id(patch.steam_account_id, request.user)
+        except DjangoValidationError as exc:
+            return _signup_refusal(event, request.user, intent, exc.messages[0])
+
+        try:
             with transaction.atomic():
                 org_user = resolve_or_create_org_user(request.user, event.organization)
                 apply_signup_input(org_user=org_user, event=event, patch=patch)
@@ -1366,6 +1382,76 @@ class EventViewSet(viewsets.ModelViewSet):
         if not has_event_operator_access(request.user, event):
             raise PermissionDenied()
         return event
+
+    @action(detail=True, methods=["get", "post"], url_path="voice-presence")
+    def voice_presence(self, request: Request, pk: str | None = None) -> Response:
+        event = self._ready_check_operator_event(request)
+        fields = (
+            "user_id",
+            "present",
+            "source",
+            "first_joined_at",
+            "last_joined_at",
+            "last_left_at",
+            "last_seen_at",
+        )
+        if request.method == "GET":
+            guild_id = event.organization.discord_server_id or None
+            channel_id = event.event_voice_channel_id
+            return Response(
+                {
+                    "feed": {
+                        "guild_id": guild_id,
+                        "age_seconds": voice_feed_age_seconds(guild_id)
+                        if guild_id
+                        else None,
+                        "channel_age_seconds": (
+                            voice_feed_age_seconds(guild_id, channel_id)
+                            if guild_id and channel_id
+                            else None
+                        ),
+                    },
+                    "voice_channel_id": channel_id,
+                    "presences": list(
+                        EventVoicePresence.objects.filter(event=event)
+                        .order_by("user_id")
+                        .values(*fields)
+                    ),
+                }
+            )
+        body = VoicePresenceOverrideInputSerializer(data=request.data)
+        if not body.is_valid():
+            return Response({"code": "invalid", "error": body.errors}, status=400)
+        member = (
+            CustomUser.objects.nocache()
+            .filter(pk=body.validated_data["user_id"])
+            .first()
+        )
+        if member is None:
+            return Response({"error": "User not found."}, status=404)
+        try:
+            result = set_presence_manually(
+                event,
+                member,
+                present=body.validated_data["present"],
+                reason=body.validated_data["reason"],
+                actor=SignupActor.from_request(request, role=ActorRole.STAFF),
+            )
+        except ValueError as exc:
+            if str(exc) != "not_signed_up":
+                raise
+            return Response(
+                {"code": "not_signed_up", "error": "User is not signed up."}, status=400
+            )
+        return Response(
+            {
+                "presence": {
+                    field: getattr(result.presence, field) for field in fields
+                },
+                "ledger_entry_id": result.ledger_entry_id,
+                "confirm": str(result.confirm) if result.confirm is not None else None,
+            }
+        )
 
     @action(detail=True, methods=["get"], url_path="ready-check")
     def ready_check(self, request: Request, pk: str | None = None) -> Response:
@@ -1651,6 +1737,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                 "event__tournament__league__organization", "event_team"
             ),
             "user",
+            steam_verified_org=True,
         )
         event_id = self.request.query_params.get("event")
         if event_id:
@@ -1946,7 +2033,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
 
     now = tz.now()
 
-    # Check which log sources have already fired
     fired_sources = set(
         DiscordMessageLog.objects.filter(
             source_id=event.pk,
@@ -1966,7 +2052,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     except Exception:
         pass
 
-    # Check subscriber DMs
     has_dms = False
     try:
         has_dms = DiscordEventDM.objects.filter(
@@ -1976,7 +2061,6 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
     except Exception:
         pass
 
-    # Last fired timestamps + fired_by from logs
     last_fired_map = {}
     for row in (
         DiscordMessageLog.objects.filter(source_id=event.pk, success=True)
@@ -2074,6 +2158,8 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         return entry
 
     has_channel = bool(event.discord_announcement_channel_id)
+    profile_misconfigured: bool = event.discord_profile_reminder and not has_channel
+    # Mirrored in frontend/app/components/events/startMentionPrerequisite.ts
     has_signup_post = (event.discord_announcement and has_channel) or (
         event.discord_post_signups and bool(event.discord_post_signups_channel_id)
     )
@@ -2123,7 +2209,10 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             check_interval="Every 30s",
             misconfigured=event.discord_signup_reminder
             and event.event_repeater_id is None,
-            description=f"DMs subscribers who haven't signed up {event.discord_signup_reminder_hours}h before event",
+            description=(
+                "DMs series subscribers who haven't signed up, "
+                f"{event.discord_signup_reminder_hours}h before event"
+            ),
         ),
         _task(
             "confirm_attendance",
@@ -2151,7 +2240,12 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             ),
             log_source="profile_reminder",
             check_interval="Every 30s",
-            description=f"Posts {event.discord_profile_reminder_hours}h before event",
+            misconfigured=profile_misconfigured,
+            description=(
+                "Enabled but no announcement channel is set"
+                if profile_misconfigured
+                else f"Posts in the announcement channel {event.discord_profile_reminder_hours}h before event"
+            ),
         ),
         _task(
             "start_mention",
@@ -2167,8 +2261,12 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             check_interval="Every 30s",
             misconfigured=event.discord_start_mention and not has_signup_post,
             description=(
-                f"Mentions signed-up members on the signup post "
-                f"{event.discord_start_mention_minutes}m before event"
+                START_MENTION_NO_SIGNUP_POST_DESCRIPTION
+                if event.discord_start_mention and not has_signup_post
+                else (
+                    f"Mentions signed-up members on the signup post "
+                    f"{event.discord_start_mention_minutes}m before event"
+                )
             ),
         ),
         _task(

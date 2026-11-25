@@ -13,8 +13,7 @@ from rest_framework import serializers
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
-from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
@@ -34,6 +33,8 @@ from org.models import (
 from org.models_promotion_sync import PromotionContactOutbox
 from org.promotion.services import record_promo_send, undo_promo_send
 from tournament.models import Tournament
+from user.discord_accounts import merge_discord_accounts
+from user.models import ProfileClaimRequest
 
 # Close, reopen, merge and delete counts include the registered conduct and
 # leadership tracks. Sends add the outbox row (existing-row check, membership
@@ -57,14 +58,14 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 209
-MERGE_CLAIM_QUERIES = 190
-DELETE_API_QUERIES = 113
-DELETE_ADMIN_QUERIES = 164
+MERGE_DISCORD_QUERIES = 210
+MERGE_CLAIM_QUERIES = 191
+DELETE_API_QUERIES = 114
+DELETE_ADMIN_QUERIES = 165
 DELETE_ADMIN_CONFIRM_QUERIES = 53
 PROMO_SEND_QUERIES = 29
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 127
+PROMO_RELEASE_QUERIES = 128
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8

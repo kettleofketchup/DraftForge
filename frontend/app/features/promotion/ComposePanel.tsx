@@ -32,6 +32,7 @@ import {
   undoToastDescription,
   usePreviewOptions,
 } from './feedback';
+import type { ComposeMode } from './promotionColumns';
 import { useRenderPromo, useSendPromo, useUndoPromoSend } from './queries';
 import {
   DISCORD_DM_LIMIT,
@@ -60,6 +61,10 @@ export interface ComposePanelProps {
   syncConfigured?: boolean;
   /** The recipient turned out to be already contacted; close this panel. */
   onStale?: () => void;
+  /** "record" logs a DM the sender already sent; both only record, never send. */
+  mode?: ComposeMode;
+  /** Inside a dialog that already titles the recipient: no frame or heading. */
+  embedded?: boolean;
 }
 
 const CONTACT_ALREADY_RECORDED = 'contact_already_recorded';
@@ -69,6 +74,13 @@ function errorCode(err: unknown): string | undefined {
     ?.data;
   return typeof data?.code === 'string' ? data.code : undefined;
 }
+
+const MODE_NOTE: Record<ComposeMode, string> = {
+  message:
+    "DraftForge doesn't send DMs. Copy the message, send it to them on Discord, then mark it sent.",
+  record:
+    'Record a DM you already sent on Discord. Pick the template you used and make the text match what you sent. Nothing is sent from DraftForge.',
+};
 
 export function ComposePanel({
   orgId,
@@ -81,6 +93,8 @@ export function ComposePanel({
   onSendFailed,
   syncConfigured = false,
   onStale,
+  mode = 'message',
+  embedded = false,
 }: ComposePanelProps) {
   const [templateId, setTemplateId] = useState<number | null>(
     templates[0]?.id ?? null,
@@ -204,11 +218,22 @@ export function ComposePanel({
 
   return (
     <section
-      className="flex flex-col gap-4 rounded-lg border border-border bg-base-900/40 p-4"
+      className={cn(
+        'flex flex-col gap-4',
+        !embedded && 'rounded-lg border border-border bg-base-900/40 p-4',
+      )}
       data-testid="promo-compose-panel"
+      data-mode={mode}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold">Message {DisplayName(candidate)}</h3>
+        {embedded ? (
+          <span className="text-sm text-muted-foreground">
+            {/* eslint-disable-next-line draftforge/use-display-name -- the Discord @handle to DM */}
+            {candidate.discordUsername ? `@${candidate.discordUsername}` : null}
+          </span>
+        ) : (
+          <h3 className="font-semibold">Message {DisplayName(candidate)}</h3>
+        )}
         {candidate.discordId && (
           <a
             href={`https://discord.com/users/${candidate.discordId}`}
@@ -222,6 +247,13 @@ export function ComposePanel({
           </a>
         )}
       </div>
+
+      <p
+        className="text-sm text-muted-foreground"
+        data-testid={`promo-${mode}-note`}
+      >
+        {MODE_NOTE[mode]}
+      </p>
 
       {templates.length === 0 ? (
         <p
@@ -365,7 +397,11 @@ export function ComposePanel({
               disabled={!canSubmit}
               data-testid="promo-mark-sent-btn"
             >
-              {send.isPending ? 'Saving...' : 'Mark sent'}
+              {send.isPending
+                ? 'Saving...'
+                : mode === 'record'
+                  ? 'Record as sent'
+                  : 'Mark sent'}
             </PrimaryButton>
           </div>
         </form>

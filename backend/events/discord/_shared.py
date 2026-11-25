@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from discordbot.models import DiscordEventLog
 from events.admission import self_serve_refusal
 from events.constants import SignupStatus
@@ -26,6 +26,7 @@ from events.ledger import SignupActor
 from events.models import Event, EventSignup
 from org.membership import resolve_or_create_org_user
 from telemetry.logging import get_logger
+from user.models import PositionsModel
 
 if TYPE_CHECKING:
     from org.models import OrgUser
@@ -133,7 +134,7 @@ def _get_org_user(
     auto-created using the Discord username. A button click only carries a
     Discord ID — it can't run the OAuth pipeline — so the phantom holds the
     signup until the person logs in, at which point the social-auth pipeline
-    reclaims this exact row by discordId (see app/pipelines.py). The phantom is
+    reclaims this exact row by discordId (see user/pipelines.py). The phantom is
     a normal, immediately-loginable account — no restrictions.
 
     Returns (org_user, user) or (None, None).

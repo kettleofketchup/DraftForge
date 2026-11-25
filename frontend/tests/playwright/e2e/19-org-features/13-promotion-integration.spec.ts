@@ -90,7 +90,9 @@ async function expectTicked(page: Page, ref: Ref): Promise<void> {
   await expect(page.getByTestId(`promo-external-contact-${id}`)).toContainText(
     'Delivery not verified',
   );
-  await expect(page.getByTestId(`promo-select-${id}`)).toBeDisabled();
+  await expect(
+    page.getByTestId(`promo-candidate-message-${id}`),
+  ).toBeDisabled();
 }
 
 interface Subject {
@@ -192,7 +194,7 @@ test.describe('Promotion SFG contact history @cicd', () => {
     await expect(warning).toContainText('Last SFG receipt imported');
     await expect(warning).not.toContainText(/synced/i);
     await expect(
-      page.getByTestId(`promo-candidate-${rowId(refs.non_member)}`),
+      page.getByTestId(`promo-candidate-row-${rowId(refs.non_member)}`),
     ).toHaveCount(0);
     await shoot(page, 'default-hidden', warning);
 
@@ -209,7 +211,7 @@ test.describe('Promotion SFG contact history @cicd', () => {
     await shoot(
       page,
       'non-member',
-      page.getByTestId(`promo-candidate-${rowId(refs.non_member)}`),
+      page.getByTestId(`promo-candidate-row-${rowId(refs.non_member)}`),
     );
 
     await source(page, 'active');
@@ -220,14 +222,14 @@ test.describe('Promotion SFG contact history @cicd', () => {
     await shoot(
       page,
       'shown-imported',
-      page.getByTestId(`promo-candidate-${rowId(refs.external)}`),
+      page.getByTestId(`promo-candidate-row-${rowId(refs.external)}`),
     );
 
     const both = rowId(refs.local_and_external);
     await expectTicked(page, refs.local_and_external);
     await expect(page.getByTestId(`promo-last-messaged-${both}`)).toBeVisible();
-    const row = page.getByTestId(`promo-candidate-${both}`);
-    const undo = row.locator('[data-testid^="promo-undo-"]');
+    const row = page.getByTestId(`promo-candidate-row-${both}`);
+    const undo = row.locator('[data-testid^="promo-candidate-undo-"]');
     await expect(undo).toHaveCount(1);
     await shoot(page, 'local-and-external', row);
 
@@ -242,18 +244,20 @@ test.describe('Promotion SFG contact history @cicd', () => {
       0,
     );
     await expectTicked(page, refs.local_and_external);
-    await expect(row.locator('[data-testid^="promo-undo-"]')).toHaveCount(0);
+    await expect(
+      row.locator('[data-testid^="promo-candidate-undo-"]'),
+    ).toHaveCount(0);
     await shoot(page, 'after-local-undo', row);
 
     await source(page, 'discord');
     await expectTicked(page, refs.discord_only);
     await expect(
-      page.getByTestId(`promo-candidate-${rowId(refs.discord_only)}`),
+      page.getByTestId(`promo-candidate-row-${rowId(refs.discord_only)}`),
     ).toContainText('No account yet');
     await shoot(
       page,
       'discord-only',
-      page.getByTestId(`promo-candidate-${rowId(refs.discord_only)}`),
+      page.getByTestId(`promo-candidate-row-${rowId(refs.discord_only)}`),
     );
 
     const refused = await postWithCsrf(
@@ -290,7 +294,7 @@ test.describe('Promotion SFG contact history @cicd', () => {
     await open(page);
     await source(page, 'active');
     const fresh = data.audiences!.fresh;
-    await page.getByTestId(`promo-select-${fresh.pk}`).click();
+    await page.getByTestId(`promo-candidate-message-${fresh.pk}`).click();
     await expect(page.getByTestId('promo-message-text')).toBeVisible();
 
     await importContact(
@@ -306,7 +310,9 @@ test.describe('Promotion SFG contact history @cicd', () => {
       timeout: 65_000,
     });
     await expect(page.getByTestId('promo-pick-player')).toBeVisible();
-    await expect(page.getByTestId(`promo-select-${fresh.pk}`)).toHaveCount(0);
+    await expect(
+      page.getByTestId(`promo-candidate-message-${fresh.pk}`),
+    ).toHaveCount(0);
     await shoot(
       page,
       'stale-tab-refresh',
@@ -322,7 +328,7 @@ test.describe('Promotion SFG contact history @cicd', () => {
     await open(page);
     await source(page, 'active');
     const month = data.audiences!.month;
-    await page.getByTestId(`promo-select-${month.pk}`).click();
+    await page.getByTestId(`promo-candidate-message-${month.pk}`).click();
     await pickTemplate(page);
 
     const banner = page.getByTestId('promo-sent-banner');
@@ -385,7 +391,9 @@ test.describe('Promotion SFG contact history @cicd', () => {
       page,
       `/organizations/${data.orgs.features.pk}?tab=promotion&event=${data.events.upcoming.pk}`,
     );
-    await expect(page.getByText('Loading players...')).toBeVisible();
+    await expect(page.getByTestId('promo-candidate-count')).toHaveText(
+      'Loading players...',
+    );
     await shoot(page, 'loading', page.getByTestId('promo-candidate-list'));
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     release();

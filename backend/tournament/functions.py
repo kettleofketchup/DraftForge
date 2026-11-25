@@ -5,15 +5,15 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_obj
-from app.display_names import user_display_name
 from app.models import CustomUser
 from org.display_names import guild_nicknames, org_nicknames_public
 from telemetry.logging import get_logger
-from tournament.models import Team, Tournament
+from tournament.models import LIVE_TEAM_FIRST, Team, Tournament
 from tournament.permissions import can_edit_tournament
 from tournament.serializers.tournament import TournamentSerializer
 from tournament.serializers.users import build_users_dict, tournament_organization
 from tournament.state import tournament_state_queryset
+from user.display_names import user_display_name
 
 log = get_logger(__name__)
 
@@ -71,7 +71,12 @@ def create_team_from_captain(request: Request) -> Response:
             status=403,
         )
 
-    if Team.objects.filter(tournament=tournament, captain=user).exists():
+    existing = (
+        Team.objects.filter(tournament=tournament, captain=user)
+        .order_by(*LIVE_TEAM_FIRST)
+        .first()
+    )
+    if existing is not None:
         if draft_order == 0:
             log.debug(
                 "captain_already_registered",
@@ -85,9 +90,8 @@ def create_team_from_captain(request: Request) -> Response:
                 status=201,
             )
 
-        team = Team.objects.get(tournament=tournament, captain=user)
-        team.draft_order = draft_order
-        team.save()
+        existing.draft_order = draft_order
+        existing.save()
         return Response(
             {
                 "error": "User is already a captain in this tournament with a draft order"

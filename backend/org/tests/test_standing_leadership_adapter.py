@@ -8,8 +8,7 @@ from django.urls import reverse
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from events.reopen import reopen_event
@@ -34,6 +33,8 @@ from org.standing import api as standing
 from org.standing.periods import parse_period
 from org.standing.types import TrackAccess
 from org.tests.leadership_base import LeadershipTestCase
+from user.discord_accounts import merge_discord_accounts
+from user.models import ProfileClaimRequest
 
 CLOSE_KEYS = ("captains_snapshotted", "leadership_awarded")
 CLOSE_LOG_KEYS = ("captain_reviews_voided", "leadership_revoked")

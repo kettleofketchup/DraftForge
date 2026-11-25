@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
@@ -129,6 +130,32 @@ class TaskScheduleEndpointTest(TestCase):
                     task["status"], "disabled", f"{task['task']} should be disabled"
                 )
 
+    def test_signup_reminder_description_names_series_subscribers(self) -> None:
+        resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
+        row = next(t for t in resp.json() if t["task"] == "signup_reminder")
+        self.assertEqual(
+            row["description"],
+            "DMs series subscribers who haven't signed up, 6h before event",
+        )
+
+    def test_signup_reminder_description_when_misconfigured(self) -> None:
+        event = Event.objects.create(
+            organization=self.org,
+            event_repeater=None,
+            name="Misconfigured Reminder Test",
+            state="signups_open",
+            scheduled_at=timezone.now() + timedelta(hours=24),
+            discord_signup_reminder=True,
+            discord_signup_reminder_hours=12,
+        )
+        resp = self.client.get(f"/api/events/{event.pk}/task-schedule/")
+        row = next(t for t in resp.json() if t["task"] == "signup_reminder")
+        self.assertEqual(row["status"], "misconfigured")
+        self.assertEqual(
+            row["description"],
+            "DMs series subscribers who haven't signed up, 12h before event",
+        )
+
     def test_fired_tasks_detected(self) -> None:
         # signup_reminder fired status is driven by DiscordEventDM rows
         # (subscriber DMs sent), not DiscordMessageLog.
@@ -165,6 +192,62 @@ class TaskScheduleEndpointTest(TestCase):
         tasks = resp.json()
         ann = next(t for t in tasks if t["task"] == "announcement")
         self.assertEqual(ann["status"], "misconfigured")
+
+    def _profile_reminder_row(self, event: Event) -> dict[str, Any]:
+        resp = self.client.get(f"/api/events/{event.pk}/task-schedule/")
+        return next(t for t in resp.json() if t["task"] == "profile_reminder")
+
+    def test_profile_reminder_misconfigured_without_channel(self) -> None:
+        event = Event.objects.create(
+            organization=self.org,
+            name="Profile Reminder No Channel",
+            state="signups_open",
+            scheduled_at=timezone.now() + timedelta(hours=24),
+            discord_profile_reminder=True,
+            discord_profile_reminder_hours=4,
+            discord_announcement=False,
+            discord_announcement_channel_id="",
+        )
+        row = self._profile_reminder_row(event)
+        self.assertEqual(row["status"], "misconfigured")
+        self.assertFalse(row["can_fire"])
+        self.assertIn("announcement channel", row["description"].lower())
+        self.assertIsNone(re.search(r"\bDM", row["description"]))
+
+    def test_profile_reminder_description_names_announcement_channel(self) -> None:
+        row = self._profile_reminder_row(self.event)
+        self.assertNotEqual(row["status"], "misconfigured")
+        self.assertIn("announcement channel", row["description"].lower())
+        self.assertIn("4h", row["description"])
+        self.assertIsNone(re.search(r"\bDM", row["description"]))
+
+    def test_profile_reminder_disabled_without_channel_is_not_misconfigured(
+        self,
+    ) -> None:
+        event = Event.objects.create(
+            organization=self.org,
+            name="Profile Reminder Off",
+            state="signups_open",
+            scheduled_at=timezone.now() + timedelta(hours=24),
+            discord_profile_reminder=False,
+            discord_announcement_channel_id="",
+        )
+        row = self._profile_reminder_row(event)
+        self.assertEqual(row["status"], "disabled")
+        self.assertNotIn("Enabled", row["description"])
+        self.assertNotIn("no announcement channel", row["description"].lower())
+
+    def test_profile_reminder_fired_with_channel_keeps_new_description(self) -> None:
+        DiscordMessageLog.objects.create(
+            source="profile_reminder",
+            source_id=self.event.pk,
+            success=True,
+            channel_id="123456",
+            embed_data={},
+        )
+        row = self._profile_reminder_row(self.event)
+        self.assertEqual(row["status"], "fired")
+        self.assertIn("announcement channel", row["description"].lower())
 
     def test_requires_authentication(self) -> None:
         client = APIClient()  # not authenticated

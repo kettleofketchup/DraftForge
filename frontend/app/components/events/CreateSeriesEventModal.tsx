@@ -151,9 +151,6 @@ export function CreateSeriesEventModal({
           : data.scheduled_at,
       });
       toast.success('One-off event created');
-      queryClient.invalidateQueries({
-        queryKey: repeaterKeys.events(repeater.id),
-      });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       queryClient.invalidateQueries({
         queryKey: repeaterKeys.detail(repeater.id),

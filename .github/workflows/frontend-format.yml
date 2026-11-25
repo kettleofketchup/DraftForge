@@ -22,6 +22,8 @@ concurrency:
 jobs:
   prettier:
     name: prettier (frontend)
+    # Hosted on purpose: `npm ci` makes this 3-5x slower on the 1-CPU home runner
+    # (docs/development/ci-runners.md).
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

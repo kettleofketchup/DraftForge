@@ -1,1 +1,0 @@
-- Approving or rejecting a profile claim no longer errors when the claimed profile was already merged by another claim: reject works, and approve rejects the claim with a clear reason. Two staff approving the same claim at once can no longer both run the merge, and the approval log now records the merged profile's id and Steam ID (#804).

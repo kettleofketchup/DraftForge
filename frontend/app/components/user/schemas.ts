@@ -31,12 +31,12 @@ export const ActiveDraftSchema = z.discriminatedUnion('type', [
 export type ActiveDraftType = z.infer<typeof ActiveDraftSchema>;
 
 export const UserSchema = z.object({
-  positions: PositionSchema.optional(),
+  positions: PositionSchema.nullable().optional(),
   // Nullable because ``CustomUser.username`` is ``null=True`` at the model
   // level (Steam-only signups). Form schemas (EditUserSchema) still enforce
   // non-null + length when a user is editing their own profile.
   username: z.string().min(2).max(100).nullable(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.string().url().nullable().optional(),
   is_staff: z.boolean().optional(),
   is_superuser: z.boolean().optional(),
   nickname: z.string().min(2).max(100).nullable().optional(),
@@ -50,6 +50,11 @@ export const UserSchema = z.object({
   // The game `mmr` was resolved for.
   mmr_game_type: z.number().nullable().optional(),
   steam_account_id: z.number().min(0).nullable().optional(), // 32-bit Friend ID (Dotabuff)
+  steam_account_verified: z.boolean().optional(),
+  steam_account_verified_at: z.string().nullable().optional(),
+  steam_account_exists_checked: z.boolean().optional(),
+  // Org member payloads only (backend/org/serializers.py OrgUserSerializer).
+  steam_account_verified_org_name: z.string().nullable().optional(),
   avatar: z.string().url().nullable().optional(),
   orgUserPk: z.number().min(0).optional(), // OrgUser pk (for org-scoped PATCH)
   pk: z.number().min(0).optional(), // User pk (for display)

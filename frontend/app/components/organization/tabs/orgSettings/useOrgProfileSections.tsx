@@ -52,6 +52,7 @@ import {
   DiscordConnectionCard,
   discordConnectKeys,
 } from '~/features/discord-connect';
+import { invalidatePromotionQueries } from '~/features/org-features/queryKeys';
 
 export type OrgProfileSection = 'general' | 'discord' | 'members' | 'rules';
 
@@ -132,6 +133,7 @@ export function useOrgProfileSections(
         queryKey: discordConnectKeys.botStatus(organization.pk),
       });
       queryClient.invalidateQueries({ queryKey: organizationsQueryKey });
+      void invalidatePromotionQueries(queryClient, organization.pk);
       return true;
     } catch (err) {
       toast.error(

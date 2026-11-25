@@ -32,7 +32,16 @@ concurrency:
 jobs:
   shellcheck:
     name: shellcheck (just recipes)
-    runs-on: ubuntu-latest
+    # Small job, on the home runner to free hosted slots: same-repo PRs from
+    # HOME_RUNNER_AUTHORS when SELF_HOSTED_RUNNERS is 'true' (docs/development/ci-runners.md).
+    # Same guard as playwright.yml `prepare`; scripts/check-runs-on.sh allowlists this job.
+    runs-on: >-
+      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
+      && 'draftforge-home' || 'ubuntu-latest' }}
     timeout-minutes: 15
     env:
       SHELLCHECK_VERSION: v0.11.0
@@ -57,21 +66,45 @@ jobs:
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
             "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/${archive}"
           echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
-          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          # Python's tarfile, not `tar -xJ`: the home runner image has no xz.
+          python3 -I -m tarfile --filter data -e "$RUNNER_TEMP/$archive" "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/shellcheck-${SHELLCHECK_VERSION}" >> "$GITHUB_PATH"
 
       - name: Shellcheck just recipes
         run: just ci::shellcheck
 
-  # Only playwright.yml `prepare` may use the draftforge-home runner (scripts/check-runs-on.sh).
+  # Only the jobs allowlisted in scripts/check-runs-on.sh may use a home runner label, each its own.
   runs-on-guard:
     name: runs-on guard (home runner label)
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Small job, on the home runner to free hosted slots: same-repo PRs from
+    # HOME_RUNNER_AUTHORS when SELF_HOSTED_RUNNERS is 'true' (docs/development/ci-runners.md).
+    # Same guard as playwright.yml `prepare`; scripts/check-runs-on.sh allowlists this job.
+    runs-on: >-
+      ${{ (vars.SELF_HOSTED_RUNNERS == 'true'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.event.pull_request.user.login))
+      && contains(format(',{0},', vars.HOME_RUNNER_AUTHORS), format(',{0},', github.triggering_actor)))
+      && 'draftforge-home' || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    env:
+      YQ_VERSION: v4.54.3
+      YQ_SHA256: 129534601871538efe0ba4c5e62a34fb1d5f469bcb975c4fddeb467d82974973
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Pinned, and installed on hosted runners too (they ship a yq that moves): the
+      # home runner image has none.
+      - name: Install yq ${{ env.YQ_VERSION }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/yq"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/yq/yq" \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          echo "${YQ_SHA256}  $RUNNER_TEMP/yq/yq" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/yq/yq"
+          echo "$RUNNER_TEMP/yq" >> "$GITHUB_PATH"
 
       - name: Test the guard
         run: python3 -I scripts/test_check_runs_on.py

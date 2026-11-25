@@ -162,7 +162,6 @@ _ORG_PERMISSION_NAMES = (
     "is_org_owner",
     "has_org_admin_access",
     "has_org_staff_access",
-    "is_site_admin",
     "is_org_role_holder",
     "has_org_promoter_access",
     "can_view_org_members",
@@ -441,18 +440,26 @@ _TOURNAMENT_RETIRED_DEFS = {
         "_is_dropout",
         "_is_member",
         "_is_standin",
+        "_captain_source",
+        "_eligibility_violations",
         "_leadership_touched_by",
+        "_live_after_reopen",
+        "_live_other_teams",
+        "_on_other_team_error",
         "_org_settings",
         "_problem_pairs",
         "_refresh_herodrafts",
         "_standin_violations",
         "add_standin",
         "follow_captain",
+        "live_conflicts",
         "mark_dropout",
         "other_team_user_ids",
         "remove_standin",
         "rename",
+        "replace_captain",
         "restore_member",
+        "roster_conflict_body",
         "set_captain",
         "set_deputy",
         "standin_cap",
@@ -515,10 +522,12 @@ _TOURNAMENT_RETIRED_DEFS = {
         "CaptainDraftFollowUpTests",
         "DraftBookkeepingTests",
         "DropoutTests",
+        "EliminatedTeamRuleTests",
         "FixtureHelperTests",
         "HeroDraftCaptainCacheTests",
         "InvariantTests",
         "RenameTests",
+        "ReplaceCaptainTests",
         "ReseatGhostDeputyTests",
         "RosterSignalTests",
         "SetCaptainTests",
@@ -530,6 +539,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "TeamManagementFixture",
         "TournamentCacheTests",
         "_problems",
+        "eliminate",
     ),
     "app.tests.test_team_signals": (
         "EmptyTeamAuditTests",
@@ -667,6 +677,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "ManualPlacementOverrideTest",
         "UnsetWinnerTest",
         "AdvanceWinnerPersistenceTest",
+        "PlacementClearGuardTests",
     ),
     "app.tests.test_bracket_queries": (
         "_user_ids",
@@ -742,6 +753,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "prepare_restore",
         "prepare_standins_remove",
         "prepare_sub_in",
+        "prepare_replace_captain",
         "TeamApiFixture",
         "TeamActionPermissionTests",
         "LeadershipActionTests",
@@ -752,6 +764,8 @@ _TOURNAMENT_RETIRED_DEFS = {
         "TeamHistoryTests",
         "LegacyDeleteTests",
         "TeamUsageTests",
+        "ReplaceCaptainApiTests",
+        "TeamPatchPlacementGuardTests",
     ),
     "app.tests.test_team_create_permissions": ("TeamCreatePermissionTests",),
     "app.tests.test_tournament_viewer": (
@@ -857,7 +871,230 @@ TOURNAMENT = MovedSlice(
     cached_labels=frozenset({"tournament", "team", "game"}),
 )
 
-MOVED_SLICES: tuple[MovedSlice, ...] = (HERO_DRAFT, TEAM_DRAFT, ORG, LEAGUE, TOURNAMENT)
+_USER_SPLIT_DEFS = {
+    "app.views_main": (
+        "UserView",
+        "UserCreateView",
+        "current_user",
+        "bulk_users",
+        "steam_account_id_lookup",
+        "_admin_friend_id_refusal",
+        "refresh_avatar",
+        "refresh_user_avatar_admin",
+        "refresh_all_avatars",
+    ),
+    "app.functions.user": (
+        "ProfileUpdateSerializer",
+        "profile_update",
+        "_friend_id_error",
+    ),
+    "app.views.user_search": ("search_users",),
+    "app.views.steam_verification": (
+        "_load",
+        "_payload",
+        "_current_id",
+        "steam_verification",
+    ),
+    "app.serializers_ssr": ("UserSerializerSSR",),
+    "app.views.ssr": ("UserSSRView",),
+    "app.views.internal": ("list_users_for_avatar_check", "update_user_avatar"),
+    "app.tests.test_search_users": ("SearchUsersTest",),
+    "app.tests.test_user_delete_route": ("UserDeleteRouteTests",),
+    "app.tests.test_current_user_membership": ("MemberOrganizationIdsTests",),
+    "app.tests.test_user_partial_patch": ("PartialUserPatchTests",),
+    "app.tests.test_user_mmr_verification": ("CustomUserMMRVerificationTest",),
+    "app.tests.test_user_privilege_fields": ("UserPrivilegeFieldsTests",),
+    "app.tests.test_steam_account_id_conflict": (
+        "SteamAccountIdConflictTests",
+        "SteamAccountIdLookupTests",
+        "SteamAccountIdConflictLabelTests",
+        "_org_user_url",
+        "_reload",
+        "OrgUserPatchVerificationTests",
+        "UserPatchVerificationTests",
+        "AdminLookupBudgetTest",
+    ),
+    "app.tests.test_views_main_auth": ("RefreshAllAvatarsRateLimitTest",),
+    "app.tests.test_internal_avatar_and_sweep": (
+        "ListDiscordLinkedUsersTest",
+        "ListDiscordGuildIdsTest",
+        "BulkUpdateUserAvatarsTest",
+    ),
+    "app.tests.test_ssr_views": ("SSREndpointTests",),
+}
+
+USER = MovedSlice(
+    name="user",
+    source_app="app",
+    new_app="user",
+    moved=frozenset(
+        {
+            *(
+                (module, name)
+                for module, names in _USER_SPLIT_DEFS.items()
+                for name in names
+            ),
+            ("app.serializers", "UserPkField"),
+            ("app.serializers", "PositionsSerializer"),
+            ("app.serializers", "TournamentUserSerializer"),
+            ("app.serializers", "UserSerializer"),
+            ("app.schemas", "TournamentUserSchema"),
+            ("app.user_cache", "serialize_user_core"),
+            ("app.user_cache", "serialize_users_core"),
+            ("app.tests.test_user_core_cache", "SerializeUserCoreTests"),
+            ("app.tests.test_user_core_cache", "BulkUsersCacheTests"),
+            (
+                "app.tests.test_tournament_user_schema",
+                "TournamentUserSchemaDisplayNameTest",
+            ),
+            (
+                "app.tests.test_user_serializer_discord_names",
+                "UserSerializerDiscordNamesTest",
+            ),
+            (
+                "app.tests.test_user_serializer_discord_names",
+                "NoSerializerEmitsCustomUserGuildNicknameTest",
+            ),
+            ("app.tests.test_user_serializer_discord_names", "_serializer_sources"),
+            ("app.tests.test_user_serializer_discord_names", "_in_customuser_meta"),
+            ("app.tests.test_user_serializer_payload", "UserSerializerPayloadTest"),
+            ("app.tests.test_schema_reexports", "AppSchemaReexportTests"),
+            ("app.tasks.avatar_refresh", "_is_test_environment"),
+            ("app.tasks.avatar_refresh", "_is_avatar_url_valid"),
+            ("app.tasks.avatar_refresh", "_fetch_discord_avatar"),
+            ("app.tasks.avatar_refresh", "_check_and_update_user"),
+            ("app.tasks.avatar_refresh", "refresh_discord_avatars"),
+            ("app.tasks.avatar_refresh", "refresh_single_user_avatar"),
+            ("app.tasks.avatar_refresh", "refresh_avatars_batched"),
+            ("app.tasks.avatar_refresh", "refresh_all_discord_data"),
+            ("app.tasks.discord_name_sync", "_sync_targets"),
+            ("app.tasks.discord_name_sync", "sync_active_org_discord_names"),
+            ("app.tasks.discord_name_sync", "sync_org_discord_names"),
+            ("app.internal_client.users", "get_users_for_avatar_check"),
+            ("app.internal_client.users", "update_user_avatar"),
+            ("app.internal_client.users", "list_discord_linked_users"),
+            ("app.internal_client.users", "list_discord_guild_ids"),
+            ("app.internal_client.users", "bulk_update_user_avatars"),
+            ("app.internal_client.users", "list_discord_name_sync_targets"),
+            ("app.internal_client.users", "bulk_update_member_names"),
+            ("app.utils.avatar_utils", "refresh_user_avatar"),
+            ("app.management.prod_payload", "steam_account_id"),
+            ("app.management.prod_payload", "position_values"),
+            ("app.management.prod_payload", "create_positions"),
+            ("app.management.commands.refresh_avatars", "Command"),
+            ("app.management.commands.sync_prod_users", "Command"),
+            ("app.tests.test_avatar_refresh_batched", "_user_row"),
+            ("app.tests.test_avatar_refresh_batched", "AvatarRefreshBatchedTest"),
+            ("app.tests.test_discord_name_sync_task", "_member"),
+            ("app.tests.test_discord_name_sync_task", "DiscordNameSyncTaskTests"),
+            ("app.tests.test_discord_name_sync_beat", "DiscordNameSyncBeatTests"),
+            ("app.tests.test_prod_import_commands", "fake_response"),
+            ("app.tests.test_prod_import_commands", "prod_user"),
+            ("app.tests.test_prod_import_commands", "SyncProdUsersCommandTest"),
+            ("app.internal_client", "bulk_update_member_names"),
+            ("app.internal_client", "bulk_update_user_avatars"),
+            ("app.internal_client", "get_users_for_avatar_check"),
+            ("app.internal_client", "list_discord_guild_ids"),
+            ("app.internal_client", "list_discord_linked_users"),
+            ("app.internal_client", "list_discord_name_sync_targets"),
+            ("app.internal_client", "update_user_avatar"),
+            ("app.display_names", "first_name"),
+            ("app.display_names", "user_display_name"),
+            ("app.steam_accounts", "steam_account_id_holder"),
+            ("app.steam_accounts", "steam_account_id_identity"),
+            ("app.steam_accounts", "steam_account_id_conflict_payload"),
+            ("app.steam_accounts", "_require_id"),
+            ("app.steam_accounts", "_apply_verification"),
+            ("app.steam_accounts", "log_steam_verification_change"),
+            ("app.steam_accounts", "mark_steam_account_verified"),
+            ("app.steam_accounts", "clear_steam_account_verification"),
+            ("app.steam_accounts", "steam_verification_payload"),
+            ("app.discord_accounts", "_GameProfileSnapshot"),
+            ("app.discord_accounts", "_positions_set"),
+            ("app.discord_accounts", "_snapshot_game_profiles"),
+            ("app.discord_accounts", "_carry_over_game_profiles"),
+            ("app.discord_accounts", "merge_discord_accounts"),
+            ("app.discord_accounts", "find_split_discord_accounts"),
+            ("app.pipelines", "save_discord"),
+            ("app.pipelines", "associate_by_discord_id"),
+            ("app.pipelines", "associate_by_discord_username"),
+            ("app.management.commands.reclaim_discord_accounts", "Command"),
+            ("app.models", "PositionsModel"),
+            ("app.models", "ProfileClaimRequest"),
+            ("app.tests.test_discord_pipeline_names", "_social"),
+            ("app.tests.test_discord_pipeline_names", "SaveDiscordGlobalNameTest"),
+            ("app.tests.test_discord_reclaim", "_social"),
+            ("app.tests.test_discord_reclaim", "AssociateByDiscordIdTest"),
+            ("app.tests.test_discord_reclaim", "MergeDiscordAccountsTest"),
+            ("app.tests.test_discord_reclaim", "_discarded"),
+            ("app.tests.test_discord_reclaim", "MergeDiscardedRowsTest"),
+            ("app.tests.test_discord_reclaim", "MergeOrgMemberDependentsTest"),
+            ("app.tests.test_discord_reclaim", "MergeProfileCarryoverCoverageTest"),
+            ("app.tests.test_discord_reclaim", "MergeWithoutBaseProfileTest"),
+            ("app.tests.test_discord_reclaim", "GetOrgUserPhantomGuardTest"),
+            ("app.tests.test_discord_reclaim", "SaveDiscordCollisionTest"),
+            ("app.tests.test_display_names", "FirstNameTest"),
+            ("app.tests.test_display_names", "UserDisplayNameTest"),
+            ("org.permissions", "is_site_admin"),
+            ("app.permissions_org", "is_site_admin"),
+        }
+    ),
+    retired_modules=frozenset(
+        {
+            "app.functions.user",
+            "app.views.user_search",
+            "app.views.steam_verification",
+            "app.functions",
+            "app.tests.test_search_users",
+            "app.tests.test_user_delete_route",
+            "app.tests.test_current_user_membership",
+            "app.tests.test_user_partial_patch",
+            "app.tests.test_user_mmr_verification",
+            "app.tests.test_user_privilege_fields",
+            "app.tests.test_steam_account_id_conflict",
+            "app.schemas",
+            "app.user_cache",
+            "app.tests.test_user_core_cache",
+            "app.tests.test_tournament_user_schema",
+            "app.tests.test_user_serializer_discord_names",
+            "app.tests.test_user_serializer_payload",
+            "app.tests.test_schema_reexports",
+            "app.tasks",
+            "app.tasks.avatar_refresh",
+            "app.tasks.discord_name_sync",
+            "app.internal_client.users",
+            "app.utils.avatar_utils",
+            "app.management.prod_payload",
+            "app.management.commands.refresh_avatars",
+            "app.management.commands.sync_prod_users",
+            "app.tests.test_avatar_refresh_batched",
+            "app.tests.test_discord_name_sync_task",
+            "app.tests.test_discord_name_sync_beat",
+            "app.tests.test_prod_import_commands",
+            "app.utils",
+            "app.steam_accounts",
+            "app.pipelines",
+            "app.tests.test_discord_pipeline_names",
+            "app.tests.test_discord_reclaim",
+            "app.tests.test_display_names",
+            "app.display_names",
+            "app.discord_accounts",
+            "app.management.commands.reclaim_discord_accounts",
+        }
+    ),
+    model_labels=frozenset({"positionsmodel", "profileclaimrequest"}),
+    move_migration=("app", "0117_move_user_models_to_user"),
+    cached_labels=frozenset(),
+)
+
+MOVED_SLICES: tuple[MovedSlice, ...] = (
+    HERO_DRAFT,
+    TEAM_DRAFT,
+    ORG,
+    LEAGUE,
+    TOURNAMENT,
+    USER,
+)
 
 # Slices cut before the rule that a retired module's defs go into `moved`;
 # their modules were renamed or split on the way out.
@@ -866,8 +1103,40 @@ RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
 )
 
 # retired module -> where its defs live now, when that is not the same path
-# under the new app; None means renamed within the source app.
+# under the new app; None: no single home file to check (renamed within the
+# source app, or a retired package).
 RETIRED_MODULE_HOMES: dict[str, str | None] = {
+    "app.functions.user": "user.views_profile",
+    "app.views.user_search": "user.views_search",
+    "app.views.steam_verification": "user.views_steam_verification",
+    "app.functions": None,
+    "app.tests.test_search_users": "user.tests.test_search_users",
+    "app.tests.test_user_delete_route": "user.tests.test_user_delete_route",
+    "app.tests.test_current_user_membership": "user.tests.test_current_user_membership",
+    "app.tests.test_user_partial_patch": "user.tests.test_user_partial_patch",
+    "app.tests.test_user_mmr_verification": "user.tests.test_user_mmr_verification",
+    "app.tests.test_user_privilege_fields": "user.tests.test_user_privilege_fields",
+    "app.tests.test_steam_account_id_conflict": "user.tests.test_steam_account_id_conflict",
+    "app.schemas": "user.schemas",
+    "app.user_cache": "user.cache",
+    "app.tests.test_user_core_cache": "user.tests.test_user_core_cache",
+    "app.tests.test_tournament_user_schema": "user.tests.test_tournament_user_schema",
+    "app.tests.test_user_serializer_discord_names": "user.tests.test_user_serializer_discord_names",
+    "app.tests.test_user_serializer_payload": "user.tests.test_user_serializer_payload",
+    "app.tests.test_schema_reexports": "user.tests.test_schema_reexports",
+    "app.tasks": None,
+    "app.tasks.avatar_refresh": "user.tasks.avatar_refresh",
+    "app.tasks.discord_name_sync": "user.tasks.discord_name_sync",
+    "app.internal_client.users": "user.internal_client",
+    "app.utils.avatar_utils": "user.avatar",
+    "app.management.prod_payload": "user.management.prod_payload",
+    "app.management.commands.refresh_avatars": "user.management.commands.refresh_avatars",
+    "app.management.commands.sync_prod_users": "user.management.commands.sync_prod_users",
+    "app.tests.test_avatar_refresh_batched": "user.tests.test_avatar_refresh_batched",
+    "app.tests.test_discord_name_sync_task": "user.tests.test_discord_name_sync_task",
+    "app.tests.test_discord_name_sync_beat": "user.tests.test_discord_name_sync_beat",
+    "app.tests.test_prod_import_commands": "user.tests.test_prod_import_commands",
+    "app.utils": None,
     "app.tests.test_league_rating": None,
     "app.permissions_tournament": "tournament.permissions",
     "app.tournament_state": "tournament.state",
@@ -881,94 +1150,32 @@ RETIRED_MODULE_HOMES: dict[str, str | None] = {
 
 # target app -> production file (relative to backend/) -> what it may import from that app
 ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
-    "draft": {
-        "app/discord_accounts.py": BackEdge(
-            frozenset({"repoint_chat_attribution"}),
-            "Discord account merge repoints hero draft chat authorship",
-        ),
-        "app/views_main.py": BackEdge(
-            frozenset({"DraftRound", "DraftTeam"}),
-            "current_user lists the user's pending team-draft pick and the active "
-            "hero drafts the user captains",
-        ),
-    },
+    "draft": {},
     "org": {
+        "app/views_main.py": BackEdge(
+            frozenset({"Organization"}), "home_stats cross-domain aggregate"
+        ),
         "app/admin.py": BackEdge(
             frozenset({"api", "release_earning_sends"}),
             "CustomUser admin delete checks standing blockers, releases promo "
             "earning sends and records standing on user deletion",
         ),
-        "app/discord_accounts.py": BackEdge(
-            frozenset(
-                {
-                    "OrgUser",
-                    "api",
-                    "delete_counts",
-                    "demote_colliding_earning_sends",
-                    "merge_member_dependents",
-                    "merge_org_mmrs",
-                    "reconcile_promotion_identity",
-                    "repoint_org_attribution",
-                }
-            ),
-            "user account merge pairs org memberships, moves their dependents, "
-            "merges per-game org MMR and standing, and repoints org "
-            "contribution and promo attribution",
-        ),
-        "app/management/commands/sync_prod_users.py": BackEdge(
-            frozenset(
-                {
-                    "AttendanceOutcome",
-                    "ContributionEntry",
-                    "EventCaptain",
-                    "Organization",
-                    "PromoSend",
-                }
-            ),
-            "prod user sync clears org conduct, contribution, leadership and promo "
-            "rows before reloading users, and keeps organization owners",
-        ),
-        "app/serializers.py": BackEdge(
-            frozenset({"Organization"}),
-            "UserSerializer.default_organization reads Organization at class "
-            "definition",
-        ),
-        "app/views/user_search.py": BackEdge(
-            frozenset(
-                {"OrgUser", "Organization", "has_org_staff_access", "user_name_q"}
-            ),
-            "user search scopes by Organization, matches org server nicknames, "
-            "checks org staff and reports org membership",
-        ),
         "app/views/internal.py": BackEdge(
             frozenset({"OrgUser"}),
             "repeater subscriber endpoint reports each subscriber's org membership",
         ),
-        "app/views_main.py": BackEdge(
-            frozenset(
-                {
-                    "OrgUser",
-                    "Organization",
-                    "api",
-                    "has_org_staff_access",
-                    "member_organization_ids",
-                    "release_earning_sends",
-                }
-            ),
-            "UserView org-staff checks, profile claims and deletion standing; "
-            "current_user membership ids; home stats counts Organization",
-        ),
     },
     "league": {
-        "app/views/user_search.py": BackEdge(
-            frozenset({"League", "LeagueUser"}),
-            "user search resolves ?league_id= to a League and flags league "
-            "membership",
-        ),
         "app/views_main.py": BackEdge(
             frozenset({"League"}),
             "home_stats caches on and counts League as a cross-domain home-page "
             "aggregate",
+        ),
+    },
+    "user": {
+        "app/models.py": BackEdge(
+            frozenset({"BaseUserProfile", "DotaUserProfile", "PositionsModel"}),
+            "CustomUser profile accessors",
         ),
     },
     "tournament": {
@@ -984,7 +1191,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
-ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {}
+ALLOWED_NAME_COLLISIONS: dict[tuple[str, str], str] = {
+    ("app/tests/test_redis_namespace.py", "_reload"): (
+        "Reloads backend.settings; unrelated to the moved user re-fetch helper."
+    ),
+    ("app/tests/test_settings_env_overrides.py", "_reload"): (
+        "Reloads backend.settings; unrelated to the moved user re-fetch helper."
+    ),
+}
 
 GUARD_FILE = "tests/test_app_boundaries.py"
 
@@ -1346,7 +1560,28 @@ FIXTURE_MIGRATION = ("other", "0003_x")
 FIXTURE_MIGRATION_PATH = "other/migrations/0003_x.py"
 
 
+def _retired_module_present(base: Path, module: str) -> bool:
+    rel = base / Path(*module.split("."))
+    return rel.with_suffix(".py").exists() or (rel.is_dir() and any(rel.rglob("*.py")))
+
+
 class GuardSelfTests(SimpleTestCase):
+    def test_retired_package_with_leftover_py_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            package = base / "pkg"
+            package.mkdir()
+            (package / "x.py").write_text("")
+            self.assertTrue(_retired_module_present(base, "pkg"))
+
+    def test_retired_package_with_only_pycache_absent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            cache = base / "pkg" / "__pycache__"
+            cache.mkdir(parents=True)
+            (cache / "x.cpython-312.pyc").write_bytes(b"")
+            self.assertFalse(_retired_module_present(base, "pkg"))
+
     def violations(self, source: str, path: str) -> list[str]:
         return find_violations(
             source,
@@ -1380,6 +1615,24 @@ class GuardSelfTests(SimpleTestCase):
         self.assertFlagged("from src.models import Moved\n", "src/views.py")
         self.assertClean("from dst.models import Moved\n", "dst/views.py")
         self.assertClean("from src.models import Other\n", "src/views.py")
+
+    def test_import_via_non_source_old_module_flagged(self) -> None:
+        moved_slice = replace(
+            FIXTURE_SLICE,
+            moved=frozenset({("org.permissions", "f")}),
+        )
+        self.assertNotEqual(
+            find_violations(
+                "from org.permissions import f\n", "x/y.py", slices=(moved_slice,)
+            ),
+            [],
+        )
+        self.assertEqual(
+            find_violations(
+                "from user.permissions import f\n", "x/y.py", slices=(moved_slice,)
+            ),
+            [],
+        )
 
     def test_relative_import_through_old_module(self) -> None:
         self.assertFlagged("from .models import Moved\n", "src/views.py")
@@ -1701,6 +1954,9 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertIn("draft/models/hero.py", rels)
         self.assertIn("draft/models/team.py", rels)
         self.assertIn("org/permissions.py", rels)
+        self.assertIn("user/permissions.py", rels)
+        self.assertIn("backend/settings.py", rels)
+        self.assertIn("config/celery_light.py", rels)
         self.assertIn("org/models.py", rels)
         self.assertIn("league/permissions.py", rels)
         self.assertIn("league/models.py", rels)
@@ -1715,10 +1971,8 @@ class AppBoundaryTests(SimpleTestCase):
     def test_retired_modules_are_gone(self) -> None:
         for s in MOVED_SLICES:
             for module in s.retired_modules:
-                rel = Path(*module.split("."))
                 with self.subTest(module=module):
-                    self.assertFalse((self.base / rel.with_suffix(".py")).exists())
-                    self.assertFalse((self.base / rel / "__init__.py").exists())
+                    self.assertFalse(_retired_module_present(self.base, module))
 
     def test_retired_module_defs_listed_in_moved(self) -> None:
         self.assertEqual(find_unlisted_retired_defs(MOVED_SLICES, self.base), [])

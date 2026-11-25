@@ -91,6 +91,7 @@ nav:
       - Draft System: features/draft.md
       - Hero Draft: features/herodraft.md
       - Bracket: features/bracket.md
+      - Team Management: features/team-management.md
       - CSV Import: features/csv-import.md
       - Events:
           - Overview: features/events.md
@@ -101,8 +102,10 @@ nav:
       - Organization Leadership: features/organization-leadership.md
       - Organization Settings: features/organization-settings.md
       - Org MMR per Game: features/org-mmr.md
+      - Steam Friend ID Verification: features/steam-friend-id.md
       - MMR Sync API: features/org-mmr-sync-api.md
       - SFG Promotion Sync: features/sfg-promotion-sync.md
+      - Lobby Bot League Access: features/lobby-bot-league-access.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md

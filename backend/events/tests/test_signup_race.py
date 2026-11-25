@@ -5,12 +5,13 @@ from django.db import close_old_connections
 from django.test import TransactionTestCase
 from django.utils import timezone as tz
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from events.services import staff_add_signup
 from events.tests.actors import SYSTEM
 from org.models import Organization
+from user.models import PositionsModel
 
 
 class StaffAddSignupRaceTest(TransactionTestCase):

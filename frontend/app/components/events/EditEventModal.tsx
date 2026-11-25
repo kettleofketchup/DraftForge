@@ -325,6 +325,7 @@ export function EditEventModal({
             <DiscordConfigSection
               control={form.control}
               isRepeater={event?.event_repeater != null}
+              showNotifyNewEvents={false}
               organizationId={event?.organization ?? 0}
             />
           ),

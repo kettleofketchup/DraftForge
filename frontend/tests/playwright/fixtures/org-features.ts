@@ -50,7 +50,10 @@ export interface OrgFeaturesTestData {
   >;
   templates: { pk: number; name: string; org_pk: number }[];
   tournaments: OrgFeaturesRef[];
-  audiences?: Record<string, { pk: number | null; discord_id: string }>;
+  audiences?: Record<
+    string,
+    { pk: number | null; discord_id: string; mmr: number | null }
+  >;
   /** Synthetic imported SFG contacts (resetOrgFeatures({ sfgContacts: true })). */
   sfg_contacts?: Record<
     'external' | 'local_and_external' | 'discord_only' | 'non_member',

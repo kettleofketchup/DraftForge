@@ -12,7 +12,7 @@ class PositionsInvalidationTests(TestCase):
         assert pos is not None
         # save() must invalidate the owning dota profile + bubbled parents,
         # NOT raise AttributeError on the now-empty customuser_set.
-        with patch("app.models.invalidate_after_commit") as mock_inv:
+        with patch("user.models.invalidate_after_commit") as mock_inv:
             pos.carry = 5
             pos.save()
             assert mock_inv.called

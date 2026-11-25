@@ -89,7 +89,7 @@ export default defineConfig({
       // 16-events specs (run in events-sequential project — those tests
       // share a single seeded event PK from getEventsTestData and race on
       // start_roll_call / resetEventsData when workers > 1 in the same shard),
-      // layout specs (layout project), 18-dota-lobby specs
+      // layout specs (layout project), 22-dota-lobby specs
       // (dota-lobby-sequential) and 19-org-features specs
       // (org-features-sequential).
       testIgnore: [
@@ -97,7 +97,7 @@ export default defineConfig({
         /e2e\/mobile\//,
         /e2e\/16-events\//,
         /e2e\/layout\//,
-        /e2e\/18-dota-lobby\//,
+        /e2e\/22-dota-lobby\//,
         /e2e\/19-org-features\//,
       ],
       use: {
@@ -143,7 +143,7 @@ export default defineConfig({
     },
     {
       name: 'dota-lobby-sequential',
-      testMatch: /e2e\/18-dota-lobby\/.*\.spec\.ts/,
+      testMatch: /e2e\/22-dota-lobby\/.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: true,
@@ -158,7 +158,7 @@ export default defineConfig({
           ],
         },
       },
-      // The 18-dota-lobby specs share one simulated dota_lobby and one set
+      // The 22-dota-lobby specs share one simulated dota_lobby and one set
       // of seeded lobby games, and each file resets them
       // (/api/tests/dota-lobby/reset/): files must not overlap, so one
       // worker runs them in order whatever --workers says.

@@ -1,10 +1,10 @@
 from rest_framework import serializers
 
-from app.serializers import UserPkField
 from draft.models import Draft, DraftOptions, DraftRound
 from tournament.models import Tournament
 from tournament.serializers.team import TeamSerializerForTournament, TeamSerializerSlim
 from tournament.serializers.users import serialize_user_with_mmr
+from user.serializers import UserPkField
 
 
 def users_remaining_pks(draft: Draft) -> list[int]:

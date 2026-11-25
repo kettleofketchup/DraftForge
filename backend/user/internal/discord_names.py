@@ -1,4 +1,4 @@
-"""Internal endpoints for the Discord name sync worker (app/tasks/discord_name_sync.py)."""
+"""Internal endpoints for the Discord name sync worker (user/tasks/discord_name_sync.py)."""
 
 from typing import Any
 

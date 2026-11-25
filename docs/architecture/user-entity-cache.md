@@ -44,7 +44,7 @@ The pattern has three layers:
 A custom DRF field that serializes user relationships as just their `pk`:
 
 ```python
-# backend/app/serializers.py
+# backend/user/serializers.py
 class UserPkField(serializers.RelatedField):
     def to_representation(self, value):
         if value is None:
@@ -420,7 +420,7 @@ sequenceDiagram
 
 | File | Purpose |
 |------|---------|
-| `backend/app/serializers.py` | `UserPkField` |
+| `backend/user/serializers.py` | `UserPkField` |
 | `backend/tournament/serializers/*.py` | Slim serializers; `build_users_dict()` in `users.py` |
 | `backend/org/serializers.py` | `OrgUserSerializer` (org-scoped MMR + `orgUserPk`) |
 | `backend/org/mmr.py` | Per-game org MMR reads, writes and prefetch |

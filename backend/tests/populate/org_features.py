@@ -22,7 +22,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_model, invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from league.models import League
@@ -66,6 +66,7 @@ from tests.data.org_features import (
     ORG_FEATURES_CONDUCT_PAST_EVENT_NAMES,
     ORG_FEATURES_CONDUCT_RANKED,
     ORG_FEATURES_CONDUCT_SIGNUPS,
+    ORG_FEATURES_EVENT_TOURNAMENT_NAME,
     ORG_FEATURES_LEADERSHIP_EVENT_NAME,
     ORG_FEATURES_LEADERSHIP_TEAMS,
     ORG_FEATURES_LEADERSHIP_TOURNAMENT,
@@ -92,8 +93,13 @@ from tests.populate.promotion_integration import (
     restore_promotion_integration_settings,
     seed_promotion_integration,
 )
-from tests.populate.utils import delete_ledger_for_users, ensure_org_user
+from tests.populate.utils import (
+    delete_events,
+    delete_ledger_for_users,
+    ensure_org_user,
+)
 from tournament.models import Team, Tournament
+from user.models import PositionsModel
 
 # (org pk, owner, admins, staff, promoters)
 _ROLES: list[tuple[int, TestUser, list[TestUser], list[TestUser], list[TestUser]]] = [
@@ -247,6 +253,7 @@ def _create_events(org: Organization, users: dict[int, CustomUser]) -> None:
             organization=org,
             name=name,
             description="Upcoming event for the locked features E2E tests.",
+            tournament_name=ORG_FEATURES_EVENT_TOURNAMENT_NAME,
             scheduled_at=start,
             ends_at=start + timedelta(hours=3),
             state=state,
@@ -258,6 +265,7 @@ def _create_events(org: Organization, users: dict[int, CustomUser]) -> None:
         organization=org,
         name=ORG_FEATURES_COMPLETED_EVENT_NAME,
         description="Completed event with a host and a helper.",
+        tournament_name=ORG_FEATURES_EVENT_TOURNAMENT_NAME,
         scheduled_at=start,
         ends_at=start + timedelta(hours=3),
         state=EventState.COMPLETED,
@@ -442,7 +450,7 @@ def _rebuild() -> list[Organization]:
     ContributionEntry.objects.nocache().filter(organization__in=org_pks).delete()
     PromoSend.objects.nocache().filter(organization__in=org_pks).delete()
     ContributionPointValue.objects.nocache().filter(organization__in=org_pks).delete()
-    Event.objects.nocache().filter(organization__in=org_pks).delete()
+    delete_events(Event.objects.nocache().filter(organization__in=org_pks))
     Tournament.objects.nocache().filter(league__organization__in=org_pks).exclude(
         pk__in=[pk for pk, _, _, _ in ORG_FEATURES_TOURNAMENTS]
     ).delete()

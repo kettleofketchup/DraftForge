@@ -7,7 +7,7 @@ from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from discordbot.services.discord_members import (
     DiscordMembersFetchError,
     get_discord_members_data,
@@ -16,12 +16,14 @@ from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.display_names import guild_nicknames
 from org.integration.ticks import external_contact_exists, external_contacts
-from org.models import Organization, OrgUser
+from org.mmr import game_for_event
+from org.models import Organization, OrgUser, OrgUserGameMmr
 from org.models_promotion import PromoSend
 from org.promotion.render import player_name
 from org.user_search import user_name_q
 from telemetry.logging import get_logger
 from tournament.models import Tournament
+from user.models import PositionsModel
 from user.querysets import with_user_profiles
 
 log = get_logger(__name__)
@@ -71,6 +73,7 @@ class CandidateRow(TypedDict):
     guildNickname: str | None
     discordId: str | None
     avatarUrl: str | None
+    mmr: int | None
     recent_count: int | None
     last_active_at: datetime | None
     discord_joined_at: datetime | None
@@ -134,6 +137,22 @@ def _with_guild_nickname(
             OrgUser.objects.filter(user=OuterRef("pk"), organization=org).values(
                 "guild_nickname"
             )[:1]
+        )
+    )
+
+
+def _with_org_mmr(
+    qs: QuerySet[CustomUser], org: Organization, event: Event
+) -> QuerySet[CustomUser]:
+    """Annotate ``org_mmr``: this org's MMR for the event's game, null when unset."""
+    return qs.annotate(
+        org_mmr=Subquery(
+            OrgUserGameMmr.objects.filter(
+                org_user__user=OuterRef("pk"),
+                org_user__organization=org,
+                game_type=game_for_event(event),
+                mmr__gt=0,
+            ).values("mmr")[:1]
         )
     )
 
@@ -300,6 +319,7 @@ def _member_row(joiner: GuildJoiner) -> CandidateRow:
         "guildNickname": member.get("nick"),
         "discordId": user.discordId,
         "avatarUrl": user.avatarUrl,
+        "mmr": None,
         "recent_count": None,
         "last_active_at": None,
         "discord_joined_at": joiner["joined_at"],
@@ -344,12 +364,18 @@ def candidates(
     hide_signed_up: bool = True,
     hide_messaged: bool = True,
     q: str = "",
+    min_mmr: int | None = None,
+    max_mmr: int | None = None,
+    user_pk: int | None = None,
 ) -> list[CandidateRow]:
+    """Candidate rows for ``source``. Every filter runs before the Discord row
+    cap; an MMR bound drops players without an org MMR for the event's game."""
     event_signups = EventSignup.objects.nocache().filter(event=event)
     active_signups = event_signups.exclude(status__in=DECLINED_STATUSES)
     declined = event_signups.filter(status__in=DECLINED_STATUSES)
     event_sends = PromoSend.objects.filter(event=event, recipient__isnull=False)
     term = q.strip()
+    mmr_bounded = min_mmr is not None or max_mmr is not None
 
     joiners: list[GuildJoiner] = []
     joined_at: dict[str, datetime] = {}
@@ -358,7 +384,7 @@ def candidates(
             j
             for j in recent_guild_joiners(org, days=days)
             if j["member"]["user"]["id"] != sender.discordId
-        ][:MAX_DISCORD_ROWS]
+        ]
         joined_at = {j["member"]["user"]["id"]: j["joined_at"] for j in joiners}
         qs = with_user_profiles(
             _with_guild_nickname(
@@ -377,7 +403,14 @@ def candidates(
         )
     if term:
         qs = qs.filter(user_name_q(term, org_id=org.pk))
-    users = list(qs)
+    if user_pk is not None:
+        qs = qs.filter(pk=user_pk)
+    qs = _with_org_mmr(qs, org, event)
+    if min_mmr is not None:
+        qs = qs.filter(org_mmr__gte=min_mmr)
+    if max_mmr is not None:
+        qs = qs.filter(org_mmr__lte=max_mmr)
+    users = list(qs.nocache())
     user_pks = [u.pk for u in users]
 
     signed_up = set(
@@ -420,6 +453,7 @@ def candidates(
             "guildNickname": user.org_guild_nickname,
             "discordId": user.discordId,
             "avatarUrl": user.avatarUrl,
+            "mmr": user.org_mmr,
             "recent_count": getattr(user, "recent_count", None),
             "last_active_at": getattr(user, "last_active_at", None),
             "discord_joined_at": joined_at.get(user.discordId or ""),
@@ -441,19 +475,23 @@ def candidates(
             "discordId", flat=True
         )
     )
+    unlinked_allowed = not mmr_bounded and user_pk is None
     merged: list[CandidateRow] = []
     for joiner in joiners:
         discord_id = joiner["member"]["user"]["id"]
         if discord_id in user_rows:
             merged.append(user_rows[discord_id])
-        elif discord_id not in linked and (
-            not term or _member_matches(joiner["member"], term)
+        elif (
+            unlinked_allowed
+            and discord_id not in linked
+            and (not term or _member_matches(joiner["member"], term))
         ):
             merged.append(_member_row(joiner))
     _attach_external_contacts(event, merged)
     if hide_messaged:
         merged = [r for r in merged if not r["contact_recorded"]]
-    return merged
+    # The cap comes after every filter, external contacts included.
+    return merged[:MAX_DISCORD_ROWS]
 
 
 def _attach_external_contacts(event: Event, rows: list[CandidateRow]) -> None:

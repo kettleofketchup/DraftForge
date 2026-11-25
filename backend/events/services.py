@@ -12,7 +12,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
@@ -95,6 +95,7 @@ from org.standing import api as standing
 from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
 from tournament.models import Team, Tournament
+from user.models import PositionsModel
 
 if TYPE_CHECKING:
     from discordbot.models import DiscordEvent
@@ -314,6 +315,7 @@ def _create_signup(
             signup_type=signup_type,
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
+            self_made=not for_staff_placement,
             **eligibility,
             **carry,
         )
@@ -343,6 +345,7 @@ def _create_signup(
         event_team=event_team,
         signup_type=signup_type,
         status=status,
+        self_made=not for_staff_placement,
         **eligibility,
         **carry,
     )
@@ -441,7 +444,11 @@ def create_tentative_signup(
         EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
-        event=event, user=user, status=SignupStatus.TENTATIVE, **carry
+        event=event,
+        user=user,
+        status=SignupStatus.TENTATIVE,
+        self_made=True,
+        **carry,
     )
     entry = _record_leaf(signup, event=event, actor=actor, action=action, before=before)
     if prior_status in seat_holding_statuses(event):

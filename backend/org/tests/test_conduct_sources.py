@@ -1,5 +1,4 @@
 from datetime import timedelta
-from unittest import skipUnless
 
 from django.utils import timezone as tz
 
@@ -11,6 +10,7 @@ from events.constants import (
     SignupAction,
     SignupMeans,
     SignupStatus,
+    VoicePresenceSource,
 )
 from events.ledger import SignupActor, record_signup_change
 from events.models import (
@@ -26,12 +26,10 @@ from events.ready_check_constants import (
     ReadyCheckPhase,
 )
 from org.conduct.constants import Outcome, OutcomeSource
-from org.conduct.sources import automatic_outcomes
+from org.conduct.sources import _voice_user_ids, automatic_outcomes
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
 from org.tests.conduct_base import ConductTestCase
-
-HAS_CULL = hasattr(SignupMeans, "CULL")
 
 
 class AutomaticOutcomesTest(ConductTestCase):
@@ -67,12 +65,12 @@ class AutomaticOutcomesTest(ConductTestCase):
     def _member(self, status: str = SignupStatus.APPROVED) -> EventSignup:
         return self.signup(self.event, self.make_user(), status)
 
-    def _cull(self, signup: EventSignup) -> None:
+    def _system_drop(self, signup: EventSignup) -> None:
         record_signup_change(
             event=self.event,
             subject=signup.user,
             actor=SignupActor(
-                user=None, role=ActorRole.SYSTEM, means=getattr(SignupMeans, "CULL")
+                user=None, role=ActorRole.SYSTEM, means=SignupMeans.SYSTEM
             ),
             action=SignupAction.REJECTED,
             signup=signup,
@@ -201,26 +199,18 @@ class AutomaticOutcomesTest(ConductTestCase):
 
         self.assertEqual(self._run(signup), {})
 
-    @skipUnless(HAS_CULL, "SignupMeans has no CULL member yet")
-    def test_confirmed_then_culled_is_no_show(self) -> None:
+    def test_system_dropped_signup_is_not_attributed_to_cull(self) -> None:
         signup = self._member(SignupStatus.DROPPED)
         self._entry(self._check(), signup, ReadyCheckEntryState.CONFIRMED)
-        self._cull(signup)
+        self._system_drop(signup)
 
-        self.assertEqual(
-            self._run(signup),
-            {self._key(signup.user): (Outcome.NO_SHOW, OutcomeSource.CULL)},
-        )
+        self.assertEqual(self._run(signup), {})
 
-    @skipUnless(HAS_CULL, "SignupMeans has no CULL member yet")
-    def test_dropped_with_ledger_cull_attribution(self) -> None:
-        signup = self._member(SignupStatus.DROPPED)
-        self._cull(signup)
-
-        self.assertEqual(
-            self._run(signup),
-            {self._key(signup.user): (Outcome.NO_SHOW, OutcomeSource.CULL)},
-        )
+    def test_no_signup_means_marks_a_cull_yet(self) -> None:
+        # #533 adds the start cull. Its means must feed automatic_outcomes
+        # (OutcomeSource.CULL) before this assertion is dropped.
+        self.assertNotIn("cull", SignupMeans.values)
+        self.assertFalse(hasattr(SignupMeans, "CULL"))
 
     def test_voice_upgrades_only(self) -> None:
         present = self._member()
@@ -245,6 +235,37 @@ class AutomaticOutcomesTest(ConductTestCase):
                 self._key(present.user): (Outcome.ATTENDED, OutcomeSource.VOICE),
                 self._key(joined.user): (Outcome.ATTENDED, OutcomeSource.VOICE),
             },
+        )
+
+    def test_manual_present_row_gives_no_voice_credit(self) -> None:
+        manual = self._member()
+        feed = self._member()
+        manual_joined = self._member()
+        EventVoicePresence.objects.create(
+            event=self.event,
+            user=manual.user,
+            present=True,
+            source=VoicePresenceSource.MANUAL,
+        )
+        EventVoicePresence.objects.create(
+            event=self.event,
+            user=feed.user,
+            present=True,
+            source=VoicePresenceSource.FEED,
+        )
+        EventVoicePresence.objects.create(
+            event=self.event,
+            user=manual_joined.user,
+            present=True,
+            source=VoicePresenceSource.MANUAL,
+            first_joined_at=tz.now(),
+        )
+
+        self.assertEqual(_voice_user_ids(self.event, {manual.user.pk}), set())
+        self.assertEqual(_voice_user_ids(self.event, {feed.user.pk}), {feed.user.pk})
+        self.assertEqual(
+            _voice_user_ids(self.event, {manual_joined.user.pk}),
+            {manual_joined.user.pk},
         )
 
 

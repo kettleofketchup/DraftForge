@@ -12,6 +12,9 @@ export type SectionFieldMeta = Record<
   Record<string, SettingsFieldMeta>
 >;
 
+export const PROFILE_REMINDER_DESCRIPTION: string =
+  'Posts a reminder in the announcement channel asking signed-up members to complete the profile details this event requires (such as Friend ID) before the event. Needs an announcement channel.';
+
 /**
  * Every event-form field, under the section that renders it by default, with the
  * text the settings search matches. A modal that renders a field elsewhere (signup
@@ -319,15 +322,15 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_signup_reminder: {
       label: 'Send signup reminder',
-      description: "DM users who haven't signed up yet before the event starts",
+      description:
+        "DM series subscribers who haven't signed up yet, before the event starts",
     },
     discord_signup_reminder_hours: {
       label: 'Signup reminder: hours before event',
     },
     discord_profile_reminder: {
       label: 'Profile update reminder',
-      description:
-        'DM signed-up users to complete their profile (Steam ID, MMR) before the event',
+      description: PROFILE_REMINDER_DESCRIPTION,
     },
     discord_profile_reminder_hours: { label: 'Profile reminder: when to send' },
     discord_confirm_attendance: {
@@ -371,7 +374,8 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_announcement_channel_id: {
       label: 'Announcement channel',
-      description: 'Channel where the announcement will be posted',
+      description:
+        'Shared by the pre-day announcement, attendance reminder, profile reminder and series new-event posts.',
     },
     discord_announcement_hours: {
       label: 'Hours before event',
@@ -383,9 +387,10 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       keywords: ['ping'],
     },
     discord_notify_new_events: {
-      label: 'Message interested users',
+      label: 'Post new events',
       description:
-        'DM subscribed users when new events are created or cancelled',
+        'Post each new series event in the announcement channel when it is created',
+      keywords: ['new event', 'channel', 'notify'],
     },
   },
 };

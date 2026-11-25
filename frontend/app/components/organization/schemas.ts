@@ -71,3 +71,34 @@ export type OrganizationType = z.infer<typeof OrganizationSchema> & {
 export type CreateOrganizationInput = z.infer<typeof CreateOrganizationSchema>;
 export type EditOrganizationInput = z.infer<typeof EditOrganizationSchema>;
 export type OrganizationsType = OrganizationType[];
+
+// backend/user/serializers.py PositionsSerializer
+const OrgMemberPositionsSchema = z.object({
+  pk: z.number(),
+  carry: z.number(),
+  mid: z.number(),
+  offlane: z.number(),
+  soft_support: z.number(),
+  hard_support: z.number(),
+});
+
+// backend/org/serializers.py OrgUserSerializer, with include_game_mmrs=True
+export const OrgMemberSchema = z.object({
+  orgUserPk: z.number(),
+  pk: z.number(),
+  username: z.string().nullable(),
+  nickname: z.string().nullable(),
+  guildNickname: z.string().nullable(),
+  discordNickname: z.string().nullable(),
+  avatar: z.string().nullable(),
+  discordId: z.string().nullable(),
+  positions: OrgMemberPositionsSchema.nullable(),
+  steam_account_id: z.number().nullable(),
+  avatarUrl: z.string().nullable(),
+  mmr: z.number(),
+  mmr_game_type: z.number(),
+  game_mmrs: z.record(z.string(), z.number()),
+  league_mmr: z.number().nullable(),
+});
+
+export type OrgMemberType = z.infer<typeof OrgMemberSchema>;

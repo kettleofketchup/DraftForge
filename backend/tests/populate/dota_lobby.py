@@ -19,7 +19,7 @@ from cacheops import invalidate_model, invalidate_obj
 from django.db import transaction
 from django.utils import timezone as tz
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from events.constants import EventState, RepeatFrequency, SignupStatus
 from events.models import Event, EventRepeater, EventSignup
 from events.services import (
@@ -56,9 +56,10 @@ from tests.data.dota_lobby import (
 )
 from tests.data.models import TestUser
 from tests.dota_lobby_sim import SimulatorUnavailable, simulator_request
-from tests.populate.utils import ensure_league_user, ensure_org_user
+from tests.populate.utils import delete_events, ensure_league_user, ensure_org_user
 from tournament.choices import DotaLobbyMode, GameMode
 from tournament.models import Game, Team, Tournament
+from user.models import PositionsModel
 
 # The reason the reset writes on the lobby rows it ends.
 RESET_REASON = "test_reset"
@@ -146,7 +147,7 @@ def _create_bracket(
 def _delete_existing(org: Organization) -> None:
     # The tournaments go with their teams, games and lobby rows.
     Tournament.objects.filter(name__in=LOBBY_TOURNAMENT_NAMES).delete()
-    Event.objects.filter(organization=org).delete()
+    delete_events(Event.objects.filter(organization=org))
     EventRepeater.objects.filter(organization=org).delete()
 
 

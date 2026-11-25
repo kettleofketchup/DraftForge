@@ -19,7 +19,6 @@ from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.discord_accounts import merge_discord_accounts
 from app.models import CustomUser
 from org.integration.lifecycle import (
     cancel_or_redact_promotion_identity,
@@ -35,6 +34,7 @@ from org.models_promotion_sync import (
 )
 from org.promotion.services import record_promo_send
 from org.tests.test_integration_contacts import GUILD_ONLY_ID, _ImportBase
+from user.discord_accounts import merge_discord_accounts
 
 
 class MergeTests(_ImportBase):

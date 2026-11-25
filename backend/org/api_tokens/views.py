@@ -37,8 +37,8 @@ from org.models import (
     OrgApiTokenUsage,
     OrgLog,
 )
-from org.permissions import is_site_admin
 from telemetry.logging import get_logger
+from user.permissions import is_site_admin
 
 log = get_logger(__name__)
 

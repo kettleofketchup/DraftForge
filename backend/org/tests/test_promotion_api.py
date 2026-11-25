@@ -328,7 +328,15 @@ class PromotionReadTest(PromotionApiBase):
         self.assertEqual([r["id"] for r in rows], [self.event.pk])
         self.assertEqual(
             set(rows[0]),
-            {"id", "name", "scheduled_at", "ends_at", "state", "signups_open_at"},
+            {
+                "id",
+                "name",
+                "scheduled_at",
+                "ends_at",
+                "state",
+                "signups_open_at",
+                "game_type",
+            },
         )
 
     def test_candidates_expose_discord_username_only_here(self) -> None:

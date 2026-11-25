@@ -32,6 +32,7 @@ export const PromoEventSchema = z.object({
   ends_at: z.string().nullable(),
   state: z.string(),
   signups_open_at: z.string().nullable(),
+  game_type: z.number(),
 });
 export type PromoEvent = z.infer<typeof PromoEventSchema>;
 
@@ -95,6 +96,8 @@ export const CandidateRowSchema = z.object({
   guildNickname: z.string().nullish(),
   discordId: z.string().nullable(),
   avatarUrl: z.string().nullable(),
+  /** The org's MMR for the event's game; null when unset or no account. */
+  mmr: z.number().nullable(),
   recent_count: z.number().nullable(),
   last_active_at: z.string().nullish(),
   discord_joined_at: z.string().nullish(),
@@ -117,6 +120,9 @@ export const CandidatesResponseSchema = z.object({
   source: z.enum(CANDIDATE_SOURCES),
   n: z.number(),
   days: z.number(),
+  game_type: z.number(),
+  min_mmr: z.number().nullable(),
+  max_mmr: z.number().nullable(),
   rows: z.array(CandidateRowSchema),
   contact_sync: ContactSyncSchema,
 });
@@ -129,6 +135,8 @@ export interface CandidateFilters {
   hideSignedUp: boolean;
   hideMessaged: boolean;
   q: string;
+  minMmr: number | null;
+  maxMmr: number | null;
 }
 
 export const DEFAULT_CANDIDATE_FILTERS: CandidateFilters = {
@@ -138,6 +146,8 @@ export const DEFAULT_CANDIDATE_FILTERS: CandidateFilters = {
   hideSignedUp: true,
   hideMessaged: true,
   q: '',
+  minMmr: null,
+  maxMmr: null,
 };
 
 export const RenderResponseSchema = z.object({

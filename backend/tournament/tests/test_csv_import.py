@@ -6,12 +6,13 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from events.models import Event
 from events.services import create_tournament_for_event
 from org.mmr import org_mmr_for
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
+from user.models import PositionsModel
 from user.tests.test_cacheops_integration import _redis_reachable
 
 
@@ -291,6 +292,40 @@ class OrgCSVImportTest(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["created"], 1)
+
+    def test_csv_stub_verified_by_site_staff(self) -> None:
+        staff = CustomUser.objects.create_user(
+            username="csv_site_staff", password="pass", is_staff=True
+        )
+        client = APIClient()
+        client.force_authenticate(staff)
+        resp = client.post(
+            self.url,
+            {"rows": [{"steam_friend_id": "76561198099999998", "mmr": 3000}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.data["summary"]["created"], 1)
+        user = CustomUser.objects.get(steamid=76561198099999998)
+        self.assertEqual(
+            user.steam_account_id, 76561198099999998 - CustomUser.STEAM_ID_64_BASE
+        )
+        self.assertIsNotNone(user.steam_account_verified_at)
+        self.assertEqual(user.steam_account_verified_by_id, staff.pk)
+        self.assertIsNone(user.steam_account_verified_org_id)
+
+    def test_csv_stub_unverified_by_org_staff(self) -> None:
+        resp = self.client.post(
+            self.url,
+            {"rows": [{"steam_friend_id": "76561198099999997", "mmr": 3000}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        user = CustomUser.objects.get(steamid=76561198099999997)
+        self.assertEqual(
+            user.steam_account_id, 76561198099999997 - CustomUser.STEAM_ID_64_BASE
+        )
+        self.assertIsNone(user.steam_account_verified_at)
 
     def test_import_rejects_too_many_rows(self):
         """More than MAX_ROWS returns 400."""
