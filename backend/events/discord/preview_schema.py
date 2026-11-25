@@ -28,6 +28,10 @@ class _Forbid(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class _Response(BaseModel):
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+
 class EventContext(_Forbid):
     type: Literal["event"]
     event_id: int
@@ -76,12 +80,12 @@ class DiscordPreviewRequest(_Forbid):
     open_signups: bool = False
 
 
-class Gate(BaseModel):
+class Gate(_Response):
     would_send: bool
     reasons: list[GateCode] = []
 
 
-class PreviewDestination(BaseModel):
+class PreviewDestination(_Response):
     type: PreviewDestinationType
     channel_id: str | None = None
     thread_name: str | None = None
@@ -89,16 +93,16 @@ class PreviewDestination(BaseModel):
     reply_to_message_id: str | None = None
 
 
-class Variant(BaseModel):
+class Variant(_Response):
     code: Literal["current_post"]
     messages: list[DiscordMessage] = []
 
 
-class ScheduledEventLocation(BaseModel):
+class ScheduledEventLocation(_Response):
     location: str
 
 
-class ScheduledEventPreview(BaseModel):
+class ScheduledEventPreview(_Response):
     name: str
     description: str
     scheduled_start_time: str
@@ -106,11 +110,11 @@ class ScheduledEventPreview(BaseModel):
     entity_metadata: ScheduledEventLocation
 
 
-class Mentions(BaseModel):
+class Mentions(_Response):
     users: dict[str, str] = {}
 
 
-class DiscordPreviewResponse(BaseModel):
+class DiscordPreviewResponse(_Response):
     kind: PreviewKind
     status: PreviewStatus
     missing: list[str] = []
@@ -122,7 +126,7 @@ class DiscordPreviewResponse(BaseModel):
     scheduled_event: ScheduledEventPreview | None = None
     notes: list[NoteCode] = []
     note_args: dict[str, str] = {}
-    mentions: Mentions = Mentions()
+    mentions: Mentions = Field(default_factory=Mentions)
 
 
 class DiscordPreviewApi(BaseModel):

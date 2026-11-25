@@ -55,6 +55,8 @@ from events.completion import close_event
 from events.constants import ActorRole, Commitment, EventState, SignupAction
 from events.discord import notify_create_discord_event, notify_signup_changed
 from events.discord.gates import initial_state_for_new_event
+from events.discord.preview import PreviewInputError, build_discord_preview
+from events.discord.preview_schema import DiscordPreviewRequest
 from events.discord.state import signup_list_queryset
 from events.eligibility import (
     EligibilityResult,
@@ -1033,6 +1035,45 @@ class EventViewSet(viewsets.ModelViewSet):
         if hasattr(self, "_cascade_warning") and self._cascade_warning:
             response.data["_warning"] = self._cascade_warning
         return response
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="discord-preview",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def discord_preview(self, request: Request) -> Response:
+        """What a Discord post would contain for the given form values; sends nothing."""
+        try:
+            body = DiscordPreviewRequest.model_validate(request.data)
+        except PydanticValidationError as exc:
+            return Response(
+                {
+                    "error": "Invalid preview request.",
+                    "detail": exc.errors(
+                        include_url=False, include_context=False, include_input=False
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            preview = build_discord_preview(
+                body.kind,
+                body.context,
+                body.values,
+                request.user,
+                open_signups=body.open_signups,
+            )
+        except ValidationError as exc:
+            detail = exc.detail
+            fields = detail if isinstance(detail, dict) else {"detail": detail}
+            return Response(
+                {"error": "Some preview values are invalid.", **fields},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PreviewInputError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(preview.model_dump(mode="json"))
 
     def check_object_permissions(self, request: Request, obj: Event) -> None:
         super().check_object_permissions(request, obj)
