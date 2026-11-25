@@ -29,16 +29,16 @@ just test::pw::ui
 ```
 frontend/tests/playwright/
 ├── e2e/                    # Test specs organized by feature
-│   ├── 00-hydration-handling.spec.ts
-│   ├── 01-navigation.spec.ts
-│   ├── 03-tournaments/     # Tournament list: page, form, card layout, discovery (tabs, tiers, search)
-│   ├── 04-tournament/      # Single tournament tests
-│   ├── 05-match-stats/     # Match statistics tests
+│   ├── hydration-handling.spec.ts
+│   ├── navigation.spec.ts
+│   ├── tournaments/     # Tournament list: page, form, card layout, discovery (tabs, tiers, search)
+│   ├── tournament/      # Single tournament tests
+│   ├── match-stats/     # Match statistics tests
 │   ├── 06-mobile/          # Mobile responsive tests
-│   ├── 07-draft/           # Captain draft tests
-│   ├── 08-shuffle-draft/   # Shuffle draft tests
-│   ├── 09-bracket/         # Bracket display tests
-│   ├── 10-leagues/         # League tests
+│   ├── draft/           # Captain draft tests
+│   ├── shuffle-draft/   # Shuffle draft tests
+│   ├── bracket/         # Bracket display tests
+│   ├── leagues/         # League tests
 │   └── herodraft/          # HeroDraft multi-browser tests
 ├── fixtures/               # Test fixtures and auth helpers
 │   ├── auth.ts             # Authentication fixtures

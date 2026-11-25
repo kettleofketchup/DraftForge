@@ -72,7 +72,14 @@ Returns the members you can match against:
 - `game_type`: `1` Dota 2 (default), `2` Deadlock.
 - Each entry needs `steam_id` (32-bit account ID or 64-bit Steam ID) or `discord_id`, plus
   `mmr`. `null` or `0` clears the value. At most 500 entries per request.
-- `mark_verified` (default `true`) marks Dota 2 MMR as verified for every matched member.
+- `mark_verified` (default `true`) writes through the Official-MMR writer, recording the
+  token owner as verifier and superseding pending requests even when the value is unchanged.
+  The existing verification rules apply: no self-verification except for superusers, and
+  staff subjects require an admin reviewer. Disallowed entries are reported individually
+  in `invalid`; other entries are still processed.
+- With `mark_verified: false`, changed values use the unverified bulk writer. This clears
+  existing Official verification metadata, including when overwriting an Official value,
+  without superseding pending requests. Unchanged values are left untouched.
 - Only existing members of the org are updated. The API never adds members.
 
 Response:

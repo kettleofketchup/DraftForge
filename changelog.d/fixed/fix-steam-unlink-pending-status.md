@@ -1,0 +1,1 @@
+- Unlinking a Steam match from a bracket game now returns the game to pending, so the bracket keeps loading and the game can get a lobby again. A migration also repairs games already left in the invalid "scheduled" status. (#921)

@@ -153,6 +153,7 @@ context.
   "INTERNAL_API_URL" "http://backend:8000/api/internal"
   "API_BASE_URL" "http://backend:8000/api"
   "SQLITE_PATH" "/data/db.sqlite3"
+  "MEDIA_ROOT" "/data/media"
   "EXTRA_ALLOWED_HOSTS" $host
   "EXTRA_CSRF_TRUSTED_ORIGINS" (ternary (printf "https://%s" $host) "" (ne $host ""))
   "TRUST_X_FORWARDED_PROTO" "true"

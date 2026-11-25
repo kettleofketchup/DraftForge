@@ -9,6 +9,10 @@ vi.mock('../tabs/InfoTab', () => ({ InfoTab: () => null }));
 vi.mock('../tabs/MatchesTab', () => ({ MatchesTab: () => null }));
 vi.mock('../tabs/TournamentsTab', () => ({ TournamentsTab: () => null }));
 vi.mock('../tabs/UsersTab', () => ({ UsersTab: () => null }));
+vi.mock('~/features/mmr-requests', () => ({
+  MmrRequestsTab: () => null,
+  useMmrPendingCount: () => ({ data: undefined }),
+}));
 vi.mock('../tabs/LobbyBotsTab', () => ({
   LobbyBotsTab: ({ enabled }: { enabled: boolean }) => (
     <div data-testid="lobby-bots-tab-stub" data-enabled={String(enabled)} />

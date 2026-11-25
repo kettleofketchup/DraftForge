@@ -46,6 +46,7 @@ populate_imports=(
     backend/tests/helpers/steam_match.py
     backend/tests/test_auth.py
     backend/tournament/choices.py
+    backend/tournament/services/bracket_placement.py
     backend/user/steam_accounts.py
 )
 

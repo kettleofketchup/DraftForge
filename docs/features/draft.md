@@ -419,15 +419,15 @@ Every title carries `@cicd`.
 
 | Spec | Populate key |
 |------|--------------|
-| `07-draft/07-ready-screen.spec.ts` | `draft_timer_ready` |
-| `07-draft/08-timer-countdown.spec.ts` | `draft_timer_countdown` |
-| `07-draft/09-timeout-skip.spec.ts` | `draft_timer_skip` |
-| `07-draft/10-pause-resume.spec.ts` | `draft_timer_pause` |
-| `08-shuffle-draft/04-timeout-skip.spec.ts` | `shuffle_timer_skip` |
+| `draft/ready-screen.spec.ts` | `draft_timer_ready` |
+| `draft/timer-countdown.spec.ts` | `draft_timer_countdown` |
+| `draft/timeout-skip.spec.ts` | `draft_timer_skip` |
+| `draft/pause-resume.spec.ts` | `draft_timer_pause` |
+| `shuffle-draft/timeout-skip.spec.ts` | `shuffle_timer_skip` |
 
 ```bash
-just test::pw::spec 07-draft
-just test::pw::spec 08-shuffle-draft
+just test::pw::spec draft
+just test::pw::spec shuffle-draft
 ```
 
 ## Implementation Notes

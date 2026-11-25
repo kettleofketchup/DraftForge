@@ -9,6 +9,10 @@ vi.mock('../tabs/InfoTab', () => ({ InfoTab: () => null }));
 vi.mock('../tabs/MatchesTab', () => ({ MatchesTab: () => null }));
 vi.mock('../tabs/TournamentsTab', () => ({ TournamentsTab: () => null }));
 vi.mock('../tabs/UsersTab', () => ({ UsersTab: () => null }));
+vi.mock('~/features/mmr-requests', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/features/mmr-requests')>()),
+  useMmrPendingCount: () => ({ data: undefined }),
+}));
 
 const league = { pk: 5, name: 'L', users_count: 9 } as LeagueType;
 

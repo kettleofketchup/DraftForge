@@ -97,7 +97,13 @@ class OrgUserPatchGameMmrsTests(PatchFixtures, TestCase):
         log = logs.get()
         self.assertEqual(
             log.details,
-            {"game_type": 2, "mmr": 3000, "source": "org_user_patch"},
+            {
+                "game_type": 2,
+                "mmr": 3000,
+                "source": "org_user_patch",
+                "previous_mmr": 2500,
+                "verified": True,
+            },
         )
         self.assertEqual(log.target_user, self.member)
         self.assertEqual(log.actor, self.owner)

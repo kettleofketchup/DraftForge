@@ -118,7 +118,7 @@ slot URL (`DF_BASE_URL`), flushes the test Redis, then runs `npx playwright test
 just test::pw::run <args>       # npx playwright test <args> against this slot
 just test::pw::headless [args]  # chromium, herodraft and events-sequential projects
 just test::pw::ui | debug | report | install
-just test::pw::spec <pattern>   # Spec files whose path matches, --no-deps
+just test::pw::spec <name>      # Spec files by name (roll-call), path (events/roll-call) or directory (events), --no-deps; else every spec whose path contains it
 just test::pw::grep '<title>'   # Tests whose title matches, --no-deps
 just test::pw::navigation | tournament | draft | bracket | league | herodraft | all
 just test::pw::cicd             # @cicd tests across every project
@@ -156,8 +156,18 @@ just test::slots-unit              # Slot helper and just recipe tests (no conta
 
 ```bash
 just test::run '<command>'    # One-off command in a test container, image entrypoint bypassed
-just test::backend::all       # pytest on the host with the test env loaded (also ::steam, ::draft)
+just test::backend::all [args]     # Whole suite as CI runs it, in this slot's test stack (below)
+just test::backend::pytest <args>  # Focused pytest on the host, test env loaded (also ::steam, ::draft)
 ```
+
+`test::backend::all` starts this worktree's test stack (`test::upd`), checks
+`makemigrations --check --dry-run`, then runs `python manage.py test -v 2 --parallel auto`
+in the backend container once per `just ci::backend-test-labels` group (`app`,
+`migrations-draft`, `migrations-user`, `rest`), one after another. Extra args go to every
+group's `manage.py test` (for example `--failfast`). It ends with a pass/fail line and
+wall time per group and exits non-zero if any failed. The stack stays up; `just test::down`
+stops it. `test::backend::pytest` runs pytest on the host and needs Redis on
+`localhost:6379`, so keep it for single modules or tests.
 
 ## Update Commands (`just update::*`)
 

@@ -29,6 +29,7 @@ class Command(BaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         check_only = options["check_only"]
+        force = options["force"]
         user_id = options["user_id"]
 
         if user_id:
@@ -62,8 +63,7 @@ class Command(BaseCommand):
                             )
                         )
                 else:
-                    # check_and_update_avatar() checks and updates the avatar
-                    updated = user.check_and_update_avatar()
+                    updated = user.check_and_update_avatar(force=force)
 
                     if updated:
                         updated_count += 1

@@ -310,7 +310,7 @@ cd frontend && npx cypress run --spec "tests/cypress/e2e/09-bracket/**/*.cy.ts"
 
 # Open Cypress interactive mode for brackets
 cd frontend && npx cypress open
-# Then select 09-bracket tests
+# Then select bracket tests
 ```
 
 ### Tournaments for Bracket Testing

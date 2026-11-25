@@ -11,10 +11,11 @@ import {
   EntityBreadcrumb,
   type BreadcrumbSegment,
 } from '~/components/ui/entity-breadcrumb';
+import { useMmrPendingCount, withPendingCount } from '~/features/mmr-requests';
 import { useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
-import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { useIsLeagueAdmin, useIsLeagueStaff } from '~/hooks/usePermissions';
 import { memberCountDisplay } from '~/lib/memberCountDisplay';
 import { generateMeta } from '~/lib/seo';
 import type { LeagueSSR } from '~/lib/ssr-types';
@@ -137,6 +138,10 @@ export default function LeaguePage() {
       ? currentOrg
       : null;
   const canEdit = useIsLeagueAdmin(league, leagueOrg);
+  const canReviewMmr = useIsLeagueStaff(league, leagueOrg);
+  const mmrPendingCount =
+    useMmrPendingCount({ league: pk ?? 0 }, canReviewMmr && !!pk).data?.count ??
+    0;
   const currentUserStatus = useUserStore((s) => s.currentUserStatus);
   const leagueOrgPk = league?.organization?.pk;
   const lobbyBotsAccessSettled =
@@ -192,9 +197,24 @@ export default function LeaguePage() {
         ? [{ value: 'users', label: `${userCountDisplay} Users` }]
         : []),
       { value: 'matches', label: 'Matches' },
+      ...(canReviewMmr
+        ? [
+            {
+              value: 'mmr-requests',
+              label: withPendingCount('MMR requests', mmrPendingCount),
+            },
+          ]
+        : []),
       ...(canEdit ? [{ value: 'lobby-bots', label: 'Lobby bots' }] : []),
     ],
-    [leagueTournaments.length, userCountDisplay, canViewMembers, canEdit],
+    [
+      leagueTournaments.length,
+      userCountDisplay,
+      canViewMembers,
+      canReviewMmr,
+      mmrPendingCount,
+      canEdit,
+    ],
   );
 
   usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);
@@ -266,6 +286,7 @@ export default function LeaguePage() {
           onTabChange={handleTabChange}
           canViewMembers={canViewMembers}
           memberAccessSettled={memberAccessSettled}
+          canReviewMmr={canReviewMmr}
           canManageLobbyBots={canEdit}
           lobbyBotsAccessSettled={lobbyBotsAccessSettled}
         />
