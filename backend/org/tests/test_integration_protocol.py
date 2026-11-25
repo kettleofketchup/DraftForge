@@ -6,7 +6,10 @@ oversized or mistyped requests are all refused, and errors come back in the
 contract envelope without echoing what the client sent.
 """
 
-from datetime import UTC, datetime, timedelta
+import json
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 from django.core import signing
 from django.test import SimpleTestCase, override_settings
@@ -16,6 +19,7 @@ from rest_framework.test import APIClient
 
 from org.integration import cursors
 from org.integration.base import IntegrationAPIView
+from org.integration.contacts import ImportBatch, ImportEntryV, parse_import_batch
 from org.integration.errors import IntegrationError
 from org.integration.parsers import (
     MAX_BATCH,
@@ -25,12 +29,14 @@ from org.integration.parsers import (
     json_body,
     parse_batch,
     parse_choice,
+    parse_date,
     parse_hash,
     parse_id,
     parse_limit,
     parse_timestamp,
     parse_uuid,
 )
+from org.integration.receipts import IMPORT_SOURCE_FIELDS, import_source_hash
 
 
 class _Echo(IntegrationAPIView):
@@ -243,6 +249,16 @@ class FieldValidatorTests(SimpleTestCase):
             with self.subTest(bad=bad), self.assertRaises(IntegrationError):
                 parse_timestamp(bad, "t", now=now)
 
+    def test_parse_timestamp_unbounded_skips_only_the_future_bound(self) -> None:
+        now = datetime(2026, 11, 24, 12, 0, tzinfo=UTC)
+        self.assertEqual(
+            parse_timestamp("2099-01-01T00:00:00Z", "t", now=now, bounded=False),
+            datetime(2099, 1, 1, tzinfo=UTC),
+        )
+        for bad in ("2099-01-01T00:00:00+00:00", "0000-01-01T00:00:00Z", None):
+            with self.subTest(bad=bad), self.assertRaises(IntegrationError):
+                parse_timestamp(bad, "t", now=now, bounded=False)
+
     def test_parse_uuid_and_hash_lowercase_canonical(self) -> None:
         uid = "3f2b6c1e-8a4d-4f6b-9c2e-1d7a5b3e9f01"
         self.assertEqual(parse_uuid(uid, "u"), uid)
@@ -339,3 +355,305 @@ class CursorTests(SimpleTestCase):
     def test_encode_refuses_oversized_key(self) -> None:
         with self.assertRaises(ValueError):
             self.encode(key=["x" * 4000])
+
+
+GOLDEN = Path(__file__).parent / "golden"
+INT64_MAX = "9223372036854775807"
+# The fixtures are copied from the adaptor, whose upstream name must never
+# reach this repository. It is assembled from parts so the repository-wide
+# grep for it stays empty.
+_UPSTREAM_MARK = "".join(("s", "f", "g"))
+
+
+def _fixture(name: str) -> tuple[str, dict]:
+    text = (GOLDEN / name).read_text(encoding="utf-8")
+    return text, json.loads(text)
+
+
+class ImportSourceHashGoldenTests(SimpleTestCase):
+    def test_import_source_hash_golden(self) -> None:
+        text, golden = _fixture("import_source_hash.json")
+        self.assertNotIn(_UPSTREAM_MARK, text.lower())
+        self.assertEqual(golden["source"], "contact_log")
+        self.assertEqual(
+            IMPORT_SOURCE_FIELDS,
+            (
+                "source",
+                "source_contact_id",
+                "recorded_at",
+                "contact_date_ny",
+                "contact_method",
+                "contact_reason",
+                "occasion_id",
+                "event_date",
+                "forced",
+            ),
+        )
+        by_name = {case["name"]: case for case in golden["cases"]}
+        for case in golden["cases"]:
+            with self.subTest(case=case["name"]):
+                self.assertEqual(
+                    import_source_hash(case["entry"], source=golden["source"]),
+                    case["hash"],
+                )
+                twin = case.get("same_hash_as")
+                if twin is not None:
+                    self.assertEqual(case["hash"], by_name[twin]["hash"])
+        self.assertTrue(any("same_hash_as" in case for case in golden["cases"]))
+
+    def test_parsed_entry_carries_the_golden_hash(self) -> None:
+        _, golden = _fixture("import_source_hash.json")
+        now = datetime(2026, 11, 25, 10, tzinfo=UTC)
+        for case in golden["cases"]:
+            with self.subTest(case=case["name"]):
+                batch = parse_import_batch(_batch(entries=[case["entry"]]), now=now)
+                self.assertEqual(batch.entries[0].source_hash, case["hash"])
+
+    def test_import_source_hash_changes_with_each_source_fact(self) -> None:
+        _, golden = _fixture("import_source_hash.json")
+        base = golden["cases"][0]["entry"]
+        digest = import_source_hash(base)
+        for field, value in (
+            ("source_contact_id", "1999"),
+            ("recorded_at", "2026-11-24T18:30:01Z"),
+            ("contact_date_ny", "2026-11-23"),
+            ("contact_method", "OTHER"),
+            ("contact_reason", "FOLLOW_UP"),
+            ("occasion_id", "78"),
+            ("event_date", "2026-12-05T00:00:00Z"),
+            ("forced", True),
+        ):
+            with self.subTest(field=field):
+                self.assertNotEqual(import_source_hash({**base, field: value}), digest)
+        self.assertNotEqual(import_source_hash(base, source="other"), digest)
+
+
+def _entry(**overrides) -> dict:
+    entry = {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": None,
+        "forced": False,
+    }
+    entry.update(overrides)
+    return entry
+
+
+_DEFAULT_RANGE = {"after": "0", "through": INT64_MAX}
+
+
+def _batch(
+    *,
+    entries: list | None = None,
+    skipped_ids: list | None = None,
+    range: Any = _DEFAULT_RANGE,  # noqa: A002
+    **overrides,
+) -> dict:
+    body = {
+        "source": "contact_log",
+        "guild_id": "555000000000000001",
+        "scan_started_at": "2026-11-25T10:00:00.000000Z",
+        "range": range,
+        "skipped_ids": skipped_ids if skipped_ids is not None else [],
+        "entries": entries if entries is not None else [],
+    }
+    body.update(overrides)
+    return body
+
+
+class ParseImportBatchTests(SimpleTestCase):
+    now = datetime(2026, 11, 25, 10, tzinfo=UTC)
+
+    def parse(self, payload) -> ImportBatch:
+        return parse_import_batch(payload, now=self.now)
+
+    def assert_rejected(self, payload) -> None:
+        with self.assertRaises(IntegrationError) as ctx:
+            self.parse(payload)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_import_rules_fixture(self) -> None:
+        text, golden = _fixture("import_rules.json")
+        self.assertNotIn(_UPSTREAM_MARK, text.lower())
+        now = parse_timestamp(golden["now"], "now")
+        self.assertTrue(any(c["accept"] for c in golden["cases"]))
+        self.assertTrue(any(not c["accept"] for c in golden["cases"]))
+        for case in golden["cases"]:
+            payload = _batch(entries=[case["entry"]])
+            with self.subTest(case=case["name"]):
+                if case["accept"]:
+                    batch = parse_import_batch(payload, now=now)
+                    self.assertEqual(len(batch.entries), 1)
+                else:
+                    with self.assertRaises(IntegrationError) as ctx:
+                        parse_import_batch(payload, now=now)
+                    self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_parses_a_full_batch(self) -> None:
+        batch = self.parse(
+            _batch(
+                range={"after": "1000", "through": "1010"},
+                skipped_ids=["1005"],
+                entries=[
+                    _entry(),
+                    _entry(
+                        source_contact_id="1002",
+                        promoter_discord_id=None,
+                        contact_reason="GENERAL",
+                        occasion_id=None,
+                        event_date="2099-12-05T20:00:00.5Z",
+                    ),
+                ],
+            )
+        )
+        self.assertEqual(batch.guild_id, "555000000000000001")
+        self.assertEqual(batch.scan_started_at, self.now)
+        self.assertEqual((batch.range_after, batch.range_through), (1000, 1010))
+        self.assertEqual(batch.skipped_ids, frozenset({1005}))
+        first, second = batch.entries
+        self.assertIsInstance(first, ImportEntryV)
+        self.assertEqual(first.source_contact_id, 1001)
+        self.assertEqual(first.target_discord_id, "123456789012345678")
+        self.assertEqual(first.promoter_discord_id, "123456789012345601")
+        self.assertEqual(first.recorded_at, datetime(2026, 11, 24, 18, 30, tzinfo=UTC))
+        self.assertEqual(first.contact_date_ny, date(2026, 11, 24))
+        self.assertEqual(first.contact_method, "DISCORD_DM")
+        self.assertEqual(first.contact_reason, "EVENT_INVITE")
+        self.assertEqual(first.occasion_id, 77)
+        self.assertIsNone(first.event_date)
+        self.assertFalse(first.forced)
+        self.assertEqual(first.source_hash, import_source_hash(_entry()))
+        self.assertIsNone(second.promoter_discord_id)
+        self.assertIsNone(second.occasion_id)
+        self.assertEqual(
+            second.event_date, datetime(2099, 12, 5, 20, 0, 0, 500000, tzinfo=UTC)
+        )
+
+    def test_probe_batch_is_accepted(self) -> None:
+        batch = self.parse(_batch(range=None))
+        self.assertIsNone(batch.range_after)
+        self.assertIsNone(batch.range_through)
+        self.assertEqual(batch.skipped_ids, frozenset())
+        self.assertEqual(batch.entries, [])
+
+    def test_parse_import_batch_range_rules(self) -> None:
+        cases = {
+            "null range with entries": _batch(range=None, entries=[_entry()]),
+            "null range with skipped ids": _batch(range=None, skipped_ids=["5"]),
+            "skipped id outside range": _batch(
+                range={"after": "10", "through": "20"}, skipped_ids=["21"]
+            ),
+            "skipped id at range start": _batch(
+                range={"after": "10", "through": "20"}, skipped_ids=["10"]
+            ),
+            "skipped id equal to an entry id": _batch(
+                entries=[_entry()], skipped_ids=["1001"]
+            ),
+            "repeated skipped id": _batch(skipped_ids=["5", "5"]),
+            "entry outside range": _batch(
+                range={"after": "1001", "through": "2000"}, entries=[_entry()]
+            ),
+            "after equals through": _batch(range={"after": "20", "through": "20"}),
+            "after above through": _batch(range={"after": "21", "through": "20"}),
+            "through zero": _batch(range={"after": "0", "through": "0"}),
+            "after not canonical": _batch(range={"after": "00", "through": "20"}),
+            "range missing a key": _batch(range={"through": "20"}),
+            "range with an extra key": _batch(
+                range={"after": "0", "through": "20", "limit": "5"}
+            ),
+            "range not an object": _batch(range=["0", "20"]),
+            "duplicate entry id": _batch(entries=[_entry(), _entry()]),
+            "too many entries": _batch(
+                entries=[_entry(source_contact_id=str(i)) for i in range(1, 102)]
+            ),
+            "too many skipped ids": _batch(
+                skipped_ids=[str(i) for i in range(1, 1002)]
+            ),
+        }
+        for name, payload in cases.items():
+            with self.subTest(case=name):
+                self.assert_rejected(payload)
+
+    def test_batch_bounds_are_inclusive(self) -> None:
+        batch = self.parse(
+            _batch(
+                range={"after": "0", "through": "2000"},
+                entries=[_entry(source_contact_id=str(i)) for i in range(1, 101)],
+                skipped_ids=[str(i) for i in range(1001, 2001)],
+            )
+        )
+        self.assertEqual(len(batch.entries), 100)
+        self.assertEqual(len(batch.skipped_ids), 1000)
+
+    def test_parse_import_batch_rejects_removed_keys(self) -> None:
+        self.assert_rejected(_batch(mapping_version="a" * 64))
+        for key, value in (
+            ("event_id", "720"),
+            ("linkage", "occasion"),
+            ("discord_id", "123456789012345678"),
+            ("user_id", None),
+            ("org_user_id", None),
+        ):
+            with self.subTest(key=key):
+                self.assert_rejected(_batch(entries=[{**_entry(), key: value}]))
+
+    def test_rejects_bad_envelope_fields(self) -> None:
+        missing = _batch()
+        del missing["scan_started_at"]
+        for name, payload in {
+            "other source": _batch(source="other"),
+            "guild id not canonical": _batch(guild_id="0555"),
+            "scan start in the future": _batch(
+                scan_started_at="2026-11-25T10:05:00.000001Z"
+            ),
+            "scan start missing": missing,
+            "skipped ids not a list": _batch(skipped_ids="5"),
+            "skipped id not canonical": _batch(skipped_ids=["05"]),
+            "entries not a list": _batch(entries={}),
+            "entry not an object": _batch(entries=["1001"]),
+            "not an object": [],
+        }.items():
+            with self.subTest(case=name):
+                self.assert_rejected(payload)
+
+    def test_forced_must_be_a_json_boolean(self) -> None:
+        for value in (0, 1, "true", None):
+            with self.subTest(value=value):
+                self.assert_rejected(_batch(entries=[_entry(forced=value)]))
+
+    def test_error_names_the_field_not_the_value(self) -> None:
+        with self.assertRaises(IntegrationError) as ctx:
+            self.parse(_batch(entries=[_entry(contact_reason="SECRET_REASON")]))
+        self.assertIn("entries[0].contact_reason", ctx.exception.message)
+        self.assertNotIn("SECRET_REASON", ctx.exception.message)
+
+
+class ParseDateTests(SimpleTestCase):
+    def test_parse_date_accepts_real_dates(self) -> None:
+        self.assertEqual(parse_date("2026-11-24", "d"), date(2026, 11, 24))
+        self.assertEqual(parse_date("2024-02-29", "d"), date(2024, 2, 29))
+        self.assertEqual(parse_date("0001-01-01", "d"), date(1, 1, 1))
+
+    def test_parse_date_rejects_invalid(self) -> None:
+        for bad in (
+            "2026-02-30",
+            "2026-1-01",
+            "2026-01-1",
+            "0000-01-01",
+            "2026-13-01",
+            "2026-11-24T00:00:00Z",
+            " 2026-11-24",
+            "２026-11-24",
+            "20261124",
+            20261124,
+            None,
+        ):
+            with self.subTest(bad=bad), self.assertRaises(IntegrationError) as ctx:
+                parse_date(bad, "d")
+            self.assertEqual(ctx.exception.status_code, 400)

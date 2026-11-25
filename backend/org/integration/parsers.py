@@ -4,7 +4,7 @@
 document level (size, content type, UTF-8, duplicate keys, non-finite
 numbers, trailing data, non-object top level). The ``parse_*`` helpers then
 check each field: exact key sets at every level, canonical decimal-string
-IDs, UTC ``Z`` timestamps, lowercase UUIDs and hashes, enums and batch
+IDs, UTC ``Z`` timestamps, ``YYYY-MM-DD`` dates, lowercase UUIDs and hashes, enums and batch
 bounds. Every failure is an ``IntegrationError`` that names the field path
 and never the value.
 """
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from django.utils import timezone
@@ -32,6 +32,7 @@ MAX_FUTURE = timedelta(minutes=5)
 _TIMESTAMP = re.compile(
     r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?Z", re.ASCII
 )
+_DATE = re.compile(r"(\d{4})-(\d{2})-(\d{2})", re.ASCII)
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 _HASH = re.compile(r"[0-9a-f]{64}")
 _JSON_PROBLEMS = {
@@ -128,9 +129,14 @@ def format_id(value: int | None) -> str | None:
     return None if value is None else str(value)
 
 
-def parse_timestamp(value: Any, path: str, *, now: datetime | None = None) -> datetime:
-    """RFC 3339 UTC with a ``Z`` suffix, at most six fractional digits and
-    at most five minutes in the future."""
+def parse_timestamp(
+    value: Any, path: str, *, now: datetime | None = None, bounded: bool = True
+) -> datetime:
+    """RFC 3339 UTC with a ``Z`` suffix and at most six fractional digits.
+
+    ``bounded`` (the default) also requires it to be at most five minutes
+    in the future; a day anchor such as an event date passes ``False``.
+    """
     match = _TIMESTAMP.fullmatch(value) if isinstance(value, str) else None
     if match is None:
         raise invalid(path, "must be a UTC timestamp like 2026-11-24T11:30:00Z")
@@ -148,9 +154,21 @@ def parse_timestamp(value: Any, path: str, *, now: datetime | None = None) -> da
         )
     except ValueError:
         raise invalid(path, "is not a real date and time") from None
-    if parsed > (now or timezone.now()) + MAX_FUTURE:
+    if bounded and parsed > (now or timezone.now()) + MAX_FUTURE:
         raise invalid(path, "is too far in the future")
     return parsed
+
+
+def parse_date(value: Any, path: str) -> date:
+    """A real calendar date spelled ``YYYY-MM-DD``."""
+    match = _DATE.fullmatch(value) if isinstance(value, str) else None
+    if match is None:
+        raise invalid(path, "must be a date like 2026-11-24")
+    year, month, day = match.groups()
+    try:
+        return date(int(year), int(month), int(day))
+    except ValueError:
+        raise invalid(path, "is not a real date") from None
 
 
 def parse_uuid(value: Any, path: str) -> str:

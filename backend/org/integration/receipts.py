@@ -6,9 +6,13 @@ HTML escaping, and timestamps rewritten to six fractional digits with a
 that already passed strict validation.
 
 ``canonical_receipt_hash`` covers the whole outbound DraftForge -> adaptor
-receipt, delivery UUID included. ``import_source_hash`` covers only the
-immutable external source facts of an inbound contact: never ``user_id`` or
-``org_user_id``, which are mutable DraftForge associations.
+receipt, delivery UUID included. ``import_source_hash`` covers the source
+facts of an imported contact-log row (``IMPORT_SOURCE_FIELDS``). Both Discord
+IDs are left out: the adaptor derives them from each person's current
+primary account, not from the row, so they are compared separately.
+
+``_legacy_import_source_hash`` is the digest of the per-event import wire
+that the guild-wide import replaces; it goes away with that wire.
 """
 
 from __future__ import annotations
@@ -33,6 +37,18 @@ __all__ = [
 ]
 
 IMPORT_SOURCE_FIELDS = (
+    "source",
+    "source_contact_id",
+    "recorded_at",
+    "contact_date_ny",
+    "contact_method",
+    "contact_reason",
+    "occasion_id",
+    "event_date",
+    "forced",
+)
+
+_LEGACY_IMPORT_SOURCE_FIELDS = (
     "source_contact_id",
     "event_id",
     "discord_id",
@@ -80,7 +96,24 @@ def canonical_receipt_hash(payload: Mapping[str, Any]) -> str:
 
 
 def import_source_hash(entry: Mapping[str, Any], *, source: str = "contact_log") -> str:
-    facts: dict[str, Any] = {field: entry[field] for field in IMPORT_SOURCE_FIELDS}
+    """Digest of one wire-shaped import entry (IDs as strings, timestamps as
+    wire strings or aware datetimes, ``event_date`` possibly null)."""
+    facts: dict[str, Any] = {
+        field: entry[field] for field in IMPORT_SOURCE_FIELDS if field != "source"
+    }
+    facts["source"] = source
+    facts["recorded_at"] = format_timestamp(facts["recorded_at"])
+    if facts["event_date"] is not None:
+        facts["event_date"] = format_timestamp(facts["event_date"])
+    return _sha256(canonical_json(facts))
+
+
+def _legacy_import_source_hash(
+    entry: Mapping[str, Any], *, source: str = "contact_log"
+) -> str:
+    facts: dict[str, Any] = {
+        field: entry[field] for field in _LEGACY_IMPORT_SOURCE_FIELDS
+    }
     facts["recorded_at"] = format_timestamp(facts["recorded_at"])
     facts["source"] = source
     return _sha256(canonical_json(facts))

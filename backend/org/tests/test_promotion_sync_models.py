@@ -17,9 +17,9 @@ from django_test_migrations.contrib.unittest_case import MigratorTestCase
 from events.models import Event
 from org.integration.receipts import (
     ImmutableFieldError,
+    _legacy_import_source_hash,
     canonical_receipt_hash,
     canonical_receipt_json,
-    import_source_hash,
 )
 from org.models import OrgUser, PromoSend
 from org.models_promotion_sync import (
@@ -48,7 +48,7 @@ class CanonicalHashGoldenTest(_SendFixture):
         self.assertEqual(canonical_receipt_hash(golden["receipt"]), golden["sha256"])
 
     def test_import_source_hash_excludes_associations(self) -> None:
-        golden = _golden("import_source_hash.json")
+        golden = _golden("legacy_import_source_hash.json")
         users = {entry["user_id"] for entry in golden["entries"]}
         org_users = {entry["org_user_id"] for entry in golden["entries"]}
         self.assertEqual(users, {None, "9001"})
@@ -56,13 +56,13 @@ class CanonicalHashGoldenTest(_SendFixture):
         for index, entry in enumerate(golden["entries"]):
             with self.subTest(index=index):
                 self.assertEqual(
-                    import_source_hash(entry, source=golden["source"]),
+                    _legacy_import_source_hash(entry, source=golden["source"]),
                     golden["sha256"],
                 )
 
     def test_import_source_hash_changes_with_source_facts(self) -> None:
-        base = _golden("import_source_hash.json")["entries"][0]
-        digest = import_source_hash(base, source="contact_log")
+        base = _golden("legacy_import_source_hash.json")["entries"][0]
+        digest = _legacy_import_source_hash(base, source="contact_log")
         for field, value in (
             ("source_contact_id", "8022"),
             ("event_id", "721"),
@@ -73,7 +73,9 @@ class CanonicalHashGoldenTest(_SendFixture):
         ):
             with self.subTest(field=field):
                 self.assertNotEqual(
-                    import_source_hash({**base, field: value}, source="contact_log"),
+                    _legacy_import_source_hash(
+                        {**base, field: value}, source="contact_log"
+                    ),
                     digest,
                 )
 

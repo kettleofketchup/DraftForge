@@ -1,38 +1,120 @@
 {
-  "description": "Inbound contact log -> DraftForge import source_hash. Covers only immutable source facts (source, source_contact_id, event_id, discord_id, recorded_at, contact_method, linkage); user_id and org_user_id are mutable DraftForge associations and never change the digest. Same canonicalisation as receipt_hash.json.",
+  "description": "Contact log import source_hash: sha256 of canonical JSON (sorted keys, compact, no escaping, timestamps as six-digit UTC Z) of source, source_contact_id, recorded_at, contact_date_ny, contact_method, contact_reason, occasion_id, event_date and forced. target_discord_id and promoter_discord_id are excluded, so cases naming same_hash_as share that case's hash.",
   "source": "contact_log",
-  "entries": [
+  "cases": [
     {
-      "source_contact_id": "8021",
-      "event_id": "720",
-      "user_id": null,
-      "org_user_id": null,
-      "discord_id": "123456789012345678",
-      "recorded_at": "2026-11-24T11:30:00Z",
-      "contact_method": "DISCORD_DM",
-      "linkage": "occasion"
+      "name": "occasion_invite",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "hash": "f05e7868b746bd27dca083d2368539fc4f21859a541efbd2329e076ee2dcc4b1"
     },
     {
-      "source_contact_id": "8021",
-      "event_id": "720",
-      "user_id": "9001",
-      "org_user_id": null,
-      "discord_id": "123456789012345678",
-      "recorded_at": "2026-11-24T11:30:00Z",
-      "contact_method": "DISCORD_DM",
-      "linkage": "occasion"
+      "name": "date_linked_general",
+      "entry": {
+        "source_contact_id": "1002",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "2026-12-05T00:00:00.000000Z",
+        "forced": false
+      },
+      "hash": "d1d2809782f7ccad9ddec3f99e8c906fd7718786b098b22eb343156592fd2f9c"
     },
     {
-      "source_contact_id": "8021",
-      "event_id": "720",
-      "user_id": "9001",
-      "org_user_id": "9100",
-      "discord_id": "123456789012345678",
-      "recorded_at": "2026-11-24T11:30:00.000000Z",
-      "contact_method": "DISCORD_DM",
-      "linkage": "occasion"
+      "name": "forced_occasion_invite",
+      "entry": {
+        "source_contact_id": "1003",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": true
+      },
+      "hash": "ab6b6e9c050fd7767071db0169f98a869310b57cbabd5d299ee2a6500d7ecad8"
+    },
+    {
+      "name": "null_promoter",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": null,
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "hash": "f05e7868b746bd27dca083d2368539fc4f21859a541efbd2329e076ee2dcc4b1",
+      "same_hash_as": "occasion_invite"
+    },
+    {
+      "name": "different_target",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345699",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "hash": "f05e7868b746bd27dca083d2368539fc4f21859a541efbd2329e076ee2dcc4b1",
+      "same_hash_as": "occasion_invite"
+    },
+    {
+      "name": "fractional_timestamps",
+      "entry": {
+        "source_contact_id": "1004",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.5Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_GROUP_DM",
+        "contact_reason": "FOLLOW_UP",
+        "occasion_id": null,
+        "event_date": "2026-12-05T20:00:00.123456Z",
+        "forced": false
+      },
+      "hash": "5d02af13024ee74ef3920b6dd9ca3e04bd9b7b35671d489014e639c49229f93a"
+    },
+    {
+      "name": "int64_max_ids",
+      "entry": {
+        "source_contact_id": "9223372036854775807",
+        "target_discord_id": "9223372036854775807",
+        "promoter_discord_id": "9223372036854775807",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "OTHER",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "9223372036854775807",
+        "event_date": null,
+        "forced": false
+      },
+      "hash": "0ac2914199f1f1dcd9ecbf7298be86ba3d99b940877bb5fe8f492eef5f63ca52"
     }
-  ],
-  "canonical": "{\"contact_method\":\"DISCORD_DM\",\"discord_id\":\"123456789012345678\",\"event_id\":\"720\",\"linkage\":\"occasion\",\"recorded_at\":\"2026-11-24T11:30:00.000000Z\",\"source\":\"contact_log\",\"source_contact_id\":\"8021\"}",
-  "sha256": "15cea345f1e7a8f8569eea766b9b59acb82c50db56cd2406a2ea6a04b3e71760"
+  ]
 }

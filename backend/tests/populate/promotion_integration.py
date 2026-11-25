@@ -25,7 +25,7 @@ from django.utils import timezone
 
 from config.promotion_sync import OrgPromotionBinding, PromotionSyncConfig
 from events.models import Event
-from org.integration.receipts import import_source_hash
+from org.integration.receipts import _legacy_import_source_hash
 from org.models import Organization, OrgUser
 from org.models_promotion_sync import (
     AssociationState,
@@ -110,7 +110,7 @@ def seed_promotion_integration(
             recorded_at=recorded_at,
             contact_method=ContactMethod.DISCORD_DM,
             linkage=ContactLinkage.OCCASION,
-            source_hash=import_source_hash(entry),
+            source_hash=_legacy_import_source_hash(entry),
             first_imported_at=now - timedelta(minutes=5),
             user_id=ref["pk"],
             org_user=org_user,

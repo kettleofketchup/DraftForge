@@ -25,16 +25,21 @@ account, a membership, a ``PromoSend`` or an award.
 Ticks: a non-quarantined receipt for the event and Discord ID suppresses
 the candidate row with that Discord ID, provided the receipt is not linked
 to a different account than the row's.
+
+``parse_import_batch`` parses the guild-wide import wire that replaces the
+per-event one above: every external contact of the bound guild in one id
+range, each entry linked to an occasion or an event date, with the rows
+the adaptor read but did not post listed in ``skipped_ids``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Final, Literal
 
 from django.conf import settings
-from django.db import IntegrityError
+from django.db import IntegrityError, models
 from django.db.models import Max
 from django.utils import timezone
 
@@ -44,14 +49,20 @@ from org.integration.bindings import get_event_binding, get_org_binding
 from org.integration.errors import IntegrationError, invalid
 from org.integration.event_lock import with_event_mutation
 from org.integration.parsers import (
+    MAX_BATCH,
     expect_object,
     parse_batch,
     parse_choice,
+    parse_date,
     parse_hash,
     parse_id,
     parse_timestamp,
 )
-from org.integration.receipts import format_timestamp, import_source_hash
+from org.integration.receipts import (
+    _legacy_import_source_hash,
+    format_timestamp,
+    import_source_hash,
+)
 from org.integration.subjects import (
     SubjectUniverse,
     authorized_event_subjects,
@@ -78,11 +89,15 @@ log = get_logger(__name__)
 
 __all__ = [
     "AssociationOutcome",
+    "ContactReason",
+    "ImportBatch",
+    "ImportEntryV",
     "contact_sync_status",
     "external_contact_exists",
     "external_contact_for",
     "external_contacts",
     "import_contact_receipts",
+    "parse_import_batch",
     "reconcile_association",
     "suppressing_receipts",
 ]
@@ -119,7 +134,7 @@ class ImportEntry:
 
     @property
     def source_hash(self) -> str:
-        return import_source_hash(
+        return _legacy_import_source_hash(
             {
                 "source_contact_id": str(self.source_contact_id),
                 "event_id": str(self.event_id),
@@ -179,6 +194,203 @@ def _parse(payload: Any) -> tuple[str, list[ImportEntry]]:
     if len({e.event_id for e in entries}) > 1:
         raise invalid("entries", "must all be for one event")
     return version, entries
+
+
+class ContactReason(models.TextChoices):
+    EVENT_INVITE = "EVENT_INVITE", "Event invite"
+    FOLLOW_UP = "FOLLOW_UP", "Follow-up"
+    GENERAL = "GENERAL", "General"
+
+
+BATCH_KEYS: Final[tuple[str, ...]] = (
+    "source",
+    "guild_id",
+    "scan_started_at",
+    "range",
+    "skipped_ids",
+    "entries",
+)
+RANGE_KEYS: Final[tuple[str, ...]] = ("after", "through")
+IMPORT_ENTRY_KEYS: Final[tuple[str, ...]] = (
+    "source_contact_id",
+    "target_discord_id",
+    "promoter_discord_id",
+    "recorded_at",
+    "contact_date_ny",
+    "contact_method",
+    "contact_reason",
+    "occasion_id",
+    "event_date",
+    "forced",
+)
+MAX_SKIPPED: Final[int] = 1000
+
+
+@dataclass(frozen=True)
+class ImportEntryV:
+    """One parsed entry of the guild-wide import."""
+
+    source_contact_id: int
+    target_discord_id: str
+    promoter_discord_id: str | None
+    recorded_at: datetime
+    contact_date_ny: date
+    contact_method: str
+    contact_reason: str
+    occasion_id: int | None
+    event_date: datetime | None
+    forced: bool
+    source_hash: str
+
+
+@dataclass(frozen=True)
+class ImportBatch:
+    """A parsed guild-wide import batch.
+
+    ``range_after``/``range_through`` are both ``None`` for the watermark
+    probe (no entries, no skipped ids); otherwise every source row with
+    ``range_after < id <= range_through`` is an entry or a skipped id.
+    """
+
+    guild_id: str
+    scan_started_at: datetime
+    range_after: int | None
+    range_through: int | None
+    skipped_ids: frozenset[int]
+    entries: list[ImportEntryV]
+
+
+def _parse_import_entry(value: Any, path: str, now: datetime) -> ImportEntryV:
+    raw = expect_object(value, path, IMPORT_ENTRY_KEYS)
+    source_contact_id = parse_id(raw["source_contact_id"], f"{path}.source_contact_id")
+    target = parse_id(raw["target_discord_id"], f"{path}.target_discord_id")
+    promoter = parse_id(
+        raw["promoter_discord_id"], f"{path}.promoter_discord_id", nullable=True
+    )
+    assert source_contact_id is not None and target is not None
+    recorded_at = parse_timestamp(raw["recorded_at"], f"{path}.recorded_at", now=now)
+    contact_date_ny = parse_date(raw["contact_date_ny"], f"{path}.contact_date_ny")
+    contact_method = parse_choice(
+        raw["contact_method"], f"{path}.contact_method", ContactMethod.values
+    )
+    contact_reason = parse_choice(
+        raw["contact_reason"], f"{path}.contact_reason", ContactReason.values
+    )
+    occasion_id = parse_id(raw["occasion_id"], f"{path}.occasion_id", nullable=True)
+    event_date = (
+        None
+        if raw["event_date"] is None
+        else parse_timestamp(raw["event_date"], f"{path}.event_date", bounded=False)
+    )
+    if (occasion_id is None) == (event_date is None):
+        raise invalid(path, "must set exactly one of occasion_id and event_date")
+    forced = raw["forced"]
+    if not isinstance(forced, bool):
+        raise invalid(f"{path}.forced", "must be a boolean")
+    if forced and occasion_id is None:
+        raise invalid(f"{path}.forced", "requires occasion_id")
+    source_hash = import_source_hash(
+        {
+            "source_contact_id": str(source_contact_id),
+            "recorded_at": recorded_at,
+            "contact_date_ny": contact_date_ny.isoformat(),
+            "contact_method": contact_method,
+            "contact_reason": contact_reason,
+            "occasion_id": None if occasion_id is None else str(occasion_id),
+            "event_date": event_date,
+            "forced": forced,
+        },
+        source=ReceiptSource.CONTACT_LOG,
+    )
+    return ImportEntryV(
+        source_contact_id=source_contact_id,
+        target_discord_id=str(target),
+        promoter_discord_id=None if promoter is None else str(promoter),
+        recorded_at=recorded_at,
+        contact_date_ny=contact_date_ny,
+        contact_method=contact_method,
+        contact_reason=contact_reason,
+        occasion_id=occasion_id,
+        event_date=event_date,
+        forced=forced,
+        source_hash=source_hash,
+    )
+
+
+def _parse_range(value: Any) -> tuple[int, int] | None:
+    if value is None:
+        return None
+    raw = expect_object(value, "range", RANGE_KEYS)
+    after = 0 if raw["after"] == "0" else parse_id(raw["after"], "range.after")
+    through = parse_id(raw["through"], "range.through")
+    assert after is not None and through is not None
+    if after >= through:
+        raise invalid("range", "after must be below through")
+    return after, through
+
+
+def parse_import_batch(payload: Any, *, now: datetime | None = None) -> ImportBatch:
+    """Parse one guild-wide import body, or raise a 400 ``IntegrationError``.
+
+    Checks the exact key sets, the per-entry rules (canonical ids, a
+    ``recorded_at`` at most five minutes ahead of ``now``, a real
+    ``contact_date_ny``, known enums, exactly one of ``occasion_id`` and
+    ``event_date``, ``forced`` only with an occasion) and the range rules:
+    a null range carries nothing, and every entry and skipped id lies in
+    ``after < id <= through``, unique across both lists. Binding checks on
+    ``guild_id`` are the caller's.
+    """
+    now = now or timezone.now()
+    body = expect_object(payload, "", BATCH_KEYS)
+    parse_choice(body["source"], "source", (ReceiptSource.CONTACT_LOG,))
+    guild_id = parse_id(body["guild_id"], "guild_id")
+    scan_started_at = parse_timestamp(
+        body["scan_started_at"], "scan_started_at", now=now
+    )
+    bounds = _parse_range(body["range"])
+    raw_skipped = parse_batch(
+        body["skipped_ids"], "skipped_ids", min_items=0, max_items=MAX_SKIPPED
+    )
+    raw_entries = parse_batch(
+        body["entries"], "entries", min_items=0, max_items=MAX_BATCH
+    )
+    if bounds is None and (raw_skipped or raw_entries):
+        raise invalid("range", "is required when the batch has entries or skipped ids")
+
+    def check_in_range(source_id: int, path: str) -> None:
+        assert bounds is not None
+        if not bounds[0] < source_id <= bounds[1]:
+            raise invalid(path, "lies outside range")
+
+    skipped: set[int] = set()
+    for i, value in enumerate(raw_skipped):
+        path = f"skipped_ids[{i}]"
+        source_id = parse_id(value, path)
+        assert source_id is not None
+        check_in_range(source_id, path)
+        if source_id in skipped:
+            raise invalid(path, "is repeated in the batch")
+        skipped.add(source_id)
+    entries: list[ImportEntryV] = []
+    seen: set[int] = set()
+    for i, value in enumerate(raw_entries):
+        path = f"entries[{i}]"
+        entry = _parse_import_entry(value, path, now)
+        check_in_range(entry.source_contact_id, f"{path}.source_contact_id")
+        if entry.source_contact_id in seen or entry.source_contact_id in skipped:
+            raise invalid(
+                f"{path}.source_contact_id", "is repeated in the batch or skipped"
+            )
+        seen.add(entry.source_contact_id)
+        entries.append(entry)
+    return ImportBatch(
+        guild_id=str(guild_id),
+        scan_started_at=scan_started_at,
+        range_after=None if bounds is None else bounds[0],
+        range_through=None if bounds is None else bounds[1],
+        skipped_ids=frozenset(skipped),
+        entries=entries,
+    )
 
 
 def _result(statuses: list[Status], association_updated: int) -> dict[str, Any]:
