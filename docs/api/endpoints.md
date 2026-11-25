@@ -472,12 +472,20 @@ system rows or deleted users.
 ### Placement and roster conflicts
 
 A team with a `placement` is out of the tournament, and its players are free to join
-other teams. Three requests reopen a placed team by clearing its placement:
+other teams. These requests can reopen a placed team by clearing its placement:
 
 - `PATCH /api/bracket/tournaments/{tid}/teams/{id}/placement/` with
   `{"placement": null}` (tournament staff; a positive integer sets the placement);
 - `POST /api/bracket/games/{id}/advance-winner/` with `{"winner": null}`, which clears
-  the loser's placement, and on grand finals both teams';
+  the loser's placement, and on a grand final or a single-elimination final both
+  finalists';
+- `POST /api/bracket/games/{id}/advance-winner/` with the other team as `winner`, which
+  reopens the team that lost before;
+- `POST /api/bracket/tournaments/{tid}/save/` (the bracket toolbar's Save), when the saved
+  bracket clears or removes a result;
+- `POST /api/steam/games/{id}/link-match/`, `DELETE /api/steam/games/{id}/unlink-match/`
+  and `POST /api/steam/suggestions/{id}/confirm/`, when linking or unlinking a Steam match
+  changes or clears the game's winner;
 - `PATCH /api/teams/{id}/` with `placement: null`.
 
 Each refuses with `409` while a member or stand-in of a reopened team is also on another
@@ -492,6 +500,12 @@ team that would be live, and changes nothing:
 ```
 
 Move the player off the live team first, then clear the placement.
+
+Automatic Steam linking never reopens such a team. `POST /api/steam/auto-assign/` skips
+the game and lists it in `skipped_roster_conflicts` (`game_id`, `match_id`, `team_id`,
+`user_ids`); `POST /api/steam/auto-link/` skips it and counts it in
+`skipped_roster_conflict_count`. Both leave the game unchanged and log
+`game_link_skipped_roster_conflict`.
 
 ## Games
 
