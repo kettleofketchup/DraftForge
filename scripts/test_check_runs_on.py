@@ -26,26 +26,33 @@ CLAUSES = [
 ]
 GUARD = "\n      && ".join(CLAUSES)
 
-RUNS_ON = (
-    "    runs-on: >-\n"
-    "      ${{ (" + GUARD + ")\n"
-    "      && 'draftforge-home' || 'ubuntu-latest' }}\n"
-)
+SMALL = "draftforge-home"
+PREPARE = "draftforge-home-prepare"
+
+
+def runs_on(label):
+    return (
+        "    runs-on: >-\n"
+        "      ${{ (" + GUARD + ")\n"
+        f"      && '{label}' || 'ubuntu-latest' }}}}\n"
+    )
+
+
+RUNS_ON = runs_on(SMALL)
+PREPARE_RUNS_ON = runs_on(PREPARE)
 HOME_PREPARE = (
     "  HOME_PREPARE: >-\n    ${{ " + GUARD.replace("\n      ", "\n    ") + " }}\n"
 )
 
-# Exactly the allowlist in check-runs-on.sh, as (workflow file, job id).
-ALLOWED = [
-    ("playwright.yml", "prepare"),
-    ("unit-tests.yml", "typecheck"),
-    ("changelog.yml", "changelog"),
-    ("shellcheck.yml", "shellcheck"),
-    ("shellcheck.yml", "runs-on-guard"),
-    ("frontend-format.yml", "prettier"),
-    ("frontend-shadcn-lint.yml", "shadcn-lint"),
-    ("pr-labeler.yml", "label"),
-]
+# Exactly the allowlist in check-runs-on.sh, as (workflow file, job id) -> label.
+LABELS = {
+    ("playwright.yml", "prepare"): PREPARE,
+    ("changelog.yml", "changelog"): SMALL,
+    ("shellcheck.yml", "shellcheck"): SMALL,
+    ("shellcheck.yml", "runs-on-guard"): SMALL,
+    ("pr-labeler.yml", "label"): SMALL,
+}
+ALLOWED = list(LABELS)
 
 PR_TRIGGER = """\
 on:
@@ -56,10 +63,10 @@ on:
 """
 
 
-def home_job(job):
+def home_job(job, label=SMALL):
     return (
         f"  {job}:\n"
-        + RUNS_ON
+        + runs_on(label)
         + "    timeout-minutes: 10\n"
         + "    steps:\n"
         + f"      - run: echo {job}\n"
@@ -78,7 +85,7 @@ env:
 """
     + HOME_PREPARE
     + "jobs:\n"
-    + home_job("prepare")
+    + home_job("prepare", PREPARE)
     + """\
   test:
     needs: prepare
@@ -138,10 +145,18 @@ def run_check(workflows_dir):
     )
 
 
+def job_runs_on(name, job):
+    """The runs-on block the allowlist requires of (name, job)."""
+    return runs_on(LABELS[(name, job)])
+
+
 def replace_job_runs_on(text, job, new_runs_on):
     """Swap one guarded job's runs-on block for new_runs_on."""
-    old = f"  {job}:\n" + RUNS_ON
-    assert old in text, job
+    old = next(
+        f"  {job}:\n" + runs_on(label)
+        for label in (SMALL, PREPARE)
+        if f"  {job}:\n" + runs_on(label) in text
+    )
     return text.replace(old, f"  {job}:\n" + new_runs_on)
 
 
@@ -184,14 +199,15 @@ class CheckRunsOnTest(unittest.TestCase):
         files = fixture()
         for name, job in ALLOWED:
             with self.subTest(name=name, job=job):
-                self.assertIn(f"  {job}:\n" + RUNS_ON, files[name])
+                self.assertIn(f"  {job}:\n" + job_runs_on(name, job), files[name])
 
     def test_each_allowed_job_passes(self):
         # Each allowlisted job is compared whitespace-collapsed, so a reflowed guard
         # on that job alone still passes.
         for name, job in ALLOWED:
             with self.subTest(name=name, job=job):
-                one_line = "    runs-on: " + " ".join(RUNS_ON.split()[2:]) + "\n"
+                block = job_runs_on(name, job)
+                one_line = "    runs-on: " + " ".join(block.split()[2:]) + "\n"
                 text = replace_job_runs_on(fixture()[name], job, one_line)
                 self.assert_passes(self.check_file(name, text))
 
@@ -211,23 +227,28 @@ class CheckRunsOnTest(unittest.TestCase):
     def test_tampered_guard_on_each_allowed_job_fails(self):
         clause = "      && github.event.pull_request.head.repo.full_name == github.repository\n"
         self.assertIn(clause, RUNS_ON)
-        tampered = {
-            "or escape": RUNS_ON.replace(
-                ")\n      && 'draftforge", " || true)\n      && 'draftforge"
-            ),
-            "dropped clause": RUNS_ON.replace(clause, ""),
-            "other label": RUNS_ON.replace("'draftforge-home'", "'self-hosted'"),
-            "swapped labels": RUNS_ON.replace(
-                "'draftforge-home' || 'ubuntu-latest'",
-                "'ubuntu-latest' || 'draftforge-home'",
-            ),
-        }
-        for how, runs_on in tampered.items():
-            self.assertNotEqual(runs_on, RUNS_ON, how)
-            for name, job in ALLOWED:
+
+        def tampered(label):
+            block = runs_on(label)
+            return {
+                "or escape": block.replace(
+                    ")\n      && 'draftforge", " || true)\n      && 'draftforge"
+                ),
+                "dropped clause": block.replace(clause, ""),
+                "other label": block.replace(f"'{label}'", "'self-hosted'"),
+                "swapped labels": block.replace(
+                    f"'{label}' || 'ubuntu-latest'",
+                    f"'ubuntu-latest' || '{label}'",
+                ),
+            }
+
+        for name, job in ALLOWED:
+            label = LABELS[(name, job)]
+            for how, block in tampered(label).items():
+                self.assertNotEqual(block, runs_on(label), how)
                 with self.subTest(how=how, name=name, job=job):
                     files = fixture()
-                    text = replace_job_runs_on(files[name], job, runs_on)
+                    text = replace_job_runs_on(files[name], job, block)
                     result = self.check_file(name, text)
                     self.assert_fails(
                         result,
@@ -238,9 +259,10 @@ class CheckRunsOnTest(unittest.TestCase):
         for name, job in ALLOWED:
             with self.subTest(name=name, job=job):
                 files = fixture()
-                old = f"  {job}:\n" + RUNS_ON + "    timeout-minutes: 10\n"
+                block = job_runs_on(name, job)
+                old = f"  {job}:\n" + block + "    timeout-minutes: 10\n"
                 self.assertIn(old, files[name])
-                text = files[name].replace(old, f"  {job}:\n" + RUNS_ON)
+                text = files[name].replace(old, f"  {job}:\n" + block)
                 result = self.check_file(name, text)
                 self.assert_fails(result, f"{name}: job {job} has no timeout-minutes")
 
@@ -276,6 +298,21 @@ class CheckRunsOnTest(unittest.TestCase):
         self.assert_fails(
             result, "playwright.yml: draftforge-home at jobs test runs-on"
         )
+
+    def test_npm_jobs_using_the_guard_fail(self):
+        # These stay on hosted runners: `npm ci` is 3-5x slower on the home runner.
+        for name, job in (
+            ("frontend-format.yml", "prettier"),
+            ("frontend-shadcn-lint.yml", "shadcn-lint"),
+            ("unit-tests.yml", "typecheck"),
+        ):
+            with self.subTest(name=name, job=job):
+                self.assertNotIn((name, job), LABELS)
+                text = f"name: {name}\n{PR_TRIGGER}jobs:\n" + home_job(job)
+                result = self.check_file(name, text)
+                self.assert_fails(
+                    result, f"{name}: draftforge-home at jobs {job} runs-on"
+                )
 
     def test_issue_labeler_using_the_guard_fails(self):
         text = ISSUE_LABELER.replace(
@@ -334,11 +371,13 @@ class CheckRunsOnTest(unittest.TestCase):
         self.assert_fails(result, "job lint runs-on '${{ matrix.os }}'")
         expr = "    runs-on: ${{ matrix.os }}\n"
         result = self.check(
-            unit_tests=replace_job_runs_on(
-                fixture()["unit-tests.yml"], "typecheck", expr
+            shellcheck=replace_job_runs_on(
+                fixture()["shellcheck.yml"], "shellcheck", expr
             )
         )
-        self.assert_fails(result, "job typecheck runs-on is not the guarded expression")
+        self.assert_fails(
+            result, "job shellcheck runs-on is not the guarded expression"
+        )
 
     def test_runner_group_fails(self):
         result = self.check(
@@ -350,11 +389,13 @@ class CheckRunsOnTest(unittest.TestCase):
         self.assert_fails(result, "job lint runs-on is a runner group")
         group = "    runs-on:\n      group: home\n"
         result = self.check(
-            unit_tests=replace_job_runs_on(
-                fixture()["unit-tests.yml"], "typecheck", group
+            shellcheck=replace_job_runs_on(
+                fixture()["shellcheck.yml"], "shellcheck", group
             )
         )
-        self.assert_fails(result, "job typecheck runs-on is not the guarded expression")
+        self.assert_fails(
+            result, "job shellcheck runs-on is not the guarded expression"
+        )
 
     def test_hosted_label_list_passes(self):
         result = self.check(
@@ -388,12 +429,79 @@ class CheckRunsOnTest(unittest.TestCase):
         )
 
     def test_runs_on_reflowed_passes(self):
-        one_line = "    runs-on: " + " ".join(RUNS_ON.split()[2:]) + "\n"
-        self.assertNotEqual(one_line, RUNS_ON)
+        one_line = "    runs-on: " + " ".join(PREPARE_RUNS_ON.split()[2:]) + "\n"
+        self.assertNotEqual(one_line, PREPARE_RUNS_ON)
         result = self.check(
             playwright=replace_job_runs_on(PLAYWRIGHT, "prepare", one_line)
         )
         self.assert_passes(result)
+
+    def test_prepare_on_the_small_label_fails(self):
+        result = self.check(
+            playwright=replace_job_runs_on(PLAYWRIGHT, "prepare", RUNS_ON)
+        )
+        self.assert_fails(
+            result,
+            "playwright.yml: job prepare runs-on is not the guarded expression "
+            "for draftforge-home-prepare",
+        )
+
+    def test_small_job_on_the_prepare_label_fails(self):
+        for name, job in ALLOWED:
+            if LABELS[(name, job)] != SMALL:
+                continue
+            with self.subTest(name=name, job=job):
+                text = replace_job_runs_on(fixture()[name], job, PREPARE_RUNS_ON)
+                result = self.check_file(name, text)
+                self.assert_fails(
+                    result,
+                    f"{name}: job {job} runs-on is not the guarded expression "
+                    "for draftforge-home:",
+                )
+
+    def test_prepare_label_on_a_non_allowlisted_job_fails(self):
+        result = self.check(
+            other=OTHER.replace("    runs-on: ubuntu-latest\n", PREPARE_RUNS_ON)
+        )
+        self.assert_fails(
+            result, "other.yml: draftforge-home-prepare at jobs lint runs-on"
+        )
+        result = self.check(
+            other=OTHER.replace("ubuntu-latest", "draftforge-home-prepare")
+        )
+        self.assert_fails(
+            result, "other.yml: draftforge-home-prepare at jobs lint runs-on"
+        )
+
+    def test_prepare_label_on_a_non_allowlisted_job_in_playwright_fails(self):
+        text = PLAYWRIGHT.replace(
+            "    if: ${{ !cancelled() }}\n    runs-on: ubuntu-latest\n",
+            "    if: ${{ !cancelled() }}\n" + PREPARE_RUNS_ON,
+        )
+        self.assertNotEqual(text, PLAYWRIGHT)
+        result = self.check(playwright=text)
+        self.assert_fails(
+            result, "playwright.yml: draftforge-home-prepare at jobs test runs-on"
+        )
+
+    def test_prepare_label_outside_runs_on_fails(self):
+        text = fixture()["changelog.yml"].replace(
+            "run: echo changelog", "run: echo draftforge-home-prepare"
+        )
+        result = self.check(changelog=text)
+        self.assert_fails(
+            result,
+            "changelog.yml: draftforge-home-prepare at jobs changelog steps 0 run",
+        )
+
+    def test_allowed_playwright_triggering_on_issues_names_its_label(self):
+        result = self.check(
+            playwright=PLAYWRIGHT.replace("on:\n", "on:\n  issues:\n", 1)
+        )
+        self.assert_fails(
+            result,
+            "playwright.yml: has a job allowed on draftforge-home-prepare and triggers on issues",
+        )
 
     def test_home_prepare_drift_fails(self):
         clause = "    && github.event.pull_request.head.repo.full_name == github.repository\n"

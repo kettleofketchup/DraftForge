@@ -234,7 +234,7 @@ prepare-images *flags:
         { echo '```'; cat "$dir/summary"; echo "done in $((SECONDS - start))s"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
     fi
 
-# Create or reuse the `home` remote buildx builder (the home cluster's BuildKit) and bootstrap it; the draftforge-home runner has no Docker daemon. Unreachable is an ::error:: and exit 1.
+# Create or reuse the `home` remote buildx builder (the home cluster's BuildKit) and bootstrap it; the draftforge-home-prepare runner has no Docker daemon. Unreachable is an ::error:: and exit 1.
 [group('ci')]
 home-builder:
     #!/usr/bin/env bash
@@ -436,7 +436,7 @@ backend-test-labels group:
 timing *args:
     cd {{quote(root)}} && python3 -I scripts/ci_timing.py "$@"
 
-# Check which jobs may use the draftforge-home runner, plus the checker's tests (the `runs-on-guard` CI job); needs mikefarah yq
+# Check which jobs may use the home runner labels (draftforge-home, draftforge-home-prepare), plus the checker's tests (the `runs-on-guard` CI job); needs mikefarah yq
 [group('ci')]
 check-runs-on:
     #!/usr/bin/env bash

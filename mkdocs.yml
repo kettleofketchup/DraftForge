@@ -104,6 +104,7 @@ nav:
       - Org MMR per Game: features/org-mmr.md
       - Steam Friend ID Verification: features/steam-friend-id.md
       - MMR Sync API: features/org-mmr-sync-api.md
+      - Lobby Bot League Access: features/lobby-bot-league-access.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md
