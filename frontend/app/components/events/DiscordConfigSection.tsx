@@ -20,9 +20,9 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
-import { announcementChannelUsers } from './announcementChannelUsers';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
+import { fallbackChannelUsers } from './fallbackChannelUsers';
 import { PROFILE_REMINDER_DESCRIPTION } from './form/settingsFields';
 import type { discordConfigSchema } from './schemas';
 import {
@@ -210,7 +210,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     ],
   });
 
-  const channelUsers = announcementChannelUsers({
+  const channelUsers = fallbackChannelUsers({
     announcement,
     confirmAttendance,
     profileReminder,
