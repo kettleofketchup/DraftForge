@@ -1,4 +1,5 @@
 import { TriangleAlert } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import type { z } from 'zod';
 import { IntegerInput } from '~/components/patterns/IntegerInput';
@@ -20,6 +21,11 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
+import {
+  EventDiscordPreviewButton,
+  type DiscordPreviewContext,
+  type PreviewKind,
+} from '~/features/event-discord-preview';
 import { announcementChannelUsers } from './announcementChannelUsers';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
@@ -82,11 +88,13 @@ function CheckboxField({
   name,
   label,
   description,
+  action,
 }: {
   control: Control<DiscordFields>;
   name: DiscordFieldName;
   label: string;
   description: string;
+  action?: ReactNode;
 }) {
   return (
     <FormField
@@ -103,12 +111,13 @@ function CheckboxField({
               className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
             />
           </FormControl>
-          <div>
+          <div className="min-w-0 flex-1">
             <FormLabel className="text-sm font-medium cursor-pointer">
               {label}
             </FormLabel>
             <FormDescription>{description}</FormDescription>
           </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
         </FormItem>
       )}
     />
@@ -171,6 +180,8 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
    *  `isRepeater`; a one-off event inherits the series' setting instead of
    *  exposing its own toggle. */
   showNotifyNewEvents?: boolean;
+  /** What the Preview buttons build from; absent for org defaults. */
+  previewContext?: DiscordPreviewContext;
 }
 
 export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
@@ -178,6 +189,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
   isRepeater,
   organizationId,
   showNotifyNewEvents = isRepeater,
+  previewContext,
 }: DiscordConfigSectionProps<T>) {
   // T extends DiscordFields by the generic constraint, so narrowing to
   // Control<DiscordFields> is sound: we touch only the discord-config slice.
@@ -225,6 +237,13 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     announcementChannelId,
   });
   const prerequisiteMessage = startMentionPrerequisiteMessage(prerequisite);
+  const preview = (kind: PreviewKind) => (
+    <EventDiscordPreviewButton
+      kind={kind}
+      organizationId={organizationId}
+      context={previewContext}
+    />
+  );
 
   return (
     <div className="space-y-3">
@@ -235,6 +254,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           name="discord_create_event"
           label="Create Discord scheduled event"
           description="Automatically creates a scheduled event in your Discord server"
+          action={preview('scheduled_event')}
         />
         {createEvent && (
           <div className="space-y-3 ml-7">
@@ -243,6 +263,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
               name="discord_sync_signups"
               label="Synchronize signups"
               description="Keep website and Discord event signups in sync"
+              action={preview('scheduled_event_sync')}
             />
             <CheckboxField
               control={control}
@@ -322,6 +343,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
             name="discord_signup_reminder"
             label="Send signup reminder"
             description="DM series subscribers who haven't signed up yet, before the event starts"
+            action={preview('signup_reminder')}
           />
           {signupReminder && (
             <HoursSelect
@@ -340,6 +362,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           name="discord_profile_reminder"
           label="Profile update reminder"
           description={PROFILE_REMINDER_DESCRIPTION}
+          action={preview('profile_reminder')}
         />
         {profileReminder && (
           <HoursSelect
@@ -356,6 +379,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           name="discord_confirm_attendance"
           label="Post attendance reminder in Discord"
           description="Posts a reminder in the announcement channel before the event. It doesn't track replies; use the ready check to require confirmation."
+          action={preview('attendance_reminder')}
         />
         {confirmAttendance && (
           <HoursSelect
@@ -372,6 +396,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           name="discord_start_mention"
           label="Mention signed-up members before start"
           description="Reply to the signup post with an @mention of every signed-up member shortly before the event starts"
+          action={preview('start_mention')}
         />
         {startMention && (
           <>
@@ -445,6 +470,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           name="discord_post_signups"
           label="Post event signup embed"
           description="Post an embed to a channel where users can react to sign up"
+          action={preview('signup_post')}
         />
         {postSignups && (
           <div className="ml-7 space-y-3">
@@ -500,6 +526,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           name="discord_announcement"
           label="Pre-day announcement"
           description="Post an announcement in a channel before the event"
+          action={preview('announcement_notice')}
         />
         {announcement && (
           <div className="ml-7 space-y-3">
@@ -558,6 +585,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
             name="discord_notify_new_events"
             label="Post new events"
             description="Post each new series event in the announcement channel when it is created"
+            action={preview('new_event_post')}
           />
         </div>
       )}
