@@ -10,6 +10,7 @@ from events.services import DISCORD_CONFIG_FIELDS
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 
 MAX_ROLE_IDS = 25
+MAX_GENERATE_DAYS_AHEAD = 366
 ROLE_ID_FIELDS: tuple[str, ...] = (
     "discord_signup_role_ids",
     "discord_announcement_role_ids",
@@ -84,6 +85,10 @@ class DiscordPreviewValuesSerializer(_PreviewValuesMixin):
         model = Event
         fields = PREVIEW_EVENT_FIELDS
         validators: list[Any] = []
+        extra_kwargs = {
+            "name": {"allow_blank": True},
+            "scheduled_at": {"allow_null": True},
+        }
 
 
 class DiscordPreviewRepeaterValuesSerializer(_PreviewValuesMixin):
@@ -91,3 +96,10 @@ class DiscordPreviewRepeaterValuesSerializer(_PreviewValuesMixin):
         model = EventRepeater
         fields = PREVIEW_REPEATER_FIELDS
         validators: list[Any] = []
+        extra_kwargs = {
+            "name": {"allow_blank": True},
+            "generate_days_ahead": {
+                "min_value": 0,
+                "max_value": MAX_GENERATE_DAYS_AHEAD,
+            },
+        }
