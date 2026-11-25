@@ -682,8 +682,8 @@ def send_attendance_reminder(event_id: int) -> str:
 
     A blank channel falls back to the announcement channel.
 
-    Idempotency is provided by sync_send_embed_with_components's internal
-    claim/finalize lease pattern (one HTTP send per (source, source_id)).
+    Idempotency via sync_send_embed_with_components's claim/finalize lease:
+    one HTTP send per (source, source_id).
     """
 
     event = get_event_for_task(event_id)
