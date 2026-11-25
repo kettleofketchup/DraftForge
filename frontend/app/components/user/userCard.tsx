@@ -148,14 +148,12 @@ export const UserCard: React.FC<Props> = memo(
       [linkPk, organizationId, leagueId, currentOrg, currentLeague, gameType],
     );
 
-    // Construct the User instance ONCE per stable input set. Doing this
-    // inline (`user={new User(...)}`) created a fresh reference on every
-    // UserCard render, which forced UserEditModal → onSubmit useCallback →
-    // submitHandler useMemo → FormDialog to all re-run, which cascaded into
-    // the entire Radix Tooltip subtree under every button. That's the
-    // 219-renders-per-Popper hit the React Scan trace was showing.
-    // React Compiler doesn't memoize class instantiations, so this
-    // useMemo is required even with the compiler enabled.
+    // Construct the User instance ONCE per stable input set. Inline
+    // (`user={new User(...)}`) makes a fresh reference on every UserCard
+    // render, re-running UserEditModal → onSubmit useCallback →
+    // submitHandler useMemo → FormDialog and the entire Radix Tooltip
+    // subtree under every button. React Compiler doesn't memoize class
+    // instantiations, so this useMemo is required even with the compiler.
     const editUser = React.useMemo(
       () =>
         new User(
@@ -275,7 +273,7 @@ export const UserCard: React.FC<Props> = memo(
         // past the grid's column width and pushes neighbors / overflows.
         // min-w-0 forces the cell to respect 1fr, letting overflow-hidden
         // on the inner card actually clip overflow.
-        // overflow-visible lets the motion.div's hover scale: 1.02 paint
+        // overflow-visible lets the inner card's hover scale: 1.02 paint
         // beyond the wrapper's box without being clipped.
         // [contain:layout_style] is CSS containment WITHOUT `paint` or
         // `size` — the browser isolates this card's layout/style work
