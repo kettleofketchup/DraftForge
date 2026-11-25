@@ -20,6 +20,7 @@ from org.settings_service import (
 from org.standing import api as standing
 
 from .models import (
+    MmrChangeRequest,
     OrgApiLimits,
     OrgApiToken,
     OrgApiTokenUsage,
@@ -53,8 +54,8 @@ class ReadOnlyAdminMixin:
 
 class OrgUserGameMmrInline(ReadOnlyAdminMixin, admin.TabularInline):
     model = OrgUserGameMmr
-    fields = ["game_type", "mmr", "updated_at"]
-    readonly_fields = ["game_type", "mmr", "updated_at"]
+    fields = ["game_type", "mmr", "updated_at", "verified_at", "verified_by"]
+    readonly_fields = fields
     extra = 0
     can_delete = False
 
@@ -86,10 +87,72 @@ class OrgUserAdmin(admin.ModelAdmin):
 
 @admin.register(OrgUserGameMmr)
 class OrgUserGameMmrAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
-    list_display = ["org_user", "game_type", "mmr", "updated_at"]
+    list_display = ["org_user", "game_type", "mmr", "verified_at", "updated_at"]
     list_filter = ["game_type"]
     raw_id_fields = ["org_user"]
-    readonly_fields = ["org_user", "game_type", "mmr", "updated_at"]
+    readonly_fields = [
+        "org_user",
+        "game_type",
+        "mmr",
+        "updated_at",
+        "verified_at",
+        "verified_by",
+    ]
+
+
+@admin.register(MmrChangeRequest)
+class MmrChangeRequestAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = [
+        "id",
+        "subject_user",
+        "organization",
+        "target",
+        "game_type",
+        "requested_mmr",
+        "status",
+        "source",
+        "created_at",
+    ]
+    list_filter = ["status", "target", "source"]
+    search_fields = ["subject_user__username", "requester__username"]
+    raw_id_fields = [
+        "requester",
+        "subject_user",
+        "organization",
+        "org_user",
+        "league",
+        "league_user",
+        "reviewed_by",
+    ]
+    exclude = ["screenshot"]
+    readonly_fields = [
+        "requester",
+        "subject_user",
+        "organization",
+        "org_user",
+        "league",
+        "league_user",
+        "target",
+        "game_type",
+        "requested_mmr",
+        "approved_mmr",
+        "previous_mmr",
+        "previous_verified",
+        "has_screenshot",
+        "screenshot_content_type",
+        "note",
+        "status",
+        "source",
+        "reviewed_by",
+        "reviewed_at",
+        "rejection_reason",
+        "created_at",
+        "updated_at",
+    ]
+
+    @admin.display(boolean=True, description="Screenshot")
+    def has_screenshot(self, obj: MmrChangeRequest) -> bool:
+        return bool(obj.screenshot.name)
 
 
 @admin.register(OrgFeature)

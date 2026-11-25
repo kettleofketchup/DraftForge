@@ -33,8 +33,8 @@ testIgnore: **/fixtures/**, **/helpers/**, **/constants.ts, **/*.d.ts
 
 ### `events-sequential` / `dota-lobby-sequential` / `org-features-sequential` - Shared-State Suites
 
-- `events-sequential` matches `e2e/16-events/`, `dota-lobby-sequential` matches
-  `e2e/22-dota-lobby/`, `org-features-sequential` matches `e2e/19-org-features/`;
+- `events-sequential` matches `e2e/events/`, `dota-lobby-sequential` matches
+  `e2e/dota-lobby/`, `org-features-sequential` matches `e2e/org-features/`;
   `chromium` ignores all three directories
 - `fullyParallel: false`, `dependencies: ['chromium']`
 - `dota-lobby-sequential` also sets `workers: 1`: its files share one simulated
@@ -113,10 +113,10 @@ just test::pw::headless --shard=1/4
 ```
 frontend/tests/playwright/
   e2e/
-    01-navigation/      # Navigation tests
+    navigation/      # Navigation tests
     02-tournament/      # Tournament tests
     ...
-    14-csv-import/      # CSV import tests
+    csv-import/      # CSV import tests
     herodraft/          # HeroDraft multi-browser tests
   demo/                 # Demo recording scripts
   fixtures/             # Shared fixtures (auth, herodraft, helpers)

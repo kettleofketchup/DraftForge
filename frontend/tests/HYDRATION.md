@@ -52,7 +52,7 @@ navigateToRoute('/tournaments'); // Smart navigation handling dropdowns
 
 ### 3. Specific Hydration Test
 
-The `00-hydration-handling.cy.ts` test file specifically tests that the app works despite hydration issues:
+The `hydration-handling.cy.ts` test file specifically tests that the app works despite hydration issues:
 
 ```typescript
 describe('Hydration Error Handling', () => {

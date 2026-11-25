@@ -12,9 +12,10 @@ from org.mmr import (
     bulk_set_org_mmrs,
     game_mmrs_prefetch,
     get_org_mmr,
-    mark_dota_mmr_verified,
     validate_org_mmr,
 )
+from org.mmr_official import apply_official_org_mmr
+from org.mmr_requests.permissions import may_verify_org_mmr
 from org.models import Organization, OrgLog, OrgUser
 from telemetry.logging import get_logger
 
@@ -150,6 +151,13 @@ def sync_mmrs(
             result.invalid.append(
                 {"index": entry.index, "error": "duplicate entry for this member"}
             )
+        elif mark_verified and not may_verify_org_mmr(actor, matched):
+            result.invalid.append(
+                {
+                    "index": entry.index,
+                    "error": "Not permitted to verify this member's MMR.",
+                }
+            )
         else:
             targets[matched.user_id] = (matched, entry.mmr)
 
@@ -165,7 +173,17 @@ def sync_mmrs(
     result.updated = len(changed)
 
     with transaction.atomic():
-        if changed:
+        if mark_verified:
+            for user_id, (org_user, mmr) in targets.items():
+                apply_official_org_mmr(
+                    org_user,
+                    game_type,
+                    mmr or 0,
+                    actor=actor,
+                    source="api_sync",
+                    extra_log={"old_mmr": old_values.get(user_id, mmr or 0)},
+                )
+        elif changed:
             bulk_set_org_mmrs(org.pk, game_type, changed)
             OrgLog.objects.bulk_create(
                 OrgLog(
@@ -183,9 +201,6 @@ def sync_mmrs(
                 for user_id, mmr in changed.items()
             )
         touched = [org_user for org_user, _ in targets.values()]
-        if mark_verified and game_type == GameType.DOTA2:
-            for org_user in touched:
-                mark_dota_mmr_verified(org_user)
         if changed or (mark_verified and touched):
             refresh_members_eligibility(touched)
 

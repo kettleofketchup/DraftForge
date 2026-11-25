@@ -1786,18 +1786,6 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                         request, signup.user, signup.event, staff_only=True
                     ),
                 )
-                if mmr_override is not None:
-                    OrgLog.objects.create(
-                        organization=signup.event.organization,
-                        actor=request.user,
-                        action="set_mmr",
-                        target_user=signup.user,
-                        details={
-                            "mmr": mmr_override,
-                            "event_id": signup.event.pk,
-                            "game_type": int(game_type),
-                        },
-                    )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

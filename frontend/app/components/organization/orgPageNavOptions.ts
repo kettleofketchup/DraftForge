@@ -1,3 +1,4 @@
+import { withPendingCount } from '~/features/mmr-requests/format';
 import type { PageNavOption } from '~/store/pageNavStore';
 
 export interface OrgPageNavInput {
@@ -8,6 +9,8 @@ export interface OrgPageNavInput {
   standingTabs: readonly { value: string; label: string }[];
   canUsePromotion: boolean;
   canViewClaims: boolean;
+  canReviewMmr: boolean;
+  mmrPendingCount: number;
   pendingClaimsCount?: number;
 }
 
@@ -33,6 +36,12 @@ export function buildOrgPageNavOptions(
     opts.push({
       value: 'claims',
       label: pending > 0 ? `Claims (${pending})` : 'Claims',
+    });
+  }
+  if (input.canReviewMmr) {
+    opts.push({
+      value: 'mmr-requests',
+      label: withPendingCount('MMR requests', input.mmrPendingCount),
     });
   }
   return opts;

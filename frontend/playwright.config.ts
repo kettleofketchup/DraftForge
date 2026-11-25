@@ -86,19 +86,19 @@ export default defineConfig({
       name: 'chromium',
       // Exclude herodraft tests (run in herodraft project), mobile specs
       // (which live under e2e/mobile/ and run in the mobile-* projects),
-      // 16-events specs (run in events-sequential project — those tests
+      // events specs (run in events-sequential project — those tests
       // share a single seeded event PK from getEventsTestData and race on
       // start_roll_call / resetEventsData when workers > 1 in the same shard),
-      // layout specs (layout project), 22-dota-lobby specs
-      // (dota-lobby-sequential) and 19-org-features specs
+      // layout specs (layout project), dota-lobby specs
+      // (dota-lobby-sequential) and org-features specs
       // (org-features-sequential).
       testIgnore: [
         /herodraft/i,
         /e2e\/mobile\//,
-        /e2e\/16-events\//,
+        /e2e\/events\//,
         /e2e\/layout\//,
-        /e2e\/22-dota-lobby\//,
-        /e2e\/19-org-features\//,
+        /e2e\/dota-lobby\//,
+        /e2e\/org-features\//,
       ],
       use: {
         ...devices['Desktop Chrome'],
@@ -118,7 +118,7 @@ export default defineConfig({
     },
     {
       name: 'events-sequential',
-      testMatch: /e2e\/16-events\/.*\.spec\.ts/,
+      testMatch: /e2e\/events\/.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: true,
@@ -133,7 +133,7 @@ export default defineConfig({
           ],
         },
       },
-      // 16-events specs share a single seeded event PK (returned by
+      // events specs share a single seeded event PK (returned by
       // getEventsTestData). Each file mutates event state independently —
       // running two files in parallel races on resetEventsData /
       // start_roll_call / reopen_signups. test.describe.serial only
@@ -143,7 +143,7 @@ export default defineConfig({
     },
     {
       name: 'dota-lobby-sequential',
-      testMatch: /e2e\/22-dota-lobby\/.*\.spec\.ts/,
+      testMatch: /e2e\/dota-lobby\/.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: true,
@@ -158,7 +158,7 @@ export default defineConfig({
           ],
         },
       },
-      // The 22-dota-lobby specs share one simulated dota_lobby and one set
+      // The dota-lobby specs share one simulated dota_lobby and one set
       // of seeded lobby games, and each file resets them
       // (/api/tests/dota-lobby/reset/): files must not overlap, so one
       // worker runs them in order whatever --workers says.
@@ -168,7 +168,7 @@ export default defineConfig({
     },
     {
       name: 'org-features-sequential',
-      testMatch: /e2e\/19-org-features\/.*\.spec\.ts/,
+      testMatch: /e2e\/org-features\/.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: true,
@@ -183,7 +183,7 @@ export default defineConfig({
           ],
         },
       },
-      // Every 19-org-features file resets the same seeded orgs, ledger and
+      // Every org-features file resets the same seeded orgs, ledger and
       // promo sends (/api/tests/org-features/reset/): one worker, in order.
       dependencies: ['chromium'],
       fullyParallel: false,

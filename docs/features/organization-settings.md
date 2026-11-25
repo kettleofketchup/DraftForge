@@ -235,4 +235,4 @@ database hash, so CI runs one fresh populate for that PR.
 | Modal | `frontend/app/components/organization/OrgSettingsDialog.tsx` (shell: `components/patterns/SettingsDialog.tsx`) |
 | Sections and access hook | `frontend/app/components/organization/tabs/orgSettings/` |
 | New event defaults sections | `frontend/app/components/events/useOrgEventDefaultsSections.tsx` |
-| Tests | `backend/org/tests/test_org_settings.py`, `frontend/app/components/organization/__tests__/OrgSettingsDialog.test.tsx`, `tabs/orgSettings/__tests__/`, `frontend/tests/playwright/e2e/19-org-features/06-org-settings.spec.ts` |
+| Tests | `backend/org/tests/test_org_settings.py`, `frontend/app/components/organization/__tests__/OrgSettingsDialog.test.tsx`, `tabs/orgSettings/__tests__/`, `frontend/tests/playwright/e2e/org-features/org-settings.spec.ts` |

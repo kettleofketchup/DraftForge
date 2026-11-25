@@ -5,7 +5,7 @@ import {
 } from '../EventSignupModal';
 
 // Pure-helper tests for the intent→copy interpolation. Form interaction is
-// in the 12-event-signup-form Playwright spec.
+// in the event-signup-form Playwright spec.
 
 describe('buildSignupModalTitle', () => {
   it('uses the "Sign Up" copy for rsvp intent', () => {

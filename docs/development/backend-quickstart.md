@@ -115,7 +115,10 @@ Note: Use `DISABLE_CACHE=true` when Redis is unavailable.
 ### Backend Tests (Docker - Recommended)
 
 ```bash
-# All tests
+# All tests, as CI runs them
+just test::backend::all
+
+# One package
 just test::run 'python manage.py test app.tests -v 2'
 
 # Specific module

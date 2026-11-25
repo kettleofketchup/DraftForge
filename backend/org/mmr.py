@@ -15,6 +15,7 @@ from telemetry.logging import get_logger
 from tournament.models import Tournament
 
 if TYPE_CHECKING:
+    from app.models import CustomUser
     from events.models import Event
 
 log = get_logger(__name__)
@@ -139,7 +140,7 @@ def validate_org_mmr(game_type: int, mmr: int | None) -> None:
 
 def game_mmrs_prefetch(*, fresh: bool) -> Prefetch:
     qs = OrgUserGameMmr.objects.nocache() if fresh else OrgUserGameMmr.objects.all()
-    return Prefetch(_PREFETCH_KEY, queryset=qs)
+    return Prefetch(_PREFETCH_KEY, queryset=qs.select_related("verified_by"))
 
 
 def _drop_read_caches(org_user: OrgUser) -> None:
@@ -182,6 +183,7 @@ def set_org_mmr(
     mmr: int | None,
     *,
     mark_verified: bool,
+    verified_by: CustomUser | None = None,
 ) -> OrgUserGameMmr | None:
     validate_org_mmr(game_type, mmr)
     value = mmr or 0
@@ -192,15 +194,28 @@ def set_org_mmr(
             .first()
         )
         old = existing.mmr if existing is not None else 0
+        now = timezone.now()
         row: OrgUserGameMmr | None = None
         if value:
             if existing is None:
                 row = OrgUserGameMmr.objects.create(
-                    org_user=org_user, game_type=game_type, mmr=value
+                    org_user=org_user,
+                    game_type=game_type,
+                    mmr=value,
+                    verified_at=now if mark_verified else None,
+                    verified_by=verified_by if mark_verified else None,
                 )
             else:
                 existing.mmr = value
-                existing.save(update_fields=["mmr", "updated_at"])
+                if mark_verified:
+                    existing.verified_at = now
+                    existing.verified_by = verified_by
+                elif value != old:
+                    existing.verified_at = None
+                    existing.verified_by = None
+                existing.save(
+                    update_fields=["mmr", "updated_at", "verified_at", "verified_by"]
+                )
                 row = existing
         elif existing is not None:
             existing.delete()
@@ -215,10 +230,51 @@ def set_org_mmr(
             game_type=game_type,
             old_mmr=old,
             new_mmr=value,
+            verified=mark_verified,
+            verified_by_id=verified_by.pk if verified_by is not None else None,
         )
         invalidate_after_commit(org_user)
         invalidate_org_user_tournaments(org_user)
     return row
+
+
+def mark_org_mmr_verified(
+    org_user: OrgUser, game_type: int, actor: CustomUser | None
+) -> None:
+    validate_org_mmr(game_type, None)
+    with transaction.atomic():
+        existing = (
+            OrgUserGameMmr.objects.nocache()
+            .select_for_update()
+            .filter(org_user_id=org_user.pk, game_type=game_type)
+            .first()
+        )
+        if existing is not None:
+            existing.verified_at = timezone.now()
+            existing.verified_by = actor
+            existing.save(update_fields=["verified_at", "verified_by", "updated_at"])
+        if game_type == GameType.DOTA2:
+            mark_dota_mmr_verified(org_user)
+        _drop_read_caches(org_user)
+        log.info(
+            "org_mmr_marked_verified",
+            system="org",
+            subsystem="mmr",
+            org_user_id=org_user.pk,
+            game_type=game_type,
+            row_exists=existing is not None,
+            verified_by_id=actor.pk if actor is not None else None,
+        )
+        invalidate_after_commit(org_user)
+        invalidate_org_user_tournaments(org_user)
+
+
+def _loser_row_wins(loser_row: OrgUserGameMmr, keeper_row: OrgUserGameMmr) -> bool:
+    loser_verified = loser_row.verified_at is not None
+    keeper_verified = keeper_row.verified_at is not None
+    if loser_verified != keeper_verified:
+        return loser_verified
+    return loser_row.mmr > keeper_row.mmr
 
 
 def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
@@ -238,8 +294,10 @@ def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
         target = keeper_rows.get(row.game_type)
         if target is None:
             moved.append(row)
-        elif target.mmr < row.mmr:
+        elif _loser_row_wins(row, target):
             target.mmr = row.mmr
+            target.verified_at = row.verified_at
+            target.verified_by_id = row.verified_by_id
             target.updated_at = now
             raised.append(target)
     with transaction.atomic():
@@ -248,7 +306,9 @@ def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
                 org_user=keeper, updated_at=now
             )
         if raised:
-            OrgUserGameMmr.objects.bulk_update(raised, ["mmr", "updated_at"])
+            OrgUserGameMmr.objects.bulk_update(
+                raised, ["mmr", "updated_at", "verified_at", "verified_by"]
+            )
         log.info(
             "org_mmr_merged",
             system="org",
@@ -284,7 +344,13 @@ def bulk_set_org_mmrs(
             f"users {missing} are not members of organization {organization_id}"
         )
     upserts = [
-        OrgUserGameMmr(org_user=by_user[uid], game_type=game_type, mmr=value)
+        OrgUserGameMmr(
+            org_user=by_user[uid],
+            game_type=game_type,
+            mmr=value,
+            verified_at=None,
+            verified_by=None,
+        )
         for uid, value in values.items()
         if value
     ]
@@ -295,7 +361,7 @@ def bulk_set_org_mmrs(
                 upserts,
                 update_conflicts=True,
                 unique_fields=["org_user", "game_type"],
-                update_fields=["mmr", "updated_at"],
+                update_fields=["mmr", "updated_at", "verified_at", "verified_by"],
             )
         if cleared:
             OrgUserGameMmr.objects.filter(

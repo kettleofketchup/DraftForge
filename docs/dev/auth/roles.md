@@ -17,7 +17,7 @@ from a row there, the tests fail (or you have a documentation bug).
 >    (tournament and game checks) or
 >    [`backend/events/permissions.py`][permissions-events] (event staff)
 > 3. The expectations in the matrix spec under
->    [`frontend/tests/playwright/e2e/17-auth/`][matrix]
+>    [`frontend/tests/playwright/e2e/auth/`][matrix]
 > 4. The corresponding row in this document
 >
 > Any one of those four out of sync produces silent permission drift.
@@ -85,7 +85,7 @@ hasn't loaded yet.
 
 ## Create-Action Matrix
 
-The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
+The five entry points locked by `e2e/auth/create-gates.spec.ts`.
 ✓ = button visible to that role; ✗ = button hidden.
 
 |                              | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | promoter | leagueAdmin | leagueStaff | anonymous |
@@ -118,7 +118,7 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 
 ## Edit + Bracket Matrix
 
-The ten entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
+The ten entry points locked by `e2e/auth/edit-and-bracket-gates.spec.ts`.
 
 |                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | promoter | leagueAdmin | leagueStaff | anonymous |
 | -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :------: | :---------: | :---------: | :-------: |
@@ -202,7 +202,7 @@ The locked-feature gates are checked against the dedicated org-features test dat
 backend permission tests (`org/tests/test_features_api.py`, `test_promoters.py`,
 `test_contributions_api.py`, `test_promotion_api.py`, `test_conduct_api.py`,
 `events/tests/test_event_staff_api.py`) and the Playwright specs in
-`frontend/tests/playwright/e2e/19-org-features/`, which log in with
+`frontend/tests/playwright/e2e/org-features/`, which log in with
 `loginOrgFeatures(context, role)`.
 
 | Action | Who | Switch |
@@ -267,7 +267,7 @@ The event page shows the forecast, badges and Attendance panel when the event pa
    the frontend hook's convention (site admin bypass, owner-counts-as-
    admin, etc.).
 3. Add a `data-testid` to the gated button.
-4. Append a row to whichever spec in `e2e/17-auth/` covers the action.
+4. Append a row to whichever spec in `e2e/auth/` covers the action.
 5. Update the matrix table in this page.
 
 ## Adding a New Role
@@ -282,7 +282,7 @@ A new role requires:
 - A login fixture in `frontend/tests/playwright/fixtures/auth.ts`.
 - An entry in `ROLE_NAMES` and `ROLE_LOGINS` in `role-contexts.ts`.
 - An expectation column in **every** matrix table — both in this page
-  and in `e2e/17-auth/*.spec.ts`.
+  and in `e2e/auth/*.spec.ts`.
 
 If the new role scopes to an org or league, **wire it into the
 auth-matrix org/league**, not DTX — keep the isolation intact. The
@@ -331,13 +331,13 @@ feature suites.
 | Playwright role fixture           | `frontend/tests/playwright/fixtures/role-contexts.ts`                                 |
 | Login endpoints                   | `backend/tests/test_auth.py`, `backend/tests/urls.py`                                 |
 | Test users                        | `backend/tests/data/users.py`                                                         |
-| Create-action matrix              | `frontend/tests/playwright/e2e/17-auth/01-create-gates.spec.ts`                        |
-| Edit + bracket matrix             | `frontend/tests/playwright/e2e/17-auth/02-edit-and-bracket-gates.spec.ts`              |
-| Locked-feature gates              | `backend/org/feature_errors.py`, `frontend/tests/playwright/e2e/19-org-features/`      |
+| Create-action matrix              | `frontend/tests/playwright/e2e/auth/create-gates.spec.ts`                        |
+| Edit + bracket matrix             | `frontend/tests/playwright/e2e/auth/edit-and-bracket-gates.spec.ts`              |
+| Locked-feature gates              | `backend/org/feature_errors.py`, `frontend/tests/playwright/e2e/org-features/`      |
 
 [hooks]: https://github.com/kettleofketchup/DraftForge/blob/main/frontend/app/hooks/usePermissions.ts
 [permissions]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/org/permissions.py
 [permissions-league]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/league/permissions.py
 [permissions-tournament]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/tournament/permissions.py
 [permissions-events]: https://github.com/kettleofketchup/DraftForge/blob/main/backend/events/permissions.py
-[matrix]: https://github.com/kettleofketchup/DraftForge/tree/main/frontend/tests/playwright/e2e/17-auth
+[matrix]: https://github.com/kettleofketchup/DraftForge/tree/main/frontend/tests/playwright/e2e/auth
