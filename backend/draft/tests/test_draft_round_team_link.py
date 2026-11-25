@@ -1,7 +1,9 @@
 """DraftRound.team prefers the stored drafting team over the captain lookup."""
 
+from django.db import connection
 from django.db.models import Max
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from app.models import CustomUser
@@ -11,6 +13,9 @@ from draft.tests.team_fixtures import TimedDraftFixture
 from league.models import League
 from org.models import Organization
 from tournament.models import Team, Tournament
+from tournament.models.team_log import TeamLogVia
+from tournament.serializers.draft import DraftRoundForDraftSerializer
+from tournament.services.team_management import replace_captain
 from tournament.state import tournament_state_queryset
 
 
@@ -201,3 +206,94 @@ class ShuffleTeamLinkTests(TestCase):
         second = self.rounds()[1]
         self.assertIsNone(second.captain_id)
         self.assertIsNone(second.drafting_team_id)
+
+
+class TakeoverPickTests(TestCase):
+    def setUp(self) -> None:
+        self.fx = TimedDraftFixture(
+            style="snake", num_teams=2, timer_enabled=False, prefix="tko"
+        )
+        self.draft = self.fx.draft
+        self.live, self.eliminated = self.fx.teams
+        self.old_captain = self.live.captain
+        self.live_rounds = set(
+            DraftRound.objects.nocache()
+            .filter(draft=self.draft, captain=self.old_captain)
+            .values_list("pk", flat=True)
+        )
+        self.player = self.fx.players[0]
+
+    def take_over(self) -> None:
+        Team.objects.filter(pk=self.eliminated.pk).invalidated_update(placement=2)
+        change = replace_captain(
+            self.live,
+            self.eliminated.captain,
+            actor=self.fx.staff,
+            via=TeamLogVia.WEB,
+            reason="r",
+        )
+        self.assertEqual(
+            change.log.details["draft_rounds_skipped_reason"],
+            "old_captain_leads_other_team",
+        )
+
+    def first_live_round(self) -> DraftRound:
+        return (
+            DraftRound.objects.nocache()
+            .filter(pk__in=self.live_rounds)
+            .order_by("pick_number")
+            .first()
+        )
+
+    def member_pks(self, team: Team) -> set[int]:
+        return set(
+            Team.objects.nocache()
+            .get(pk=team.pk)
+            .members.nocache()
+            .values_list("pk", flat=True)
+        )
+
+    def test_pick_player_after_shared_captain_takeover_adds_to_stored_team(
+        self,
+    ) -> None:
+        self.take_over()
+        rnd = self.first_live_round()
+        self.assertEqual(rnd.captain_id, self.old_captain.pk)
+        self.assertEqual(rnd.drafting_team_id, self.live.pk)
+
+        rnd.pick_player(self.player)
+
+        self.assertIn(self.player.pk, self.member_pks(self.live))
+        self.assertNotIn(self.player.pk, self.member_pks(self.eliminated))
+
+    def test_undo_after_takeover_uses_stored_team(self) -> None:
+        self.take_over()
+        self.first_live_round().pick_player(self.player)
+        self.assertIn(self.player.pk, self.member_pks(self.live))
+
+        response = self.fx.undo(self.fx.staff)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn(self.player.pk, self.member_pks(self.live))
+        self.assertNotIn(self.player.pk, self.member_pks(self.eliminated))
+        self.assertIsNone(self.first_live_round().choice_id)
+
+    def payload_queries(self) -> tuple[int, list[int | None]]:
+        state = tournament_state_queryset(fresh=True).get(pk=self.fx.tournament.pk)
+        rounds = state.draft.draft_rounds.all()
+        with CaptureQueriesContext(connection) as ctx:
+            data = DraftRoundForDraftSerializer(rounds, many=True).data
+        return len(ctx.captured_queries), [
+            r["team"]["pk"] if r["team"] else None for r in data
+        ]
+
+    def test_state_payload_query_count_unchanged(self) -> None:
+        linked_count, linked_teams = self.payload_queries()
+        DraftRound.objects.filter(draft=self.draft).invalidated_update(
+            drafting_team=None
+        )
+        null_count, null_teams = self.payload_queries()
+
+        self.assertEqual(linked_teams, null_teams)
+        self.assertNotIn(None, linked_teams)
+        self.assertLessEqual(linked_count, null_count)

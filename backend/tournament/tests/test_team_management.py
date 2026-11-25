@@ -1624,6 +1624,44 @@ class DraftBookkeepingTests(TeamManagementFixture, TestCase):
             with self.subTest(path=path):
                 self.assertEqual(team_pks, expected)
 
+    def test_follow_captain_moves_other_teams_rounds_baseline(self) -> None:
+        Team.objects.filter(pk=self.team.pk).update(draft_order=1)
+        Team.objects.filter(pk=self.other.pk).update(draft_order=2)
+        self.draft.build_rounds()
+        others = set(
+            DraftRound.objects.nocache()
+            .filter(draft=self.draft, captain=self.o1)
+            .values_list("pk", flat=True)
+        )
+        self.assertEqual(len(others), 4)
+        z = self.make_user("roster_z")
+        self.tournament.users.add(z)
+        self.other.members.add(z)
+        Team.objects.filter(pk=self.team.pk).update(captain=self.o1)
+        self.team.members.add(self.o1)
+
+        first = set_captain(
+            self.other, z, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+        second = set_captain(
+            self.refresh(self.team),
+            self.m1,
+            actor=self.actor,
+            via=TeamLogVia.WEB,
+            reason="r",
+        )
+
+        self.assertEqual(
+            first.log.details["draft_rounds_skipped_reason"],
+            "old_captain_leads_other_team",
+        )
+        self.assertEqual(second.log.details["draft_rounds_updated"], 4)
+        for draft_round in DraftRound.objects.nocache().filter(pk__in=others):
+            with self.subTest(round=draft_round.pk):
+                # follow-up: narrow follow_captain to drafting_team
+                self.assertEqual(draft_round.captain_id, self.m1.pk)
+                self.assertEqual(draft_round.team.pk, self.other.pk)
+
     def test_rebuild_with_rounds_refused_after_staff_changes(self) -> None:
         self.pick(self.c, self.p1, 1)
         add_standin(
