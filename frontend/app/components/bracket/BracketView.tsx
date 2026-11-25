@@ -136,6 +136,8 @@ function createStructuralEdges(matches: BracketMatch[]): Edge[] {
     }));
 }
 
+const NO_MATCHES: BracketMatch[] = [];
+
 function BracketFlowInner({
   tournamentId,
   embedded = false,
@@ -160,8 +162,13 @@ function BracketFlowInner({
   );
 
   // Use individual selectors to prevent unnecessary re-renders
-  const matches = useBracketStore((state) => state.matches);
-  const isDirty = useBracketStore((state) => state.isDirty);
+  const isOwnBracket = useBracketStore(
+    (state) =>
+      state.tournamentId === null || state.tournamentId === tournamentId,
+  );
+  const storeMatches = useBracketStore((state) => state.matches);
+  const matches = isOwnBracket ? storeMatches : NO_MATCHES;
+  const isDirty = useBracketStore((state) => state.isDirty) && isOwnBracket;
   const { isLoading, data: bracketData } = useBracketQuery(tournamentId);
 
   const { getLayoutedElements } = useElkLayout();

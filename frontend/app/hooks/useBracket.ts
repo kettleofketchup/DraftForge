@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   advanceWinner as advanceWinnerAPI,
@@ -13,17 +13,30 @@ import type {
 import type { BracketMatch } from '~/components/bracket/types';
 import { parseBracketError } from '~/lib/bracketError';
 import { getLogger } from '~/lib/logger';
-import { mapApiMatchToMatch, useBracketStore } from '~/store/bracketStore';
+import {
+  isBracketStoreFor,
+  mapApiMatchToMatch,
+  useBracketStore,
+} from '~/store/bracketStore';
 
 const log = getLogger('bracket:save');
 
 /**
  * Fetches bracket data via TanStack Query and seeds the Zustand bracketStore.
  * Polling pauses automatically when the bracket has unsaved edits (isDirty).
+ * Switching tournaments drops the previous tournament's bracket, edits included.
  */
 export function useBracketQuery(tournamentId: number | null) {
-  const isDirty = useBracketStore((state) => state.isDirty);
+  const isDirty = useBracketStore(
+    (state) => state.isDirty && state.tournamentId === tournamentId,
+  );
   const previousDataRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (useBracketStore.getState().tournamentId === tournamentId) return;
+    previousDataRef.current = null;
+    useBracketStore.getState().bindTournament(tournamentId);
+  }, [tournamentId]);
 
   const query = useQuery({
     queryKey: ['bracket', tournamentId],
@@ -98,7 +111,9 @@ export function usePersistMatchResult(tournamentId: number | undefined) {
     mutationFn: ({ gameId, winner }: MatchResultVars) =>
       advanceWinnerAPI(gameId, winner),
     onSuccess: (_data, { gameId, winner }) => {
-      useBracketStore.setState({ isDirty: false });
+      if (isBracketStoreFor(tournamentId)) {
+        useBracketStore.setState({ isDirty: false });
+      }
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
       log.info('bracket_match_result_saved', { tournamentId, gameId, winner });
     },
@@ -117,7 +132,7 @@ export function usePersistMatchResult(tournamentId: number | undefined) {
         'bracket',
         tournamentId,
       ]);
-      if (cached) {
+      if (cached && isBracketStoreFor(tournamentId)) {
         const apiMatches = cached.matches as unknown as BracketMatchDTO[];
         useBracketStore.setState({
           matches: apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches)),
@@ -135,9 +150,19 @@ export function usePersistMatchResult(tournamentId: number | undefined) {
 export function useSaveBracket(tournamentId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (matches: BracketMatch[]) =>
-      saveBracketAPI(tournamentId, matches),
+    mutationFn: async (matches: BracketMatch[]) => {
+      if (!isBracketStoreFor(tournamentId)) {
+        throw new Error('This bracket belongs to another tournament');
+      }
+      return saveBracketAPI(tournamentId, matches);
+    },
     onSuccess: (data) => {
+      if (!isBracketStoreFor(tournamentId)) {
+        queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
+        log.info('bracket_saved_after_switch', { tournamentId });
+        toast.success('Bracket saved');
+        return;
+      }
       // Update Zustand store with saved matches (they now have backend PKs)
       const apiMatches = data.matches as unknown as BracketMatchDTO[];
       const savedMatches = apiMatches.map((m) =>

@@ -108,6 +108,7 @@ export function mapApiMatchToMatch(
 
 interface BracketStore {
   // State
+  tournamentId: number | null;
   matches: BracketMatch[];
   nodes: Node[];
   edges: Edge[];
@@ -115,6 +116,7 @@ interface BracketStore {
   isVirtual: boolean;
 
   // Actions
+  bindTournament: (tournamentId: number | null) => void;
   setMatches: (matches: BracketMatch[]) => void;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
@@ -137,11 +139,31 @@ interface BracketStore {
 }
 
 export const useBracketStore = create<BracketStore>()((set, get) => ({
+  tournamentId: null,
   matches: [],
   nodes: [],
   edges: [],
   isDirty: false,
   isVirtual: true,
+
+  bindTournament: (tournamentId) => {
+    const previous = get();
+    if (previous.tournamentId === tournamentId) return;
+    if (previous.isDirty && previous.tournamentId !== null) {
+      log.warn('bracket_unsaved_edits_dropped', {
+        from: previous.tournamentId,
+        to: tournamentId,
+      });
+    }
+    set({
+      tournamentId,
+      matches: [],
+      nodes: [],
+      edges: [],
+      isDirty: false,
+      isVirtual: true,
+    });
+  },
 
   setMatches: (matches) => set({ matches, isDirty: true }),
   setNodes: (nodes) => set({ nodes }),
@@ -357,3 +379,9 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     });
   },
 }));
+
+/** True unless the store holds a different tournament's bracket. */
+export function isBracketStoreFor(tournamentId: number | null | undefined) {
+  const bound = useBracketStore.getState().tournamentId;
+  return bound === null || bound === tournamentId;
+}

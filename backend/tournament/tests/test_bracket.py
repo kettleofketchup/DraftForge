@@ -259,6 +259,72 @@ class SaveBracketTest(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_save_bracket_rejects_team_from_another_tournament(self) -> None:
+        other_tournament = Tournament.objects.create(
+            name="Other Tournament", date_played=date.today()
+        )
+        foreign = Team.objects.create(name="Foreign", tournament=other_tournament)
+        existing = Game.objects.create(
+            tournament=self.tournament,
+            round=1,
+            position=0,
+            bracket_type="winners",
+            radiant_team=self.teams[0],
+        )
+        for slot in ("radiantTeam", "direTeam"):
+            with self.subTest(slot=slot):
+                response = self.client.post(
+                    f"/api/bracket/tournaments/{self.tournament.pk}/save/",
+                    {
+                        "matches": [
+                            {
+                                "id": "w-1-0",
+                                "round": 1,
+                                "position": 0,
+                                "bracketType": "winners",
+                                "status": "pending",
+                                slot: {"pk": foreign.pk},
+                            },
+                            {
+                                "id": "w-1-1",
+                                "round": 1,
+                                "position": 1,
+                                "bracketType": "winners",
+                                "status": "pending",
+                            },
+                        ]
+                    },
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertEqual(response.data["code"], "team_not_in_tournament")
+                self.assertEqual(response.data["team_ids"], [foreign.pk])
+                existing.refresh_from_db()
+                self.assertEqual(existing.radiant_team_id, self.teams[0].pk)
+                self.assertEqual(
+                    Game.objects.filter(tournament=self.tournament).count(), 1
+                )
+
+    def test_save_bracket_rejects_unknown_team_id(self) -> None:
+        response = self.client.post(
+            f"/api/bracket/tournaments/{self.tournament.pk}/save/",
+            {
+                "matches": [
+                    {
+                        "id": "w-1-0",
+                        "round": 1,
+                        "position": 0,
+                        "bracketType": "winners",
+                        "radiantTeam": {"pk": 987654},
+                    }
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.data["code"], "team_not_in_tournament")
+        self.assertFalse(Game.objects.filter(tournament=self.tournament).exists())
+
 
 class CalculatePlacementTest(TestCase):
     """Test placement calculation logic."""
