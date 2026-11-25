@@ -8,7 +8,9 @@ import {
   readyCheckConfigSchema,
 } from '../../schemas';
 import {
+  ATTENDANCE_REMINDER_DESCRIPTION,
   EVENT_SECTION_FIELDS,
+  NEW_EVENTS_DESCRIPTION,
   PROFILE_REMINDER_DESCRIPTION,
 } from '../settingsFields';
 import { EVENT_TAB_META } from '../tabs';
@@ -87,6 +89,27 @@ describe('per-post channel fields', () => {
       );
       expect(discord[key]?.description).toMatch(/announcement channel/i);
       expect(discord[key]?.description).toMatch(/blank/i);
+    }
+  });
+
+  it('describes channel posts by their own channel', () => {
+    expect(discord.discord_confirm_attendance?.description).toBe(
+      ATTENDANCE_REMINDER_DESCRIPTION,
+    );
+    expect(discord.discord_notify_new_events?.description).toBe(
+      NEW_EVENTS_DESCRIPTION,
+    );
+    expect(discord.discord_profile_reminder?.description).toBe(
+      PROFILE_REMINDER_DESCRIPTION,
+    );
+    for (const text of [
+      ATTENDANCE_REMINDER_DESCRIPTION,
+      NEW_EVENTS_DESCRIPTION,
+      PROFILE_REMINDER_DESCRIPTION,
+    ]) {
+      expect(text).toMatch(/in its channel/);
+      expect(text).toMatch(/when none is picked/);
+      expect(text).not.toMatch(/in the announcement channel/);
     }
   });
 

@@ -13,7 +13,13 @@ export type SectionFieldMeta = Record<
 >;
 
 export const PROFILE_REMINDER_DESCRIPTION: string =
-  'Posts a reminder in the announcement channel asking signed-up members to complete the profile details this event requires (such as Friend ID) before the event. Needs an announcement channel.';
+  'Posts a reminder in its channel (the announcement channel when none is picked) asking signed-up members to complete the profile details this event requires (such as Friend ID) before the event.';
+
+export const ATTENDANCE_REMINDER_DESCRIPTION: string =
+  "Posts a reminder in its channel (the announcement channel when none is picked) before the event. It doesn't track replies; use the ready check to require confirmation.";
+
+export const NEW_EVENTS_DESCRIPTION: string =
+  'Post each new series event in its channel (the announcement channel when none is picked) when it is created';
 
 /**
  * Every event-form field, under the section that renders it by default, with the
@@ -341,8 +347,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_confirm_attendance: {
       label: 'Post attendance reminder in Discord',
-      description:
-        "Posts a reminder in the announcement channel before the event. It doesn't track replies; use the ready check to require confirmation.",
+      description: ATTENDANCE_REMINDER_DESCRIPTION,
     },
     discord_confirm_attendance_hours: {
       label: 'Attendance reminder: when to send',
@@ -400,8 +405,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_notify_new_events: {
       label: 'Post new events',
-      description:
-        'Post each new series event in the announcement channel when it is created',
+      description: NEW_EVENTS_DESCRIPTION,
       keywords: ['new event', 'channel', 'notify'],
     },
     discord_new_event_channel_id: {
