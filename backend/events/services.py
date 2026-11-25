@@ -48,6 +48,7 @@ from events.eligibility import (
     validate_friend_id,
 )
 from events.ledger import SignupActor, record_signup_change, snapshot
+from events.line import restamp_to_back, waitlist_rank
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -712,6 +713,7 @@ def _record_leaf(
     actor: SignupActor,
     action: SignupAction,
     before: SignupSnapshot | None,
+    after: SignupSnapshot | None = None,
     extra: dict[str, Any] | None = None,
     reason: str = "",
     rules_overridden: Sequence[str] = (),
@@ -724,7 +726,7 @@ def _record_leaf(
         action=action,
         signup=signup,
         before=before,
-        after=snapshot(signup, extra=extra),
+        after=after or snapshot(signup, extra=extra),
         reason=reason,
         rules_overridden=rules_overridden,
         correlation_id=correlation_id,
@@ -781,10 +783,11 @@ def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     _reread_signup(signup)
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
-    before = snapshot(signup)
+    before = _ranked_snapshot(signup)
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
-    signup.save(update_fields=["status", "updated_at"])
+    signup.waitlist_position = None
+    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     _roster_remove_if_left(signup)
     entry = _record_leaf(
         signup,
@@ -837,7 +840,8 @@ def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
-    signup.save(update_fields=["status", "updated_at"])
+    signup.waitlist_position = None
+    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     standing.on_signup_withdrawn(signup, prior_status=prior_status, by_member=by_member)
     _roster_remove_if_left(signup)
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
@@ -861,7 +865,7 @@ def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
 def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     """Cancel a signup."""
     _reread_signup(signup)
-    before = snapshot(signup)
+    before = _ranked_snapshot(signup)
     prior_status = _withdraw(signup, by_member=_by_member(actor))
     entry = _record_leaf(
         signup,
@@ -875,6 +879,10 @@ def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
+
+
+def _ranked_snapshot(signup: EventSignup) -> SignupSnapshot:
+    return snapshot(signup, waitlist_rank=waitlist_rank(signup))
 
 
 def _by_member(actor: SignupActor) -> bool:
@@ -911,7 +919,7 @@ def _promote_from_waitlist(
     cause: SignupLedgerEntry | None,
     actor: SignupActor | None = None,
 ) -> list[EventSignup]:
-    """Promote waitlisted signups into every free seat, in waitlist order as
+    """Promote waitlisted signups into every free seat, in line order as
     reordered by the org's standing tracks.
 
     Promotions are recorded as system rows unless ``actor`` names who caused
@@ -923,7 +931,7 @@ def _promote_from_waitlist(
             EventSignup.objects.nocache()
             .filter(event=locked, status=SignupStatus.WAITLISTED)
             .select_related("user__base_profile")
-            .order_by("waitlist_position")
+            .in_line_order()
         )
         cache = StandingCache()
         correlation_id = cause.correlation_id if cause is not None else ""
@@ -932,7 +940,9 @@ def _promote_from_waitlist(
         for candidate in standing.promotion_order(locked, candidates, cache=cache):
             if not has_free_seat(locked):
                 break
-            before = snapshot(candidate)
+            before = snapshot(
+                candidate, waitlist_rank=_rank_among(candidate, candidates, promoted)
+            )
             promoted.append(_promote_one(locked, candidate, cache=cache))
             record_signup_change(
                 event=locked,
@@ -941,7 +951,7 @@ def _promote_from_waitlist(
                 action=SignupAction.PROMOTED,
                 signup=candidate,
                 before=before,
-                after=snapshot(candidate),
+                after=snapshot(candidate, waitlist_rank=None),
                 caused_by=cause,
                 correlation_id=correlation_id,
             )
@@ -950,6 +960,14 @@ def _promote_from_waitlist(
     if promoted:
         invalidate_after_commit(locked)
     return promoted
+
+
+def _rank_among(
+    signup: EventSignup, line: list[EventSignup], gone: list[EventSignup]
+) -> int:
+    gone_pks = {g.pk for g in gone}
+    ahead = line[: line.index(signup)]
+    return 1 + sum(1 for s in ahead if s.pk not in gone_pks)
 
 
 @transaction.atomic
@@ -991,16 +1009,18 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
     _reread_signup(signup)
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
-    before = snapshot(signup)
+    lock_event(signup.event)
+    before = snapshot(signup, waitlist_rank=None)
     max_pos = (
-        EventSignup.objects.filter(
-            event=signup.event, status=SignupStatus.WAITLISTED
-        ).aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
+        EventSignup.objects.nocache()
+        .filter(event=signup.event, status=SignupStatus.WAITLISTED)
+        .aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
         or 0
     )
     signup.status = SignupStatus.WAITLISTED
     signup.waitlist_position = max_pos + 1
-    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+    restamped = restamp_to_back(signup, reason="demote")
+    signup.save(update_fields=["status", "waitlist_position", *restamped, "updated_at"])
     _roster_remove_if_left(signup)
     _record_leaf(
         signup,
@@ -1008,6 +1028,7 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
         actor=actor,
         action=SignupAction.DEMOTED,
         before=before,
+        after=_ranked_snapshot(signup),
     )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))

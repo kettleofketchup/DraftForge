@@ -169,8 +169,8 @@ class SignupLineRankApiTests(TestCase):
         response = client.post(reverse("event-signup-demote", args=[third.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], SignupStatus.WAITLISTED)
-        self.assertEqual(response.json()["line_rank"], 3)
-        self.assertEqual(self._ranks(event)[third.pk], 3)
+        self.assertEqual(response.json()["line_rank"], 4)
+        self.assertEqual(self._ranks(event)[third.pk], 4)
 
         response = client.post(reverse("event-signup-reject", args=[signups[1].pk]))
         self.assertEqual(response.status_code, 200)

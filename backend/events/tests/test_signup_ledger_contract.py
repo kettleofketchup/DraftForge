@@ -234,7 +234,9 @@ class LeafMutationLedgerTests(LedgerContractMixin, EventTestCase):
         entry = self.ledger(event)[0]
         self.assertEqual(entry.action, SignupAction.DEMOTED)
         self.assertIsNone(entry.before["waitlist_position"])
-        self.assertEqual(entry.after["waitlist_position"], 4)
+        self.assertEqual(entry.after["waitlist_position"], 2)
+        signup.refresh_from_db()
+        self.assertEqual(signup.waitlist_position, 4)
 
     def test_reinstate_roll_call_records(self, _notify: Any) -> None:
         event = self.make_event(state=EventState.ROLL_CALL)
