@@ -20,7 +20,7 @@ from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from events.models import Event
-    from events.schemas import EventTaskSchema
+    from events.schemas import EventSignupSchema, EventTaskSchema
 
     EmbedEvent = Event | EventTaskSchema
 
@@ -52,7 +52,11 @@ def _discord_timestamp(dt: datetime, style: str = "F") -> str:
 
 
 def _event_url(event: "EmbedEvent") -> str:
-    return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
+    if not SITE_URL:
+        return ""
+    if event.pk is None:
+        return f"{SITE_URL}/events"
+    return f"{SITE_URL}/events/{event.pk}"
 
 
 # Signup post status line per event state; open signups need none.
@@ -78,8 +82,16 @@ def _seated(signups: Sequence[_SeatListed]) -> list[_SeatListed]:
     return [s for s in signups if _holds_seat(s)]
 
 
-def _signup_counts(event: "EmbedEvent") -> tuple[int, int]:
-    signups = get_event_signups(event.pk)
+def _signups_for(
+    event: "EmbedEvent", signups: Sequence["EventSignupSchema"] | None
+) -> Sequence["EventSignupSchema"]:
+    return get_event_signups(event.pk) if signups is None else signups
+
+
+def _signup_counts(
+    event: "EmbedEvent", *, signups: Sequence["EventSignupSchema"] | None = None
+) -> tuple[int, int]:
+    signups = _signups_for(event, signups)
     active = _seated(signups)
     confirmed = [s for s in signups if s.status == "confirmed"]
     return len(active), len(confirmed)
@@ -182,7 +194,9 @@ def build_user_list_fields(
     return fields
 
 
-def build_announcement_embeds(event: "EmbedEvent") -> list[dict[str, Any]]:
+def build_announcement_embeds(
+    event: "EmbedEvent", *, signups: Sequence["EventSignupSchema"] | None = None
+) -> list[dict[str, Any]]:
     """Build two embeds for event announcement: info + participants.
 
     Returns a list of embed dicts (for the Discord API 'embeds' array).
@@ -227,7 +241,7 @@ def build_announcement_embeds(event: "EmbedEvent") -> list[dict[str, Any]]:
     }
 
     # Embed 2: Participants (fetched via public API)
-    all_signups = get_event_signups(event.pk)
+    all_signups = _signups_for(event, signups)
 
     active = _seated(all_signups)
     count = len(active)
@@ -284,7 +298,9 @@ def build_announcement_embed(event: "EmbedEvent") -> dict[str, Any]:
     return combined
 
 
-def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
+def build_announcement_v2(
+    event: "EmbedEvent", *, signups: Sequence["EventSignupSchema"] | None = None
+) -> dict[str, Any]:
     """Build embed + components payload for event announcement.
 
     Returns dict with 'embed' (single embed dict) and 'components' (action rows).
@@ -339,7 +355,7 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
     fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
 
     # Signup lists (fetched via public API, typed as EventSignupSchema)
-    all_signups = get_event_signups(event.pk)
+    all_signups = _signups_for(event, signups)
 
     # Signed Up
     active = _seated(all_signups)
@@ -399,7 +415,7 @@ def build_announcement_v2(event: "EmbedEvent") -> dict[str, Any]:
             }
         )
 
-    event_url = f"{SITE_URL}/events/{event.pk}"
+    event_url = _event_url(event)
 
     # Embed 1: Title + description + logo thumbnail
     title_embed = {
@@ -537,6 +553,8 @@ def _build_reminder_embed(
     color: int,
     extra_fields: list[dict[str, Any]] | None = None,
     include_buttons: bool = False,
+    *,
+    signups: Sequence["EventSignupSchema"] | None = None,
 ) -> dict[str, Any]:
     """Shared layout for all reminder embeds — matches announcement style.
 
@@ -548,7 +566,7 @@ def _build_reminder_embed(
     """
 
     url = _event_url(event)
-    active, _confirmed = _signup_counts(event)
+    active, _confirmed = _signup_counts(event, signups=signups)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
     tz = ZoneInfo(event.timezone) if getattr(event, "timezone", None) else None
@@ -634,8 +652,11 @@ def _build_reminder_embed(
     return result
 
 
-def build_signup_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
-    active, _confirmed = _signup_counts(event)
+def build_signup_reminder_embed(
+    event: "EmbedEvent", *, signups: Sequence["EventSignupSchema"] | None = None
+) -> dict[str, Any]:
+    signups = _signups_for(event, signups)
+    active, _confirmed = _signup_counts(event, signups=signups)
     max_display = str(event.max_players) if event.max_players else "\u221e"
     desc = event.description or ""
     if desc:
@@ -648,16 +669,20 @@ def build_signup_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
         description=desc,
         color=COLOR_REMINDER,
         include_buttons=True,
+        signups=signups,
     )
 
 
-def build_attendance_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
+def build_attendance_reminder_embed(
+    event: "EmbedEvent", *, signups: Sequence["EventSignupSchema"] | None = None
+) -> dict[str, Any]:
     return _build_reminder_embed(
         event,
         title=f"\u270b {event.name} \u2014 Confirm Attendance",
         description="The event is coming up! Please confirm your attendance by reacting to the signup post.",
         color=COLOR_REMINDER,
         include_buttons=True,
+        signups=signups,
     )
 
 
@@ -673,7 +698,9 @@ def _profile_requirements(event: "EmbedEvent") -> list[str]:
     return requirements
 
 
-def build_profile_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
+def build_profile_reminder_embed(
+    event: "EmbedEvent", *, signups: Sequence["EventSignupSchema"] | None = None
+) -> dict[str, Any]:
     requirements = _profile_requirements(event)
     req_text = ", ".join(requirements) if requirements else "a complete profile"
     return _build_reminder_embed(
@@ -682,10 +709,13 @@ def build_profile_reminder_embed(event: "EmbedEvent") -> dict[str, Any]:
         description=f"Please make sure you have: {req_text}",
         color=COLOR_PROFILE,
         include_buttons=True,
+        signups=signups,
     )
 
 
-def build_subscriber_dm_embed(event: "EmbedEvent") -> dict[str, Any]:
+def build_subscriber_dm_embed(
+    event: "EmbedEvent", *, signups: Sequence["EventSignupSchema"] | None = None
+) -> dict[str, Any]:
     """Build DM embed for subscriber pre-event notification.
 
     Works with both Django model instances and Pydantic EventTaskSchema.
@@ -700,4 +730,5 @@ def build_subscriber_dm_embed(event: "EmbedEvent") -> dict[str, Any]:
         description=desc,
         color=COLOR_REMINDER,
         include_buttons=True,
+        signups=signups,
     )
