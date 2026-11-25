@@ -98,8 +98,8 @@ export function makeApiTokenColumns({
         </code>
       ),
       meta: {
-        headClassName: 'hidden w-36 sm:table-cell',
-        cellClassName: 'hidden w-36 sm:table-cell',
+        headClassName: 'hidden w-40 sm:table-cell',
+        cellClassName: 'hidden w-40 sm:table-cell',
       },
     },
     owner: {
