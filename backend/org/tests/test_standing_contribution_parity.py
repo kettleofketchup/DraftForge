@@ -30,13 +30,24 @@ from org.models import (
     PromoSend,
     PromoTemplate,
 )
+from org.models_promotion_sync import PromotionContactOutbox
 from org.promotion.services import record_promo_send, undo_promo_send
 from tournament.models import Tournament
 from user.discord_accounts import merge_discord_accounts
 from user.models import ProfileClaimRequest
 
 # Close, reopen, merge and delete counts include the registered conduct and
-# leadership tracks.
+# leadership tracks. Sends add the outbox row (existing-row check, membership
+# lookup, insert); user and membership deletes null the external-receipt links.
+# A send also takes the event mutation lock (SQLite: an early event write,
+# then the event read) and checks for an imported external contact. A merge looks
+# up the dropped account's receipts and points its open outbox rows at the
+# kept account (one UPDATE for senders, one for recipients). Every user
+# delete, including the dropped account in a merge, runs the pre_delete hook
+# that quarantines its receipts, cancels its open outbox rows and redacts the
+# payloads of every outbox row naming it (one UPDATE each); after a merge
+# that hook finds none of the merged rows. The send view also reads the new
+# send's outbox summary for its writeback field (one SELECT).
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
 CLOSE_AUTO_CANCEL_QUERIES = 42
 CLOSE_ADMIN_CANCEL_QUERIES = 12
@@ -47,14 +58,14 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 39
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 201
-MERGE_CLAIM_QUERIES = 183
-DELETE_API_QUERIES = 109
-DELETE_ADMIN_QUERIES = 160
+MERGE_DISCORD_QUERIES = 210
+MERGE_CLAIM_QUERIES = 191
+DELETE_API_QUERIES = 114
+DELETE_ADMIN_QUERIES = 165
 DELETE_ADMIN_CONFIRM_QUERIES = 53
-PROMO_SEND_QUERIES = 23
+PROMO_SEND_QUERIES = 29
 PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 123
+PROMO_RELEASE_QUERIES = 128
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8
@@ -610,6 +621,15 @@ class PromoParityTest(_ParityBase):
                 "earns_points": True,
                 "points_awarded": 1,
                 "sent_at": serializers.DateTimeField().to_representation(send.sent_at),
+                "writeback": {
+                    "state": "pending",
+                    "reason": None,
+                    "delivery_id": str(
+                        PromotionContactOutbox.objects.get(
+                            local_send_id=send.pk
+                        ).delivery_id
+                    ),
+                },
             },
         )
         self.assertEqual(ledger(self.org), [self._promo_row(send)])

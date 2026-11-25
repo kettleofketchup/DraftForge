@@ -14,10 +14,16 @@ import {
   putApiLimits,
   revokeApiToken,
 } from './api';
-import type { ApiLimits, ApiToken, ApiUsage, CreatedApiToken } from './schemas';
+import type {
+  ApiLimits,
+  ApiToken,
+  ApiUsage,
+  CreateApiTokenInput,
+  CreatedApiToken,
+} from './schemas';
 
 function canUse(access: OrgFeatureAccess): boolean {
-  return access.settled && access.canUseMmrSync;
+  return access.settled && access.canUseApiTokens;
 }
 
 export function useApiTokens(
@@ -60,10 +66,10 @@ export function useApiLimits(
 export function useCreateApiToken(
   orgId: number,
   access: OrgFeatureAccess,
-): UseMutationResult<CreatedApiToken, unknown, string> {
+): UseMutationResult<CreatedApiToken, unknown, CreateApiTokenInput> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name) => createApiToken(orgId, name),
+    mutationFn: (input) => createApiToken(orgId, input),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: apiTokenKeys.tokens(orgId, access.viewerPk),

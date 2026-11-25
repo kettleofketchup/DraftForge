@@ -1,1 +1,1 @@
-0023_api_tokens
+0025_promotion_sync_receipts

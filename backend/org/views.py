@@ -32,6 +32,7 @@ from org.accounts import (
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.integration.lifecycle import reconcile_promotion_identity
 from org.mmr import merge_org_mmrs
 from org.models import OrgLog, OrgUser, PromoSend
 from org.permissions import IsOrgStaff
@@ -402,6 +403,7 @@ class ClaimRequestViewSet(
         LeagueLog.objects.filter(target_user=target_user).update(target_user=claimer)
 
         demote_colliding_earning_sends(claimer, target_user)
+        reconcile_promotion_identity(claimer, target_user)
         PromoSend.objects.filter(sender=target_user).update(sender=claimer)
         PromoSend.objects.filter(recipient=target_user).update(recipient=claimer)
 

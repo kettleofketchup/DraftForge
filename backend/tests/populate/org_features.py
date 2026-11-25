@@ -89,6 +89,10 @@ from tests.populate.promotion_audiences import (
     restore_promotion_audience_settings,
     seed_promotion_audiences,
 )
+from tests.populate.promotion_integration import (
+    restore_promotion_integration_settings,
+    seed_promotion_integration,
+)
 from tests.populate.utils import (
     delete_events,
     delete_ledger_for_users,
@@ -483,13 +487,18 @@ def _rebuild() -> list[Organization]:
 
 
 def reset_org_features_data(
-    *, release_gate: bool = False, audiences: bool = False
+    *,
+    release_gate: bool = False,
+    audiences: bool = False,
+    external_contacts: bool = False,
 ) -> dict[str, Any]:
     """Put the locked features data back to the seeded state; returns the lookup.
 
     release_gate turns the leadership staff release gate on without stamping,
-    so the closed captain snapshots stay pending release.
+    so the closed captain snapshots stay pending release. external_contacts seeds
+    the audiences plus synthetic imported external contacts on a bound event.
     """
+    restore_promotion_integration_settings()
     restore_promotion_audience_settings()
     orgs = _rebuild()
     if release_gate:
@@ -513,10 +522,16 @@ def reset_org_features_data(
     for org in orgs:
         invalidate_obj(org)
     data = org_features_test_data()
-    if audiences:
+    if audiences or external_contacts:
         org = next(org for org in orgs if org.pk == FEATURES_ORG.pk)
         event = Event.objects.get(pk=data["events"]["upcoming"]["pk"])
         data["audiences"] = seed_promotion_audiences(org, event)
+        if external_contacts:
+            data["external_contacts"] = seed_promotion_integration(
+                org, event, data["audiences"]
+            )
+            invalidate_model(OrgUser)
+            invalidate_obj(org)
     return data
 
 

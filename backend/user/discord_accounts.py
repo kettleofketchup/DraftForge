@@ -34,6 +34,7 @@ from org.accounts import (
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.integration.lifecycle import reconcile_promotion_identity
 from org.mmr import merge_org_mmrs
 from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
@@ -195,6 +196,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             merge_member_dependents(drop_ou, keep_ou, discard=_discard)
             _discard(drop_ou)
         demote_colliding_earning_sends(keep, drop)
+        reconcile_promotion_identity(keep, drop)
         merge_user_signups(
             drop,
             keep,

@@ -12,6 +12,9 @@ from org.contributions.services import (
     has_promo_entry,
     revoke_promo_entry,
 )
+from org.integration.event_lock import with_event_mutation
+from org.integration.outbox import enqueue_send
+from org.integration.ticks import external_contact_for
 from org.models import PromoSend, PromoTemplate
 from org.permissions import (
     has_org_promoter_access,
@@ -34,6 +37,17 @@ class PromoSendError(ValueError):
     def __init__(self, field: str, message: str) -> None:
         super().__init__(message)
         self.field = field
+
+
+class ContactAlreadyRecorded(PromoSendError):
+    """An external contact for this recipient and event is recorded."""
+
+    code: Final[str] = "contact_already_recorded"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "recipient_id", "a contact with this player is already recorded externally"
+        )
 
 
 def _earning_send_exists(event: Event, recipient: CustomUser) -> bool:
@@ -106,7 +120,6 @@ def _award_send(send: PromoSend, event: Event, sender: CustomUser) -> None:
     )
 
 
-@transaction.atomic
 def record_promo_send(
     *,
     sender: CustomUser,
@@ -115,10 +128,41 @@ def record_promo_send(
     template: PromoTemplate | None,
     text: str,
 ) -> PromoSend:
-    event = _lock_event(event)
+    """Record one manual promotion DM, its outbox receipt and any award.
+
+    Runs under the event's mutation lock, the same one an external contact
+    import takes, so a recipient whose external contact has committed can
+    no longer be sent to (``ContactAlreadyRecorded``).
+    """
+    return with_event_mutation(
+        event.pk,
+        lambda: _record_locked(
+            sender=sender,
+            event_id=event.pk,
+            recipient=recipient,
+            template=template,
+            text=text,
+        ),
+    )
+
+
+def _record_locked(
+    *,
+    sender: CustomUser,
+    event_id: int,
+    recipient: CustomUser,
+    template: PromoTemplate | None,
+    text: str,
+) -> PromoSend:
+    event = Event.objects.nocache().select_related("organization").get(pk=event_id)
     _validate_send(
         sender=sender, event=event, recipient=recipient, template=template, text=text
     )
+    if recipient.discordId and (
+        external_contact_for(event.pk, recipient.discordId, user_id=recipient.pk)
+        is not None
+    ):
+        raise ContactAlreadyRecorded()
     earns = will_earn(sender, event, recipient)
     send = PromoSend.objects.create(
         organization=event.organization,
@@ -129,6 +173,7 @@ def record_promo_send(
         text=text,
         earns_points=earns,
     )
+    enqueue_send(send)
     if earns:
         _award_send(send, event, sender)
     log.info(
