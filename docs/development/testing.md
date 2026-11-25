@@ -208,7 +208,7 @@ without the Docker stack. The frontend typecheck runs in its own `Typecheck (fro
 job in the same workflow.
 
 `just test::backend::all` runs each group in turn in this worktree's test stack, with the
-same `--parallel auto`, and prints a pass/fail and wall-time line per group.
+same `--parallel auto` (6 workers locally, `DJANGO_TEST_PROCESSES`), and prints a pass/fail and wall-time line per group.
 
 `just py::test` (or `just test::backend::pytest`) runs the same modules with pytest on
 the host (`backend/pytest.ini`, `backend/conftest.py`): same temp-file test DB and `DOTA_LOBBY_*` defaults as
