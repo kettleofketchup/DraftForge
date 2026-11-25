@@ -302,7 +302,10 @@ export const UserCard: React.FC<Props> = memo(
         >
           {/* Header: 2-col layout with name/badges left, actions right */}
           <CardHeader className="p-0 gap-0.5">
-            <CardTitle className="text-base truncate">
+            <CardTitle
+              className="text-base truncate"
+              data-testid="usercard-name"
+            >
               {DisplayName(user)}
             </CardTitle>
             {!compact && (user.is_staff || user.is_superuser) && (
