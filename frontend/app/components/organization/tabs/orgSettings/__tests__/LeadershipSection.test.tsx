@@ -340,6 +340,85 @@ describe('LeadershipSection', () => {
     ]);
   });
 
+  it('renders the review DM toggle under Reviews and feedback toggle under Visibility', async () => {
+    await loaded();
+    const group = (field: string) =>
+      input(field).closest('fieldset')?.querySelector('legend')?.textContent;
+    expect(group('review_dms_enabled')).toBe('Reviews');
+    expect(group('captain_feedback_visible')).toBe('Visibility');
+    expect(screen.getByText('Send review DMs')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "When a review window opens, each teammate gets a Discord DM with buttons to score their captain. Applies to windows opened after you turn it on. Re-closing an event doesn't send new DMs.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Show captains their feedback'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "When off, captains can't see their own rating, trait scores or rating points. Staff and the ranking are unaffected.",
+      ),
+    ).toBeInTheDocument();
+    for (const field of ['review_dms_enabled', 'captain_feedback_visible']) {
+      expect(
+        screen.getByTestId(`leadership-setting-${field}-default`),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it('resets a flipped toggle back to its default', async () => {
+    await loaded();
+    fireEvent.click(input('captain_feedback_visible'));
+    expect(
+      screen.queryByTestId(
+        'leadership-setting-captain_feedback_visible-default',
+      ),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByTestId('leadership-setting-captain_feedback_visible-reset'),
+    );
+    expect(
+      screen.getByTestId('leadership-setting-captain_feedback_visible-default'),
+    ).toBeInTheDocument();
+  });
+
+  it('saves only the toggle that changed', async () => {
+    vi.mocked(patchLeadershipSettings).mockResolvedValue(
+      leadershipSettings({ review_dms_enabled: true }),
+    );
+    await loaded();
+    fireEvent.click(input('review_dms_enabled'));
+    expect(await save()).toBe(true);
+    expect(patchLeadershipSettings).toHaveBeenCalledWith(7, {
+      review_dms_enabled: true,
+    });
+  });
+
+  it('saves captain feedback turned off', async () => {
+    vi.mocked(patchLeadershipSettings).mockResolvedValue(
+      leadershipSettings({ captain_feedback_visible: false }),
+    );
+    await loaded();
+    fireEvent.click(input('captain_feedback_visible'));
+    expect(await save()).toBe(true);
+    expect(patchLeadershipSettings).toHaveBeenCalledWith(7, {
+      captain_feedback_visible: false,
+    });
+  });
+
+  it('drops the captain aggregates clause from the public ranking help', async () => {
+    await loaded();
+    expect(
+      screen.getByText(
+        'Members see the leadership ranking. When off, only staff see it.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/captains still see their own aggregates/),
+    ).not.toBeInTheDocument();
+  });
+
   it('disables the fallback hours while the gate is off', async () => {
     await loaded();
     expect(input('auto_release_after_hours')).toBeDisabled();

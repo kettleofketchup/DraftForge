@@ -68,6 +68,45 @@ describe('leadership response schemas', () => {
     expect(MemberLeadershipSchema.parse(rest).events).toBeUndefined();
   });
 
+  it('parses a private-feedback member payload with null reviews', () => {
+    const { events: _events, ...rest } = memberLeadership();
+    const parsed = MemberLeadershipSchema.parse({
+      ...rest,
+      rating: null,
+      status: 'new',
+      reviews: null,
+      traits: rest.traits.map((t) => ({ ...t, rating: null })),
+      feedback_private: true,
+    });
+    expect(parsed.reviews).toBeNull();
+    expect(parsed.feedback_private).toBe(true);
+  });
+
+  it('requires feedback_private on member and captain payloads', () => {
+    const { feedback_private: _m, ...member } = memberLeadership();
+    expect(MemberLeadershipSchema.safeParse(member).success).toBe(false);
+    const { feedback_private: _c, ...captain } = moderationCaptain();
+    expect(EventCaptainReviewsSchema.safeParse(captain).success).toBe(false);
+    expect(
+      EventCaptainReviewsSchema.parse(
+        moderationCaptain({ own_snapshot: true, feedback_private: true }),
+      ).feedback_private,
+    ).toBe(true);
+  });
+
+  it('parses the review DM and captain feedback settings', () => {
+    const parsed = LeadershipSettingsSchema.parse(
+      leadershipSettings({
+        review_dms_enabled: true,
+        captain_feedback_visible: false,
+      }),
+    );
+    expect(parsed.review_dms_enabled).toBe(true);
+    expect(parsed.captain_feedback_visible).toBe(false);
+    expect(parsed.defaults.review_dms_enabled).toBe(false);
+    expect(parsed.defaults.captain_feedback_visible).toBe(true);
+  });
+
   it('parses an unreleased event aggregate', () => {
     const parsed = MemberLeadershipSchema.parse(
       memberLeadership({

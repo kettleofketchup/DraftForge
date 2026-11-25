@@ -19,6 +19,8 @@ const VALUES = {
   leaderboard_public: true,
   require_staff_release: false,
   auto_release_after_hours: null,
+  review_dms_enabled: false,
+  captain_feedback_visible: true,
 };
 
 const SETTINGS: LeadershipSettings = {
@@ -62,6 +64,25 @@ describe('leadership settings form', () => {
       review_window_hours: 24,
       points: { captain: null, coach: 3 },
     });
+  });
+
+  it('picks both toggles', () => {
+    const form = pickLeadershipFormValues(SETTINGS);
+    expect(form.review_dms_enabled).toBe(false);
+    expect(form.captain_feedback_visible).toBe(true);
+  });
+
+  it('patches only the toggle that changed', () => {
+    const form = pickLeadershipFormValues(SETTINGS);
+    expect(
+      leadershipSettingsPatch({ ...form, review_dms_enabled: true }, SETTINGS),
+    ).toEqual({ review_dms_enabled: true });
+    expect(
+      leadershipSettingsPatch(
+        { ...form, captain_feedback_visible: false },
+        SETTINGS,
+      ),
+    ).toEqual({ captain_feedback_visible: false });
   });
 
   it('is empty when nothing changed', () => {

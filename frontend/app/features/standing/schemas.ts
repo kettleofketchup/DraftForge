@@ -26,6 +26,7 @@ export const TrackInfoSchema = z.object({
   board_open: z.boolean(),
   can_manage: z.boolean(),
   can_moderate: z.boolean(),
+  own_private: z.boolean(),
 });
 export type TrackInfo = z.infer<typeof TrackInfoSchema>;
 
@@ -45,6 +46,7 @@ export const StandingLeaderboardSchema = z.object({
   rows: z.array(StandingRowSchema),
   rows_visible: z.boolean(),
   own_row: StandingRowSchema.nullable(),
+  own_private: z.boolean(),
 });
 export type StandingLeaderboard = z.infer<typeof StandingLeaderboardSchema>;
 

@@ -38,6 +38,7 @@ const track = (key: TrackKey, over: Partial<TrackInfo> = {}): TrackInfo => ({
   board_open: true,
   can_manage: false,
   can_moderate: false,
+  own_private: false,
   ...over,
 });
 

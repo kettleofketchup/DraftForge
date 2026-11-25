@@ -61,6 +61,7 @@ function board(
     rows: [row(1, 12), row(2, 8)],
     rows_visible: true,
     own_row: null,
+    own_private: false,
     ...overrides,
   };
 }
@@ -187,6 +188,36 @@ describe('StandingLeaderboard', () => {
     expect(own).toHaveAttribute('aria-current', 'true');
     expect(own.className).toContain('bg-primary/10');
     expect(own).toHaveTextContent('(you)');
+  });
+
+  it('shows the private-feedback note instead of the own-only variant', () => {
+    renderBoard({
+      board: board({
+        rows: [],
+        rows_visible: false,
+        own_row: row(2, 3),
+        own_private: true,
+      }),
+      membersPrivate: true,
+      viewerPk: 102,
+    });
+    expect(screen.getByTestId('standing-own-private')).toHaveTextContent(
+      'Your org keeps captain feedback private.',
+    );
+    expect(
+      screen.getByTestId('contributions-members-private'),
+    ).not.toHaveTextContent('only your own standing is shown');
+  });
+
+  it('shows the private-feedback note above visible rows', () => {
+    renderBoard({ board: board({ own_private: true }), viewerPk: 102 });
+    expect(screen.getByTestId('standing-own-private')).toBeInTheDocument();
+    expect(screen.getByTestId('contributions-row-1')).toBeInTheDocument();
+  });
+
+  it('shows no private-feedback note by default', () => {
+    renderBoard();
+    expect(screen.queryByTestId('standing-own-private')).toBeNull();
   });
 
   it('asks an anonymous viewer to sign in', () => {

@@ -55,6 +55,7 @@ const allTrue = {
       board_open: true,
       can_manage: true,
       can_moderate: false,
+      own_private: false,
     },
   ],
 };
