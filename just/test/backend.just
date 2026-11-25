@@ -14,8 +14,7 @@ all *args:
     #!/usr/bin/env bash
     set -euo pipefail
     {{just}} test::upd
-    # One group at a time: running the four at once oversubscribes the CPU and measured
-    # slower than this, not faster.
+    # One group at a time: all four at once oversubscribes the CPU and measured slower.
     summary=() fail=0 start=$SECONDS
     procs=()
     if [[ "${GITHUB_ACTIONS-}" != true && -z "${CI-}" ]]; then
