@@ -88,8 +88,8 @@ A player who is a member, captain or deputy of a team in the tournament is never
 
 When an event reaches `max_players`, new RSVPs go to the waitlist:
 
-- **Position tracking** — each waitlisted player gets a queue position
-- **Automatic promotion** — when someone cancels or is rejected, the next waitlisted player is promoted. A seat freed by staff moving a player to the waitlist stays open for staff to fill
+- **Position tracking** — a waitlisted player's position is their rank among the waitlisted players in line order (see [The line is the queue](signup-ledger.md#the-line-is-the-queue))
+- **Automatic promotion** — when someone cancels, is rejected or switches to Maybe, the next waitlisted player in line is promoted. A seat freed by staff moving a player to the waitlist stays open for staff to fill
 - **Waitlist tab** — always visible on the event page with count, even when empty
 
 ---
@@ -101,8 +101,10 @@ When an event reaches `max_players`, new RSVPs go to the waitlist:
 | RSVP (first time) | Creates signup with status based on event config |
 | RSVP (already signed up) | Error toast: "User has already signed up" |
 | Cancel RSVP | Sets status to cancelled, opens slot for waitlist |
-| RSVP after cancel | Deletes old signup, creates fresh one |
-| RSVP when full | Added to waitlist with position number |
+| RSVP after cancel | Signs the same signup up again, keeping its history. `line_withdraw_forfeits` decides whether it goes to the back of the line or gets its old place back |
+| Maybe → RSVP | Switches the same signup to Main. `line_switch_restamps` decides whether it goes to the back of the line |
+| RSVP → Maybe | Switches the same signup to Maybe and frees its seat for the next waitlisted player. `line_switch_restamps` decides whether it goes to the back of the line |
+| RSVP when full | Added to the waitlist; its position is its rank in line order |
 | RSVP after being dropped | Error on the web, in Discord and for tentative RSVPs: "You were dropped from this event". The Dropped row is kept |
 
 ### Dropped status
@@ -136,6 +138,8 @@ These event config fields control signup behavior. **Game** column flags fields 
 | `min_mmr` | null | Dota | Minimum MMR threshold for auto-approval |
 | `discord_require_rank_screenshot` | false | Dota | Discord/web modal require a `.png/.jpg/.jpeg/.webp` rank screenshot for `rank_status="active"` only — "previous" rank captures the medal+star without a screenshot |
 | `discord_require_battlecup_screenshot` | false | Dota | Require a Battle Cup screenshot for `rank_status="never"` |
+| `line_withdraw_forfeits` | true | any | A member who withdraws, declines or is rejected and signs up again goes to the back of the line; when off, they get their old place back |
+| `line_switch_restamps` | true | any | Switching between Main and Maybe moves the signup to the back of the line; when off, it keeps its place |
 | `roll_call_mode` | `manual` | any | `manual` (shown as **Staff-verified**: staff confirm members on the roll call page) or `automatic` (members confirm themselves) |
 
 ---
@@ -251,7 +255,7 @@ When a check closes, [Conduct](../organization-conduct.md) records members who c
 
 - "Maybe" (tentative) RSVPs are never asked.
 - There is no out-of-range exclusion: everyone in scope is asked.
-- Seats freed by drops are filled from the waitlist in waitlist order, not by line tier.
+- Seats freed by drops are filled from the waitlist in line order, with no line tiers yet.
 - A promoted member who has not confirmed when the tournament starts stays on the event but misses the starting teams. Promotion never skips manual approval.
 
 ### Start cull and voice

@@ -118,10 +118,20 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 
 - **Auto-approve** — signups go directly to Approved status
 - **Manual approval** — admin reviews and approves each signup
-- **Waitlist** — when max players is reached, new signups are waitlisted with position tracking
-- **Re-RSVP** — cancelled signups can re-register
+- **Waitlist** — when max players is reached, new signups are waitlisted. A signup's waitlist position is its rank among the waitlisted signups in line order, and promotion takes the next waitlisted signup in line
+- **Re-RSVP** — cancelled, declined and rejected signups can sign up again. The same signup is reused, so its history stays in one place
+- **Main/Maybe switch** — switching between RSVP (Main) and tentative (Maybe) changes the same signup. Moving from Main to Maybe frees the seat for the next waitlisted signup
 
 Each signup keeps a place in line and its original sign-up, and the signup ledger records every change to it, with who made it and how: see [Signup Ledger & Line Position](events/signup-ledger.md).
+
+The **Signup Line** settings decide whether a returning or switching signup keeps its place in line. They sit on the event's approval tab, on the series' event tab and in the organization's New Event Defaults, and a series passes them on to its future events:
+
+| Setting | Default | When on | When off |
+|---|---|---|---|
+| **Withdrawing gives up your place** (`line_withdraw_forfeits`) | on | A member who withdraws, declines or is rejected and signs up again goes to the back of the line | They get their old place back |
+| **Switching Main/Maybe gives up your place** (`line_switch_restamps`) | on | Moving between Main and Maybe sends the signup to the back of the line | It keeps its place |
+
+With both on, which is the default, the order is the same as before these settings existed. Signup rows on the event page and the roll call page show **in line since**: the time the signup took its current place.
 
 #### Web vs Discord parity
 
@@ -282,7 +292,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/event-signups/{id}/reject/` | Reject a signup |
 | POST | `/api/event-signups/{id}/confirm/` | Confirm attendance (roll-call) |
 | POST | `/api/event-signups/{id}/unconfirm/` | Reverse a confirm |
-| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the end of the waitlist. Nobody is promoted into the freed seat; staff fill it by hand |
+| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the waitlist; it moves to the back of the line. Nobody is promoted into the freed seat; staff fill it by hand |
 | POST | `/api/event-signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
 | POST | `/api/event-signups/{id}/reinstate/` | Re-enable a cancelled signup |
 
