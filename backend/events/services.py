@@ -1140,10 +1140,16 @@ def reinstate_signup(
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
-        before = snapshot(signup)
+        before = _ranked_snapshot(signup)
         locked = lock_event(event)
         check = live_ready_check(locked, lock=True)
         was_dropped = signup.status == SignupStatus.DROPPED
+        restamp = _reinstate_restamp_reason(
+            signup,
+            locked,
+            for_staff_placement=for_staff_placement,
+            waitlisted=False,
+        )
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
         signup.commitment = Commitment.MAIN
@@ -1154,6 +1160,7 @@ def reinstate_signup(
                 "waitlist_position",
                 "commitment",
                 *cleared,
+                *_reinstate_restamp(signup, restamp),
                 "updated_at",
             ]
         )
@@ -1171,20 +1178,18 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
-    before = snapshot(signup)
+    before = _ranked_snapshot(signup)
     locked = lock_event(event)
     result = evaluate_signup(
         locked, signup.user, for_staff_placement=for_staff_placement
     )
-    if not has_free_seat(locked):
-        max_pos = (
-            EventSignup.objects.filter(
-                event=event, status=SignupStatus.WAITLISTED
-            ).aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
-            or 0
-        )
+    waitlisted = not has_free_seat(locked)
+    restamp = _reinstate_restamp_reason(
+        signup, locked, for_staff_placement=for_staff_placement, waitlisted=waitlisted
+    )
+    if waitlisted:
+        signup.waitlist_position = _next_waitlist_position(locked)
         signup.status = SignupStatus.WAITLISTED
-        signup.waitlist_position = max_pos + 1
     else:
         signup.status = _decide_signup_status(locked, result)
         signup.waitlist_position = None
@@ -1197,6 +1202,7 @@ def reinstate_signup(
             "waitlist_position",
             "commitment",
             *stamped,
+            *_reinstate_restamp(signup, restamp),
             "updated_at",
         ]
     )
@@ -1204,6 +1210,26 @@ def reinstate_signup(
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
+
+
+def _reinstate_restamp_reason(
+    signup: EventSignup, event: Event, *, for_staff_placement: bool, waitlisted: bool
+) -> str | None:
+    """Why a reinstated row goes to the back of the line, or None to keep its place."""
+    if signup.first_signed_up_at is None:
+        return "bare_decline"
+    if not for_staff_placement:
+        return "member_reinstate" if forfeits_on_withdraw(event) else None
+    return "staff_reinstate" if waitlisted else None
+
+
+def _reinstate_restamp(signup: EventSignup, reason: str | None) -> list[str]:
+    if reason is None:
+        return []
+    fields = restamp_to_back(signup, reason=reason)
+    if signup.first_signed_up_at is None:
+        fields += start_first_fields(signup)
+    return fields
 
 
 def _record_reinstated(
@@ -1220,6 +1246,7 @@ def _record_reinstated(
         actor=actor,
         action=SignupAction.REINSTATED,
         before=before,
+        after=_ranked_snapshot(signup),
         correlation_id=f"rc{check.pk}:reinstate" if check is not None else "",
     )
 

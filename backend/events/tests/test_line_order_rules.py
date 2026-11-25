@@ -7,7 +7,13 @@ from django.db.models.signals import post_delete
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
-from events.constants import Commitment, SignupAction, SignupStatus, SignupType
+from events.constants import (
+    Commitment,
+    EventState,
+    SignupAction,
+    SignupStatus,
+    SignupType,
+)
 from events.models import Event, EventSignup, EventTeam, SignupLedgerEntry
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
 from events.services import (
@@ -18,6 +24,7 @@ from events.services import (
     decline_signup,
     demote_to_waitlist,
     process_rsvp,
+    reinstate_signup,
     reject_signup,
     staff_add_signup,
 )
@@ -691,3 +698,189 @@ class SwitchToMaybeTests(LedgerContractMixin, EventTestCase):
                     )
                 self.assertEqual(self._row(row).status, status)
                 self.assertEqual(self.ledger(event), [])
+
+
+@patch("events.services.notify_signup_changed")
+class ReinstateLineTests(LedgerContractMixin, EventTestCase):
+    def _age(self, signup: EventSignup) -> datetime:
+        past = tz.now() - timedelta(days=3)
+        EventSignup._base_manager.filter(pk=signup.pk).update(
+            first_signed_up_at=past, signed_up_at=past
+        )
+        return past
+
+    def _row(self, signup: EventSignup) -> EventSignup:
+        return EventSignup.objects.nocache().get(pk=signup.pk)
+
+    def _last_entry(self, event: Event) -> SignupLedgerEntry:
+        return [e for e in self.ledger(event) if e.subject_user_id == self.subject.pk][
+            -1
+        ]
+
+    def _restamp_reasons(self, logs: list[dict[str, Any]]) -> list[str]:
+        return [
+            log["reason"] for log in logs if log["event"] == "signup_line_restamped"
+        ]
+
+    def test_member_reinstate_obeys_forfeits(self, _notify: Any) -> None:
+        for forfeits in (True, False):
+            with self.subTest(line_withdraw_forfeits=forfeits):
+                event = self.make_event(line_withdraw_forfeits=forfeits)
+                old = process_rsvp(event, self.subject, actor=self.member_actor)
+                later = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+                past = self._age(old)
+                cancel_signup(old, actor=self.member_actor)
+
+                with (
+                    capture_logs() as logs,
+                    self.captureOnCommitCallbacks(execute=True),
+                ):
+                    result = reinstate_signup(
+                        self._row(old),
+                        actor=self.member_actor,
+                        for_staff_placement=False,
+                    )
+
+                self.assertEqual(result.pk, old.pk)
+                row = self._row(old)
+                self.assertEqual(row.status, SignupStatus.APPROVED)
+                self.assertEqual(row.first_signed_up_at, past)
+                if forfeits:
+                    self.assertGreater(row.line_seq, later.line_seq)
+                    self.assertGreater(row.signed_up_at, past)
+                    self.assertEqual(self._restamp_reasons(logs), ["member_reinstate"])
+                else:
+                    self.assertEqual(row.line_seq, old.line_seq)
+                    self.assertEqual(row.signed_up_at, past)
+                    self.assertEqual(self._restamp_reasons(logs), [])
+                self.assertEqual(
+                    self._last_entry(event).action, SignupAction.REINSTATED
+                )
+
+    def test_member_reinstate_dropped_raises(self, _notify: Any) -> None:
+        event = self.make_event()
+        row = EventSignup.objects.create(
+            event=event, user=self.subject, status=SignupStatus.DROPPED
+        )
+
+        with self.assertRaisesMessage(ValueError, DROPPED_SIGNUP_MESSAGE):
+            reinstate_signup(row, actor=self.member_actor, for_staff_placement=False)
+
+        self.assertEqual(self._row(row).status, SignupStatus.DROPPED)
+        self.assertEqual(self.ledger(event), [])
+
+    def test_staff_reinstate_full_event_goes_to_back(self, _notify: Any) -> None:
+        event = self.make_event(max_players=1, line_withdraw_forfeits=False)
+        a = process_rsvp(event, self.subject, actor=self.member_actor)
+        cancel_signup(a, actor=self.member_actor)
+        b = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        w = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        self.assertEqual(w.status, SignupStatus.WAITLISTED)
+
+        with capture_logs() as logs, self.captureOnCommitCallbacks(execute=True):
+            reinstate_signup(self._row(a), actor=self.staff_actor)
+
+        row = self._row(a)
+        self.assertEqual(row.status, SignupStatus.WAITLISTED)
+        self.assertGreater(row.line_seq, self._row(w).line_seq)
+        self.assertEqual(row.waitlist_position, self._row(w).waitlist_position + 1)
+        self.assertEqual(self._restamp_reasons(logs), ["staff_reinstate"])
+        entry = self._last_entry(event)
+        self.assertEqual(entry.action, SignupAction.REINSTATED)
+        self.assertIsNone(entry.before["waitlist_position"])
+        self.assertEqual(entry.after["waitlist_position"], 2)
+
+        cancel_signup(b, actor=self.staff_actor)
+
+        self.assertEqual(self._row(w).status, SignupStatus.APPROVED)
+        self.assertEqual(self._row(a).status, SignupStatus.WAITLISTED)
+
+    def test_staff_reinstate_free_seat_keeps_line_seq(self, _notify: Any) -> None:
+        event = self.make_event()
+        a = process_rsvp(event, self.subject, actor=self.member_actor)
+        process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        past = self._age(a)
+        cancel_signup(a, actor=self.member_actor)
+
+        with capture_logs() as logs, self.captureOnCommitCallbacks(execute=True):
+            reinstate_signup(self._row(a), actor=self.staff_actor)
+
+        row = self._row(a)
+        self.assertEqual(row.status, SignupStatus.APPROVED)
+        self.assertEqual(row.line_seq, a.line_seq)
+        self.assertEqual(row.signed_up_at, past)
+        self.assertEqual(self._restamp_reasons(logs), [])
+
+    def test_roll_call_reinstate_keeps_line_seq(self, _notify: Any) -> None:
+        for remove in (cancel_signup, reject_signup):
+            with self.subTest(remove=remove.__name__):
+                event = self.make_event()
+                a = process_rsvp(event, self.subject, actor=self.member_actor)
+                process_rsvp(event, self.make_user(), actor=self.staff_actor)
+                past = self._age(a)
+                remove(a, actor=self.staff_actor)
+                Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+
+                with (
+                    capture_logs() as logs,
+                    self.captureOnCommitCallbacks(execute=True),
+                ):
+                    reinstate_signup(self._row(a), actor=self.staff_actor)
+
+                row = self._row(a)
+                self.assertEqual(row.status, SignupStatus.APPROVED)
+                self.assertEqual(row.line_seq, a.line_seq)
+                self.assertEqual(row.signed_up_at, past)
+                self.assertEqual(self._restamp_reasons(logs), [])
+                self.assertEqual(
+                    self._last_entry(event).action, SignupAction.REINSTATED
+                )
+
+    def test_bare_decline_reinstate_always_back(self, _notify: Any) -> None:
+        callers = (
+            ("staff", True),
+            ("member", False),
+        )
+        for name, for_staff in callers:
+            with self.subTest(caller=name):
+                event = self.make_event(max_players=2, line_withdraw_forfeits=False)
+                declined = decline_signup(event, self.subject, actor=self.member_actor)
+                b = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+                process_rsvp(event, self.make_user(), actor=self.staff_actor)
+                d = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+                self.assertEqual(d.status, SignupStatus.WAITLISTED)
+                actor = self.staff_actor if for_staff else self.member_actor
+
+                with (
+                    capture_logs() as logs,
+                    self.captureOnCommitCallbacks(execute=True),
+                ):
+                    reinstate_signup(
+                        self._row(declined),
+                        actor=actor,
+                        for_staff_placement=for_staff,
+                    )
+
+                row = self._row(declined)
+                self.assertEqual(row.status, SignupStatus.WAITLISTED)
+                self.assertGreater(row.line_seq, d.line_seq)
+                self.assertEqual(row.first_signed_up_at, row.signed_up_at)
+                self.assertEqual(self._restamp_reasons(logs), ["bare_decline"])
+
+                cancel_signup(b, actor=self.staff_actor)
+
+                self.assertEqual(self._row(d).status, SignupStatus.APPROVED)
+                self.assertEqual(self._row(declined).status, SignupStatus.WAITLISTED)
+
+    def test_bare_decline_roll_call_reinstate_restamps(self, _notify: Any) -> None:
+        event = self.make_event()
+        declined = decline_signup(event, self.subject, actor=self.member_actor)
+        later = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+
+        reinstate_signup(self._row(declined), actor=self.staff_actor)
+
+        row = self._row(declined)
+        self.assertEqual(row.status, SignupStatus.APPROVED)
+        self.assertGreater(row.line_seq, later.line_seq)
+        self.assertEqual(row.first_signed_up_at, row.signed_up_at)
