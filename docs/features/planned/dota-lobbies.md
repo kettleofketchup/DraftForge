@@ -303,7 +303,7 @@ announcements. The opt-in Discord lobby info DM still sends it to the game's ros
 
 ### End-to-end tests
 
-`frontend/tests/playwright/e2e/18-dota-lobby/` runs the integration against the real
+`frontend/tests/playwright/e2e/22-dota-lobby/` runs the integration against the real
 dota_lobby service in simulation mode, the test stack's `dota-lobby` service (see
 [Test Stack Slots](../../development/test-stack-slots.md#simulated-dota_lobby)). The
 specs use their own data (Lobby Test Org and League, the Lobby Test Series with a fixed

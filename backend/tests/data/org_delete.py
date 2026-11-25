@@ -1,7 +1,7 @@
 """
 Org Delete test data — four distinct users on a dedicated org.
 
-Used by frontend/tests/playwright/e2e/17-org-delete/ to verify the
+Used by frontend/tests/playwright/e2e/21-org-delete/ to verify the
 permission matrix on the Danger Zone UI.
 """
 

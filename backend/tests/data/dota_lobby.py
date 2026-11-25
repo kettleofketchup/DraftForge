@@ -1,6 +1,6 @@
 """Dota lobby E2E test data: the DraftForge <-> dota_lobby integration.
 
-Used by frontend/tests/playwright/e2e/18-dota-lobby/ against the simulated
+Used by frontend/tests/playwright/e2e/22-dota-lobby/ against the simulated
 dota_lobby in the test stack (docker/dota-lobby/simulator.yaml, whose bots
 administer LOBBY_STEAM_LEAGUE_ID). populate_dota_lobby_data creates it and
 reset_dota_lobby_data puts it back between spec files.
