@@ -18,9 +18,9 @@ from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.integration.receipts import (
     ImmutableFieldError,
-    _legacy_import_source_hash,
     canonical_receipt_hash,
     canonical_receipt_json,
+    import_source_hash,
 )
 from org.models import ContributionEntry, OrgLog, OrgUser, PromoSend
 from org.models_promotion_sync import (
@@ -50,35 +50,36 @@ class CanonicalHashGoldenTest(_SendFixture):
         self.assertEqual(canonical_receipt_json(golden["receipt"]), golden["canonical"])
         self.assertEqual(canonical_receipt_hash(golden["receipt"]), golden["sha256"])
 
-    def test_import_source_hash_excludes_associations(self) -> None:
-        golden = _golden("legacy_import_source_hash.json")
-        users = {entry["user_id"] for entry in golden["entries"]}
-        org_users = {entry["org_user_id"] for entry in golden["entries"]}
-        self.assertEqual(users, {None, "9001"})
-        self.assertEqual(org_users, {None, "9100"})
-        for index, entry in enumerate(golden["entries"]):
-            with self.subTest(index=index):
+    def test_import_source_hash_excludes_discord_ids(self) -> None:
+        golden = _golden("import_source_hash.json")
+        base = golden["cases"][0]["entry"]
+        digest = import_source_hash(base, source=golden["source"])
+        self.assertEqual(digest, golden["cases"][0]["hash"])
+        for field, value in (
+            ("target_discord_id", "123456789012345679"),
+            ("promoter_discord_id", None),
+        ):
+            with self.subTest(field=field):
                 self.assertEqual(
-                    _legacy_import_source_hash(entry, source=golden["source"]),
-                    golden["sha256"],
+                    import_source_hash({**base, field: value}, source="contact_log"),
+                    digest,
                 )
 
     def test_import_source_hash_changes_with_source_facts(self) -> None:
-        base = _golden("legacy_import_source_hash.json")["entries"][0]
-        digest = _legacy_import_source_hash(base, source="contact_log")
+        base = _golden("import_source_hash.json")["cases"][0]["entry"]
+        digest = import_source_hash(base, source="contact_log")
         for field, value in (
-            ("source_contact_id", "8022"),
-            ("event_id", "721"),
-            ("discord_id", "123456789012345679"),
-            ("recorded_at", "2026-11-24T11:30:01Z"),
+            ("source_contact_id", "1999"),
+            ("recorded_at", "2026-11-24T18:30:01Z"),
+            ("contact_date_ny", "2026-11-25"),
             ("contact_method", "OTHER"),
-            ("linkage", "event_date"),
+            ("contact_reason", "FOLLOW_UP"),
+            ("occasion_id", "78"),
+            ("forced", True),
         ):
             with self.subTest(field=field):
                 self.assertNotEqual(
-                    _legacy_import_source_hash(
-                        {**base, field: value}, source="contact_log"
-                    ),
+                    import_source_hash({**base, field: value}, source="contact_log"),
                     digest,
                 )
 

@@ -1,10 +1,12 @@
 """Import-versus-send races on a real, committing database.
 
 Both an external contact import and a local record-send run their whole event
-mutation under ``with_event_mutation``: a PostgreSQL row lock on the event,
-or SQLite's early write lock. So once an import that suppresses a recipient
-has committed, no ordinary send to that recipient can commit; and a send
-that committed first stays, next to the imported history, with one award.
+mutation under the event's lock (``with_event_mutations`` /
+``with_event_mutation``): a PostgreSQL row lock on the event, or SQLite's
+early write lock. So once an import that suppresses a recipient has
+committed, no ordinary send to that recipient can commit; and a send that
+committed first stays, next to the imported history, with its point voided
+because the external contact holds it.
 
 The module runs on whichever engine the test settings select. The default
 suite is SQLite; ``just test::backend::pg-race`` runs it again against a
@@ -36,7 +38,7 @@ from org.features import set_org_feature
 from org.integration import contacts, event_lock
 from org.integration.contacts import import_contact_receipts
 from org.integration.event_lock import with_event_mutation
-from org.integration.subjects import authorized_event_subjects
+from org.integration.receipts import format_timestamp
 from org.models import ContributionEntry, Organization, OrgUser, PromoSend
 from org.models_promotion_sync import ExternalPromotionReceipt
 from org.promotion import services
@@ -97,8 +99,6 @@ class _RaceBase(TransactionTestCase):
         set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=None)
         self.promoter = self._user("race_promoter")
         self.org.promoters.add(self.promoter)
-        # An earning send enrolls its sender; enrolling up front keeps the
-        # subject universe (and so the mapping version) stable across a send.
         OrgUser.objects.create(user=self.promoter, organization=self.org)
         self.recipient = self._user("race_recipient")
         league = League.objects.create(
@@ -132,26 +132,25 @@ class _RaceBase(TransactionTestCase):
         user.save()
         return user
 
-    @property
-    def org_user(self) -> OrgUser:
-        # Playing an org tournament enrolls the recipient as an OrgUser.
-        return OrgUser.objects.get(user=self.recipient, organization=self.org)
-
     def payload(self) -> dict[str, Any]:
-        version = authorized_event_subjects(self.org, self.event).mapping_version
         return {
             "source": "contact_log",
-            "mapping_version": version,
+            "guild_id": GUILD,
+            "scan_started_at": format_timestamp(timezone.now()),
+            "range": {"after": "9000", "through": "9001"},
+            "skipped_ids": [],
             "entries": [
                 {
                     "source_contact_id": "9001",
-                    "event_id": str(self.event.pk),
-                    "user_id": str(self.recipient.pk),
-                    "org_user_id": str(self.org_user.pk),
-                    "discord_id": self.recipient.discordId,
+                    "target_discord_id": self.recipient.discordId,
+                    "promoter_discord_id": None,
                     "recorded_at": "2026-11-01T10:00:00Z",
+                    "contact_date_ny": "2026-11-01",
                     "contact_method": "DISCORD_DM",
-                    "linkage": "occasion",
+                    "contact_reason": "EVENT_INVITE",
+                    "occasion_id": "501",
+                    "event_date": None,
+                    "forced": False,
                 }
             ],
         }
@@ -183,8 +182,8 @@ class _RaceBase(TransactionTestCase):
 class ImportFirstRaceTests(_RaceBase):
     def test_no_send_commits_after_a_committed_import(self) -> None:
         payload = self.payload()
-        wrapper, inside, release = self.paused(contacts._apply_entries)
-        with patch.object(contacts, "_apply_entries", wrapper):
+        wrapper, inside, release = self.paused(contacts._apply_batch)
+        with patch.object(contacts, "_apply_batch", wrapper):
             importer = _Worker(lambda: import_contact_receipts(self.org, payload))
             importer.start()
             self.assertTrue(inside.wait(WAIT), importer.error)
@@ -209,7 +208,7 @@ class ImportFirstRaceTests(_RaceBase):
 
 
 class SendFirstRaceTests(_RaceBase):
-    def test_send_first_keeps_both_histories_and_one_award(self) -> None:
+    def test_send_first_keeps_both_histories_and_voids_the_local_point(self) -> None:
         payload = self.payload()
         wrapper, inside, release = self.paused(services.enqueue_send)
         with patch.object(services, "enqueue_send", wrapper):
@@ -225,9 +224,14 @@ class SendFirstRaceTests(_RaceBase):
         self.assertIsNone(sender.error)
         self.assertIsNone(importer.error)
         self.assertEqual(importer.result["applied"], 1)
+        self.assertEqual(importer.result["voided_local"], 1)
         self.assertEqual(PromoSend.objects.count(), 1)
         self.assertEqual(ExternalPromotionReceipt.objects.count(), 1)
-        self.assertEqual(ContributionEntry.objects.count(), 1)
+        # The send's entry and its void: the point is the external one.
+        self.assertEqual(ContributionEntry.objects.count(), 2)
+        self.assertEqual(
+            sum(ContributionEntry.objects.values_list("points", flat=True)), 0
+        )
 
     def test_concurrent_identical_imports_store_once(self) -> None:
         payload = self.payload()
@@ -244,34 +248,15 @@ class SendFirstRaceTests(_RaceBase):
         self.assertEqual(ExternalPromotionReceipt.objects.count(), 1)
 
 
-class GuildFetchOutsideLockTests(_RaceBase):
-    """The Discord guild fetch is network I/O. On SQLite (IMMEDIATE
-    transactions) any fetch inside the import's transaction would hold the
-    database-wide write lock across it, so it must run before the lock."""
+class NoNetworkInsideLockTests(_RaceBase):
+    """The import does no network I/O: on SQLite (IMMEDIATE transactions) a
+    fetch inside its transaction would hold the database-wide write lock."""
 
-    def test_import_fetches_guild_before_taking_the_event_lock(self) -> None:
-        payload = self.payload()
-        held = {"lock": False}
-        seen: list[tuple[bool, bool]] = []
-        original_lock = event_lock.lock_event
-
-        def tracking_lock(event_id: int) -> None:
-            original_lock(event_id)
-            held["lock"] = True
-
-        def fetch(**_: Any) -> list:
-            seen.append((connection.in_atomic_block, held["lock"]))
-            return []
-
-        with (
-            patch.object(event_lock, "lock_event", tracking_lock),
-            patch("org.promotion.recipients.get_discord_members_data", fetch),
-        ):
-            result = import_contact_receipts(self.org, payload)
-
+    def test_import_never_reads_the_guild(self) -> None:
+        with patch("org.promotion.recipients.get_discord_members_data") as fetch:
+            result = import_contact_receipts(self.org, self.payload())
         self.assertEqual(result["applied"], 1)
-        self.assertTrue(seen, "the import never read the guild")
-        self.assertEqual(seen, [(False, False)] * len(seen))
+        fetch.assert_not_called()
 
 
 class EventMutationRetryTests(_RaceBase):

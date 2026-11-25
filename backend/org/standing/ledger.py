@@ -19,6 +19,7 @@ from org.models import (
     OrgUser,
     PromoSend,
 )
+from org.models_promotion_sync import ExternalPromotionReceipt
 from org.standing.kinds import KINDS
 from org.standing.periods import Period
 from org.standing.types import TrackKey
@@ -138,6 +139,7 @@ def award(
     promo_send: PromoSend | None = None,
     reason: str = "",
     awarded_by: CustomUser | None = None,
+    external_contact: ExternalPromotionReceipt | None = None,
 ) -> ContributionEntry:
     kind = _check_kind(kind)
     if points is None:
@@ -155,6 +157,7 @@ def award(
         awarded_by=awarded_by,
         occurred_at=occurred_at,
         promo_send=promo_send,
+        external_contact=external_contact,
     )
 
 

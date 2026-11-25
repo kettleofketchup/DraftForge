@@ -30,7 +30,6 @@ log = get_logger(__name__)
 
 _DEFAULT_MESSAGES: dict[str, str] = {
     "invalid_request": "Invalid request.",
-    "invalid_cursor": "Invalid cursor.",
     "unauthorized": "Missing, invalid or revoked credential.",
     "forbidden": "Not allowed.",
     "feature_locked": "This feature is not enabled for this organization.",
@@ -41,15 +40,9 @@ _DEFAULT_MESSAGES: dict[str, str] = {
     "not_found": "Not found.",
     "method_not_allowed": "Method not allowed.",
     "not_acceptable": "Not acceptable.",
-    "mapping_changed": "The mapping changed; restart the read.",
-    "identity_conflict": "Two subjects resolve to the same identity.",
-    "source_content_conflict": (
-        "A stored source contact has different source facts; nothing was imported."
-    ),
     "import_conflict_retry": (
-        "A concurrent import stored one of these contacts first; retry the batch."
+        "A concurrent import changed these contacts first; retry the batch."
     ),
-    "subject_source_unavailable": "A subject source is unavailable; retry later.",
     "request_too_large": "Request body too large.",
     "unsupported_media_type": "Content type must be application/json.",
     "rate_limited": "Request limit exceeded.",

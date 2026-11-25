@@ -1,77 +1,154 @@
-"""Importing external contact receipts as event-scoped promotion suppression.
+"""Importing the bound guild's external contact log.
 
-POST ``/api/organizations/{org}/integration/v1/contact-receipts/`` stores
-each external contact once, keyed by ``(org, source, source_contact_id)``. Its
-source facts are immutable: a rescan with the same facts is ``unchanged``
-and keeps the original import time, and changed facts are 409
-``source_content_conflict`` for the whole batch. The DraftForge association
-(user, membership) may be enriched by a verified resolution, or quarantined
-for that entry alone when the Discord ID now belongs to someone else.
+POST ``/api/organizations/{org}/integration/v1/contact-receipts/`` takes one
+id range of the external contact log: every row the adaptor read with
+``after < id <= through`` is either an entry or a skipped id. Each entry is
+stored once, keyed by ``(org, source, source_contact_id)``, whoever the
+player is: an unknown player is stored with no account. An occasion bound to
+one of the org's events maps the contact to that event; any other occasion,
+and every date-linked contact, is stored with no event and earns nothing.
 
-Imported receipts tick the promoter's existing candidate rows
+A replay with the same source facts, target, promoter and bound event is
+``unchanged`` and keeps the original import time. Any difference is
+``updated`` (a supersede, audited in the org log). A stored contact inside a
+posted range that is neither posted nor skipped was deleted at the source and
+is retracted, unless a newer scan than this one imported it; posting it
+again reinstates it. The import never creates an account, a membership or a
+``PromoSend``.
+
+Imported invitations tick the promoter's candidate rows
 (``contact_recorded`` / ``external_contact``), are hidden by "Hide messaged"
-and block a new ordinary send with 409 ``contact_already_recorded``. They
-never create a send, an award, an account or a membership.
+and block a new ordinary send with 409 ``contact_already_recorded``.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
-from django.db import IntegrityError
+from django.core.cache import cache
+from django.db import IntegrityError, models
 from django.test import override_settings
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from discordbot.services.discord_members import DiscordMembersFetchError
+from config.promotion_sync import PromotionSyncConfig
 from events.constants import EventState
 from events.models import Event
 from org.api_tokens.tokens import issue_token
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.integration import contacts
-from org.integration.contacts import external_contact_for
+from org.integration.contacts import external_contact_for, reconcile_association
 from org.integration.lifecycle import reconcile_promotion_identity
-from org.integration.subjects import authorized_event_subjects
+from org.integration.receipts import format_timestamp
 from org.membership import resolve_or_create_org_user
-from org.models import ContributionEntry, Organization, OrgUser, PromoSend
+from org.models import ContributionEntry, Organization, OrgLog, OrgUser, PromoSend
 from org.models_promotion_sync import (
     AssociationReason,
     AssociationState,
+    ContactReason,
     ExternalPromotionReceipt,
+    PointStatus,
 )
 from org.promotion.recipients import user_for_guild_member
 from org.promotion.services import record_promo_send, undo_promo_send
-from org.tests.test_integration_recipients import (
-    FETCH,
-    GUILD_ONLY_ID,
-    _RecipientsBase,
-    bindings,
-    guild_member,
-)
-from org.tests.test_promotion_api import base
+from org.tests.test_api_tokens import LOCMEM_CACHE
+from org.tests.test_promotion_api import PromotionApiBase, base
 from tournament.models import Tournament
 from user.discord_accounts import merge_discord_accounts
 
-RECORDED = "2026-11-01T10:00:00Z"
+GUILD = "770000000000000001"
+FETCH = "org.promotion.recipients.get_discord_members_data"
+GUILD_ONLY_ID = "990000000000000001"
 SECOND_GUILD_ID = "990000000000000003"
+UNKNOWN_ID = "990000000000000099"
+OCCASION = 88
+COMPLETED_OCCASION = 89
+UNBOUND_OCCASION = 4242
+RECORDED = "2026-11-01T10:00:00Z"
+CONTACT_DATE = "2026-11-01"
 
 
-class _ImportBase(_RecipientsBase):
+def guild_member(discord_id: str, *, days_ago: float, bot: bool = False) -> dict:
+    joined = timezone.now() - timedelta(days=days_ago)
+    return {
+        "user": {
+            "id": discord_id,
+            "username": f"g{discord_id[-4:]}",
+            "global_name": None,
+            "avatar": None,
+            **({"bot": True} if bot else {}),
+        },
+        "nick": None,
+        "joined_at": joined.isoformat(),
+    }
+
+
+def bindings(org: Organization, events: dict[Event, int]) -> PromotionSyncConfig:
+    raw = json.dumps(
+        [
+            {
+                "org_id": str(org.pk),
+                "guild_id": GUILD,
+                "events": [
+                    {"event_id": str(e.pk), "occasion_id": str(occasion)}
+                    for e, occasion in events.items()
+                ],
+            }
+        ]
+    )
+    return PromotionSyncConfig.from_env(environ={"PROMOTION_SYNC_BINDINGS": raw})
+
+
+def age_import(receipt_id: int, *, minutes: int = 30) -> None:
+    """Move a receipt's import time back, as if an older scan stored it.
+
+    ``first_imported_at`` is frozen for application code; the plain
+    queryset update skips that guard on purpose.
+    """
+    models.QuerySet.update(
+        ExternalPromotionReceipt.objects.filter(pk=receipt_id),
+        first_imported_at=timezone.now() - timedelta(minutes=minutes),
+    )
+
+
+@override_settings(CACHES=LOCMEM_CACHE, DISCORD_BOT_TOKEN="test-bot-token")
+class _ImportBase(PromotionApiBase):
     def setUp(self) -> None:
         super().setUp()
+        cache.clear()
+        self.org.discord_server_id = GUILD
+        self.org.save()
+        self.admin = self.users["admin"]
+        assert self.admin is not None
         self.issued = issue_token(
-            self.org,
-            self.admin,
-            "contact-log-import",
-            operations=["promotion:read", "promotion:import"],
+            self.org, self.admin, "contact-log-import", operations=["promotion:import"]
         )
-        self.members = [
+        self.members: list[dict[str, Any]] = [
             guild_member(GUILD_ONLY_ID, days_ago=5),
             guild_member(SECOND_GUILD_ID, days_ago=5),
         ]
+        self.bind({self.event: OCCASION, self.completed_event: COMPLETED_OCCASION})
+        fetch = patch(FETCH, side_effect=lambda **_: list(self.members))
+        self.fetch = fetch.start()
+        self.addCleanup(fetch.stop)
+
+    def bind(self, events: dict[Event, int]) -> None:
+        override = override_settings(PROMOTION_SYNC=bindings(self.org, events))
+        override.enable()
+        self.addCleanup(override.disable)
+
+    def assertError(self, resp, status: int, code: str) -> None:
+        self.assertEqual(resp.status_code, status, resp.content)
+        self.assertEqual(resp.json()["error"]["code"], code)
+
+    def bearer(self, raw: str | None = None) -> APIClient:
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {raw or self.issued.raw}")
+        return client
 
     def import_url(self, org: Organization | None = None) -> str:
         return (
@@ -79,50 +156,77 @@ class _ImportBase(_RecipientsBase):
             "contact-receipts/"
         )
 
-    def version(self, event: Event | None = None) -> str:
-        return authorized_event_subjects(self.org, event or self.event).mapping_version
-
-    def subject(self, who: CustomUser | str) -> tuple[str | None, str | None, str]:
+    @staticmethod
+    def discord(who: CustomUser | str) -> str:
         if isinstance(who, str):
-            return (None, None, who)
+            return who
         who.refresh_from_db()
-        ou = OrgUser.objects.filter(user=who, organization=self.org).first()
         assert who.discordId
-        return (str(who.pk), str(ou.pk) if ou else None, who.discordId)
+        return who.discordId
 
     def entry(
-        self, source_id: int, who: CustomUser | str, **overrides: Any
+        self,
+        source_id: int,
+        who: CustomUser | str,
+        *,
+        promoter: CustomUser | str | None = None,
+        event: Event | None = None,
+        **overrides: Any,
     ) -> dict[str, Any]:
-        user_id, org_user_id, discord_id = self.subject(who)
-        event = overrides.pop("event", self.event)
+        occasion = COMPLETED_OCCASION if event == self.completed_event else OCCASION
         data = {
             "source_contact_id": str(source_id),
-            "event_id": str(event.pk),
-            "user_id": user_id,
-            "org_user_id": org_user_id,
-            "discord_id": discord_id,
+            "target_discord_id": self.discord(who),
+            "promoter_discord_id": None if promoter is None else self.discord(promoter),
             "recorded_at": RECORDED,
+            "contact_date_ny": CONTACT_DATE,
             "contact_method": "DISCORD_DM",
-            "linkage": "occasion",
+            "contact_reason": "EVENT_INVITE",
+            "occasion_id": str(occasion),
+            "event_date": None,
+            "forced": False,
         }
         data.update(overrides)
         return data
+
+    def batch(
+        self,
+        entries: list[dict[str, Any]],
+        *,
+        after: int | None = None,
+        through: int | None = None,
+        skipped: list[int] | None = None,
+        scan_started_at: datetime | None = None,
+        guild: str = GUILD,
+    ) -> dict[str, Any]:
+        ids = [int(e["source_contact_id"]) for e in entries] + list(skipped or [])
+        if through is None and ids:
+            through = max(ids)
+        if after is None and ids:
+            after = min(ids) - 1
+        return {
+            "source": "contact_log",
+            "guild_id": guild,
+            "scan_started_at": format_timestamp(scan_started_at or timezone.now()),
+            "range": (
+                None
+                if through is None
+                else {"after": str(after or 0), "through": str(through)}
+            ),
+            "skipped_ids": [str(i) for i in skipped or []],
+            "entries": entries,
+        }
 
     def post(
         self,
         entries: list[dict[str, Any]],
         *,
-        version: str | None = None,
-        event: Event | None = None,
         body: dict[str, Any] | None = None,
         raw: str | None = None,
         org: Organization | None = None,
+        **batch: Any,
     ):
-        payload = body or {
-            "source": "contact_log",
-            "mapping_version": version or self.version(event),
-            "entries": entries,
-        }
+        payload = body if body is not None else self.batch(entries, **batch)
         return self.bearer(raw).post(self.import_url(org), payload, format="json")
 
     def imported(self, entries: list[dict[str, Any]], **kwargs: Any) -> dict:
@@ -150,300 +254,332 @@ class _ImportBase(_RecipientsBase):
         )
 
     def non_member_player(self, name: str) -> CustomUser:
-        """An account authorized as a recent guild joiner, with no OrgUser.
-
-        (Playing an org tournament enrolls an OrgUser, so a non-member is
-        reached through the guild source.)
-        """
+        """An account in the guild with no membership in the org."""
         user = self._user(name)
         self.members = [*self.members, guild_member(user.discordId, days_ago=3)]
         self.assertFalse(OrgUser.objects.filter(user=user).exists())
         return user
 
 
+COUNT_KEYS = (
+    "applied",
+    "unchanged",
+    "updated",
+    "reinstated",
+    "quarantined",
+    "association_updated",
+    "retracted",
+    "credited",
+    "uncredited",
+    "duplicate",
+    "echo",
+    "voided_local",
+    "restored_local",
+)
+
+
 class ImportTests(_ImportBase):
-    def test_new_contacts_apply_with_counts(self) -> None:
+    def test_new_contacts_apply_with_exact_response(self) -> None:
         body = self.imported(
             [self.entry(8021, self.recipient), self.entry(8022, GUILD_ONLY_ID)]
         )
-        self.assertEqual(self.statuses(body), ["applied", "applied"])
         self.assertEqual(
-            {k: v for k, v in body.items() if k != "results"},
-            {"applied": 2, "unchanged": 0, "quarantined": 0, "association_updated": 0},
+            body,
+            {
+                "results": [
+                    {
+                        "index": 0,
+                        "status": "applied",
+                        "point": "uncredited",
+                        "voided_local": False,
+                    },
+                    {
+                        "index": 1,
+                        "status": "applied",
+                        "point": "uncredited",
+                        "voided_local": False,
+                    },
+                ],
+                **dict.fromkeys(COUNT_KEYS, 0),
+                "applied": 2,
+                "uncredited": 2,
+                "max_source_contact_id": "8022",
+            },
         )
         stored = self.receipt(8021)
         self.assertEqual(stored.user_id, self.recipient.pk)
         self.assertEqual(stored.association_state, AssociationState.LINKED)
         self.assertEqual(stored.recorded_at, datetime(2026, 11, 1, 10, tzinfo=UTC))
+        self.assertEqual(stored.event_id, self.event.pk)
+        self.assertEqual(stored.occasion_id, OCCASION)
+        self.assertEqual(stored.contact_reason, ContactReason.EVENT_INVITE)
         guild_only = self.receipt(8022)
         self.assertIsNone(guild_only.user_id)
         self.assertEqual(guild_only.association_state, AssociationState.UNRESOLVED)
 
-    def test_reordered_rescan_is_unchanged_with_original_import_time(self) -> None:
-        first = [self.entry(8021, self.recipient), self.entry(8022, GUILD_ONLY_ID)]
-        self.imported(first)
-        before = {
-            r.source_contact_id: (r.first_imported_at, r.source_hash)
-            for r in ExternalPromotionReceipt.objects.all()
-        }
-        body = self.imported(list(reversed(first)))
-        self.assertEqual(self.statuses(body), ["unchanged", "unchanged"])
-        self.assertEqual(body["applied"], 0)
-        self.assertEqual(body["unchanged"], 2)
-        after = {
-            r.source_contact_id: (r.first_imported_at, r.source_hash)
-            for r in ExternalPromotionReceipt.objects.all()
-        }
-        self.assertEqual(before, after)
-
-    def test_empty_batch_never_clears(self) -> None:
-        self.imported([self.entry(8021, self.recipient)])
-        body = self.imported([])
-        self.assertEqual(
-            body,
-            {
-                "results": [],
-                "applied": 0,
-                "unchanged": 0,
-                "quarantined": 0,
-                "association_updated": 0,
-            },
-        )
-        self.assertTrue(self.ticked(self.recipient.discordId, self.recipient))
-
-    def _assert_rejected(self, resp, status: int, code: str) -> None:
-        self.assertError(resp, status, code)
+    def test_guild_mismatch_403(self) -> None:
+        resp = self.post([self.entry(8021, self.recipient)], guild="770000000000000099")
+        self.assertError(resp, 403, "binding_mismatch")
         self.assertFalse(ExternalPromotionReceipt.objects.exists())
 
-    def test_duplicate_source_ids_reject_whole_batch(self) -> None:
-        resp = self.post(
-            [self.entry(8021, self.recipient), self.entry(8021, GUILD_ONLY_ID)]
-        )
-        self._assert_rejected(resp, 400, "invalid_request")
+    def test_binding_missing_403(self) -> None:
+        with override_settings(PROMOTION_SYNC=PromotionSyncConfig(bindings=())):
+            resp = self.post([self.entry(8021, self.recipient)])
+        self.assertError(resp, 403, "binding_missing")
+        self.assertFalse(ExternalPromotionReceipt.objects.exists())
 
-    def test_bad_row_rejects_whole_batch(self) -> None:
+    def test_wrong_org_and_grant_and_feature(self) -> None:
+        entries = [self.entry(8021, self.recipient)]
+        self.assertEqual(self.post(entries, org=self.other_org).status_code, 404)
+        mmr = issue_token(self.org, self.admin, "mmr", operations=["mmr:read"])
+        self.assertError(self.post(entries, raw=mmr.raw), 403, "operation_not_granted")
+        set_org_feature(self.org, FeatureKey.PROMOTION, enabled=False, actor=None)
+        self.assertError(self.post(entries), 403, "feature_locked")
+        self.assertFalse(ExternalPromotionReceipt.objects.exists())
+
+    def test_invalid_row_rejects_whole_batch(self) -> None:
         resp = self.post(
             [
                 self.entry(8021, self.recipient),
                 self.entry(8022, GUILD_ONLY_ID, recorded_at="2026-11-01 10:00"),
             ]
         )
-        self._assert_rejected(resp, 400, "invalid_request")
+        self.assertError(resp, 400, "invalid_request")
         self.assertIn("entries[1].recorded_at", resp.json()["error"]["message"])
+        self.assertFalse(ExternalPromotionReceipt.objects.exists())
 
-    def test_unauthorized_subject_rejects_whole_batch(self) -> None:
-        stranger = self._user("stranger")
-        resp = self.post([self.entry(8021, self.recipient), self.entry(8022, stranger)])
-        self._assert_rejected(resp, 400, "invalid_request")
+    def test_old_wire_rejected(self) -> None:
+        body = {
+            "source": "contact_log",
+            "mapping_version": "a" * 64,
+            "entries": [],
+        }
+        self.assertError(self.post([], body=body), 400, "invalid_request")
 
-    def test_mismatched_tuple_rejects_whole_batch(self) -> None:
-        wrong = self.entry(8022, self.recipient, user_id=None)
-        resp = self.post([self.entry(8021, GUILD_ONLY_ID), wrong])
-        self._assert_rejected(resp, 400, "invalid_request")
+    def test_unknown_player_stored_without_user(self) -> None:
+        users = CustomUser.objects.count()
+        body = self.imported([self.entry(8021, UNKNOWN_ID)])
+        self.assertEqual(self.statuses(body), ["applied"])
+        stored = self.receipt(8021)
+        self.assertIsNone(stored.user_id)
+        self.assertIsNone(stored.org_user_id)
+        self.assertEqual(stored.discord_id, UNKNOWN_ID)
+        self.assertEqual(stored.association_state, AssociationState.UNRESOLVED)
+        self.assertEqual(CustomUser.objects.count(), users)
 
-    def test_stale_mapping_version_rejects_whole_batch(self) -> None:
-        stale = self.version()
-        self.members = [*self.members, guild_member("990000000000000077", days_ago=1)]
-        resp = self.post([self.entry(8021, self.recipient)], version=stale)
-        self._assert_rejected(resp, 409, "mapping_changed")
+    def test_unbound_occasion_and_date_rows_not_applicable(self) -> None:
+        body = self.imported(
+            [
+                self.entry(8021, self.recipient, occasion_id=str(UNBOUND_OCCASION)),
+                self.entry(
+                    8022,
+                    self.recipient,
+                    occasion_id=None,
+                    event_date="2026-11-05T00:00:00Z",
+                ),
+                self.entry(8023, self.recipient, contact_reason="FOLLOW_UP"),
+            ]
+        )
+        self.assertEqual([r["point"] for r in body["results"]], ["not_applicable"] * 3)
+        for source_id in (8021, 8022):
+            stored = self.receipt(source_id)
+            self.assertIsNone(stored.event_id)
+            self.assertFalse(stored.holds_point)
+        self.assertEqual(self.receipt(8023).event_id, self.event.pk)
+        self.assertFalse(self.receipt(8023).holds_point)
+        self.assertFalse(self.ticked(self.recipient.discordId, self.recipient))
 
-    def test_source_id_collision_is_a_retryable_import_conflict(self) -> None:
-        # A concurrent import stored one of these source IDs first, so the
-        # insert fails after validation. That is not a mapping change.
+    def test_event_outside_org_is_not_mapped(self) -> None:
+        self.bind({self.other_event: OCCASION})
+        self.imported([self.entry(8021, self.recipient)])
+        self.assertIsNone(self.receipt(8021).event_id)
+
+    def test_replay_unchanged_keeps_import_time(self) -> None:
+        first = [self.entry(8021, self.recipient), self.entry(8022, GUILD_ONLY_ID)]
+        self.imported(first)
+        before = {
+            r.source_contact_id: (r.first_imported_at, r.source_hash, r.source_revision)
+            for r in ExternalPromotionReceipt.objects.all()
+        }
+        body = self.imported(list(reversed(first)))
+        self.assertEqual(self.statuses(body), ["unchanged", "unchanged"])
+        self.assertEqual((body["applied"], body["unchanged"]), (0, 2))
+        after = {
+            r.source_contact_id: (r.first_imported_at, r.source_hash, r.source_revision)
+            for r in ExternalPromotionReceipt.objects.all()
+        }
+        self.assertEqual(before, after)
+        self.assertFalse(OrgLog.objects.filter(action="update_external_contact"))
+
+    def _assert_updated(self, source_id: int, changed: set[str]) -> None:
+        stored = self.receipt(source_id)
+        self.assertEqual(stored.source_revision, 1)
+        self.assertIsNotNone(stored.source_updated_at)
+        log = OrgLog.objects.get(action="update_external_contact")
+        self.assertIsNone(log.actor_id)
+        self.assertEqual(
+            set(log.details),
+            {
+                "source_contact_id",
+                "revision",
+                "old_hash",
+                "new_hash",
+                "changed",
+                "old_event_id",
+                "new_event_id",
+            },
+        )
+        self.assertEqual(set(log.details["changed"]), changed)
+        self.assertEqual(log.details["source_contact_id"], source_id)
+        text = json.dumps(log.details)
+        for discord_id in (GUILD_ONLY_ID, SECOND_GUILD_ID, self.recipient.discordId):
+            self.assertNotIn(discord_id, text)
+
+    def test_updated_on_changed_hash(self) -> None:
+        self.imported([self.entry(8021, self.recipient)])
+        old_hash = self.receipt(8021).source_hash
+        body = self.imported(
+            [self.entry(8021, self.recipient, recorded_at="2026-11-02T10:00:00Z")]
+        )
+        self.assertEqual(self.statuses(body), ["updated"])
+        self.assertEqual(body["updated"], 1)
+        stored = self.receipt(8021)
+        self.assertNotEqual(stored.source_hash, old_hash)
+        self.assertEqual(stored.recorded_at, datetime(2026, 11, 2, 10, tzinfo=UTC))
+        self._assert_updated(8021, {"recorded_at", "source_hash"})
+
+    def test_updated_on_changed_target(self) -> None:
+        self.imported([self.entry(8021, GUILD_ONLY_ID)])
+        body = self.imported([self.entry(8021, SECOND_GUILD_ID)])
+        self.assertEqual(self.statuses(body), ["updated"])
+        stored = self.receipt(8021)
+        self.assertEqual(stored.discord_id, SECOND_GUILD_ID)
+        self.assertTrue(stored.holds_point)
+        self._assert_updated(8021, {"discord_id"})
+
+    def test_updated_on_changed_promoter(self) -> None:
+        self.imported([self.entry(8021, GUILD_ONLY_ID)])
+        body = self.imported(
+            [self.entry(8021, GUILD_ONLY_ID, promoter=self.users["member"])]
+        )
+        self.assertEqual(self.statuses(body), ["updated"])
+        self.assertEqual(
+            self.receipt(8021).promoter_discord_id, self.users["member"].discordId
+        )
+        self._assert_updated(8021, {"promoter_discord_id"})
+
+    def test_updated_on_changed_binding(self) -> None:
+        self.imported([self.entry(8021, GUILD_ONLY_ID)])
+        self.bind({self.completed_event: OCCASION})
+        body = self.imported([self.entry(8021, GUILD_ONLY_ID)])
+        self.assertEqual(self.statuses(body), ["updated"])
+        stored = self.receipt(8021)
+        self.assertEqual(stored.event_id, self.completed_event.pk)
+        self._assert_updated(8021, {"event"})
+        log = OrgLog.objects.get(action="update_external_contact")
+        self.assertEqual(log.details["old_event_id"], self.event.pk)
+        self.assertEqual(log.details["new_event_id"], self.completed_event.pk)
+
+    def _two_stored(self) -> None:
+        self.imported([self.entry(10, GUILD_ONLY_ID), self.entry(30, SECOND_GUILD_ID)])
+        for source_id in (10, 30):
+            age_import(self.receipt(source_id).pk)
+
+    def test_retract_inside_range_only(self) -> None:
+        self._two_stored()
+        body = self.imported([], after=0, through=20)
+        self.assertEqual(body["retracted"], 1)
+        retracted = self.receipt(10)
+        self.assertIsNotNone(retracted.retracted_at)
+        self.assertEqual(retracted.point_status, PointStatus.RETRACTED)
+        self.assertFalse(retracted.holds_point)
+        self.assertIsNone(self.receipt(30).retracted_at)
+        self.assertFalse(
+            external_contact_for(self.event.pk, GUILD_ONLY_ID, user_id=None)
+        )
+
+    def test_skipped_ids_never_retracted(self) -> None:
+        self._two_stored()
+        body = self.imported([], after=0, through=20, skipped=[10])
+        self.assertEqual(body["retracted"], 0)
+        self.assertIsNone(self.receipt(10).retracted_at)
+
+    def test_first_imported_guard_blocks_retraction(self) -> None:
+        self.imported([self.entry(10, GUILD_ONLY_ID)])
+        body = self.imported(
+            [], after=0, through=20, scan_started_at=timezone.now() - timedelta(hours=1)
+        )
+        self.assertEqual(body["retracted"], 0)
+        self.assertIsNone(self.receipt(10).retracted_at)
+
+    def test_reinstated_after_retraction(self) -> None:
+        self._two_stored()
+        self.imported([], after=0, through=20)
+        body = self.imported([self.entry(10, GUILD_ONLY_ID)])
+        self.assertEqual(self.statuses(body), ["reinstated"])
+        self.assertEqual(body["reinstated"], 1)
+        stored = self.receipt(10)
+        self.assertIsNone(stored.retracted_at)
+        self.assertEqual(stored.point_status, PointStatus.UNCREDITED)
+        self.assertTrue(stored.holds_point)
+
+    def test_max_source_contact_id_includes_retracted(self) -> None:
+        probe = self.imported([])
+        self.assertIsNone(probe["max_source_contact_id"])
+        self._two_stored()
+        body = self.imported([], after=20, through=40)
+        self.assertEqual(body["retracted"], 1)
+        self.assertEqual(body["max_source_contact_id"], "30")
+        self.assertEqual(self.imported([])["max_source_contact_id"], "30")
+
+    def test_import_creates_no_users_members_or_sends(self) -> None:
+        player = self.non_member_player("np")
+        users, org_users = CustomUser.objects.count(), OrgUser.objects.count()
+        self.imported(
+            [
+                self.entry(8021, self.recipient),
+                self.entry(8022, UNKNOWN_ID, promoter=self.recipient),
+                self.entry(8023, player, promoter=UNKNOWN_ID),
+            ]
+        )
+        self.assertEqual(CustomUser.objects.count(), users)
+        self.assertEqual(OrgUser.objects.count(), org_users)
+        self.assertFalse(PromoSend.objects.exists())
+
+    def test_concurrent_source_id_insert_is_a_retryable_conflict(self) -> None:
         with patch(
-            "org.integration.contacts._apply_entries",
+            "org.integration.contacts._apply_batch",
             side_effect=IntegrityError("unique constraint"),
         ):
             resp = self.post([self.entry(8021, self.recipient)])
-        self._assert_rejected(resp, 409, "import_conflict_retry")
+        self.assertError(resp, 409, "import_conflict_retry")
+        self.assertFalse(ExternalPromotionReceipt.objects.exists())
 
-    def test_guild_is_read_before_the_event_lock(self) -> None:
-        lock = {"held": False}
-        reads: list[bool] = []
-        original = contacts.with_event_mutation
-
-        def tracking(event_id: int, operation: Any) -> Any:
-            lock["held"] = True
-            try:
-                return original(event_id, operation)
-            finally:
-                lock["held"] = False
-
-        def fetch(**_: Any) -> list[dict]:
-            reads.append(lock["held"])
-            return list(self.members)
-
-        version = self.version()
-        with (
-            patch.object(contacts, "with_event_mutation", tracking),
-            patch(FETCH, side_effect=fetch),
-        ):
-            self.imported([self.entry(8021, GUILD_ONLY_ID)], version=version)
-        self.assertEqual(reads, [False])
-
-    def test_unavailable_guild_is_503_before_locking(self) -> None:
-        version = self.version()
-        with (
-            patch(FETCH, side_effect=DiscordMembersFetchError("down")),
-            patch.object(contacts, "with_event_mutation") as locked,
-        ):
-            resp = self.post([self.entry(8021, self.recipient)], version=version)
-        self._assert_rejected(resp, 503, "subject_source_unavailable")
-        locked.assert_not_called()
-
-    def test_multiple_events_in_one_batch_rejected(self) -> None:
-        resp = self.post(
-            [
-                self.entry(8021, self.recipient),
-                self.entry(8022, self.recipient, event=self.completed_event),
-            ]
-        )
-        self._assert_rejected(resp, 400, "invalid_request")
-
-    def test_only_configured_occasion_linkage_and_source_methods(self) -> None:
-        cases = {
-            "linkage": "event_date",
-            "contact_method": "EMAIL",
-            "recorded_at": (timezone.now() + timedelta(minutes=10)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            ),
-        }
-        for field, value in cases.items():
-            with self.subTest(field=field):
-                resp = self.post([self.entry(8021, self.recipient, **{field: value})])
-                self._assert_rejected(resp, 400, "invalid_request")
-        for method in ("DISCORD_DM", "DISCORD_GROUP_DM", "OTHER"):
-            with self.subTest(method=method):
-                source_id = 8100 + len(method)
-                self.imported(
-                    [self.entry(source_id, self.recipient, contact_method=method)]
-                )
-
-    def test_envelope_errors(self) -> None:
-        version = self.version()
-        entries = [self.entry(8021, self.recipient)]
-        cases = [
-            {"source": "draftforge", "mapping_version": version, "entries": entries},
-            {"mapping_version": version, "entries": entries},
-            {
-                "source": "contact_log",
-                "mapping_version": version,
-                "entries": entries,
-                "x": 1,
-            },
-            {"source": "contact_log", "mapping_version": "8", "entries": entries},
-            {
-                "source": "contact_log",
-                "mapping_version": version,
-                "entries": [{**entries[0], "note": "hi"}],
-            },
-        ]
-        for body in cases:
-            with self.subTest(body=sorted(body)):
-                self._assert_rejected(self.post([], body=body), 400, "invalid_request")
-
-    def test_unbound_event_and_wrong_org(self) -> None:
-        unbound = Event.objects.create(
-            organization=self.org,
-            name="Unbound",
-            scheduled_at=timezone.now() + timedelta(days=4),
-            created_by=self.admin,
-            state=EventState.UPCOMING,
-        )
-        resp = self.post(
-            [self.entry(8021, self.recipient, event=unbound)], version="a" * 64
-        )
-        self._assert_rejected(resp, 403, "binding_missing")
-        resp = self.post([self.entry(8021, self.recipient)], org=self.other_org)
-        self._assert_rejected(resp, 404, "not_found")
-
-    def test_replay_rechecks_grant_feature_and_binding(self) -> None:
-        entries = [self.entry(8021, self.recipient)]
-        self.imported(entries)
-        read_only = issue_token(
-            self.org, self.admin, "read-only", operations=["promotion:read"]
-        )
-        self.assertError(
-            self.post(entries, raw=read_only.raw), 403, "operation_not_granted"
-        )
-        version = self.version()
-        set_org_feature(self.org, FeatureKey.PROMOTION, enabled=False, actor=None)
-        self.assertError(self.post(entries, version=version), 403, "feature_locked")
-        set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=None)
-        with override_settings(PROMOTION_SYNC=bindings(self.org)):
-            self.assertError(
-                self.post(entries, version=version), 403, "binding_missing"
-            )
-        self.assertEqual(ExternalPromotionReceipt.objects.count(), 1)
-
-    def _conflict_cases(self) -> dict[str, dict[str, Any]]:
-        return {
-            "recorded_at": {"recorded_at": "2026-11-02T10:00:00Z"},
-            "contact_method": {"contact_method": "OTHER"},
-            "discord_id": {"discord_id": SECOND_GUILD_ID},
-        }
-
-    def test_changed_source_facts_conflict_for_whole_batch(self) -> None:
+    def test_import_never_reads_the_guild(self) -> None:
         self.imported([self.entry(8021, GUILD_ONLY_ID)])
-        original = self.receipt(8021)
-        for name, change in self._conflict_cases().items():
-            with self.subTest(changed=name):
-                resp = self.post(
-                    [
-                        self.entry(8099, self.recipient),
-                        self.entry(8021, GUILD_ONLY_ID, **change),
-                    ]
-                )
-                self.assertError(resp, 409, "source_content_conflict")
-                self.assertFalse(
-                    ExternalPromotionReceipt.objects.filter(
-                        source_contact_id=8099
-                    ).exists()
-                )
-                stored = self.receipt(8021)
-                self.assertEqual(stored.source_hash, original.source_hash)
-                self.assertEqual(stored.recorded_at, original.recorded_at)
-                self.assertEqual(stored.discord_id, GUILD_ONLY_ID)
+        self.fetch.assert_not_called()
 
-    def test_changed_event_for_retained_source_id_conflicts(self) -> None:
-        self.imported([self.entry(8021, self.recipient)])
-        moved = self.entry(8021, self.recipient, event=self.completed_event)
-        resp = self.post([moved], event=self.completed_event)
-        self.assertError(resp, 409, "source_content_conflict")
-        self.assertEqual(self.receipt(8021).event_id, self.event.pk)
+    def test_recipients_route_removed_404(self) -> None:
+        resp = self.bearer().get(
+            f"/api/organizations/{self.org.pk}/integration/v1/events/"
+            f"{self.event.pk}/recipients/"
+        )
+        self.assertEqual(resp.status_code, 404)
 
-    def test_two_source_ids_for_one_target_give_one_tick_and_nothing_else(
-        self,
-    ) -> None:
-        users, org_users = CustomUser.objects.count(), OrgUser.objects.count()
-        body = self.imported(
-            [
-                self.entry(8021, self.recipient),
-                self.entry(8022, self.recipient, recorded_at="2026-11-03T10:00:00Z"),
-                self.entry(8023, GUILD_ONLY_ID),
-            ]
+    def test_promotion_read_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown operation"):
+            issue_token(self.org, self.admin, "old", operations=["promotion:read"])
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            f"/api/organizations/{self.org.pk}/api-tokens/",
+            {"name": "old", "operations": ["promotion:read"]},
+            format="json",
         )
-        self.assertEqual(body["applied"], 3)
-        contact = external_contact_for(
-            self.event.pk, self.recipient.discordId, user_id=self.recipient.pk
-        )
-        self.assertEqual(
-            contact,
-            {
-                "source": "contact_log",
-                "recorded_at": datetime(2026, 11, 3, 10, tzinfo=UTC),
-                "delivery_verified": False,
-                "can_undo": False,
-            },
-        )
-        self.assertFalse(PromoSend.objects.exists())
-        self.assertFalse(ContributionEntry.objects.nocache().exists())
-        self.assertEqual(CustomUser.objects.count(), users)
-        self.assertEqual(OrgUser.objects.count(), org_users)
+        self.assertEqual(resp.status_code, 400)
 
 
 class AssociationRescanTests(_ImportBase):
-    """Association-only changes never conflict, and never block a new contact."""
+    """Association changes on replay are reconciled, never superseded."""
 
     def _assert_enriched(self, source_id: int, before: ExternalPromotionReceipt):
         after = self.receipt(source_id)
@@ -459,7 +595,7 @@ class AssociationRescanTests(_ImportBase):
 
         resolved = user_for_guild_member(guild_member(GUILD_ONLY_ID, days_ago=5))
         body = self.imported(
-            [self.entry(8021, resolved), self.entry(8030, self.recipient)]
+            [self.entry(8021, GUILD_ONLY_ID), self.entry(8030, self.recipient)]
         )
         self.assertEqual(self.statuses(body), ["unchanged", "applied"])
         self.assertEqual(body["association_updated"], 1)
@@ -474,14 +610,11 @@ class AssociationRescanTests(_ImportBase):
         self.assertIsNone(before.org_user_id)
 
         org_user = resolve_or_create_org_user(player, self.org)
-        body = self.imported(
-            [self.entry(8021, player), self.entry(8031, GUILD_ONLY_ID)]
-        )
-        self.assertEqual(self.statuses(body), ["unchanged", "applied"])
+        body = self.imported([self.entry(8021, player)])
+        self.assertEqual(self.statuses(body), ["unchanged"])
         self.assertEqual(body["association_updated"], 1)
         after = self._assert_enriched(8021, before)
         self.assertEqual(after.org_user_id, org_user.pk)
-        self.assertTrue(self.ticked(player.discordId, player))
 
     def test_rescan_after_verified_merge(self) -> None:
         drop = self.non_member_player("merge_drop")
@@ -497,8 +630,8 @@ class AssociationRescanTests(_ImportBase):
         reconcile_promotion_identity(keep, drop)
         merge_discord_accounts(keep, drop)
 
-        body = self.imported([self.entry(8021, keep), self.entry(8032, GUILD_ONLY_ID)])
-        self.assertEqual(self.statuses(body), ["unchanged", "applied"])
+        body = self.imported([self.entry(8021, keep)])
+        self.assertEqual(self.statuses(body), ["unchanged"])
         after = self._assert_enriched(8021, before)
         self.assertEqual(after.user_id, keep.pk)
         self.assertTrue(self.ticked(discord_id, keep))
@@ -512,15 +645,14 @@ class AssociationRescanTests(_ImportBase):
         CustomUser.objects.filter(pk=first_owner.pk).update(
             discordId="880000000000000555"
         )
-        new_owner = CustomUser.objects.create_user(
+        CustomUser.objects.create_user(
             username="new_owner", password="x", discordId=discord_id
         )
         body = self.imported(
-            [self.entry(8021, new_owner), self.entry(8033, GUILD_ONLY_ID)]
+            [self.entry(8021, discord_id), self.entry(8033, GUILD_ONLY_ID)]
         )
         self.assertEqual(self.statuses(body), ["quarantined", "applied"])
         self.assertEqual(body["quarantined"], 1)
-        self.assertEqual(body["applied"], 1)
         self.assertEqual(body["association_updated"], 0)
         after = self.receipt(8021)
         self.assertEqual(after.association_state, AssociationState.QUARANTINED)
@@ -529,9 +661,8 @@ class AssociationRescanTests(_ImportBase):
         )
         self.assertEqual(after.user_id, first_owner.pk)
         self.assertEqual(after.source_hash, before.source_hash)
-        self.assertFalse(self.ticked(discord_id, new_owner))
 
-        again = self.imported([self.entry(8021, new_owner)])
+        again = self.imported([self.entry(8021, discord_id)])
         self.assertEqual(self.statuses(again), ["quarantined"])
 
     def test_membership_of_another_user_quarantines(self) -> None:
@@ -541,8 +672,6 @@ class AssociationRescanTests(_ImportBase):
         other = OrgUser.objects.create(
             user=self._user("ou_other"), organization=self.org
         )
-        from org.integration.contacts import reconcile_association
-
         outcome = reconcile_association(stored, player.pk, other.pk)
         self.assertEqual(outcome.status, "quarantined")
         self.assertFalse(outcome.association_updated)
@@ -592,9 +721,6 @@ class CandidateSuppressionTests(_ImportBase):
                 self.row(self.candidates(source=source, days=90, n=10), discord_id),
                 source,
             )
-        self.assertIsNotNone(
-            self.row(self.candidates(source="discord", days=90), GUILD_ONLY_ID)
-        )
         self._import_all()
         for source, discord_id in sources.items():
             with self.subTest(source=source):
@@ -652,7 +778,7 @@ class CandidateSuppressionTests(_ImportBase):
         self.assertIsNotNone(stamp)
 
     def test_org_without_bindings_unchanged(self) -> None:
-        with override_settings(PROMOTION_SYNC=bindings(self.other_org)):
+        with override_settings(PROMOTION_SYNC=PromotionSyncConfig(bindings=())):
             body = self.candidates(hide_messaged="false")
         self.assertEqual(
             body["contact_sync"],
@@ -662,18 +788,13 @@ class CandidateSuppressionTests(_ImportBase):
         assert row is not None
         self.assertFalse(row["contact_recorded"])
 
-    def test_quarantined_or_foreign_receipt_does_not_tick(self) -> None:
-        self._import_all()
-        ExternalPromotionReceipt.objects.filter(source_contact_id=8021).update(
-            association_state=AssociationState.QUARANTINED
-        )
-        ExternalPromotionReceipt.objects.filter(source_contact_id=8022).update(
-            user=self.joiner
-        )
-        body = self.candidates(source="recent", n=10)
-        self.assertIsNotNone(self.row(body, self.recipient.discordId))
-        body = self.candidates(source="active", days=90)
-        self.assertIsNotNone(self.row(body, self.active_player.discordId))
+    def test_retracted_and_other_reason_contacts_do_not_tick(self) -> None:
+        self.imported([self.entry(8022, self.recipient, contact_reason="GENERAL")])
+        self.assertFalse(self.ticked(self.recipient.discordId, self.recipient))
+        self.imported([self.entry(8021, self.recipient)])
+        age_import(self.receipt(8021).pk)
+        self.imported([], after=8020, through=8021)
+        self.assertFalse(self.ticked(self.recipient.discordId, self.recipient))
 
     def test_local_and_external_undo_removes_only_local(self) -> None:
         send = record_promo_send(
@@ -690,11 +811,11 @@ class CandidateSuppressionTests(_ImportBase):
         self.assertIsNotNone(row["external_contact"])
 
         undo_promo_send(send, actor=self.users["promoter"])
+        self.assertFalse(ContributionEntry.objects.nocache().exists())
         row = self.row(self.candidates(hide_messaged="false"), self.recipient.discordId)
         assert row is not None
         self.assertIsNone(row["last_messaged"])
         self.assertTrue(row["contact_recorded"])
-        self.assertIsNotNone(row["external_contact"])
         self.assertTrue(self.receipt(8021))
 
     def test_send_to_externally_contacted_is_409(self) -> None:
@@ -741,3 +862,18 @@ class CandidateSuppressionTests(_ImportBase):
             self.assertIsNotNone(self.row(first, self.recipient.discordId))
             self.imported([self.entry(8021, self.recipient)])
             self.assertIsNone(self.row(self.candidates(), self.recipient.discordId))
+
+
+class UnboundEventTests(_ImportBase):
+    def test_new_unbound_event_gets_no_contacts(self) -> None:
+        unbound = Event.objects.create(
+            organization=self.org,
+            name="Unbound",
+            scheduled_at=timezone.now() + timedelta(days=4),
+            created_by=self.admin,
+            state=EventState.UPCOMING,
+        )
+        self.imported([self.entry(8021, self.recipient)])
+        self.assertFalse(
+            ExternalPromotionReceipt.objects.filter(event=unbound).exists()
+        )

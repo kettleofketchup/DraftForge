@@ -1,13 +1,14 @@
 """Which promotion candidates an imported external contact ticks.
 
-A non-quarantined receipt for the event and a Discord ID ticks the candidate
-row with that Discord ID, unless the receipt is linked to a different
-account than the row's. So a Discord-only guild row ticks before and after
+A non-quarantined invitation receipt for the event and a Discord ID ticks
+the candidate row with that Discord ID, unless the receipt is linked to a
+different account than the row's. Echoes of our own sends and contacts
+retracted at the source never tick. So a Discord-only guild row ticks before and after
 the person gets an account, and a Discord ID that moved to another account
 does not carry its old contacts across.
 
 Kept apart from ``contacts`` (the import) so the promoter candidate code can
-use it without importing the subject universe, which imports it.
+use it without importing the import path.
 """
 
 from __future__ import annotations
@@ -17,13 +18,22 @@ from typing import Any
 
 from django.db.models import Exists, OuterRef, Q, QuerySet
 
-from org.models_promotion_sync import AssociationState, ExternalPromotionReceipt
+from org.models_promotion_sync import (
+    AssociationState,
+    ContactReason,
+    ExternalPromotionReceipt,
+    PointStatus,
+)
 
 
 def suppressing_receipts(event_id: int) -> QuerySet[ExternalPromotionReceipt]:
     """Receipts that can tick a candidate of ``event_id``."""
-    return ExternalPromotionReceipt.objects.filter(event_id=event_id).exclude(
-        association_state=AssociationState.QUARANTINED
+    return (
+        ExternalPromotionReceipt.objects.filter(
+            event_id=event_id, contact_reason=ContactReason.EVENT_INVITE
+        )
+        .exclude(point_status__in=[PointStatus.ECHO, PointStatus.RETRACTED])
+        .exclude(association_state=AssociationState.QUARANTINED)
     )
 
 

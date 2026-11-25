@@ -11,15 +11,13 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from django.core import signing
 from django.test import SimpleTestCase, override_settings
 from django.urls import path
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from org.integration import cursors
 from org.integration.base import IntegrationAPIView
-from org.integration.contacts import ImportBatch, ImportEntryV, parse_import_batch
+from org.integration.contacts import ImportBatch, ImportEntry, parse_import_batch
 from org.integration.errors import IntegrationError
 from org.integration.parsers import (
     MAX_BATCH,
@@ -32,7 +30,6 @@ from org.integration.parsers import (
     parse_date,
     parse_hash,
     parse_id,
-    parse_limit,
     parse_timestamp,
     parse_uuid,
 )
@@ -55,7 +52,7 @@ class _Boom(IntegrationAPIView):
         raise RuntimeError("SELECT secret FROM tokens WHERE dfk_abc")
 
     def post(self, request) -> Response:
-        raise IntegrationError("mapping_changed", 409)
+        raise IntegrationError("import_conflict_retry", 409)
 
 
 urlpatterns = [path("echo/", _Echo.as_view()), path("boom/", _Boom.as_view())]
@@ -165,7 +162,7 @@ class ParserTests(SimpleTestCase):
     def test_integration_error_uses_its_code_and_status(self) -> None:
         resp = APIClient().post("/boom/", {}, format="json")
         self.assertEqual(resp.status_code, 409)
-        self.assertEqual(resp.json()["error"]["code"], "mapping_changed")
+        self.assertEqual(resp.json()["error"]["code"], "import_conflict_retry")
         self.assertEqual(resp["X-Request-ID"], resp.json()["error"]["request_id"])
 
 
@@ -282,79 +279,6 @@ class FieldValidatorTests(SimpleTestCase):
             with self.subTest(n=bad if not isinstance(bad, list) else len(bad)):
                 with self.assertRaises(IntegrationError):
                     parse_batch(bad, "entries")
-
-    def test_parse_limit(self) -> None:
-        self.assertEqual(parse_limit(None), 100)
-        self.assertEqual(parse_limit("1"), 1)
-        self.assertEqual(parse_limit("100"), 100)
-        for bad in ("0", "101", "01", "-1", "abc", " 5", "1e2", ""):
-            with self.subTest(bad=bad), self.assertRaises(IntegrationError):
-                parse_limit(bad)
-
-
-@override_settings(SECRET_KEY="cursor-test-secret")
-class CursorTests(SimpleTestCase):
-    def encode(self, **overrides) -> str:
-        args = {
-            "org_id": 41,
-            "resource": "event_recipients:720",
-            "key": ["123456789012345678", 9001],
-            "fingerprint": "f" * 64,
-        }
-        args.update(overrides)
-        return cursors.encode_cursor(**args)
-
-    def decode(self, raw: str, **overrides):
-        args = {
-            "org_id": 41,
-            "resource": "event_recipients:720",
-            "fingerprint": "f" * 64,
-        }
-        args.update(overrides)
-        return cursors.decode_cursor(raw, **args)
-
-    def assert_error(self, code: str, status: int, raw: str, **overrides) -> None:
-        with self.assertRaises(IntegrationError) as ctx:
-            self.decode(raw, **overrides)
-        self.assertEqual(
-            (ctx.exception.code, ctx.exception.status_code), (code, status)
-        )
-
-    def test_round_trip(self) -> None:
-        raw = self.encode()
-        self.assertLessEqual(len(raw), cursors.MAX_CURSOR_BYTES)
-        self.assertEqual(self.decode(raw), ["123456789012345678", 9001])
-
-    def test_other_org_or_resource_is_invalid(self) -> None:
-        raw = self.encode()
-        self.assert_error("invalid_cursor", 400, raw, org_id=42)
-        self.assert_error("invalid_cursor", 400, raw, resource="event_recipients:721")
-        self.assert_error("invalid_cursor", 400, raw, resource="contributions")
-
-    def test_changed_fingerprint_is_mapping_changed(self) -> None:
-        self.assert_error("mapping_changed", 409, self.encode(), fingerprint="e" * 64)
-
-    def test_tampered_or_foreign_signature_is_invalid(self) -> None:
-        raw = self.encode()
-        flipped = raw[:-1] + ("A" if raw[-1] != "A" else "B")
-        self.assert_error("invalid_cursor", 400, flipped)
-        forged = signing.dumps(
-            {"v": 1, "o": 41, "r": "event_recipients:720", "k": [], "f": "f" * 64},
-            salt="some.other.salt",
-        )
-        self.assert_error("invalid_cursor", 400, forged)
-        with override_settings(SECRET_KEY="another-secret"):
-            other = self.encode()
-        self.assert_error("invalid_cursor", 400, other)
-
-    def test_oversized_or_non_ascii_cursor_is_invalid(self) -> None:
-        self.assert_error("invalid_cursor", 400, "a" * (cursors.MAX_CURSOR_BYTES + 1))
-        self.assert_error("invalid_cursor", 400, "é")
-        self.assert_error("invalid_cursor", 400, "")
-
-    def test_encode_refuses_oversized_key(self) -> None:
-        with self.assertRaises(ValueError):
-            self.encode(key=["x" * 4000])
 
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -517,7 +441,7 @@ class ParseImportBatchTests(SimpleTestCase):
         self.assertEqual((batch.range_after, batch.range_through), (1000, 1010))
         self.assertEqual(batch.skipped_ids, frozenset({1005}))
         first, second = batch.entries
-        self.assertIsInstance(first, ImportEntryV)
+        self.assertIsInstance(first, ImportEntry)
         self.assertEqual(first.source_contact_id, 1001)
         self.assertEqual(first.target_discord_id, "123456789012345678")
         self.assertEqual(first.promoter_discord_id, "123456789012345601")

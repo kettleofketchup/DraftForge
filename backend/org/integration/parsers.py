@@ -26,7 +26,6 @@ from org.integration.errors import IntegrationError, invalid
 
 MAX_BODY_BYTES = 65_536
 MAX_BATCH = 100
-DEFAULT_LIMIT = 100
 MAX_FUTURE = timedelta(minutes=5)
 
 _TIMESTAMP = re.compile(
@@ -197,13 +196,3 @@ def parse_batch(
     if not min_items <= len(value) <= max_items:
         raise invalid(path, f"must hold {min_items} to {max_items} items")
     return value
-
-
-def parse_limit(raw: str | None) -> int:
-    """The ``limit`` query parameter: 1 to ``MAX_BATCH``, default ``DEFAULT_LIMIT``."""
-    if raw is None:
-        return DEFAULT_LIMIT
-    number = parse_canonical_id(raw)
-    if number is None or number > MAX_BATCH:
-        raise invalid("limit", f"must be a whole number from 1 to {MAX_BATCH}")
-    return number

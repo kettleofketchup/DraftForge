@@ -2,7 +2,9 @@
 
 A local record-send and an external contact import both read "has this
 recipient been contacted for this event?" and then write. They run their
-whole read-check-write through ``with_event_mutation`` so the check and the
+whole read-check-write through ``with_event_mutation`` (one event) or
+``with_event_mutations`` (an import spanning several events, locked in
+ascending id order so two of them cannot deadlock) so the check and the
 write cannot interleave:
 
 - PostgreSQL: ``SELECT ... FOR UPDATE`` on the event row.
@@ -21,7 +23,7 @@ retried.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Final, TypeVar
 
 from django.db import OperationalError, connection, transaction
@@ -77,12 +79,32 @@ def lock_event(event_id: int) -> None:
 
 def with_event_mutation(event_id: int, operation: Callable[[], T]) -> T:
     """Run ``operation`` in one transaction holding the event's lock."""
+    return with_event_mutations([event_id], operation)
+
+
+def with_event_mutations(
+    event_ids: Sequence[int],
+    operation: Callable[[], T],
+    *,
+    lock_first: Callable[[], None] | None = None,
+) -> T:
+    """Run ``operation`` in one transaction holding each event's lock.
+
+    ``lock_first`` runs first inside the transaction, for a lock that must
+    come before the event locks (the import takes its organization row
+    there). The events are then locked in ascending id order; an empty
+    list locks none. Retries follow ``with_event_mutation``.
+    """
+    ordered = sorted(set(event_ids))
     retryable = not connection.in_atomic_block
     attempt = 1
     while True:
         try:
             with transaction.atomic():
-                lock_event(event_id)
+                if lock_first is not None:
+                    lock_first()
+                for event_id in ordered:
+                    lock_event(event_id)
                 return operation()
         except OperationalError as exc:
             if not (
@@ -93,7 +115,7 @@ def with_event_mutation(event_id: int, operation: Callable[[], T]) -> T:
                 "promo_event_mutation_retry",
                 system="org",
                 subsystem="promotion",
-                event_id=event_id,
+                event_ids=ordered,
                 attempt=attempt,
             )
             _backoff(attempt)

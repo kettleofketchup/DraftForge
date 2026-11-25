@@ -38,18 +38,18 @@ except ImportError as _import_error:  # pragma: no cover
     ) from _import_error
 
 
-class _PromotionReadProbe(IntegrationAPIView):
+class _PromotionProbe(IntegrationAPIView):
     def get(self, request, org_id: int) -> Response:
-        org = gate_token_request(request, org_id, operation=Operation.PROMOTION_READ)
+        org = gate_token_request(request, org_id, operation=Operation.PROMOTION_IMPORT)
         return Response({"org_id": org.pk})
 
 
 urlpatterns = [
-    path("probe/<int:org_id>/promotion/", _PromotionReadProbe.as_view()),
+    path("probe/<int:org_id>/promotion/", _PromotionProbe.as_view()),
     *project_urlpatterns,
 ]
 
-PROMO_OPS = [Operation.PROMOTION_READ, Operation.PROMOTION_IMPORT]
+PROMO_OPS = [Operation.PROMOTION_IMPORT]
 
 
 class OperationCatalogTests(unittest.TestCase):
@@ -62,7 +62,6 @@ class OperationCatalogTests(unittest.TestCase):
             {
                 "mmr:read": FeatureKey.MMR_SYNC,
                 "mmr:write": FeatureKey.MMR_SYNC,
-                "promotion:read": FeatureKey.PROMOTION,
                 "promotion:import": FeatureKey.PROMOTION,
             },
         )
@@ -76,10 +75,14 @@ class OperationCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown operation"):
             parse_operations(["contributions:read"])
 
+    def test_promotion_read_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown operation"):
+            parse_operations(["promotion:read"])
+
     def test_parse_dedupes_and_sorts_canonically(self) -> None:
         self.assertEqual(
-            parse_operations(["promotion:read", "mmr:read", "promotion:read"]),
-            ["mmr:read", "promotion:read"],
+            parse_operations(["promotion:import", "mmr:read", "promotion:import"]),
+            ["mmr:read", "promotion:import"],
         )
 
 
@@ -117,13 +120,11 @@ class GrantTests(ApiTokenBase):
         self.client.force_authenticate(self.admin)
         resp = self.client.post(
             self.tokens_url(),
-            {"name": "adaptor", "operations": ["promotion:import", "promotion:read"]},
+            {"name": "adaptor", "operations": ["promotion:import"]},
             format="json",
         )
         self.assertEqual(resp.status_code, 201, resp.data)
-        self.assertEqual(
-            resp.data["operations"], ["promotion:import", "promotion:read"]
-        )
+        self.assertEqual(resp.data["operations"], ["promotion:import"])
         raw = resp.data["token"]
         self.assertEqual(self.bearer(raw).get(self.promo_url()).status_code, 200)
         mmr = self.bearer(raw).get(self.sync_url())
@@ -134,7 +135,7 @@ class GrantTests(ApiTokenBase):
         self.client.force_authenticate(self.admin)
         resp = self.client.post(
             self.tokens_url(),
-            {"name": "x", "operations": ["promotion:read", "mmr:read"]},
+            {"name": "x", "operations": ["promotion:import", "mmr:read"]},
             format="json",
         )
         self.assertEqual(resp.status_code, 403)
@@ -143,7 +144,7 @@ class GrantTests(ApiTokenBase):
 
     def test_issuance_rejects_unknown_and_empty_operations(self) -> None:
         self.client.force_authenticate(self.admin)
-        for ops in ([], ["promotion:write"], ["nope"], "promotion:read"):
+        for ops in ([], ["promotion:write"], ["promotion:read"], "promotion:import"):
             with self.subTest(ops=ops):
                 resp = self.client.post(
                     self.tokens_url(), {"name": "x", "operations": ops}, format="json"
@@ -155,7 +156,7 @@ class GrantTests(ApiTokenBase):
         self.client.force_authenticate(self.staff)
         resp = self.client.post(
             self.tokens_url(),
-            {"name": "x", "operations": ["promotion:read"]},
+            {"name": "x", "operations": ["promotion:import"]},
             format="json",
         )
         self.assertEqual(resp.status_code, 403)
@@ -178,9 +179,7 @@ class GrantTests(ApiTokenBase):
         self.assertEqual(resp.json()["error"]["code"], "feature_locked")
         set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=None)
 
-        OrgApiToken.objects.filter(pk=issued.token.pk).update(
-            operations=["promotion:import"]
-        )
+        OrgApiToken.objects.filter(pk=issued.token.pk).update(operations=["mmr:read"])
         self.assertEqual(client.get(url).status_code, 403)
         OrgApiToken.objects.filter(pk=issued.token.pk).update(operations=PROMO_OPS)
 

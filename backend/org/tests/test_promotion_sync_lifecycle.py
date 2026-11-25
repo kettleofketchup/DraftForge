@@ -341,16 +341,13 @@ class DeletionTests(_ImportBase):
         with self.assertRaises(ImmutableFieldError):
             row.save(update_fields=["payload"])
 
-    def test_quarantined_evidence_stays_in_universe(self) -> None:
+    def test_quarantined_evidence_is_kept_after_deletion(self) -> None:
         player = self.non_member_player("evidence_player")
         discord_id = player.discordId
         self.imported([self.entry(8021, player)])
         cancel_or_redact_promotion_identity(player)
         player.delete()
-        universe = self.version()
-        self.assertTrue(universe)
-        from org.integration.subjects import authorized_event_subjects
-
-        subjects = authorized_event_subjects(self.org, self.event)
-        self.assertIsNotNone(subjects.by_discord_id(discord_id))
-        self.assertEqual(self.receipt(8021).discord_id, discord_id)
+        stored = self.receipt(8021)
+        self.assertEqual(stored.discord_id, discord_id)
+        self.assertEqual(stored.association_state, AssociationState.QUARANTINED)
+        self.assertTrue(stored.holds_point)

@@ -9,6 +9,7 @@ from rest_framework.test import APIRequestFactory
 from app.models import CustomUser
 from events.models import Event
 from org.integration.contacts import contact_sync_status
+from org.integration.receipts import import_source_hash
 from org.models import ContributionEntry, Organization, OrgUser, PromoSend
 from org.models_promotion_sync import (
     ExternalPromotionReceipt,
@@ -28,6 +29,21 @@ class PromotionIntegrationFixtureTests(TestCase):
         self.original_sync = settings.PROMOTION_SYNC
         self.addCleanup(reset_org_features_data)
         populate_org_features_data()
+
+    @staticmethod
+    def _hash(receipt: ExternalPromotionReceipt) -> str:
+        return import_source_hash(
+            {
+                "source_contact_id": str(receipt.source_contact_id),
+                "recorded_at": receipt.recorded_at,
+                "contact_date_ny": receipt.contact_date_ny.isoformat(),
+                "contact_method": receipt.contact_method,
+                "contact_reason": receipt.contact_reason,
+                "occasion_id": str(receipt.occasion_id),
+                "event_date": None,
+                "forced": receipt.forced,
+            }
+        )
 
     def _rows(self, event: Event, source: CandidateSource) -> dict[str, dict]:
         rows = candidates(
@@ -63,9 +79,14 @@ class PromotionIntegrationFixtureTests(TestCase):
                 set(refs),
                 {"external", "local_and_external", "discord_only", "non_member"},
             )
+            receipts = ExternalPromotionReceipt.objects.filter(event=event)
+            self.assertEqual(receipts.count(), 4)
             self.assertEqual(
-                ExternalPromotionReceipt.objects.filter(event=event).count(), 4
+                {(r.point_status, r.holds_point) for r in receipts},
+                {("uncredited", True)},
             )
+            for receipt in receipts:
+                self.assertEqual(receipt.source_hash, self._hash(receipt))
             self.assertEqual(
                 PromoSend.objects.filter(event=event).count(), 1
             )  # the audience fixture's seeded local send only

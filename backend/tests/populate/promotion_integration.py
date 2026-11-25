@@ -12,8 +12,10 @@ candidate:
 - ``discord_only``: a guild member without a DraftForge account.
 - ``non_member``: a recent tournament player who is not an org member.
 
-No PromoSend, award, account or membership is created for any of them, and no
-real contact log, adaptor or Discord endpoint is contacted. All IDs are synthetic.
+None names a promoter, so each holds its (event, player) promotion point
+uncredited, as the import would settle it. No PromoSend, award, account or
+membership is created for any of them, and no real contact log, adaptor or
+Discord endpoint is contacted. All IDs are synthetic.
 """
 
 from datetime import timedelta
@@ -26,13 +28,15 @@ from django.utils import timezone
 
 from config.promotion_sync import OrgPromotionBinding, PromotionSyncConfig
 from events.models import Event
-from org.integration.receipts import _legacy_import_source_hash
+from org.integration.receipts import import_source_hash
 from org.models import Organization, OrgUser
 from org.models_promotion_sync import (
     AssociationState,
     ContactMethod,
     ContactReason,
     ExternalPromotionReceipt,
+    PointReason,
+    PointStatus,
     PromotionContactOutbox,
     ReceiptSource,
 )
@@ -88,13 +92,16 @@ def seed_promotion_integration(
         else:
             ref = dict(audiences[audience])
         recorded_at = now - timedelta(hours=hours)
+        contact_date_ny = recorded_at.astimezone(CONTACT_TZ).date()
         entry = {
             "source_contact_id": str(contact_id),
-            "event_id": str(event.pk),
-            "discord_id": ref["discord_id"],
             "recorded_at": recorded_at,
+            "contact_date_ny": contact_date_ny.isoformat(),
             "contact_method": ContactMethod.DISCORD_DM.value,
-            "linkage": "occasion",
+            "contact_reason": ContactReason.EVENT_INVITE.value,
+            "occasion_id": str(OCCASION_ID),
+            "event_date": None,
+            "forced": False,
         }
         org_user = (
             OrgUser.objects.nocache()
@@ -110,12 +117,12 @@ def seed_promotion_integration(
             event=event,
             discord_id=ref["discord_id"],
             recorded_at=recorded_at,
-            contact_date_ny=recorded_at.astimezone(CONTACT_TZ).date(),
+            contact_date_ny=contact_date_ny,
             contact_method=ContactMethod.DISCORD_DM,
             contact_reason=ContactReason.EVENT_INVITE,
             occasion_id=OCCASION_ID,
             forced=False,
-            source_hash=_legacy_import_source_hash(entry),
+            source_hash=import_source_hash(entry),
             first_imported_at=now - timedelta(minutes=5),
             user_id=ref["pk"],
             org_user=org_user,
@@ -125,6 +132,10 @@ def seed_promotion_integration(
                 else AssociationState.UNRESOLVED
             ),
             association_updated_at=now - timedelta(minutes=5),
+            # No promoter is named, so each holds its point uncredited.
+            point_status=PointStatus.UNCREDITED,
+            point_reason=PointReason.PROMOTER_UNRESOLVED,
+            holds_point=True,
         )
         refs[key] = {**ref, "source_contact_id": str(contact_id)}
     return refs

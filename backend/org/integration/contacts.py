@@ -1,43 +1,43 @@
-"""Import external contact receipts and answer "was this person contacted?".
+"""Import the bound guild's external contact log and answer "was this
+person contacted?".
 
-``import_contact_receipts`` is all or nothing. It validates the whole batch
-(shape, one bound event, occasion linkage, the current ``mapping_version``,
-every subject tuple against the authorized universe, and every retained
-source ID's immutable facts) before writing anything, then writes inside
-the event's mutation lock (``event_lock.with_event_mutation``), the same
-lock a local record-send takes. Per entry it returns:
+``import_contact_receipts`` takes one id range of the external contact log
+(``parse_import_batch``): every source row with ``after < id <= through``
+is an entry or a skipped id. The whole batch is validated before anything
+is written; it then runs under the org row lock and the lock of every event
+it touches, taken in ascending order (``event_lock.with_event_mutations``),
+the same per-event lock a local record-send takes. Per entry it returns:
 
-- ``applied``: a new source contact, stored once;
-- ``unchanged``: the source contact is already stored with the same facts.
-  A verified association change (null to the account that owns the Discord
-  ID, null to that account's membership here) is saved and counted in
-  ``association_updated``; the source facts and import time stay as they
-  were;
+- ``applied``: a new source contact, stored once whoever the player is (an
+  unknown player is stored with no account);
+- ``unchanged``: stored with the same source facts, target, promoter and
+  bound event. A verified association change (null to the account that
+  owns the Discord ID, null to that account's membership here) is saved and
+  counted in ``association_updated``; the source facts and import time stay;
+- ``updated``: any of those differ, so the receipt is superseded
+  (``points.supersede``) and audited;
+- ``reinstated``: a retracted receipt was posted again;
 - ``quarantined``: the stored association conflicts with the incoming one
   (the Discord ID now belongs to another account, or the membership is
-  someone else's). Only that entry is quarantined: its evidence is kept
-  and it stops ticking. The rest of the batch still applies.
+  someone else's). Only that entry is quarantined.
 
-A retained source ID with different source facts is 409
-``source_content_conflict`` for the whole batch. Nothing here creates an
-account, a membership, a ``PromoSend`` or an award.
+Each entry also reports its ``point`` (``points.settle``) and whether it
+voided a local point. Stored, live receipts inside the range that were
+neither posted nor skipped are retracted, unless they were imported after
+this scan started (less a grace period), so an older scan never retracts a
+newer scan's row. Nothing here creates an account, a membership or a
+``PromoSend``.
 
-Ticks: a non-quarantined receipt for the event and Discord ID suppresses
-the candidate row with that Discord ID, provided the receipt is not linked
-to a different account than the row's.
-
-``parse_import_batch`` parses the guild-wide import wire that replaces the
-per-event one above: every external contact of the bound guild in one id
-range, each entry linked to an occasion or an event date, with the rows
-the adaptor read but did not post listed in ``skipped_ids``.
+The event comes only from DraftForge's own binding (occasion -> event of
+this org); date-linked contacts and unbound occasions have none.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Final, Literal
-from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -45,30 +45,22 @@ from django.db.models import Max
 from django.utils import timezone
 
 from app.models import CustomUser
+from config.promotion_sync import OrgPromotionBinding
 from events.models import Event
-from org.integration.bindings import get_event_binding, get_org_binding
+from org.integration import points
+from org.integration.bindings import get_org_binding
 from org.integration.errors import IntegrationError, invalid
-from org.integration.event_lock import with_event_mutation
+from org.integration.event_lock import with_event_mutations
 from org.integration.parsers import (
     MAX_BATCH,
     expect_object,
     parse_batch,
     parse_choice,
     parse_date,
-    parse_hash,
     parse_id,
     parse_timestamp,
 )
-from org.integration.receipts import (
-    _legacy_import_source_hash,
-    format_timestamp,
-    import_source_hash,
-)
-from org.integration.subjects import (
-    SubjectUniverse,
-    authorized_event_subjects,
-    guild_snapshot,
-)
+from org.integration.receipts import format_timestamp, import_source_hash
 from org.integration.ticks import (
     external_contact_exists,
     external_contact_for,
@@ -82,6 +74,7 @@ from org.models_promotion_sync import (
     ContactMethod,
     ContactReason,
     ExternalPromotionReceipt,
+    PointStatus,
     ReceiptSource,
 )
 from telemetry.logging import get_logger
@@ -92,7 +85,7 @@ __all__ = [
     "AssociationOutcome",
     "ContactReason",
     "ImportBatch",
-    "ImportEntryV",
+    "ImportEntry",
     "contact_sync_status",
     "external_contact_exists",
     "external_contact_for",
@@ -103,100 +96,13 @@ __all__ = [
     "suppressing_receipts",
 ]
 
-ENVELOPE_KEYS: Final[tuple[str, ...]] = ("source", "mapping_version", "entries")
-ENTRY_KEYS: Final[tuple[str, ...]] = (
-    "source_contact_id",
-    "event_id",
-    "user_id",
-    "org_user_id",
-    "discord_id",
-    "recorded_at",
-    "contact_method",
-    "linkage",
-)
-# v1 supports occasion linkage only; no event-date fallback is configured.
-SUPPORTED_LINKAGE: Final[str] = "occasion"
-LINKAGES: Final[tuple[str, ...]] = ("occasion", "event_date")
-CONTACT_TZ: Final = ZoneInfo("America/New_York")
-HISTORY_WARNING: Final[str] = "history_may_be_incomplete"
-
-Status = Literal["applied", "unchanged", "quarantined"]
-
-
-@dataclass(frozen=True)
-class ImportEntry:
-    index: int
-    source_contact_id: int
-    event_id: int
-    user_id: int | None
-    org_user_id: int | None
-    discord_id: str
-    recorded_at: datetime
-    contact_method: str
-    linkage: str
-
-    @property
-    def source_hash(self) -> str:
-        return _legacy_import_source_hash(
-            {
-                "source_contact_id": str(self.source_contact_id),
-                "event_id": str(self.event_id),
-                "discord_id": self.discord_id,
-                "recorded_at": self.recorded_at,
-                "contact_method": self.contact_method,
-                "linkage": self.linkage,
-            },
-            source=ReceiptSource.CONTACT_LOG,
-        )
+Status = Literal["applied", "unchanged", "updated", "reinstated", "quarantined"]
 
 
 @dataclass(frozen=True)
 class AssociationOutcome:
     status: Literal["unchanged", "quarantined"]
     association_updated: bool
-
-
-def _parse_entry(value: Any, index: int) -> ImportEntry:
-    path = f"entries[{index}]"
-    raw = expect_object(value, path, ENTRY_KEYS)
-    source_contact_id = parse_id(raw["source_contact_id"], f"{path}.source_contact_id")
-    event_id = parse_id(raw["event_id"], f"{path}.event_id")
-    discord_id = parse_id(raw["discord_id"], f"{path}.discord_id")
-    assert source_contact_id is not None and event_id is not None
-    linkage = parse_choice(raw["linkage"], f"{path}.linkage", LINKAGES)
-    if linkage != SUPPORTED_LINKAGE:
-        raise invalid(f"{path}.linkage", "is not the event's configured linkage")
-    return ImportEntry(
-        index=index,
-        source_contact_id=source_contact_id,
-        event_id=event_id,
-        user_id=parse_id(raw["user_id"], f"{path}.user_id", nullable=True),
-        org_user_id=parse_id(raw["org_user_id"], f"{path}.org_user_id", nullable=True),
-        discord_id=str(discord_id),
-        recorded_at=parse_timestamp(raw["recorded_at"], f"{path}.recorded_at"),
-        contact_method=parse_choice(
-            raw["contact_method"], f"{path}.contact_method", ContactMethod.values
-        ),
-        linkage=linkage,
-    )
-
-
-def _parse(payload: Any) -> tuple[str, list[ImportEntry]]:
-    body = expect_object(payload, "", ENVELOPE_KEYS)
-    parse_choice(body["source"], "source", (ReceiptSource.CONTACT_LOG,))
-    version = parse_hash(body["mapping_version"], "mapping_version")
-    raw_entries = parse_batch(body["entries"], "entries", min_items=0)
-    entries = [_parse_entry(value, i) for i, value in enumerate(raw_entries)]
-    seen: set[int] = set()
-    for entry in entries:
-        if entry.source_contact_id in seen:
-            raise invalid(
-                f"entries[{entry.index}].source_contact_id", "is repeated in the batch"
-            )
-        seen.add(entry.source_contact_id)
-    if len({e.event_id for e in entries}) > 1:
-        raise invalid("entries", "must all be for one event")
-    return version, entries
 
 
 BATCH_KEYS: Final[tuple[str, ...]] = (
@@ -224,7 +130,7 @@ MAX_SKIPPED: Final[int] = 1000
 
 
 @dataclass(frozen=True)
-class ImportEntryV:
+class ImportEntry:
     """One parsed entry of the guild-wide import."""
 
     source_contact_id: int
@@ -254,10 +160,10 @@ class ImportBatch:
     range_after: int | None
     range_through: int | None
     skipped_ids: frozenset[int]
-    entries: list[ImportEntryV]
+    entries: list[ImportEntry]
 
 
-def _parse_import_entry(value: Any, path: str, now: datetime) -> ImportEntryV:
+def _parse_import_entry(value: Any, path: str, now: datetime) -> ImportEntry:
     raw = expect_object(value, path, IMPORT_ENTRY_KEYS)
     source_contact_id = parse_id(raw["source_contact_id"], f"{path}.source_contact_id")
     target = parse_id(raw["target_discord_id"], f"{path}.target_discord_id")
@@ -299,7 +205,7 @@ def _parse_import_entry(value: Any, path: str, now: datetime) -> ImportEntryV:
         },
         source=ReceiptSource.CONTACT_LOG,
     )
-    return ImportEntryV(
+    return ImportEntry(
         source_contact_id=source_contact_id,
         target_discord_id=str(target),
         promoter_discord_id=None if promoter is None else str(promoter),
@@ -368,7 +274,7 @@ def parse_import_batch(payload: Any, *, now: datetime | None = None) -> ImportBa
         if source_id in skipped:
             raise invalid(path, "is repeated in the batch")
         skipped.add(source_id)
-    entries: list[ImportEntryV] = []
+    entries: list[ImportEntry] = []
     seen: set[int] = set()
     for i, value in enumerate(raw_entries):
         path = f"entries[{i}]"
@@ -390,142 +296,321 @@ def parse_import_batch(payload: Any, *, now: datetime | None = None) -> ImportBa
     )
 
 
-def _result(statuses: list[Status], association_updated: int) -> dict[str, Any]:
+RETRACT_GRACE: Final = timedelta(minutes=5)
+HISTORY_WARNING: Final[str] = "history_may_be_incomplete"
+_COUNTED_POINTS: Final[tuple[str, ...]] = (
+    PointStatus.CREDITED,
+    PointStatus.UNCREDITED,
+    PointStatus.DUPLICATE,
+    PointStatus.ECHO,
+)
+
+
+class _LockSetChanged(Exception):
+    """A receipt moved to an event outside the locks taken for the batch."""
+
+
+def _bound_events(org: Organization, binding: OrgPromotionBinding) -> dict[int, Event]:
+    """Occasion id -> bound event, for events that exist in this org."""
+    events = Event.objects.nocache().filter(
+        pk__in=list(binding.events), organization=org
+    )
+    by_pk = {event.pk: event for event in events}
     return {
-        "results": [{"index": i, "status": s} for i, s in enumerate(statuses)],
-        "applied": statuses.count("applied"),
-        "unchanged": statuses.count("unchanged"),
-        "quarantined": statuses.count("quarantined"),
-        "association_updated": association_updated,
+        occasion: by_pk[event_id]
+        for event_id, occasion in binding.events.items()
+        if event_id in by_pk
     }
 
 
-def _authorize(universe: SubjectUniverse, entries: list[ImportEntry]) -> None:
-    for entry in entries:
-        subject = universe.by_discord_id(entry.discord_id)
-        if subject is None or (subject.user_id, subject.org_user_id) != (
-            entry.user_id,
-            entry.org_user_id,
-        ):
-            raise invalid(
-                f"entries[{entry.index}]", "is not an authorized subject for the event"
-            )
+def _event_for(entry: ImportEntry, events: dict[int, Event]) -> Event | None:
+    return None if entry.occasion_id is None else events.get(entry.occasion_id)
 
 
-def _retained(
-    org: Organization, entries: list[ImportEntry]
-) -> dict[int, ExternalPromotionReceipt]:
+def _read(
+    org: Organization, batch: ImportBatch
+) -> tuple[dict[int, ExternalPromotionReceipt], list[ExternalPromotionReceipt]]:
+    """Retained receipts by source id, and the retraction candidates: live
+    receipts inside the range that were neither posted nor skipped."""
     stored = ExternalPromotionReceipt.objects.filter(
+        organization=org, source=ReceiptSource.CONTACT_LOG
+    )
+    entry_ids = {e.source_contact_id for e in batch.entries}
+    retained = {
+        r.source_contact_id: r for r in stored.filter(source_contact_id__in=entry_ids)
+    }
+    candidates: list[ExternalPromotionReceipt] = []
+    if batch.range_through is not None:
+        excluded = entry_ids | batch.skipped_ids
+        candidates = [
+            r
+            for r in stored.filter(
+                source_contact_id__gt=batch.range_after,
+                source_contact_id__lte=batch.range_through,
+                retracted_at__isnull=True,
+            ).order_by("source_contact_id")
+            if r.source_contact_id not in excluded
+        ]
+    return retained, candidates
+
+
+def _lock_set(
+    batch: ImportBatch,
+    events: dict[int, Event],
+    receipts: list[ExternalPromotionReceipt],
+) -> set[int]:
+    wanted = {
+        event.pk
+        for event in (_event_for(e, events) for e in batch.entries)
+        if event is not None
+    }
+    return wanted | {r.event_id for r in receipts if r.event_id is not None}
+
+
+def _resolve(
+    org: Organization, discord_id: str
+) -> tuple[CustomUser | None, OrgUser | None]:
+    user = CustomUser.objects.nocache().filter(discordId=discord_id).first()
+    if user is None:
+        return None, None
+    org_user = OrgUser.objects.nocache().filter(user=user, organization=org).first()
+    return user, org_user
+
+
+def _create(
+    org: Organization,
+    entry: ImportEntry,
+    event: Event | None,
+    user: CustomUser | None,
+    org_user: OrgUser | None,
+) -> ExternalPromotionReceipt:
+    now = timezone.now()
+    return ExternalPromotionReceipt.objects.create(
         organization=org,
         source=ReceiptSource.CONTACT_LOG,
-        source_contact_id__in=[e.source_contact_id for e in entries],
+        source_contact_id=entry.source_contact_id,
+        first_imported_at=now,
+        recorded_at=entry.recorded_at,
+        contact_date_ny=entry.contact_date_ny,
+        contact_method=entry.contact_method,
+        contact_reason=entry.contact_reason,
+        occasion_id=entry.occasion_id,
+        event_date=entry.event_date,
+        forced=entry.forced,
+        source_hash=entry.source_hash,
+        discord_id=entry.target_discord_id,
+        promoter_discord_id=entry.promoter_discord_id or "",
+        event=event,
+        user=user,
+        org_user=org_user,
+        association_state=(
+            AssociationState.LINKED if user is not None else AssociationState.UNRESOLVED
+        ),
+        association_updated_at=now,
     )
-    by_id = {r.source_contact_id: r for r in stored}
-    for entry in entries:
-        receipt = by_id.get(entry.source_contact_id)
-        if receipt is not None and receipt.source_hash != entry.source_hash:
-            raise IntegrationError("source_content_conflict", 409)
-    return by_id
 
 
-def _new_association(entry: ImportEntry) -> AssociationState:
+def _relink(
+    receipt: ExternalPromotionReceipt,
+    user: CustomUser | None,
+    org_user: OrgUser | None,
+) -> None:
+    """A new target Discord ID is a new identity: resolve it afresh."""
+    receipt.user = user
+    receipt.org_user = org_user
+    receipt.association_state = (
+        AssociationState.LINKED if user is not None else AssociationState.UNRESOLVED
+    )
+    receipt.association_reason = AssociationReason.NONE
+    receipt.association_updated_at = timezone.now()
+    receipt.save(
+        update_fields=[
+            "user",
+            "org_user",
+            "association_state",
+            "association_reason",
+            "association_updated_at",
+        ]
+    )
+
+
+def _differs(
+    receipt: ExternalPromotionReceipt, entry: ImportEntry, event: Event | None
+) -> bool:
     return (
-        AssociationState.LINKED
-        if entry.user_id is not None
-        else AssociationState.UNRESOLVED
+        receipt.source_hash != entry.source_hash
+        or receipt.discord_id != entry.target_discord_id
+        or receipt.promoter_discord_id != (entry.promoter_discord_id or "")
+        or receipt.event_id != (event.pk if event is not None else None)
     )
 
 
-def _apply_entries(
+@dataclass(frozen=True)
+class _Replay:
+    status: Status
+    outcome: points.PointOutcome
+    association_updated: bool
+    changed: bool
+
+
+def _replay(
+    receipt: ExternalPromotionReceipt,
+    entry: ImportEntry,
+    event: Event | None,
+    user: CustomUser | None,
+    org_user: OrgUser | None,
+) -> _Replay:
+    """Apply a posted entry to its stored receipt (replay rules, spec order:
+    retraction, source hash, target, promoter, bound event)."""
+    receipt.refresh_from_db()
+    association_updated = False
+    quarantined = False
+    if receipt.discord_id == entry.target_discord_id:
+        association = reconcile_association(
+            receipt,
+            user.pk if user is not None else None,
+            org_user.pk if org_user is not None else None,
+        )
+        quarantined = association.status == "quarantined"
+        association_updated = association.association_updated
+    else:
+        _relink(receipt, user, org_user)
+    reinstated = receipt.retracted_at is not None
+    if reinstated:
+        receipt.retracted_at = None
+        receipt.point_status = PointStatus.NOT_APPLICABLE
+        receipt.save(update_fields=["retracted_at", "point_status"])
+    changed = _differs(receipt, entry, event)
+    if changed:
+        outcome = points.supersede(receipt, entry, event)
+    else:
+        # The promoter may have become matchable since the last import.
+        outcome = points.settle(receipt)
+    status: Status
+    if reinstated:
+        status = "reinstated"
+    elif changed:
+        status = "updated"
+    elif quarantined:
+        status = "quarantined"
+    else:
+        status = "unchanged"
+    return _Replay(status, outcome, association_updated, changed)
+
+
+def _apply_batch(
     org: Organization,
-    event: Event,
-    occasion_id: int,
-    entries: list[ImportEntry],
+    batch: ImportBatch,
+    events: dict[int, Event],
     retained: dict[int, ExternalPromotionReceipt],
-) -> tuple[list[Status], int]:
-    """Write the validated batch. Runs inside the event lock."""
-    statuses: list[Status] = []
-    updated = 0
-    now = timezone.now()
-    for entry in entries:
+    candidates: list[ExternalPromotionReceipt],
+) -> dict[str, Any]:
+    """Write the validated batch. Runs inside the org and event locks."""
+    results: list[dict[str, Any]] = []
+    counts: Counter[str] = Counter()
+    for index, entry in enumerate(batch.entries):
+        event = _event_for(entry, events)
+        user, org_user = _resolve(org, entry.target_discord_id)
         receipt = retained.get(entry.source_contact_id)
         if receipt is None:
-            ExternalPromotionReceipt.objects.create(
-                organization=org,
-                source=ReceiptSource.CONTACT_LOG,
-                source_contact_id=entry.source_contact_id,
-                event=event,
-                discord_id=entry.discord_id,
-                recorded_at=entry.recorded_at,
-                contact_date_ny=entry.recorded_at.astimezone(CONTACT_TZ).date(),
-                contact_method=entry.contact_method,
-                contact_reason=ContactReason.EVENT_INVITE,
-                occasion_id=occasion_id,
-                forced=False,
-                source_hash=entry.source_hash,
-                first_imported_at=now,
-                user_id=entry.user_id,
-                org_user_id=entry.org_user_id,
-                association_state=_new_association(entry),
-                association_updated_at=now,
-            )
-            statuses.append("applied")
+            receipt = _create(org, entry, event, user, org_user)
+            status: Status = "applied"
+            outcome = points.settle(receipt)
+        else:
+            replay = _replay(receipt, entry, event, user, org_user)
+            status, outcome = replay.status, replay.outcome
+            counts["association_updated"] += replay.association_updated
+            if status == "reinstated" and replay.changed:
+                counts["updated"] += 1
+        counts[status] += 1
+        if outcome.point in _COUNTED_POINTS:
+            counts[outcome.point] += 1
+        counts["voided_local"] += outcome.voided_local
+        counts["restored_local"] += outcome.restored_local
+        results.append(
+            {
+                "index": index,
+                "status": status,
+                "point": outcome.point,
+                "voided_local": outcome.voided_local,
+            }
+        )
+    threshold = batch.scan_started_at - RETRACT_GRACE
+    for receipt in candidates:
+        receipt.refresh_from_db()
+        if receipt.retracted_at is not None or receipt.first_imported_at >= threshold:
             continue
-        outcome = reconcile_association(receipt, entry.user_id, entry.org_user_id)
-        statuses.append(outcome.status)
-        updated += outcome.association_updated
-    return statuses, updated
+        counts["restored_local"] += points.retract(receipt)
+        counts["retracted"] += 1
+    highest = ExternalPromotionReceipt.objects.filter(
+        organization=org, source=ReceiptSource.CONTACT_LOG
+    ).aggregate(highest=Max("source_contact_id"))["highest"]
+    return {
+        "results": results,
+        **{
+            key: counts[key]
+            for key in (
+                "applied",
+                "unchanged",
+                "updated",
+                "reinstated",
+                "quarantined",
+                "association_updated",
+                "retracted",
+                "credited",
+                "uncredited",
+                "duplicate",
+                "echo",
+                "voided_local",
+                "restored_local",
+            )
+        },
+        "max_source_contact_id": None if highest is None else str(highest),
+    }
 
 
-def import_contact_receipts(org: Organization, payload: dict) -> dict[str, Any]:
-    """Validate and store one batch atomically; see the module docstring.
+def import_contact_receipts(org: Organization, payload: Any) -> dict[str, Any]:
+    """Validate and apply one guild-wide batch atomically; see the module
+    docstring.
 
-    Raises ``IntegrationError``: 400 for any invalid or unauthorized entry,
-    403/404 for binding problems, 409 ``mapping_changed`` for a stale
-    ``mapping_version``, 409 ``source_content_conflict`` for changed
-    source facts, 409 ``import_conflict_retry`` when a concurrent import
-    stored one of the source IDs first, and 503 ``subject_source_unavailable``
-    when the guild cannot be read. Nothing is written when it raises.
+    Raises ``IntegrationError``: 400 for an invalid batch, 403
+    ``binding_missing`` / ``binding_mismatch`` for the binding and its guild,
+    and 409 ``import_conflict_retry`` when a concurrent import stored one of
+    the source ids first or moved a receipt to an event outside this
+    batch's locks (retry once). Nothing is written when it raises.
     """
-    version, entries = _parse(payload)
-    if not entries:
-        get_org_binding(org.pk)
-        return _result([], 0)
-    event_id = entries[0].event_id
-    binding = get_event_binding(org.pk, event_id)
-    # The guild read is network I/O; on SQLite the locked transaction below
-    # holds the database-wide write lock, so it must happen first. Inside
-    # the lock only the database sources and the version are re-checked.
-    try:
-        event = Event.objects.nocache().get(pk=event_id, organization=org)
-    except Event.DoesNotExist:
-        raise IntegrationError("not_found", 404) from None
-    guild = guild_snapshot(org, event)
+    batch = parse_import_batch(payload)
+    binding = get_org_binding(org.pk)
+    if batch.guild_id != str(binding.guild_id):
+        raise IntegrationError("binding_mismatch", 403)
+    events = _bound_events(org, binding)
+    retained, candidates = _read(org, batch)
+    lock_ids = _lock_set(batch, events, [*retained.values(), *candidates])
+
+    def lock_org() -> None:
+        # Serializes with rescoring, which locks the same row first.
+        list(
+            Organization.objects.nocache()
+            .select_for_update()
+            .filter(pk=org.pk)
+            .values_list("pk", flat=True)
+        )
 
     def locked() -> dict[str, Any]:
-        event = Event.objects.nocache().get(pk=event_id, organization=org)
-        universe = authorized_event_subjects(org, event, guild=guild)
-        if universe.mapping_version != version:
-            raise IntegrationError("mapping_changed", 409)
-        _authorize(universe, entries)
-        retained = _retained(org, entries)
-        statuses, updated = _apply_entries(
-            org, event, binding.occasion_id, entries, retained
-        )
-        return _result(statuses, updated)
+        retained, candidates = _read(org, batch)
+        if not _lock_set(batch, events, [*retained.values(), *candidates]) <= lock_ids:
+            raise _LockSetChanged
+        return _apply_batch(org, batch, events, retained, candidates)
 
     try:
-        result = with_event_mutation(event_id, locked)
-    except IntegrityError:
-        # A concurrent import (for example of another event) stored one of
-        # these source IDs first. The batch rolled back; a retry sees the
-        # stored receipt and reports unchanged or source_content_conflict.
+        result = with_event_mutations(sorted(lock_ids), locked, lock_first=lock_org)
+    except (IntegrityError, _LockSetChanged, Event.DoesNotExist):
         log.warning(
             "integration_contacts_import_conflict",
             system="org",
             subsystem="integration",
             org_id=org.pk,
-            event_id=event_id,
+            entries=len(batch.entries),
         )
         raise IntegrationError("import_conflict_retry", 409) from None
     log.info(
@@ -533,11 +618,10 @@ def import_contact_receipts(org: Organization, payload: dict) -> dict[str, Any]:
         system="org",
         subsystem="integration",
         org_id=org.pk,
-        event_id=event_id,
-        applied=result["applied"],
-        unchanged=result["unchanged"],
-        quarantined=result["quarantined"],
-        association_updated=result["association_updated"],
+        entries=len(batch.entries),
+        skipped=len(batch.skipped_ids),
+        events=len(lock_ids),
+        **{k: v for k, v in result.items() if k not in ("results",)},
     )
     return result
 

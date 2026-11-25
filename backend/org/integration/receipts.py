@@ -10,9 +10,6 @@ receipt, delivery UUID included. ``import_source_hash`` covers the source
 facts of an imported contact-log row (``IMPORT_SOURCE_FIELDS``). Both Discord
 IDs are left out: the adaptor derives them from each person's current
 primary account, not from the row, so they are compared separately.
-
-``_legacy_import_source_hash`` is the digest of the per-event import wire
-that the guild-wide import replaces; it goes away with that wire.
 """
 
 from __future__ import annotations
@@ -46,15 +43,6 @@ IMPORT_SOURCE_FIELDS = (
     "occasion_id",
     "event_date",
     "forced",
-)
-
-_LEGACY_IMPORT_SOURCE_FIELDS = (
-    "source_contact_id",
-    "event_id",
-    "discord_id",
-    "recorded_at",
-    "contact_method",
-    "linkage",
 )
 
 _WIRE_TIMESTAMP = re.compile(
@@ -105,15 +93,4 @@ def import_source_hash(entry: Mapping[str, Any], *, source: str = "contact_log")
     facts["recorded_at"] = format_timestamp(facts["recorded_at"])
     if facts["event_date"] is not None:
         facts["event_date"] = format_timestamp(facts["event_date"])
-    return _sha256(canonical_json(facts))
-
-
-def _legacy_import_source_hash(
-    entry: Mapping[str, Any], *, source: str = "contact_log"
-) -> str:
-    facts: dict[str, Any] = {
-        field: entry[field] for field in _LEGACY_IMPORT_SOURCE_FIELDS
-    }
-    facts["recorded_at"] = format_timestamp(facts["recorded_at"])
-    facts["source"] = source
     return _sha256(canonical_json(facts))
