@@ -8,7 +8,8 @@
  *   - Screenshot-required event surfaces URL field
  *   - Tentative path uses same modal with different submit label
  *   - Linked Steam account satisfies Friend ID (Deadlock event fast path)
- *   - Upgrade tentative -> rsvp re-runs gap evaluation
+ *   - Upgrade tentative -> rsvp re-runs gap evaluation, keeping the signup row
+ *   - Re-sign-up after cancelling keeps the signup row (#493)
  *   - Mobile viewport renders Sheet variant with sticky submit
  *
  * Notes
@@ -31,6 +32,7 @@ import {
   type EventInfo,
 } from '../../fixtures';
 import { API_URL } from '../../fixtures/base-url';
+import { getEventsSeedData } from '../../fixtures/events';
 import { test } from '../../fixtures/external-apis';
 
 async function getEventByName(
@@ -66,6 +68,28 @@ async function cancelRsvp(page: Page): Promise<void> {
   await expect(page.getByTestId('event-signup-btn')).toBeVisible({
     timeout: 10000,
   });
+}
+
+async function playerSignupId(
+  context: BrowserContext,
+  eventId: number,
+): Promise<number> {
+  const { users } = await getEventsSeedData(context);
+  const resp = await context.request.get(
+    `${API_URL}/events/signups/?event=${eventId}`,
+  );
+  expect(resp.ok()).toBeTruthy();
+  const signups: { id: number; user: number }[] = await resp.json();
+  const mine = signups.filter((s) => s.user === users.player);
+  expect(mine).toHaveLength(1);
+  return mine[0].id;
+}
+
+async function expectInLineSince(page: Page, signupId: number): Promise<void> {
+  await page.getByTestId('event-tab-signups').click();
+  await expect(
+    page.getByTestId(`signup-in-line-since-${signupId}`),
+  ).toBeVisible({ timeout: 10000 });
 }
 
 let eventInfo: EventInfo;
@@ -252,29 +276,31 @@ test.describe('Event Signup Form (@cicd)', () => {
       timeout: 10000,
     });
     await expect(page.getByTestId('event-upgrade-rsvp-btn')).toBeVisible();
+    const tentativeId = await playerSignupId(context, eventInfo.pk);
     await page.getByTestId('event-upgrade-rsvp-btn').click();
     await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({
       timeout: 10000,
     });
     await expect(page.getByTestId('event-cancel-tentative-btn')).toHaveCount(0);
+    expect(await playerSignupId(context, eventInfo.pk)).toBe(tentativeId);
+    await expectInLineSince(page, tentativeId);
   });
 
   test('cancelled signup can sign up again', async ({ page, context }) => {
     await loginEventPlayer(context);
     await page.goto(`/events/${eventInfo.pk}`);
     await page.getByTestId('event-signup-btn').click();
-    await page.getByTestId('event-cancel-rsvp-btn').click();
-    await page
-      .getByRole('alertdialog')
-      .getByRole('button', { name: 'Cancel RSVP' })
-      .click();
-    await expect(page.getByTestId('event-signup-btn')).toBeVisible({
+    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({
       timeout: 10000,
     });
+    const firstId = await playerSignupId(context, eventInfo.pk);
+    await cancelRsvp(page);
     await page.getByTestId('event-signup-btn').click();
     await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({
       timeout: 10000,
     });
+    expect(await playerSignupId(context, eventInfo.pk)).toBe(firstId);
+    await expectInLineSince(page, firstId);
   });
 
   test('mobile viewport renders Sheet variant with sticky submit', async ({
