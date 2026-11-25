@@ -15,6 +15,7 @@ from events.services import apply_signup_input, resolve_or_create_org_user
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDotaProfile
+from user.models import PositionsModel
 
 
 class ApplySignupInputTests(TestCase):
@@ -72,7 +73,6 @@ class ApplySignupInputTests(TestCase):
         (1st choice / 2nd choice / 3rd choice from sequential Selects). The
         list index + 1 becomes the priority on CustomUser.positions so
         Discord users get actual rankings instead of all-Favorite."""
-        from app.models import PositionsModel
 
         # Ensure user has a PositionsModel to write to.
         self.user.positions = PositionsModel.objects.create()
@@ -92,8 +92,6 @@ class ApplySignupInputTests(TestCase):
         self.assertEqual(positions.soft_support, 0)
 
     def test_discord_list_input_duplicate_role_keeps_earliest_slot(self):
-        from app.models import PositionsModel
-
         self.user.positions = PositionsModel.objects.create()
 
         apply_signup_input(
@@ -111,7 +109,6 @@ class ApplySignupInputTests(TestCase):
         """Web modal sends positions as a {carry, mid, …} dict with the user's
         per-role priorities (matches CustomUser.positions shape). Those values
         land verbatim on PositionsModel without being flattened to 1."""
-        from app.models import PositionsModel
         from events.schemas import PositionPriorities
 
         self.user.positions = PositionsModel.objects.create()

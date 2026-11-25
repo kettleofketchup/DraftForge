@@ -12,6 +12,7 @@ from events.tests._internal_client_orm import (
     _get_event_for_task_orm,
 )
 from events.tests.base import EventTestCase
+from user.models import PositionsModel
 
 
 class _EmbedTestCase(DiscordTestMixin, EventTestCase):
@@ -133,7 +134,7 @@ class BuildAnnouncementEmbedSignupListTest(_EmbedTestCase):
         self.assertIn("\u2705", signed_up_field["value"])
 
     def test_waitlisted_in_separate_field(self):
-        from app.models import CustomUser, PositionsModel
+        from app.models import CustomUser
         from events.constants import SignupStatus
         from events.discord.embeds import build_announcement_v2
         from events.models import EventSignup
@@ -182,7 +183,7 @@ class ReminderEmbedSignupCountTest(_EmbedTestCase):
     """
 
     def _add_signup(self, status, index):
-        from app.models import CustomUser, PositionsModel
+        from app.models import CustomUser
         from events.models import EventSignup
 
         pos = PositionsModel.objects.create()

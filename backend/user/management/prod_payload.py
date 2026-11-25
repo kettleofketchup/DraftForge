@@ -2,7 +2,8 @@
 
 from typing import Any
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
+from user.models import PositionsModel
 
 
 def steam_account_id(user_data: dict[str, Any]) -> int | None:

@@ -61,12 +61,24 @@ There is one `prepare` job. Every Playwright and backend test job has `needs: pr
 and `if: ${{ !cancelled() }}`: they start when `prepare` finishes, whether it succeeded,
 failed or was skipped, and they keep their in-job fallbacks.
 
-`just ci::prepare-images` probes GHCR with `docker buildx imagetools inspect` (no pull)
-for `frontend-dev`, `backend-dev`, `playwright-runner`, `nginx` and `test-db` at their
-content hashes, builds whatever is missing once, in parallel, and prints one line per
-image (`present`, `built+pushed in Ns`, or why not). Failures are `::warning::`s and the
-job still succeeds; the test jobs then build what is missing themselves. Timeout 30
-minutes; permissions `contents: read`, `packages: write`.
+The job probes first. Right after a shallow checkout, `scripts/ci_probe_images.py`
+(stdlib `python3`, no docker, no `just`) sends manifest HEADs to GHCR's registry API for
+`frontend-dev`, `backend-dev`, `playwright-runner`, `nginx` and `test-db` at their
+content hashes. It applies the same present rule as `ci::prepare-images` and writes
+`build=false` only when every item is present. In that case the job ends there:
+no toolchain, no `docker login`, no Zot auth and no build step. A no-op run is about
+checkout plus half a second (before this, 52 s on the home lane and about 15 s
+hosted). A registry error counts as missing. A probe that fails leaves `build` unset,
+so the job falls through to the steps below, which are unchanged.
+`scripts/slot_tests/test_ci_probe_images.py` checks that the probe queries the same
+refs as `ci::prepare-images --probe`.
+
+When something is missing, `just ci::prepare-images` probes again with
+`docker buildx imagetools inspect` (no pull), builds whatever is missing once, in
+parallel, and prints one line per image (`present`, `built+pushed in Ns`, or why not).
+Failures are `::warning::`s and the job still succeeds; the test jobs then build what
+is missing themselves. Timeout 30 minutes; permissions `contents: read`,
+`packages: write`.
 
 What it builds with and where it pushes depends on the runner:
 
@@ -76,12 +88,13 @@ What it builds with and where it pushes depends on the runner:
 | Present means | `draftforge/<img>:<hash>` exists | `draftforge/<img>:<hash>` or this PR's `draftforge-ci/<img>:pr-<n>-<hash>` exists |
 | Builder | Local `docker-container` buildx builder (`ci::buildx-builder`), only if something is missing | The home cluster's remote BuildKit (`ci::home-builder`), only if something is missing; Zot auth from `setup-builder` |
 | Images pushed to | `draftforge/<img>:<hash>` only (`docker::buildx --hash-only`): never `:latest`, never a `:buildcache` export | `draftforge-ci/<img>:pr-<n>-<hash>` only (`docker::buildx --mode=pr`): never a `draftforge/` tag, never a GHCR cache export |
-| Test DB | `docker::db::build` then `docker::db::push --hash-only` | `docker::db::build --mode=pr --pr=<n>` (populate on the runner, push through buildx); Python and Poetry are installed only when `ci::prepare-images --probe` reports `test-db` missing |
+| Test DB | `docker::db::build` then `docker::db::push --hash-only` | `docker::db::build --mode=pr --pr=<n>` (populate on the runner, push through buildx); Python and Poetry are installed only when the probe reports `test-db` missing (or the probe failed) |
 | Build cache | Reads GHCR `:buildcache` | Reads Zot `buildcache/pr/draftforge/<img>:pr-<n>` and GHCR `:buildcache`; writes only the Zot per-PR cache |
 | Fork PRs | Read-only token: reports what is missing, builds nothing (`DF_PREPARE_READONLY`) | Never runs there |
 
-The hosted column is #787 as merged; the only change on the hosted path is the
-`runs-on` expression. On the home runner the step sets `DF_PREPARE_PR=<n>`, which turns
+The hosted column is #787 as merged; the changes on the hosted path are the
+`runs-on` expression and the probe-first step, which skips the job's setup when nothing
+is missing. On the home runner the step sets `DF_PREPARE_PR=<n>`, which turns
 on PR mode. Without it, `ci::prepare-images` refuses to build on any runner whose
 `RUNNER_ENVIRONMENT` is `self-hosted`, so a misrouted job cannot push PR code to
 `draftforge/*`.
