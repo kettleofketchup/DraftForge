@@ -23,11 +23,9 @@ export interface OrgFeatureAccess {
   canUseMmrSync: boolean;
   /** The promotion feature is unlocked for this org. */
   promotionEnabled: boolean;
-  /** The contributions feature is unlocked for this org. */
-  contributionsEnabled: boolean;
   /**
    * Org admins while any feature an app token can be granted is unlocked
-   * (MMR sync, promotion or contributions), or a site admin.
+   * (MMR sync or promotion), or a site admin.
    */
   canUseApiTokens: boolean;
   standingTracks: TrackInfo[];
@@ -47,9 +45,7 @@ export function useOrgFeatureAccess(
     settled && value === true;
   const mmrSyncEnabled = flag(org?.features?.includes('mmr_sync'));
   const promotionEnabled = flag(org?.features?.includes('promotion'));
-  const contributionsEnabled = flag(org?.features?.includes('contributions'));
-  const anyTokenFeature =
-    mmrSyncEnabled || promotionEnabled || contributionsEnabled;
+  const anyTokenFeature = mmrSyncEnabled || promotionEnabled;
   return {
     settled,
     viewerPk,
@@ -66,7 +62,6 @@ export function useOrgFeatureAccess(
     mmrSyncEnabled,
     canUseMmrSync: settled && isOrgAdmin && (isSiteAdmin || mmrSyncEnabled),
     promotionEnabled,
-    contributionsEnabled,
     canUseApiTokens: settled && isOrgAdmin && (isSiteAdmin || anyTokenFeature),
     standingTracks: (settled && org?.standing_tracks) || NO_TRACKS,
   };

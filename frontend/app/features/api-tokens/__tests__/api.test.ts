@@ -165,7 +165,6 @@ describe('form schemas', () => {
       'mmr:write',
       'promotion:read',
       'promotion:import',
-      'contributions:read',
     ]);
   });
 

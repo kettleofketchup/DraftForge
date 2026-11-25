@@ -18,12 +18,11 @@ export const TOKEN_OPERATION_VALUES = [
   'mmr:write',
   'promotion:read',
   'promotion:import',
-  'contributions:read',
 ] as const;
 export type TokenOperation = (typeof TOKEN_OPERATION_VALUES)[number];
 
 /** The org feature each operation needs, as in operations._ENTITLEMENTS. */
-export type TokenFeature = 'mmr_sync' | 'promotion' | 'contributions';
+export type TokenFeature = 'mmr_sync' | 'promotion';
 
 export interface TokenOperationInfo {
   value: TokenOperation;
@@ -44,17 +43,11 @@ export const TOKEN_OPERATIONS: readonly TokenOperationInfo[] = [
     label: 'Import external contact history',
     feature: 'promotion',
   },
-  {
-    value: 'contributions:read',
-    label: 'Read contribution totals',
-    feature: 'contributions',
-  },
 ];
 
 export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
   mmr_sync: 'MMR sync API',
   promotion: 'Promotion',
-  contributions: 'Contributions',
 };
 
 /** What the backend grants a token issued without operations, and every token that predates grants. */

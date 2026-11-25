@@ -70,7 +70,6 @@ const fullAccess = makeOrgFeatureAccess({
   mmrSyncEnabled: true,
   canUseMmrSync: true,
   promotionEnabled: true,
-  contributionsEnabled: true,
   canUseApiTokens: true,
 });
 const promotionOnly = makeOrgFeatureAccess({
@@ -254,7 +253,7 @@ describe('ApiAccessPanel', () => {
     expect(op('mmr:write').getAttribute('aria-checked')).toBe('true');
     expect(op('promotion:read').getAttribute('aria-checked')).toBe('false');
     expect(op('promotion:import').getAttribute('aria-checked')).toBe('false');
-    expect(op('contributions:read').getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByTestId('api-token-op-contributions:read')).toBeNull();
     expect(screen.getByText('Import external contact history')).toBeTruthy();
   });
 
@@ -277,13 +276,6 @@ describe('ApiAccessPanel', () => {
     expect(screen.getByTestId('api-token-op-mmr:read-locked').textContent).toBe(
       'MMR sync API is locked for this organization.',
     );
-    expect(
-      (
-        screen.getByTestId(
-          'api-token-op-contributions:read',
-        ) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
     fireEvent.click(screen.getByTestId('api-token-op-promotion:read'));
     fireEvent.click(screen.getByTestId('api-token-op-promotion:import'));
     fireEvent.change(screen.getByTestId('api-token-name'), {
@@ -351,11 +343,7 @@ describe('ApiAccessPanel', () => {
       apiToken({
         id: 3,
         name: 'Contact log adaptor',
-        operations: [
-          'contributions:read',
-          'promotion:import',
-          'promotion:read',
-        ],
+        operations: ['promotion:import', 'promotion:read'],
       }),
     ]);
     renderPanel(fullAccess);
@@ -365,7 +353,6 @@ describe('ApiAccessPanel', () => {
     const adaptorRow = screen.getByTestId('api-token-operations-3');
     expect(adaptorRow.textContent).toContain('Read promotion recipients');
     expect(adaptorRow.textContent).toContain('Import external contact history');
-    expect(adaptorRow.textContent).toContain('Read contribution totals');
     expect(adaptorRow.textContent).not.toContain('MMR');
   });
 
@@ -396,7 +383,18 @@ describe('ApiAccessPanel', () => {
       'api-token-create',
     )) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    expect(screen.getByTestId('api-access-locked')).toBeTruthy();
+    const locked = screen.getByTestId('api-access-locked').textContent ?? '';
+    expect(locked).toContain('The MMR sync API and Promotion are both locked');
+    expect(locked).not.toMatch(/contribution/i);
+  });
+
+  it('names only the promotion operations for the adaptor', async () => {
+    renderPanel(fullAccess);
+    const section = await screen.findByTestId('org-settings-api-access');
+    expect(section.textContent).not.toContain('contribution operations');
+    expect(section.textContent).toContain(
+      'The adaptor needs the promotion operations',
+    );
   });
 
   it('revokes after confirmation', async () => {

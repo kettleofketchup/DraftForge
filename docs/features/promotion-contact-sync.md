@@ -9,15 +9,14 @@ invited to an event over Discord DM. This integration connects them for **event 
 - Every DM a promoter marks as sent in DraftForge gets its own receipt, kept so that each
   one can become exactly one row in the external contact log once it has a writer that
   can store it (see [Writing to the external contact log is not enabled](#writing-to-the-external-contact-log-is-not-enabled)).
-- The adaptor can read DraftForge's contribution totals. Points come from DraftForge's
-  ledger, never from the external contact log.
+- Each side computes its own totals from its own ledger; DraftForge does not export
+  them to the adaptor.
 
 Messaging stays manual. Nothing here sends a Discord message, creates an account or a
 membership, or awards points for an imported contact.
 
 The other side of the integration is the adaptor service. Its repository documents the
-contact log reads, the adaptor CLI and its intake endpoint (`docs/promotion.md` and
-`docs/contributions.md` there).
+contact log reads, the adaptor CLI and its intake endpoint (`docs/promotion.md` there).
 
 ---
 
@@ -26,7 +25,6 @@ contact log reads, the adaptor CLI and its intake endpoint (`docs/promotion.md` 
 | Direction | What | Credential |
 |-----------|------|------------|
 | Contact log → adaptor → DraftForge | External contacts for a bound event, imported as receipts that tick candidates | DraftForge app token `dfk_…` with `promotion:read` and `promotion:import` |
-| DraftForge → adaptor | Contribution totals, pulled by the adaptor | the same kind of `dfk_…` token with `contributions:read` |
 | DraftForge → adaptor → contact log | One receipt per recorded DM, sent by the dispatcher | adaptor API key with only `promotion:write`, limited to the org |
 
 The two credentials are separate on purpose: DraftForge never holds a `dfk_` token for
@@ -43,14 +41,13 @@ operations the adaptor needs:
 |-----------|-------|-------------------|
 | `promotion:read` | Read promotion recipients | Promotion |
 | `promotion:import` | Import external contact history | Promotion |
-| `contributions:read` | Read contribution totals | Contributions |
 | `mmr:read`, `mmr:write` | Read / update member MMRs | MMR sync API |
 
 New tokens default to the MMR pair, so turn those off for the adaptor token. A token for
 the adaptor does **not** need the MMR sync API feature; the API access section is shown
 to org admins when any feature with token operations is unlocked. The same request
 through the API is `POST /api/organizations/<id>/api-tokens/` with
-`{"name": "Contact log adaptor", "operations": ["promotion:read", "promotion:import", "contributions:read"]}`.
+`{"name": "Contact log adaptor", "operations": ["promotion:read", "promotion:import"]}`.
 
 Grants are fixed when the token is created. Every request checks, in order: the token,
 its org, the operation grant (`403 operation_not_granted`), the operation's feature, that
@@ -222,15 +219,6 @@ additive and reversible on a disposable database, but reversing `0025` drops eve
 receipt and outbox row. Upgrading again restores the MMR pair on every token, so a
 rollback never widens a grant.
 
-## Contribution totals for the adaptor
-
-`GET /api/organizations/<id>/integration/v1/contributions/` lists every org member with
-their all-time **contribution** track total (leadership and conduct are not included).
-Zero and negative totals are returned as they are; a member without a usable Discord ID
-is `"status": "unavailable"` with `"reason": "discord_mapping_missing"` and no points,
-which is not the same as zero. Totals are read live per page; a membership change
-between pages is `409 mapping_changed`.
-
 ## API
 
 All integration endpoints live under `/api/organizations/<org_id>/integration/v1/`, take
@@ -242,7 +230,6 @@ only `Authorization: Bearer dfk_…`, and answer errors as
 |--------|------|-----------|
 | GET | `events/<event_id>/recipients/?limit=&cursor=` | `promotion:read` |
 | POST | `contact-receipts/` | `promotion:import` |
-| GET | `contributions/?limit=&cursor=` | `contributions:read` |
 
 ## Logs
 
@@ -252,12 +239,11 @@ codes, never message text or tokens.
 
 | Event | When |
 |-------|------|
-| `integration_recipients_listed`, `integration_contacts_imported`, `integration_contributions_listed` | a successful read or import |
+| `integration_recipients_listed`, `integration_contacts_imported` | a successful read or import |
 | `integration_request_rejected`, `integration_request_failed` | an integration request answered with an error |
 | `integration_contacts_import_conflict` | a batch refused for conflicting source facts |
 | `integration_subject_source_unavailable` | the guild member list could not be read (`503`) |
 | `integration_subject_identity_conflict` | two subjects resolved to one identity (`409 identity_conflict`) |
-| `integration_ledger_unavailable` | the ledger could not be read (`503 ledger_unavailable`) |
 | `org_api_operation_denied` | a token used an operation it was not granted |
 | `promo_outbox_enqueued` | a send got its outbox row |
 | `promo_receipt_quarantined`, `promo_receipts_reconciled_for_merge`, `promo_identity_canceled_for_deletion` | receipts and rows kept honest across merges and deletions |

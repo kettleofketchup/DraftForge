@@ -453,11 +453,10 @@ test.describe('Promotion external contact history @cicd', () => {
       await toggle.click();
       await expect(toggle).toHaveAttribute('aria-checked', 'false');
     }
-    for (const op of [
-      'promotion:read',
-      'promotion:import',
-      'contributions:read',
-    ]) {
+    await expect(
+      page.getByTestId('api-token-op-contributions:read'),
+    ).toHaveCount(0);
+    for (const op of ['promotion:read', 'promotion:import']) {
       const toggle = page.getByTestId(`api-token-op-${op}`);
       await expect(toggle).toHaveAttribute('aria-checked', 'false');
       await toggle.click();
@@ -476,18 +475,14 @@ test.describe('Promotion external contact history @cicd', () => {
     expect(response.status()).toBe(201);
     expect(response.request().postDataJSON()).toEqual({
       name: 'Contact log adaptor',
-      operations: ['promotion:read', 'promotion:import', 'contributions:read'],
+      operations: ['promotion:read', 'promotion:import'],
     });
     const created = (await response.json()) as {
       id: number;
       token: string;
       operations: string[];
     };
-    expect(created.operations).toEqual([
-      'contributions:read',
-      'promotion:import',
-      'promotion:read',
-    ]);
+    expect(created.operations).toEqual(['promotion:import', 'promotion:read']);
     await expect(page.getByTestId('api-token-secret')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('api-token-secret')).toHaveCount(0);
@@ -497,7 +492,6 @@ test.describe('Promotion external contact history @cicd', () => {
     const ops = page.getByTestId(`api-token-operations-${created.id}`);
     await expect(ops).toContainText('Read promotion recipients');
     await expect(ops).toContainText('Import external contact history');
-    await expect(ops).toContainText('Read contribution totals');
     // The name keeps a readable width next to the token and its operations,
     // and no cell's content is clipped or spills into its neighbour, at both
     // screenshot sizes.

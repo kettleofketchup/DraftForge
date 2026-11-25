@@ -44,17 +44,8 @@ class _PromotionReadProbe(IntegrationAPIView):
         return Response({"org_id": org.pk})
 
 
-class _ContributionsReadProbe(IntegrationAPIView):
-    def get(self, request, org_id: int) -> Response:
-        org = gate_token_request(
-            request, org_id, operation=Operation.CONTRIBUTIONS_READ
-        )
-        return Response({"org_id": org.pk})
-
-
 urlpatterns = [
     path("probe/<int:org_id>/promotion/", _PromotionReadProbe.as_view()),
-    path("probe/<int:org_id>/contributions/", _ContributionsReadProbe.as_view()),
     *project_urlpatterns,
 ]
 
@@ -73,7 +64,6 @@ class OperationCatalogTests(unittest.TestCase):
                 "mmr:write": FeatureKey.MMR_SYNC,
                 "promotion:read": FeatureKey.PROMOTION,
                 "promotion:import": FeatureKey.PROMOTION,
-                "contributions:read": FeatureKey.CONTRIBUTIONS,
             },
         )
 
@@ -81,6 +71,10 @@ class OperationCatalogTests(unittest.TestCase):
         for bad in ([], ["promotion:write"], ["MMR:READ"], [1], "mmr:read", None):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 parse_operations(bad)
+
+    def test_contributions_read_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown operation"):
+            parse_operations(["contributions:read"])
 
     def test_parse_dedupes_and_sorts_canonically(self) -> None:
         self.assertEqual(
@@ -94,7 +88,6 @@ class GrantTests(ApiTokenBase):
     def setUp(self) -> None:
         super().setUp()
         set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=None)
-        set_org_feature(self.org, FeatureKey.CONTRIBUTIONS, enabled=True, actor=None)
 
     def promo_url(self, org=None) -> str:
         return f"/probe/{(org or self.org).pk}/promotion/"
@@ -137,11 +130,11 @@ class GrantTests(ApiTokenBase):
         self.assertEqual(mmr.status_code, 403)
 
     def test_issuance_requires_each_requested_entitlement(self) -> None:
-        set_org_feature(self.org, FeatureKey.CONTRIBUTIONS, enabled=False, actor=None)
+        set_org_feature(self.org, FeatureKey.MMR_SYNC, enabled=False, actor=None)
         self.client.force_authenticate(self.admin)
         resp = self.client.post(
             self.tokens_url(),
-            {"name": "x", "operations": ["promotion:read", "contributions:read"]},
+            {"name": "x", "operations": ["promotion:read", "mmr:read"]},
             format="json",
         )
         self.assertEqual(resp.status_code, 403)
@@ -225,15 +218,14 @@ class GrantTests(ApiTokenBase):
         self.assertEqual(resp.status_code, 404)
         self.assertEqual(resp.json()["error"]["code"], "not_found")
 
-    def test_contributions_grant_uses_contributions_entitlement(self) -> None:
+    def test_contributions_route_removed(self) -> None:
         issued = issue_token(
-            self.org, self.admin, "pts", operations=[Operation.CONTRIBUTIONS_READ]
+            self.org, self.admin, "all", operations=[op.value for op in Operation]
         )
-        url = f"/probe/{self.org.pk}/contributions/"
-        set_org_feature(self.org, FeatureKey.PROMOTION, enabled=False, actor=None)
-        self.assertEqual(self.bearer(issued.raw).get(url).status_code, 200)
-        set_org_feature(self.org, FeatureKey.CONTRIBUTIONS, enabled=False, actor=None)
-        self.assertEqual(self.bearer(issued.raw).get(url).status_code, 403)
+        resp = self.bearer(issued.raw).get(
+            f"/api/organizations/{self.org.pk}/integration/v1/contributions/"
+        )
+        self.assertEqual(resp.status_code, 404)
 
     def test_session_and_internal_service_tokens_not_accepted(self) -> None:
         self.client.force_authenticate(self.admin)

@@ -161,7 +161,7 @@ class RollbackOnDisposableDatabaseTest(MigratorTestCase):
         self.sends_before = _sends(apps, self.seed["sends"])
         Token = apps.get_model("org", "OrgApiToken")
         Token.objects.filter(pk=self.seed["tokens"][0]).update(
-            operations=["contributions:read", "promotion:import", "promotion:read"]
+            operations=["promotion:import", "promotion:read"]
         )
         Organization = apps.get_model("org", "Organization")
         org = Organization.objects.get(pk=self.seed["org"])

@@ -15,12 +15,11 @@
   adaptor answers that writeback is disabled and the receipt is kept as paused, which is
   not a successful sync.
 - App tokens get operation grants (`mmr:read`, `mmr:write`, `promotion:read`,
-  `promotion:import`, `contributions:read`), chosen per token in Org Settings → API access.
-  API access now appears when any feature with token operations is unlocked, so an org
+  `promotion:import`), chosen per token in Org Settings → API access.
+  API access now appears when the MMR sync API or Promotion is unlocked, so an org
   admin can issue an adaptor token without the MMR sync API feature.
 - Integration API under `/api/organizations/<id>/integration/v1/` for the adaptor: event
-  recipients, contact receipt import, and all-time contribution-track totals (zero and
-  negative totals exact; members without a usable Discord ID reported as unavailable).
+  recipients and contact receipt import.
 - New backend settings `PROMOTION_SYNC_BINDINGS` (org to external guild, event to
   external occasion; empty by default, and unbound orgs and events are left out) and
   `PROMOTION_ADAPTOR_*`.

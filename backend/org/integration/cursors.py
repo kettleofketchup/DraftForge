@@ -1,7 +1,7 @@
 """Signed keyset cursors for integration list routes.
 
 A cursor carries the org, the resource it pages (for example
-``event_recipients:720`` or ``contributions``), the last sort key returned
+``event_recipients:720``), the last sort key returned
 and a fingerprint of the mapping or membership the pages were computed from.
 It is signed with ``SECRET_KEY`` under its own salt, so a client cannot edit
 the key or move a cursor to another org or resource. A cursor whose

@@ -83,7 +83,6 @@ const allFalseFlags = {
   mmrSyncEnabled: false,
   canUseMmrSync: false,
   promotionEnabled: false,
-  contributionsEnabled: false,
   canUseApiTokens: false,
   standingTracks: [],
 };
@@ -167,7 +166,6 @@ describe('useOrgFeatureAccess', () => {
       mmrSyncEnabled: false,
       canUseMmrSync: false,
       promotionEnabled: true,
-      contributionsEnabled: true,
       canUseApiTokens: false,
       standingTracks: allTrue.standing_tracks,
     });
@@ -275,7 +273,7 @@ describe('useOrgFeatureAccess API tokens', () => {
     });
   }
 
-  it.each([['promotion'], ['contributions'], ['mmr_sync']])(
+  it.each([['promotion'], ['mmr_sync']])(
     'lets org admins manage tokens when %s is unlocked',
     (feature) => {
       setUser();
@@ -286,6 +284,14 @@ describe('useOrgFeatureAccess API tokens', () => {
     },
   );
 
+  it('does not let the contributions feature alone unlock tokens', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(tokenOrg(['contributions'], { admin_ids: [5] })),
+    );
+    expect(result.current.canUseApiTokens).toBe(false);
+  });
+
   it('reports which token features are unlocked', () => {
     setUser();
     const { result } = renderHook(() =>
@@ -294,7 +300,7 @@ describe('useOrgFeatureAccess API tokens', () => {
       ),
     );
     expect(result.current.promotionEnabled).toBe(true);
-    expect(result.current.contributionsEnabled).toBe(true);
+    expect(result.current).not.toHaveProperty('contributionsEnabled');
     expect(result.current.mmrSyncEnabled).toBe(false);
     expect(result.current.canUseMmrSync).toBe(false);
   });

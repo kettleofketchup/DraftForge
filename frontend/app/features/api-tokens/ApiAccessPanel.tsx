@@ -54,7 +54,7 @@ const log = getLogger('ApiAccessPanel');
 
 type TokenFeatureFlags = Pick<
   OrgFeatureAccess,
-  'mmrSyncEnabled' | 'promotionEnabled' | 'contributionsEnabled'
+  'mmrSyncEnabled' | 'promotionEnabled'
 >;
 
 function featureEnabled(access: TokenFeatureFlags, feature: TokenFeature) {
@@ -63,8 +63,6 @@ function featureEnabled(access: TokenFeatureFlags, feature: TokenFeature) {
       return access.mmrSyncEnabled;
     case 'promotion':
       return access.promotionEnabled;
-    case 'contributions':
-      return access.contributionsEnabled;
   }
 }
 
@@ -137,16 +135,16 @@ export function ApiAccessPanel({
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           Each token can only do what it was granted when created. The adaptor
-          needs the promotion and contribution operations; new tokens get the
-          MMR pair unless you choose otherwise.
+          needs the promotion operations; new tokens get the MMR pair unless you
+          choose otherwise.
         </p>
         {!anyTokenFeature(access) && (
           <p
             className="mt-2 text-sm text-warning"
             data-testid="api-access-locked"
           >
-            The MMR sync API, Promotion and Contributions are all locked for
-            this organization. Unlock one under Locked features before creating
+            The MMR sync API and Promotion are both locked for this
+            organization. Unlock one under Locked features before creating
             tokens.
           </p>
         )}
@@ -333,16 +331,11 @@ function CreateTokenDialog({
   onCreated,
 }: CreateTokenDialogProps) {
   const create = useCreateApiToken(orgId, access);
-  const { mmrSyncEnabled, promotionEnabled, contributionsEnabled } = access;
+  const { mmrSyncEnabled, promotionEnabled } = access;
   // Keyed on the flags: `access` is a fresh object on every render.
   const defaults = useMemo(
-    () =>
-      defaultOperations({
-        mmrSyncEnabled,
-        promotionEnabled,
-        contributionsEnabled,
-      }),
-    [mmrSyncEnabled, promotionEnabled, contributionsEnabled],
+    () => defaultOperations({ mmrSyncEnabled, promotionEnabled }),
+    [mmrSyncEnabled, promotionEnabled],
   );
   const form = useForm<CreateTokenForm>({
     resolver: zodResolver(CreateTokenFormSchema),

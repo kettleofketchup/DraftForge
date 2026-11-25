@@ -2,8 +2,8 @@
 
 A token only reaches a route whose operation it was granted. Tokens issued
 without naming operations, and every token that predates grants, hold the
-MMR pair and nothing else; promotion and contribution grants must be asked
-for explicitly by an org admin.
+MMR pair and nothing else; promotion grants must be asked for explicitly by
+an org admin.
 
 This module must not import models: ``OrgApiToken.operations`` uses
 ``default_operations`` as its field default.
@@ -21,7 +21,6 @@ class Operation(StrEnum):
     MMR_WRITE = "mmr:write"
     PROMOTION_READ = "promotion:read"
     PROMOTION_IMPORT = "promotion:import"
-    CONTRIBUTIONS_READ = "contributions:read"
 
 
 _ENTITLEMENTS: dict[Operation, FeatureKey] = {
@@ -29,7 +28,6 @@ _ENTITLEMENTS: dict[Operation, FeatureKey] = {
     Operation.MMR_WRITE: FeatureKey.MMR_SYNC,
     Operation.PROMOTION_READ: FeatureKey.PROMOTION,
     Operation.PROMOTION_IMPORT: FeatureKey.PROMOTION,
-    Operation.CONTRIBUTIONS_READ: FeatureKey.CONTRIBUTIONS,
 }
 
 
