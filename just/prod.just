@@ -10,6 +10,13 @@ compose := quote(root / "scripts/in-env.sh") + " - . " + quote(python) + " -m sc
 
 [group('prod')]
 up:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    media_dir={{quote(root / "backend/media")}}
+    mkdir -p "$media_dir"
+    if [[ "$(stat -c %u "$media_dir")" != 1000 ]]; then
+        echo "WARNING: run sudo chown 1000:1000 ${media_dir} (backend runs as uid 1000)" >&2
+    fi
     {{compose}} up --remove-orphans
 
 [group('prod')]

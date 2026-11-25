@@ -7,6 +7,7 @@ from events.constants import EventState, SignupStatus, SignupType
 from events.models import Event, EventSignup
 from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
+from user.models import PositionsModel
 
 
 class SignupProcessingTests(EventTestCase):
@@ -297,7 +298,7 @@ class WaitlistPromotionTests(EventTestCase):
         self.assertNotEqual(signup2.status, SignupStatus.WAITLISTED)
 
     def test_promotion_respects_order(self):
-        from app.models import CustomUser, PositionsModel
+        from app.models import CustomUser
         from events.services import cancel_signup, process_rsvp
 
         user3 = CustomUser.objects.create_user(username="third", password="p")

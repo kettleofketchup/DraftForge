@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event, EventSignup
 from events.services import (
@@ -15,6 +15,7 @@ from events.services import (
     restart_event_tournament,
 )
 from org.models import Organization
+from user.models import PositionsModel
 
 
 class EnsureTournamentWithSignupsTest(TestCase):

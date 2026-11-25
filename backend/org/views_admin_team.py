@@ -28,12 +28,11 @@ from org.member_resolution import member_nick, resolve_member_user
 from org.mmr import (
     OrgMmrError,
     game_mmrs_prefetch,
-    mark_dota_mmr_verified,
     resolve_game_type,
-    set_org_mmr,
     validate_org_mmr,
 )
-from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
+from org.mmr_official import apply_official_org_mmr
+from org.models import Organization, OrgLog, OrgUser
 from org.permissions import (
     has_org_admin_access,
     has_org_staff_access,
@@ -458,31 +457,13 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
         )
 
     with transaction.atomic():
-        current_mmrs: dict[int, int | None] = (
-            dict(
-                OrgUserGameMmr.objects.nocache()
-                .filter(org_user_id=org_user.pk)
-                .values_list("game_type", "mmr")
-            )
-            if mmr_changes
-            else {}
-        )
         for game_type, value in mmr_changes.items():
-            if (value or 0) == current_mmrs.get(game_type, 0):
-                if game_type == GameType.DOTA2:
-                    mark_dota_mmr_verified(org_user)
-                continue
-            set_org_mmr(org_user, game_type, value, mark_verified=True)
-            OrgLog.objects.create(
-                organization=org,
+            apply_official_org_mmr(
+                org_user,
+                game_type,
+                value or 0,
                 actor=request.user,
-                action="set_mmr",
-                target_user=user,
-                details={
-                    "game_type": game_type,
-                    "mmr": value,
-                    "source": "org_user_patch",
-                },
+                source="org_user_patch",
             )
         if user_updated:
             user.save()  # Full save triggers steamid sync
@@ -490,19 +471,17 @@ def update_org_user(request: Request, org_id: int, org_user_id: int) -> Response
                 log_steam_verification_change(
                     user, request.user, verify_grant.org_id, True
                 )
-        refresh_unmet_requirements(org_user)
-
-        # Invalidate all cached views affected by this change
-        league_users = LeagueUser.objects.filter(org_user=org_user).select_related(
-            "league"
-        )
-        invalidate_after_commit(
-            org_user,
-            org,
-            *user.tournaments.all(),
-            *league_users,
-            *(lu.league for lu in league_users),
-        )
+            refresh_unmet_requirements(org_user)
+            league_users = LeagueUser.objects.filter(org_user=org_user).select_related(
+                "league"
+            )
+            invalidate_after_commit(
+                org_user,
+                org,
+                *user.tournaments.all(),
+                *league_users,
+                *(lu.league for lu in league_users),
+            )
 
     written = (
         with_user_profiles(

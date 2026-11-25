@@ -12,7 +12,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, GameType, PositionsModel
+from app.models import CustomUser, GameType
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
@@ -88,13 +88,15 @@ from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_
 from events.tasks import delete_discord_scheduled_event
 from lobby.passwords import PasswordMode, generate_password
 from org.membership import resolve_or_create_org_user
-from org.mmr import game_for_event, set_org_mmr
+from org.mmr import game_for_event
+from org.mmr_official import apply_official_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
 from org.standing import api as standing
 from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
 from tournament.models import Team, Tournament
+from user.models import PositionsModel
 
 if TYPE_CHECKING:
     from discordbot.models import DiscordEvent
@@ -744,14 +746,20 @@ def approve_signup(
     before = snapshot(signup)
     extra: dict[str, Any] | None = None
 
-    # Apply MMR override when provided by an admin
     if mmr_override is not None:
         if signup.event.organization_id is None:
             raise ValueError("Cannot set MMR for an event without an organization.")
         org_user = resolve_or_create_org_user(signup.user, signup.event.organization)
         game_type = game_for_event(signup.event)
-        set_org_mmr(org_user, game_type, mmr_override, mark_verified=True)
-        refresh_unmet_requirements(org_user)
+        apply_official_org_mmr(
+            org_user,
+            game_type,
+            mmr_override,
+            actor=actor.user,
+            source="event_approve",
+            extra_log={"event_id": signup.event.pk},
+            log_unchanged=True,
+        )
         extra = {"mmr_override": mmr_override, "game_type": int(game_type)}
 
     signup.status = SignupStatus.APPROVED

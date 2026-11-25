@@ -24,21 +24,25 @@ from django.db.models import Model
 from social_django.models import UserSocialAuth
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from draft.services.hero_chat import repoint_chat_attribution
 from events.ledger import SignupActor
 from events.merge import merge_user_signups
 from events.staff import dedupe_host_helpers
+from league.mmr import merge_user_league_memberships
+from league.models import LeagueUser
 from org.accounts import (
     delete_counts,
     merge_member_dependents,
     repoint_org_attribution,
 )
 from org.mmr import merge_org_mmrs
+from org.mmr_requests.services import repoint_mmr_requests
 from org.models import OrgUser
 from org.promotion.services import demote_colliding_earning_sends
 from org.standing import api as standing
 from telemetry.logging import get_logger
+from user.models import PositionsModel
 
 logger = get_logger(__name__)
 
@@ -190,9 +194,12 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
         standing.merge_users(drop, keep, member_pairs=pairs)
         repoint_org_attribution(drop, keep)
         repoint_chat_attribution(drop, keep)
+        league_pairs = merge_user_league_memberships(drop, keep, pairs)
+        repoint_mmr_requests(keep, drop, pairs, league_pairs)
         for drop_ou, keep_ou in pairs:
             merge_member_dependents(drop_ou, keep_ou, discard=_discard)
             _discard(drop_ou)
+        LeagueUser.objects.filter(pk__in=[lu.pk for lu, _ in league_pairs]).delete()
         demote_colliding_earning_sends(keep, drop)
         merge_user_signups(
             drop,

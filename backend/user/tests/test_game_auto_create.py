@@ -1,7 +1,7 @@
 from django.test import TestCase
 
-from app.models import CustomUser, PositionsModel
-from user.models import DeadlockUserProfile, DotaUserProfile
+from app.models import CustomUser
+from user.models import DeadlockUserProfile, DotaUserProfile, PositionsModel
 
 
 class GameProfileAutoCreateTests(TestCase):
@@ -17,8 +17,13 @@ class GameProfileAutoCreateTests(TestCase):
         user = CustomUser.objects.create(username="idem")
         user.base_profile.save()
         user.base_profile.save()
-        assert DotaUserProfile.objects.filter(base_profile=user.base_profile).count() == 1
-        assert DeadlockUserProfile.objects.filter(base_profile=user.base_profile).count() == 1
+        assert (
+            DotaUserProfile.objects.filter(base_profile=user.base_profile).count() == 1
+        )
+        assert (
+            DeadlockUserProfile.objects.filter(base_profile=user.base_profile).count()
+            == 1
+        )
 
     def test_resave_does_not_leak_orphan_positions(self):
         # Guards the get_or_create callable-default fix: a bare

@@ -17,7 +17,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, PositionsModel, ProfileClaimRequest
+from app.models import CustomUser
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
 from events.eligibility import apply_admin_steam_account_id
@@ -25,6 +25,7 @@ from events.ledger import ActorRole, SignupActor, SignupMeans
 from events.merge import merge_user_signups
 from events.models import Event
 from events.staff import dedupe_host_helpers
+from league.mmr import merge_user_league_memberships
 from league.models import LeagueLog, LeagueUser
 from league.models_rating import LeagueMatchParticipant, LeagueRating
 from org.accounts import (
@@ -33,6 +34,7 @@ from org.accounts import (
     repoint_org_attribution,
 )
 from org.mmr import merge_org_mmrs
+from org.mmr_requests.services import repoint_mmr_requests
 from org.models import OrgLog, OrgUser, PromoSend
 from org.permissions import IsOrgStaff
 from org.promotion.services import demote_colliding_earning_sends
@@ -41,6 +43,7 @@ from org.standing import api as standing
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 from telemetry.logging import get_logger
 from tournament.models import Team
+from user.models import PositionsModel, ProfileClaimRequest
 from user.steam_accounts import log_steam_verification_change
 
 log = get_logger(__name__)
@@ -278,6 +281,8 @@ class ClaimRequestViewSet(
         standing.merge_users(target_user, claimer, member_pairs=pairs)
         repoint_org_attribution(target_user, claimer)
         repoint_chat_attribution(target_user, claimer)
+        league_pairs = merge_user_league_memberships(target_user, claimer, pairs)
+        repoint_mmr_requests(claimer, target_user, pairs, league_pairs)
 
         def discard(obj: Model) -> None:
             pk = obj.pk
@@ -296,6 +301,7 @@ class ClaimRequestViewSet(
         for org_user, keep_ou in pairs:
             merge_member_dependents(org_user, keep_ou, discard=discard)
             org_user.delete()
+        LeagueUser.objects.filter(pk__in=[lu.pk for lu, _ in league_pairs]).delete()
 
         staffed = Event.objects.nocache().filter(
             Q(host=target_user) | Q(helpers=target_user)
@@ -314,21 +320,6 @@ class ClaimRequestViewSet(
             )
 
         merge_user_signups(target_user, claimer, actor=actor)
-
-        # LeagueUser memberships
-        for league_user in LeagueUser.objects.filter(user=target_user):
-            existing = LeagueUser.objects.filter(
-                user=claimer, league=league_user.league
-            ).first()
-            if existing:
-                # Keep the one with higher MMR
-                if league_user.mmr > existing.mmr:
-                    existing.mmr = league_user.mmr
-                    existing.save()
-                league_user.delete()
-            else:
-                league_user.user = claimer
-                league_user.save()
 
         # Teams before tournaments: removing target_user from tournament.users
         # cascades to team.members and would run succession first.

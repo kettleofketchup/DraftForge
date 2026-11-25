@@ -240,6 +240,8 @@ export const eventSchema = z
     helpers: z.array(eventStaffUserSchema).default([]),
     contributions_awarded_at: z.string().nullable().default(null),
     user_can_manage_event_staff: z.boolean().default(false),
+    // Viewer the user_can_manage* flags were computed for.
+    manage_viewer_pk: z.number().int().nullable().optional(),
     user_is_event_operator: z.boolean().default(false),
     _warning: z.string().optional(),
   })
@@ -368,6 +370,7 @@ export const eventResponseSchema = z.object({
   dota_lobby_password_mode: z.enum(['random', 'fixed']),
   user_can_manage: z.boolean(),
   user_can_manage_event_staff: z.boolean(),
+  manage_viewer_pk: z.number().int().nullable(),
   user_is_event_operator: z.boolean().default(false),
   is_off_schedule: z.boolean(),
   can_review_captains: z.boolean().optional(),
@@ -426,6 +429,7 @@ export const eventListItemSchema = eventResponseSchema
   .extend({
     user_can_manage: z.boolean().optional(),
     user_can_manage_event_staff: z.boolean().optional(),
+    manage_viewer_pk: z.number().int().nullable().optional(),
   });
 
 export type EventListItem = z.infer<typeof eventListItemSchema>;
@@ -748,8 +752,8 @@ export const discordConfigSchema = z
     allow_active_mmr: z.boolean(),
     allow_previous_rank: z.boolean(),
     allow_battlecup_rating: z.boolean(),
-    // Generic approval requirements rendered by ApprovalConfigSection; without
-    // them here, their checkbox state is dropped from create/edit submissions.
+    // Generic approval requirements rendered by ApprovalConfigSection; a field
+    // missing here is silently dropped from create/edit submissions.
     require_steam_id: z.boolean(),
     require_mmr_verified: z.boolean(),
     require_profile_complete: z.boolean(),
@@ -785,7 +789,7 @@ export const DISCORD_CONFIG_DEFAULTS = {
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
-  // Generic approval requirements; see discordConfigSchema.
+  // Generic approval requirements (ApprovalConfigSection).
   require_steam_id: false,
   require_mmr_verified: false,
   require_profile_complete: false,

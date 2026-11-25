@@ -6,13 +6,14 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from common.game import GameType
 from events.models import Event
 from events.services import create_tournament_for_event
 from org.models import Organization, OrgLog, OrgUser, OrgUserGameMmr
 from tests.populate.utils import ensure_org_user
 from tournament.models import Tournament
+from user.models import PositionsModel
 from user.tests.test_cacheops_integration import _redis_reachable
 
 _discord_ids = itertools.count(920_000_000_000_000_000)
@@ -96,7 +97,13 @@ class OrgUserPatchGameMmrsTests(PatchFixtures, TestCase):
         log = logs.get()
         self.assertEqual(
             log.details,
-            {"game_type": 2, "mmr": 3000, "source": "org_user_patch"},
+            {
+                "game_type": 2,
+                "mmr": 3000,
+                "source": "org_user_patch",
+                "previous_mmr": 2500,
+                "verified": True,
+            },
         )
         self.assertEqual(log.target_user, self.member)
         self.assertEqual(log.actor, self.owner)

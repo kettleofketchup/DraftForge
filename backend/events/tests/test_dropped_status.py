@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.capacity import count_seats
 from events.constants import EventState, SignupStatus
 from events.discord._shared import _existing_active_signup
@@ -30,6 +30,7 @@ from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.promotion.recipients import candidates
 from org.tests.test_promotion_recipients import _PoolFixture
+from user.models import PositionsModel
 
 
 class DroppedStatusTests(EventTestCase):

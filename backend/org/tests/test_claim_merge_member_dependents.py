@@ -3,12 +3,14 @@
 import itertools
 
 from django.test import TestCase
+from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.tests.actors import SYSTEM
 from league.models import League, LeagueUser
 from org.models import Organization, OrgUser, PlayerDotaProfile
 from org.views import ClaimRequestViewSet
+from user.models import PositionsModel
 
 _discord_ids = itertools.count(798100)
 
@@ -59,6 +61,27 @@ class ClaimMergeMemberDependentsTests(TestCase):
         self._merge()
 
         self.assertEqual(LeagueUser.objects.nocache().get(pk=existing.pk).mmr, 4200)
+
+    def test_official_league_mmr_survives_member_dependent_merge(self) -> None:
+        verified_at = timezone.now()
+        existing = LeagueUser.objects.create(
+            user=self.claimer,
+            org_user=self.claimer_ou,
+            league=self.league,
+            mmr=3000,
+            mmr_verified_at=verified_at,
+            mmr_verified_by=self.claimer,
+        )
+        LeagueUser.objects.create(
+            user=self.target, org_user=self.target_ou, league=self.league, mmr=4200
+        )
+
+        self._merge()
+
+        merged = LeagueUser.objects.nocache().get(pk=existing.pk)
+        self.assertEqual(merged.mmr, 3000)
+        self.assertEqual(merged.mmr_verified_at, verified_at)
+        self.assertEqual(merged.mmr_verified_by_id, self.claimer.pk)
 
     def test_org_game_profile_moves_to_claimer(self) -> None:
         profile = PlayerDotaProfile.objects.create(

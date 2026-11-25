@@ -84,11 +84,26 @@ jobs:
         run: echo "PREPARE_START=$(date +%s)" >> "$GITHUB_ENV"
 
       # Pinned by SHA and no persisted token: this job may run on the home runner.
+      # Shallow is enough: the content hashes read only the working tree.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
+      # Probe first, with the bare runner's python3 and the registry API (no docker, no
+      # just), so a run with nothing to build ends here. build=false only when every item
+      # is present; a probe that fails leaves it unset, so the steps below still run.
+      - name: Check which images and test DB need building
+        id: probe
+        continue-on-error: true
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Home runner only: PR mode, where this PR's draftforge-ci tag also counts.
+          DF_PREPARE_PR: ${{ runner.environment == 'self-hosted' && github.event.pull_request.number || '' }}
+        run: python3 -I scripts/ci_probe_images.py
+
       - uses: ./.github/actions/setup-toolchain
+        if: steps.probe.outputs.build != 'false'
         with:
           registry-token: ${{ secrets.GITHUB_TOKEN }}
           github-actor: ${{ github.actor }}
@@ -98,7 +113,7 @@ jobs:
       # Home runner only: Zot cache auth for the remote BuildKit; ci::prepare-images
       # connects the builder itself, and only when something needs building.
       - name: Set up registry auth for the home builder
-        if: runner.environment == 'self-hosted'
+        if: runner.environment == 'self-hosted' && steps.probe.outputs.build != 'false'
         uses: ./.github/actions/setup-builder
         with:
           ghcr-user: ${{ github.actor }}
@@ -107,16 +122,12 @@ jobs:
           bootstrap: 'false'
 
       # Home runner only: the test DB populates on the host, and the runner image has no
-      # pipx for `just ci::venv`, so set up Python and Poetry only when the test DB is missing.
-      - name: Check whether the test DB needs building
-        id: home-probe
-        if: runner.environment == 'self-hosted'
-        env:
-          DF_PREPARE_PR: ${{ github.event.pull_request.number }}
-        run: just ci::prepare-images --probe | tee -a "$GITHUB_OUTPUT"
-
+      # pipx for `just ci::venv`, so set up Python and Poetry only when the test DB is
+      # missing, or when the probe failed and could not say.
       - name: Set up Python for the test DB
-        if: runner.environment == 'self-hosted' && contains(steps.home-probe.outputs.missing, 'test-db')
+        if: >-
+          runner.environment == 'self-hosted'
+          && (steps.probe.outcome != 'success' || contains(steps.probe.outputs.missing, 'test-db'))
         uses: ./.github/actions/setup-toolchain
         with:
           registry-token: ${{ secrets.GITHUB_TOKEN }}
@@ -124,7 +135,10 @@ jobs:
           buildx: 'false'
           python: 'true'
 
+      # Probes again with docker before building: the probe above only decides whether
+      # this runs, and ci::prepare-images alone decides what gets built and pushed.
       - name: Build and push missing images and test DB
+        if: steps.probe.outputs.build != 'false'
         env:
           DF_PREPARE_READONLY: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '1' || '' }}
           # Set only on the home runner: PR mode, pushes draftforge-ci/ tags only.

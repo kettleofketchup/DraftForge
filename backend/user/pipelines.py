@@ -2,10 +2,11 @@ from typing import Any
 
 from django.contrib.auth import get_user_model
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 from user.discord_accounts import merge_discord_accounts
+from user.models import PositionsModel
 
 User = get_user_model()
 

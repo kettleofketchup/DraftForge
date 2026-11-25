@@ -1,9 +1,10 @@
 from django.db import connection
 from django.test import TestCase
 
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from org.models import Organization
 from org.serializers import ProfileClaimRequestSerializer
+from user.models import ProfileClaimRequest
 
 
 class ClaimNamesTest(TestCase):
