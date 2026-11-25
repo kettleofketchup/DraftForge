@@ -23,6 +23,7 @@ def track_info_data(info: TrackInfo) -> dict[str, Any]:
         "board_open": info.board_open,
         "can_manage": info.can_manage,
         "can_moderate": info.can_moderate,
+        "own_private": info.own_private,
     }
 
 
@@ -44,4 +45,5 @@ def leaderboard_data(board: Leaderboard) -> dict[str, Any]:
         "rows": [row_data(r) for r in board.rows],
         "rows_visible": board.rows_visible,
         "own_row": row_data(board.own_row) if board.own_row is not None else None,
+        "own_private": board.own_private,
     }

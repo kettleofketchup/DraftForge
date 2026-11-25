@@ -147,4 +147,5 @@ class TrackBase(abc.ABC):
             board_open=access.board_open,
             can_manage=roles.is_admin,
             can_moderate=self.moderated and roles.is_staff,
+            own_private=access.own_private,
         )

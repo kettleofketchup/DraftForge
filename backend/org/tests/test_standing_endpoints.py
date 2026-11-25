@@ -67,8 +67,10 @@ class StandingEndpointsTest(ConductTestCase):
                 "board_open",
                 "can_manage",
                 "can_moderate",
+                "own_private",
             },
         )
+        self.assertIs(conduct["own_private"], False)
 
     def test_tracks_endpoint_skips_locked_and_404s_unknown_org(self) -> None:
         set_org_feature(self.org, FeatureKey.CONDUCT, enabled=False, actor=None)

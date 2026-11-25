@@ -280,6 +280,7 @@ def leaderboard(
         rows=board.rows if access.can_view_rows else (),
         own_row=board.own_row if access.can_view_own else None,
         rows_visible=access.can_view_rows,
+        own_private=board.own_private and access.can_view_own,
     )
 
 
