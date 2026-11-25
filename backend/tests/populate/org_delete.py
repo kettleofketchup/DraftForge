@@ -7,11 +7,9 @@ Creates ORG_DELETE_ORG (pk=10) with four distinct users:
 - ORG_DELETE_STAFF  (pk=6002) — added to org.staff
 - ORG_DELETE_MEMBER (pk=6003) — plain OrgUser, no special role
 
-PK note: Original target was pk=8 but `Auth Matrix Test Org` (from auth-matrix
-branch) occupies that slot. Shifted to 10. If auth-matrix lands separately,
-no remediation needed — PKs are independent.
+The org uses pk=10 because pk=8 belongs to `Auth Matrix Test Org`.
 
-Used by frontend/tests/playwright/e2e/17-org-delete/ to verify the
+Used by frontend/tests/playwright/e2e/21-org-delete/ to verify the
 permission matrix on the Danger Zone UI.
 """
 

@@ -1,7 +1,7 @@
 """Per-game org MMR E2E test data.
 
 Used by frontend/tests/playwright/e2e/11-org-mmr/04-game-org-mmr.spec.ts and
-e2e/16-events/16-deadlock-org-mmr-approve.spec.ts. Created by
+e2e/16-events/17-deadlock-org-mmr-approve.spec.ts. Created by
 tests.populate.game_org_mmr.populate_game_org_mmr_data.
 
 - Org / league 50 "Game MMR Org" / "Game MMR League" (steam league 17944).
