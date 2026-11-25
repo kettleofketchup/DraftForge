@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 
 import { Form } from '~/components/ui/form';
+import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 import { DiscordConfigSection } from '../DiscordConfigSection';
 import { EVENT_SECTION_FIELDS } from '../form/settingsFields';
 import { DISCORD_CONFIG_DEFAULTS, type discordConfigSchema } from '../schemas';
@@ -50,14 +51,16 @@ function Harness({
     },
   });
   return (
-    <Form {...form}>
-      <DiscordConfigSection
-        control={form.control}
-        isRepeater={isRepeater}
-        organizationId={7}
-        showNotifyNewEvents={showNotifyNewEvents}
-      />
-    </Form>
+    <TestQueryClientProvider>
+      <Form {...form}>
+        <DiscordConfigSection
+          control={form.control}
+          isRepeater={isRepeater}
+          organizationId={7}
+          showNotifyNewEvents={showNotifyNewEvents}
+        />
+      </Form>
+    </TestQueryClientProvider>
   );
 }
 
