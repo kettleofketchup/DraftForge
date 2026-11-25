@@ -57,6 +57,8 @@ from events.discord import (
 from events.discord.embeds import (
     build_announcement_notice,
     build_announcement_v2,
+    build_scheduled_event_payload,
+    build_scheduled_event_sync_payload,
     build_subscriber_dm_embed,
 )
 from events.scheduling.fire import fire_due_reminders
@@ -68,7 +70,7 @@ from events.signup_post_lock import (
     now_ms,
     release_lock,
 )
-from events.start_mention import chunk_mentions, start_mention_recipients
+from events.start_mention import build_start_mention_messages, start_mention_payload
 from events.utils import starts_in_future
 from telemetry.logging import get_logger
 
@@ -811,13 +813,11 @@ def _send_start_mention_impl(event_id: int, fired_by_user_id: int | None) -> str
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("send_start_mention", event_id, exc)
 
-    recipients = start_mention_recipients(signups, event.discord_start_mention_scope)
-    title = (event.discord_event_title or event.name)[:100]
-    header = f"{title} starts <t:{int(event.scheduled_at.timestamp())}:R>."
-    chunks = chunk_mentions(recipients.discord_ids, header)
+    preview = build_start_mention_messages(event, signups)
+    chunks = preview.chunks
     counts = {
-        "mentioned": len(recipients.discord_ids),
-        "skipped_no_discord_id": recipients.skipped_no_discord_id,
+        "mentioned": preview.mentioned,
+        "skipped_no_discord_id": preview.skipped_no_discord_id,
         "chunks": len(chunks),
     }
 
@@ -832,21 +832,18 @@ def _send_start_mention_impl(event_id: int, fired_by_user_id: int | None) -> str
         log.info("start_mention_lease_held", reason="lease_held", **fields)
         return f"Start mention for event {event_id}: lease held by another worker"
 
-    reference = {
-        "message_id": discord_state.signup_message_id,
-        "fail_if_not_exists": False,
-    }
     message_ids: list[str] = []
     failed = 0
     try:
         for index, chunk in enumerate(chunks):
+            payload = start_mention_payload(chunk, discord_state.signup_message_id)
             try:
                 data, _status = sync_send_embed_with_components_no_log(
                     channel_id=channel_id,
-                    embed=[],
-                    content=chunk.content,
-                    allowed_mentions={"users": chunk.user_ids},
-                    message_reference=reference,
+                    embed=payload["embeds"],
+                    content=payload["content"],
+                    allowed_mentions=payload["allowed_mentions"],
+                    message_reference=payload["message_reference"],
                 )
                 message_ids.append(str(data.get("id")))
             except req.RequestException as exc:
@@ -1210,19 +1207,7 @@ def _create_discord_scheduled_event_impl(event_id: int) -> str:
         )
         return "Skipped: event start time has passed"
 
-    title = event.discord_event_title or event.name
-    description = event.discord_event_description or event.description or ""
-    payload = {
-        "name": title,
-        "description": description[:1000],
-        "scheduled_start_time": event.scheduled_at.isoformat(),
-        "scheduled_end_time": (
-            event.ends_at or event.scheduled_at + timedelta(hours=3)
-        ).isoformat(),
-        "privacy_level": 2,
-        "entity_type": 3,
-        "entity_metadata": {"location": "DraftForge"},
-    }
+    payload = build_scheduled_event_payload(event)
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events"
 
     de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
@@ -1387,12 +1372,7 @@ def _sync_discord_event_signups_impl(event_id: int) -> str:
     guild_id = event.organization.discord_server_id
     discord_event_id = creation_log.discord_message_id
     active, confirmed = event.signup_count, event.confirmed_count
-    payload = {
-        "description": (
-            f"{event.description or ''}\n\n"
-            f"Signups: {active}/{event.max_players or '∞'} | Confirmed: {confirmed}"
-        ),
-    }
+    payload = build_scheduled_event_sync_payload(event, active, confirmed)
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events/{discord_event_id}"
     try:
         response = req.patch(url, json=payload, headers=_get_headers())

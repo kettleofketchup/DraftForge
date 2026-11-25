@@ -5,7 +5,7 @@ Pure functions that construct embed dicts for the Discord API.
 """
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Protocol
 from zoneinfo import ZoneInfo
 
@@ -732,3 +732,30 @@ def build_subscriber_dm_embed(
         include_buttons=True,
         signups=signups,
     )
+
+
+def build_scheduled_event_payload(event: "EmbedEvent") -> dict[str, Any]:
+    title = event.discord_event_title or event.name
+    description = event.discord_event_description or event.description or ""
+    return {
+        "name": title,
+        "description": description[:1000],
+        "scheduled_start_time": event.scheduled_at.isoformat(),
+        "scheduled_end_time": (
+            event.ends_at or event.scheduled_at + timedelta(hours=3)
+        ).isoformat(),
+        "privacy_level": 2,
+        "entity_type": 3,
+        "entity_metadata": {"location": "DraftForge"},
+    }
+
+
+def build_scheduled_event_sync_payload(
+    event: "EmbedEvent", active: int, confirmed: int
+) -> dict[str, Any]:
+    return {
+        "description": (
+            f"{event.description or ''}\n\n"
+            f"Signups: {active}/{event.max_players or '∞'} | Confirmed: {confirmed}"
+        ),
+    }
