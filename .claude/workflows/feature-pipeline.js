@@ -1,7 +1,7 @@
 export const meta = {
   name: 'feature-pipeline',
   description: 'Feature delivery pipeline: recon, reviewed spec and plan, implementation, verification, comment and sensitive-information review, then automatic PR creation',
-  whenToUse: 'One feature/issue end to end. Pass args {slug, title, worktree, branch, date, request, decisions, recon:[{key,ask}], specLenses:[str], planLenses:[str], finalLenses:[str], skills, base?}.',
+  whenToUse: 'One feature/issue end to end. Pass args {slug, title, worktree, branch, date, request, decisions, recon:[{key,ask}], specLenses:[str], planLenses:[str], finalLenses:[str], skills, base?, specCycles?, planCycles?}.',
   phases: [
     { title: 'Recon', detail: 'parallel readers map the affected surface' },
     { title: 'Spec', detail: 'write the design doc' },
@@ -94,14 +94,22 @@ const specOut = await agent(
   { label: 'write-spec', phase: 'Spec', schema: REPORT })
 
 phase('Spec review')
-const specFindings = await parallel(A.specLenses.map((lens, i) => () => agent(
-  `${CTX}\nYou are an ADVERSARIAL reviewer of the design doc at ${SPEC}. Assume it is wrong until proven otherwise. Lens: ${lens}\nRead the doc and the code. Report only defects you can back with evidence (file:line or a concrete scenario). Empty list if none survive your own scrutiny.`,
-  { label: `spec-review:${i + 1}`, phase: 'Spec review', schema: FINDINGS })))
-const specIssues = specFindings.filter(Boolean).flatMap(f => f.findings)
-log(`Spec review: ${specIssues.length} findings (${specIssues.filter(f => f.severity === 'blocker').length} blockers)`)
-const specRevised = await agent(
-  `${CTX}\nRevise the design doc at ${SPEC} using these adversarial review findings. For each, independently verify it against the code first; apply real ones, reject wrong ones. Append a "Review log" section listing each finding with applied/rejected and why.\n\nFINDINGS:\n${JSON.stringify(specIssues, null, 2)}\n\nReturn a summary of changes and anything that genuinely needs the user's decision (only if the answer changes what gets built).`,
-  { label: 'spec-revise', phase: 'Spec review', schema: REPORT })
+const SPEC_CYCLES = Math.max(1, A.specCycles || 1)
+const PLAN_CYCLES = Math.max(1, A.planCycles || 1)
+const sfx = c => (c === 0 ? '' : `:c${c + 1}`)
+let specRevised = null
+const specHistory = []
+for (let c = 0; c < SPEC_CYCLES; c++) {
+  const specFindings = await parallel(A.specLenses.map((lens, i) => () => agent(
+    `${CTX}\nYou are an ADVERSARIAL reviewer of the design doc at ${SPEC}. Assume it is wrong until proven otherwise. Lens: ${lens}\nRead the doc and the code. Report only defects you can back with evidence (file:line or a concrete scenario). Empty list if none survive your own scrutiny.${c ? ` This is review cycle ${c + 1}: the doc's "Review log" shows what earlier cycles applied or rejected; do not re-raise rejected findings without new evidence.` : ''}`,
+    { label: `spec-review:${i + 1}${sfx(c)}`, phase: 'Spec review', schema: FINDINGS })))
+  const specIssues = specFindings.filter(Boolean).flatMap(f => f.findings)
+  log(`Spec review cycle ${c + 1}/${SPEC_CYCLES}: ${specIssues.length} findings (${specIssues.filter(f => f.severity === 'blocker').length} blockers)`)
+  specRevised = await agent(
+    `${CTX}\nRevise the design doc at ${SPEC} using these adversarial review findings. For each, independently verify it against the code first; apply real ones, reject wrong ones. Append a "Review log" section listing each finding with applied/rejected and why.\n\nFINDINGS:\n${JSON.stringify(specIssues, null, 2)}\n\nReturn a summary of changes and anything that genuinely needs the user's decision (only if the answer changes what gets built).`,
+    { label: `spec-revise${sfx(c)}`, phase: 'Spec review', schema: REPORT })
+  specHistory.push(specRevised)
+}
 
 phase('Plan')
 await agent(
@@ -109,14 +117,17 @@ await agent(
   { label: 'write-plan', phase: 'Plan', schema: TASKS })
 
 phase('Plan review')
-const planFindings = await parallel(A.planLenses.map((lens, i) => () => agent(
-  `${CTX}\nYou are an ADVERSARIAL reviewer of the implementation plan at ${PLAN} (design: ${SPEC}). Assume it is wrong until proven otherwise. Lens: ${lens}\nReport only evidence-backed defects.`,
-  { label: `plan-review:${i + 1}`, phase: 'Plan review', schema: FINDINGS })))
-const planIssues = planFindings.filter(Boolean).flatMap(f => f.findings)
-log(`Plan review: ${planIssues.length} findings`)
-const plan = await agent(
-  `${CTX}\nRevise the plan at ${PLAN} using these adversarial findings; verify each against the code first, apply real ones, reject wrong ones, and append a "Review log". Then return the final ordered task list.\n\nFINDINGS:\n${JSON.stringify(planIssues, null, 2)}`,
-  { label: 'plan-revise', phase: 'Plan review', schema: TASKS })
+let plan = null
+for (let c = 0; c < PLAN_CYCLES; c++) {
+  const planFindings = await parallel(A.planLenses.map((lens, i) => () => agent(
+    `${CTX}\nYou are an ADVERSARIAL reviewer of the implementation plan at ${PLAN} (design: ${SPEC}). Assume it is wrong until proven otherwise. Lens: ${lens}\nReport only evidence-backed defects.${c ? ` This is review cycle ${c + 1}: the plan's "Review log" shows what earlier cycles applied or rejected; do not re-raise rejected findings without new evidence.` : ''}`,
+    { label: `plan-review:${i + 1}${sfx(c)}`, phase: 'Plan review', schema: FINDINGS })))
+  const planIssues = planFindings.filter(Boolean).flatMap(f => f.findings)
+  log(`Plan review cycle ${c + 1}/${PLAN_CYCLES}: ${planIssues.length} findings`)
+  plan = await agent(
+    `${CTX}\nRevise the plan at ${PLAN} using these adversarial findings; verify each against the code first, apply real ones, reject wrong ones, and append a "Review log". Then return the final ordered task list.\n\nFINDINGS:\n${JSON.stringify(planIssues, null, 2)}`,
+    { label: `plan-revise${sfx(c)}`, phase: 'Plan review', schema: TASKS })
+}
 
 phase('Execute')
 const results = []
@@ -162,7 +173,7 @@ if (!blocked) {
   const comments = await agent(
     `Review the comments on branch ${A.branch} against ${BASE} in the worktree ${WT}. Use absolute paths and worktree-scoped commands. Prefer terse comments; remove plan/task references. Commit any edits in the worktree as "chore: tighten comments" with no AI attribution, do not push, and write the gate receipt for the final HEAD of this branch.`,
     { label: 'comment-review', phase: 'Verify', agentType: 'comment-reviewer:comment-reviewer' })
-  const summary = { spec: SPEC, plan: PLAN, specOut, specRevised, results, verification, finalIssues, finalReview, comments, minor: finals.filter(Boolean).flatMap(f => f.findings).filter(f => f.severity === 'minor') }
+  const summary = { spec: SPEC, plan: PLAN, specOut, specRevised, specHistory, results, verification, finalIssues, finalReview, comments, minor: finals.filter(Boolean).flatMap(f => f.findings).filter(f => f.severity === 'minor') }
   if (!verification || !comments || finals.some(f => !f) || (finalIssues.length && (!finalReview || finalReview.status !== 'done'))) {
     return { ...summary, blocked: { stage: 'PR preflight', reason: 'Verification, final review or comment review is incomplete; nothing published.' } }
   }
@@ -211,4 +222,4 @@ if (!blocked) {
   const monitoringHandoff = `Coordinator: in the parent session, invoke /pr for PR #${n} (${publication.url}) from ${WT}. Push and PR creation are already authorized for this branch. Run its E2E coverage and CI phases, and arm the 30-minute progressive CI/CD and main merge-conflict monitor, re-arming each window until the PR is merged or closed. ${screenshots}`
   return { ...summary, preflight, publication, capture, shotCheck, screenshotsRequired: shots.length > 0, incomplete, monitoringHandoff }
 }
-return { spec: SPEC, plan: PLAN, specOut, specRevised, results, blocked }
+return { spec: SPEC, plan: PLAN, specOut, specRevised, specHistory, results, blocked }
