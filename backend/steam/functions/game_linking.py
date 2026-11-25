@@ -10,6 +10,7 @@ from steam.models import GameMatchSuggestion, Match
 from telemetry.logging import get_logger
 from tournament.models import Game, Team, Tournament
 from tournament.services.bracket_placement import (
+    PlacementRosterConflict,
     apply_bracket_placements,
     tournament_bracket_placements,
 )
@@ -570,6 +571,7 @@ def auto_assign_matches_by_time(
 
     # Apply assignments if not preview
     linked_count = 0
+    skipped_roster_conflicts: list[dict[str, int | list[int]]] = []
     if not preview:
         for assignment in assignments:
             try:
@@ -588,6 +590,25 @@ def auto_assign_matches_by_time(
                     match_method=assignment["match_method"],
                     player_overlap=assignment["player_overlap"],
                 )
+            except PlacementRosterConflict as exc:
+                log.warning(
+                    "game_link_skipped_roster_conflict",
+                    system="steam",
+                    subsystem="game_linking",
+                    game_id=assignment["game_id"],
+                    match_id=assignment["match_id"],
+                    tournament_id=tournament.pk,
+                    team_id=exc.team.pk,
+                    user_ids=exc.user_ids,
+                )
+                skipped_roster_conflicts.append(
+                    {
+                        "game_id": assignment["game_id"],
+                        "match_id": assignment["match_id"],
+                        "team_id": exc.team.pk,
+                        "user_ids": exc.user_ids,
+                    }
+                )
             except Exception as e:
                 log.error(
                     "game_link_failed",
@@ -600,6 +621,7 @@ def auto_assign_matches_by_time(
     return {
         "assignments": assignments,
         "linked_count": linked_count,
+        "skipped_roster_conflicts": skipped_roster_conflicts,
         "tournament_date": tournament_date.isoformat(),
         "total_unlinked_games": len(unlinked_games),
         "total_candidate_matches": len(candidate_matches),
