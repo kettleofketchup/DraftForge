@@ -1,12 +1,28 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import type { UserType } from '~/components/user/types';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { createI18nInstance } from '~/i18n/config';
+import { useUserStore } from '~/store/userStore';
 import { renderPromo, sendPromo } from '../api';
 import { ComposePanel } from '../ComposePanel';
 import type { LinkedCandidate, PromoEvent, PromoTemplate } from '../schemas';
@@ -95,6 +111,17 @@ async function loadedText(): Promise<HTMLTextAreaElement> {
   return box;
 }
 
+const sender = {
+  pk: 5,
+  username: 'organizer',
+  nickname: 'Org Lead',
+  avatarUrl: null,
+} as UserType;
+
+beforeEach(() => {
+  useUserStore.setState({ currentUser: sender });
+});
+
 afterEach(() => {
   vi.mocked(renderPromo).mockReset();
   vi.mocked(sendPromo).mockReset();
@@ -116,6 +143,24 @@ describe('ComposePanel', () => {
     const preview = screen.getByTestId('promo-discord-preview');
     expect(preview.textContent).toContain('Hey Ana, Friday Inhouse is');
     expect(preview.textContent).not.toContain('<t:');
+    expect(preview.querySelectorAll('time')).toHaveLength(2);
+  });
+
+  it('previews as the organizer sending from their own account', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    renderPanel();
+    await loadedText();
+    const preview = screen.getByTestId('promo-discord-preview');
+    const header = within(preview).getByTestId('discord-message-author');
+    expect(header).toHaveTextContent('Org Lead');
+    expect(header).not.toHaveTextContent('APP');
+    expect(
+      within(preview).getByTestId('promo-sender-avatar'),
+    ).toBeInTheDocument();
   });
 
   it('turns the character counter into a warning over 2000', async () => {
