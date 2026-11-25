@@ -35,8 +35,9 @@ ${A.decisions}
 
 WORKTREE: ${WT} (branch ${A.branch}). ALL reads/edits/commands happen in this worktree, never in /home/kettle/git_repos/draftforge itself (other sessions use the main checkout).
 - Use absolute paths. Your shell cwd may reset between calls. A compound \`cd X && cmd\` is blocked by a hook unless you append \` # allow-cd\`; use \`git -C ${WT} ...\` for git, \`npm --prefix ${WT}/frontend ...\` for npm, and \`cd ${WT} && just ... # allow-cd\` for just recipes.
-- Backend tests: \`cd ${WT} && just test::run 'python manage.py test <labels> -v 2' # allow-cd\`. Never raw docker compose (use \`just test::compose\`). If containers fail with EACCES / readonly database under rootless podman, run \`setfacl -R -m u:100999:rwX -m d:u:100999:rwX ${WT}/backend ${WT}/frontend\` and restart frontend, backend AND nginx.
-- Frontend unit tests: scope Vitest runs to the files you touched, with --maxWorkers=2 (parallel full suites oversubscribe the host). Typecheck with the frontend's npm typecheck script.
+- Tests while iterating (implement/review/fix): run the task's own new or changed tests, then \`cd ${WT} && just test::affected # allow-cd\`. It selects backend labels from the import graph (widening to whole apps for code Django loads by name: views/urls, signals, tasks, commands, migrations; the full suite for settings/conftest/deps) and runs \`vitest related\` on changed frontend files. \`just test::affected --plan\` prints the selection and why. Do not hand-run whole apps, whole packages or the full suites while iterating; the Verify phase runs those once. Record in testsRun the exact commands, their pass/fail summary and the HEAD sha they ran against.
+- Backend tests: \`cd ${WT} && just test::run 'python manage.py test <labels> -v 2' # allow-cd\`; add \`--parallel auto\` (capped at 6 workers under test::run) whenever you pass more than one module. Never raw docker compose (use \`just test::compose\`). If containers fail with EACCES / readonly database under rootless podman, run \`setfacl -R -m u:100999:rwX -m d:u:100999:rwX ${WT}/backend ${WT}/frontend\` and restart frontend, backend AND nginx.
+- Frontend unit tests: \`cd ${WT}/frontend && npx vitest related --run <changed files> # allow-cd\` (what test::affected runs). Typecheck with the frontend's npm typecheck script.
 - Playwright: \`cd ${WT} && just test::upd # allow-cd\` then \`just test::pw::spec <specific-file-pattern>\` (pattern matches the absolute path, so use a distinctive file name). Never headed browsers. The test stack can mount a different worktree's code: grep your edit inside the container before trusting local Playwright.
 - Shared test Redis: other worktrees may run tests concurrently; check for parallel df-backend-run-* containers before debugging WS test failures.
 - Celery loads only MODEL_APPS; no module-level cross-app model imports in signals/ready(). Run app.tests.test_celery_settings after touching models/signals/apps.
@@ -66,7 +67,8 @@ const TASKS = {
     path: { type: 'string' },
     tasks: { type: 'array', items: { type: 'object', properties: {
       id: { type: 'string' }, title: { type: 'string' }, summary: { type: 'string' },
-    }, required: ['id', 'title', 'summary'] } },
+      risk: { type: 'string', enum: ['low', 'normal'] },
+    }, required: ['id', 'title', 'summary', 'risk'] } },
     notes: { type: 'string' },
   },
   required: ['path', 'tasks'],
@@ -113,7 +115,7 @@ for (let c = 0; c < SPEC_CYCLES; c++) {
 
 phase('Plan')
 await agent(
-  `${CTX}\nInvoke the superpowers:writing-plans skill and write the implementation plan for the design at ${SPEC} to ${PLAN}. Constraints: tasks are executed SEQUENTIALLY by fresh subagents in the same worktree, each ending with a commit and a green relevant test subset; the tree must build, typecheck and migrate cleanly after every task; tests come first in each task (TDD); include exact files, commands, and verification per task; the final tasks cover Playwright E2E, docs, changelog fragment, and full verification. Keep tasks to roughly 8-14. Return the plan path and the ordered task list.`,
+  `${CTX}\nInvoke the superpowers:writing-plans skill and write the implementation plan for the design at ${SPEC} to ${PLAN}. Constraints: tasks are executed SEQUENTIALLY by fresh subagents in the same worktree, each ending with a commit and a green relevant test subset; the tree must build, typecheck and migrate cleanly after every task; tests come first in each task (TDD); include exact files, commands, and verification per task; the final tasks cover Playwright E2E, docs, changelog fragment, and full verification. Keep tasks to roughly 8-14. Mark each task risk=low only when it changes nothing but docs, the changelog fragment or user-facing copy (low-risk tasks skip per-task review; the final review still covers them), otherwise risk=normal. Return the plan path and the ordered task list.`,
   { label: 'write-plan', phase: 'Plan', schema: TASKS })
 
 phase('Plan review')
@@ -138,9 +140,9 @@ for (const [ti, t] of plan.tasks.entries()) {
     `${CTX}\nYou are implementing ONE task of the plan at ${PLAN} (design: ${SPEC}). Use superpowers:test-driven-development and superpowers:verification-before-completion before reporting. Task ${t.id}: ${t.title}\n${t.summary}\nRead the plan section for this task in full. Do exactly that task, run its verification, commit (no AI attribution). If blocked by something outside the task, report status=blocked with details instead of improvising.\nPrior tasks:\n${results.map(r => `${r.id}: ${r.status} ${r.notes}`).join('\n')}${fg}`,
     { label: `impl:${t.id}`, phase: 'Execute', schema: TASK_RESULT })
   if (!res || res.status === 'blocked') { blocked = { task: t, res }; break }
-  for (let round = 0; round < 2; round++) {
+  for (let round = 0; round < (t.risk === 'low' ? 0 : 2); round++) {
     const rev = await agent(
-      `${CTX}\nReview task ${t.id} ("${t.title}") of ${PLAN}, implemented in commits ${res.commits.join(', ')} in ${WT}. Check spec compliance (${SPEC}) and code quality (project conventions above). Be adversarial: run the task's verification yourself, grep for missed sites. Approve only if no blocker/major issues.${fg}`,
+      `${CTX}\nReview task ${t.id} ("${t.title}") of ${PLAN}, implemented in commits ${res.commits.join(', ')} in ${WT}. Check spec compliance (${SPEC}) and code quality (project conventions above). Be adversarial: read the diff, grep for missed sites, and re-run the task's new or changed tests yourself. The implementer reported: ${res.testsRun}. Run \`just test::affected --plan\` and compare it with what they ran: re-run \`just test::affected\` only when HEAD moved since their run, their run missed part of the selection, or you suspect a regression; otherwise do not repeat their suites. Approve only if no blocker/major issues.${fg}`,
       { label: `review:${t.id}:${round + 1}`, phase: 'Execute', schema: REVIEW })
     if (!rev || rev.approved) break
     res = await agent(
@@ -158,9 +160,16 @@ if (!blocked) {
   await agent(
     `${CTX}\nRun \`git -C ${WT} fetch origin\` and merge ${BASE} into ${A.branch} (plain merge, no AI attribution). Resolve conflicts preserving both sides' intent; if a migration number collides, renumber ours. Report what you merged and fixed.${FG}`,
     { label: 'merge-base', phase: 'Verify', schema: REPORT })
-  verification = await agent(
-    `${CTX}\nRun the full verification for the branch in ${WT} (superpowers:verification-before-completion): full backend suite in every CI group (labels from \`just ci::backend-test-labels app\`, \`... migrations\` and \`... rest\`), makemigrations --check --dry-run, app.tests.test_celery_settings, frontend typecheck + lint + lint:shadcn + the FULL Vitest suite exactly as CI runs it (with --maxWorkers=2; new imports can break unrelated suites through import cycles), the new Playwright spec(s) via just test::pw::spec, \`just docs::build\`, pre-commit on changed files. Report exact commands and outcomes. Do not fix anything; report failures with output.${FG}`,
-    { label: 'verify:full', phase: 'Verify', schema: REPORT })
+  const VERIFY_COMMON = `${CTX}\nYou run part of the full verification for the branch in ${WT} (superpowers:verification-before-completion), in parallel with another agent. Report exact commands and outcomes. Do not fix anything; report failures with output.${FG}`
+  const verifyParts = await parallel([
+    () => agent(
+      `${VERIFY_COMMON}\nYour part (it owns the test stack; run in this order): \`cd ${WT} && just test::backend::all # allow-cd\` (makemigrations --check plus every CI backend group with --parallel auto, as CI runs them; app.tests.test_celery_settings is in the app group), then the branch's new or changed Playwright spec(s) via just test::pw::spec.`,
+      { label: 'verify:backend+e2e', phase: 'Verify', schema: REPORT }),
+    () => agent(
+      `${VERIFY_COMMON}\nYour part (host only; never touch the test stack or Redis): frontend typecheck + lint + lint:shadcn, the FULL Vitest suite exactly as CI runs it (new imports can break unrelated suites through import cycles), \`just test::affected --plan\` recorded for the report, \`just docs::build\`, and pre-commit on the changed files.`,
+      { label: 'verify:frontend+docs', phase: 'Verify', schema: REPORT }),
+  ])
+  verification = verifyParts.some(v => !v) ? null : { report: verifyParts.map(v => v.report).join('\n\n') }
   finals = await parallel(A.finalLenses.map((l, i) => () => agent(
     `${CTX}\nADVERSARIAL final review of the whole branch diff (\`git -C ${WT} diff ${BASE}...HEAD\`), lens: ${l}. Verification report:\n${verification ? verification.report : 'n/a'}\nReport only evidence-backed defects.${FG}`,
     { label: `final-review:${i + 1}`, phase: 'Verify', schema: FINDINGS })))
