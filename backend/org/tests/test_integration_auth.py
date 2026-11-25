@@ -288,8 +288,8 @@ class MmrOperationRegressionTests(ApiTokenBase):
 
 
 class OperationsBackfillMigrationTest(MigratorTestCase):
-    migrate_from = ("org", "0023_api_tokens")
-    migrate_to = ("org", "0024_api_token_operations")
+    migrate_from = ("org", "0025_mmrchangerequest")
+    migrate_to = ("org", "0026_api_token_operations")
 
     def prepare(self) -> None:
         apps = self.old_state.apps

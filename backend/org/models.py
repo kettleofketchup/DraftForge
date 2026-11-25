@@ -25,6 +25,7 @@ from org.models_leadership import (
     EventCaptain,  # noqa: F401
     OrgLeadershipSettings,  # noqa: F401
 )
+from org.models_mmr_requests import MmrChangeRequest  # noqa: F401
 from org.models_profiles import (
     PlayerDeadlockProfile,  # noqa: F401
     PlayerDotaProfile,  # noqa: F401
@@ -242,6 +243,14 @@ class OrgUserGameMmr(models.Model):
     game_type = models.PositiveSmallIntegerField()
     mmr = models.IntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     class Meta:
         constraints = [

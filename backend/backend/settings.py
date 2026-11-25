@@ -546,6 +546,14 @@ CSRF_COOKIE_NAME = os.environ.get("DF_CSRF_COOKIE_NAME") or "csrftoken"
 
 STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR_PATH / "media"))
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {"location": MEDIA_ROOT},
+    },
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 WHITENOISE_USE_FINDERS = DEBUG
 ALLOWED_HOSTS = [
     "dota.kettle.sh",

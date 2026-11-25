@@ -1,1 +1,1 @@
-0025_promotion_sync_receipts
+0027_promotion_sync_receipts

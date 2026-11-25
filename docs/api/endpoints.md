@@ -684,7 +684,8 @@ flags never creates the org's conduct settings row.
 
 ## Organization Members
 
-Guide: [Org MMR per game](../features/org-mmr.md).
+Guides: [Org MMR per game](../features/org-mmr.md),
+[MMR update requests](../features/mmr-update-requests.md).
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
@@ -726,10 +727,36 @@ Guide: [Org MMR per game](../features/org-mmr.md).
   returns `400 {"error": "mmr requires mmr_game_type; reload the page"}`. `mmr` and
   `game_mmrs` that disagree for the same game return 400.
 - `?game_type=<id>` picks the game of the response's flat `mmr` (default Dota 2).
-- A Dota 2 write sets `has_active_dota_mmr` and `dota_mmr_last_verified`, as before.
-  Each changed game logs an `OrgLog` `set_mmr` entry with `game_type`, `mmr` and
-  `source: "org_user_patch"`.
+- Each game is written as an official value (`verified_by` = the editor, `verified_at` =
+  now) when the editor may verify that member's MMR, and any pending member request for
+  that game becomes `superseded`. That holds even when the value is unchanged. The editor
+  may not verify their own row (site superusers excepted), and a staff member's row needs
+  an org admin. Otherwise the value is saved Unverified and pending requests stay. See
+  [Who can review](../features/mmr-update-requests.md#who-can-review).
+- A verified Dota 2 write also sets `has_active_dota_mmr` and `dota_mmr_last_verified`.
+  Each changed game logs an `OrgLog` `set_mmr` entry with `game_type`, `mmr`,
+  `previous_mmr`, `verified` and `source: "org_user_patch"`.
 - A body with no changes returns `400 {"error": "No valid fields to update"}`.
+
+### MMR requests
+
+Guide and error codes: [MMR update requests](../features/mmr-update-requests.md#api).
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/users/{pk}/mmrs/` | A user's org and league MMRs with badges; pending request and last decision only for the user and staff who can review them | Any (filtered per viewer) |
+| POST | `/api/mmr-requests/` | Create a request (multipart, screenshot required) | The member |
+| GET | `/api/mmr-requests/mine/` | The caller's requests | Authenticated |
+| POST | `/api/mmr-requests/{id}/cancel/` | Cancel a pending request | The member |
+| GET | `/api/mmr-requests/{id}/screenshot/` | Stream the screenshot (`private, no-store`) | The member, reviewing staff |
+| POST | `/api/mmr-requests/{id}/approve/` | Approve, optionally with `{"mmr": n}` | Reviewing staff |
+| POST | `/api/mmr-requests/{id}/reject/` | Reject with `{"reason": "..."}` | Reviewing staff |
+| GET | `/api/organizations/{id}/mmr-requests/` | Queue (`?status=`, `?league=`) | Org staff |
+| GET | `/api/organizations/{id}/mmr-requests/pending-count/` | `{"count": n}` | Org staff |
+| POST | `/api/organizations/{id}/mmr-requests/staff-set/` | Set an official MMR (multipart, screenshot optional) | Org staff |
+| GET | `/api/leagues/{id}/mmr-requests/` | Queue (`?status=`) | League staff |
+| GET | `/api/leagues/{id}/mmr-requests/pending-count/` | `{"count": n}` | League staff |
+| POST | `/api/leagues/{id}/mmr-requests/staff-set/` | Set an official league MMR | League staff |
 
 ## Organization Settings
 

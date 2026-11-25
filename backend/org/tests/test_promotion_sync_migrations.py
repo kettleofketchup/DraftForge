@@ -1,6 +1,6 @@
 """Upgrade and rollback compatibility for the promotion contact sync migrations.
 
-``0024_api_token_operations`` and ``0025_promotion_sync_receipts`` are
+``0026_api_token_operations`` and ``0027_promotion_sync_receipts`` are
 additive. Upgrading must leave every pre-feature token MMR-only and every
 send, award and leadership row untouched, and must not backfill receipts or
 outbox rows. Rolling back is possible on a disposable database, but it drops
@@ -13,9 +13,9 @@ from datetime import UTC, datetime
 from django_test_migrations.contrib.unittest_case import MigratorTestCase
 
 AT = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
-BEFORE = ("org", "0023_api_tokens")
-OPERATIONS = ("org", "0024_api_token_operations")
-RECEIPTS = ("org", "0025_promotion_sync_receipts")
+BEFORE = ("org", "0025_mmrchangerequest")
+OPERATIONS = ("org", "0026_api_token_operations")
+RECEIPTS = ("org", "0027_promotion_sync_receipts")
 MMR_PAIR = ["mmr:read", "mmr:write"]
 
 

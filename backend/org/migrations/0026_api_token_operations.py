@@ -15,7 +15,7 @@ def backfill_mmr_only(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("org", "0023_api_tokens"),
+        ("org", "0025_mmrchangerequest"),
     ]
 
     operations = [

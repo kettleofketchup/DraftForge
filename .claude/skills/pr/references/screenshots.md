@@ -107,7 +107,9 @@ Confirm with the read-only `just test::slots` (`test::slot` would allocate again
 Before capturing, grep a string the PR adds inside the frontend container:
 `cd <wt> && just test::compose exec frontend grep -rl '<new string>' /app/frontend/app  # allow-cd`
 (adjust the path to the container's mount). Found in the after stack and absent in the
-before stack means each stack serves its own tree.
+before stack means each stack serves its own tree. Without the mount path, ask the Vite
+dev server for the module instead:
+`curl -sk <DF_BASE_URL>/app/<path>.tsx | grep -c '<new string>'`.
 
 ### No free slot
 
@@ -124,8 +126,9 @@ the user tells you to free one. Pick one:
 
 | Symptom | Fix |
 |---|---|
-| backend 500 "readonly database", or frontend `EACCES` crash loop | `setfacl -R -m u:100999:rwX -m d:u:100999:rwX <tree>/frontend <tree>/backend`, then `cd <tree> && just test::compose restart frontend backend nginx  # allow-cd` |
+| backend 500 "readonly database", or frontend `EACCES` crash loop | One `setfacl -R -m u:100999:rwX -m d:u:100999:rwX <dir>` per directory (`<tree>/backend`, then `<tree>/frontend`), each ending `2>/dev/null; true`, then `cd <tree> && just test::compose restart frontend backend nginx  # allow-cd`. Once a stack has run, setfacl prints "Operation not permitted" on container-owned files (`.vite/deps`, `test.db.sqlite3-shm`) and exits non-zero: chained with `&&`, or with both directories in one call, the backend never gets its ACL and the restart never runs. |
 | container-owned `frontend/.react-router` or `frontend/node_modules/.vite` blocks a delete or rebuild | `podman unshare rm -rf <tree>/frontend/.react-router <tree>/frontend/node_modules/.vite` |
+| after a stack ran, host `vitest` or the `tsc typecheck` pre-commit hook fails with `EACCES ... node_modules/.vite-temp/vite.config.ts.timestamp-*` | `cd <tree> && just test::down  # allow-cd`, then `podman unshare rm -rf <tree>/frontend/node_modules/.vite-temp <tree>/frontend/node_modules/.vite <tree>/frontend/.react-router`. Do this before committing a fix found while capturing. |
 
 ## 4. Capture (headless Playwright)
 

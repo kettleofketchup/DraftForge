@@ -65,6 +65,16 @@ tests:
       - failedTemplate:
           errorPattern: "env\\.extra must not set the chart-managed key \"SQLITE_PATH\""
 
+  - it: fails when env.extra overrides the chart-managed MEDIA_ROOT
+    values:
+      - ../values-preview.yaml
+      - fixtures/preview-appset-values.yaml
+    set:
+      env.extra: {MEDIA_ROOT: /tmp/media}
+    asserts:
+      - failedTemplate:
+          errorPattern: "env\\.extra must not set the chart-managed key \"MEDIA_ROOT\""
+
   # Without DJANGO_SECRET_KEY the backend falls back to the public dev key.
   - it: fails outside preview mode with no env Secret
     release:

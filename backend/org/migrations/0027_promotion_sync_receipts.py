@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("events", "0040_retarget_tournament_to_tournament"),
-        ("org", "0024_api_token_operations"),
+        ("org", "0026_api_token_operations"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

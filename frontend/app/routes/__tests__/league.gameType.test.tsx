@@ -23,7 +23,14 @@ vi.mock('~/hooks/useMemberAccess', () => ({
   useMemberAccess: () => ({ canView: false, settled: false }),
 }));
 vi.mock('~/hooks/usePageNav', () => ({ usePageNav: () => undefined }));
-vi.mock('~/hooks/usePermissions', () => ({ useIsLeagueAdmin: () => false }));
+vi.mock('~/features/mmr-requests', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('~/features/mmr-requests')>()),
+  useMmrPendingCount: () => ({ data: undefined }),
+}));
+vi.mock('~/hooks/usePermissions', () => ({
+  useIsLeagueAdmin: () => false,
+  useIsLeagueStaff: () => false,
+}));
 
 afterEach(() => {
   cleanup();
