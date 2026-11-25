@@ -17,13 +17,14 @@ from django.core.cache import cache
 from django.test import TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.services import process_rsvp
 from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 from org.models import Organization, OrgUser
 from steam.services.account_lookup import SteamLookupRateLimited
 from tests.populate.utils import ensure_org_user
+from user.models import PositionsModel
 from user.steam_accounts import (
     mark_steam_account_verified,
     steam_account_id_conflict_payload,

@@ -6,9 +6,10 @@ from unittest import mock
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from app.models import CustomUser, PositionsModel, ProfileClaimRequest
+from app.models import CustomUser
 from org.models import Organization, OrgLog
 from org.views import ClaimRequestViewSet
+from user.models import PositionsModel, ProfileClaimRequest
 
 _discord_ids = itertools.count(940_000_000_000_000_000)
 _steam_ids = itertools.count(76561198000400001)
