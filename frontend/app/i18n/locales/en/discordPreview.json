@@ -1,6 +1,19 @@
 {
+  "button": {
+    "aria": "Preview {{title}}",
+    "label": "Preview"
+  },
   "component": {
     "select_placeholder": "Make a selection"
+  },
+  "dialog": {
+    "close": "Close",
+    "description": "Preview of {{title}} as Discord will show it",
+    "loading": "Loading preview"
+  },
+  "error": {
+    "generic": "Could not load the preview.",
+    "retry": "Retry"
   },
   "markdown": {
     "spoiler": "Spoiler"

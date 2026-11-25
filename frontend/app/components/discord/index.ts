@@ -7,6 +7,10 @@ export {
   type DiscordMessageAuthor,
   type DiscordMessagePreviewProps,
 } from './DiscordMessagePreview';
+export {
+  DiscordPreviewButton,
+  type DiscordPreviewButtonProps,
+} from './DiscordPreviewButton';
 export { DiscordScheduledEventCard } from './DiscordScheduledEventCard';
 export {
   parseDiscordMarkdown,

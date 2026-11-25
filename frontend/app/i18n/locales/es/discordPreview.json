@@ -1,6 +1,19 @@
 {
+  "button": {
+    "aria": "Vista previa: {{title}}",
+    "label": "Vista previa"
+  },
   "component": {
     "select_placeholder": "Haz una selección"
+  },
+  "dialog": {
+    "close": "Cerrar",
+    "description": "Vista previa de {{title}} tal como se verá en Discord",
+    "loading": "Cargando vista previa"
+  },
+  "error": {
+    "generic": "No se pudo cargar la vista previa.",
+    "retry": "Reintentar"
   },
   "markdown": {
     "spoiler": "Spoiler"
