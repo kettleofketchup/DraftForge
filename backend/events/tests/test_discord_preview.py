@@ -53,6 +53,7 @@ from events.discord.state import (
 )
 from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
 from events.signup_schedule import compute_signups_open_at
+from events.start_mention import build_start_mention_header
 from events.tasks import (
     _create_discord_scheduled_event_impl,
     _send_event_announcement_impl,
@@ -302,6 +303,29 @@ class PreviewParityTest(_PreviewTestCase):
                     "alpha",
                 )
                 self.assertNotIn("100000000000000005", response.mentions.users)
+
+    def test_start_mention_without_recipients_reports_no_recipients(self) -> None:
+        EventSignup.objects.filter(event=self.ev).update(status=SignupStatus.CANCELLED)
+        DiscordEventMsgSignup.objects.create(
+            event=self.ev,
+            channel_id=SIGNUP_CHANNEL,
+            thread_id="5550002",
+            message_id="5550003",
+            has_posted=True,
+        )
+        Event.objects.filter(pk=self.ev.pk).update(state=EventState.ROLL_CALL)
+
+        response = self.preview("start_mention")
+        sent = self.run_task(lambda: _send_start_mention_impl(self.ev.pk, None))
+
+        self.assertEqual(response.messages, [])
+        self.assertIn("no_recipients", response.gate.reasons)
+        self.assertFalse(response.gate.would_send)
+        self.assertEqual(
+            response.note_args["header"],
+            build_start_mention_header(Event.objects.get(pk=self.ev.pk)),
+        )
+        self.assertEqual(sent.messages, [])
 
     def test_parity_new_event_post(self) -> None:
         response = self.preview("new_event_post")
@@ -745,7 +769,7 @@ class PreviewOverridesTest(_PreviewTestCase):
             seen.append(event)
 
         with patch(
-            "events.discord.preview.apply_signup_open_policy", side_effect=capture
+            "events.signup_schedule.apply_signup_open_policy", side_effect=capture
         ):
             self.preview(
                 "signup_post",

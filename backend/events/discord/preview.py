@@ -6,7 +6,7 @@ its signups injected so none of them loops back.
 
 import copy
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 from zoneinfo import ZoneInfoNotFoundError
 
@@ -23,7 +23,7 @@ from discordbot.payloads import (
 )
 from discordbot.schemas import DiscordEventStateSchema
 from events.capacity import with_signup_counts
-from events.constants import EventState, SignupOpenMode
+from events.constants import EventState
 from events.discord.embeds import (
     build_announcement_notice,
     build_announcement_v2,
@@ -73,7 +73,10 @@ from events.discord.state import (
 )
 from events.models import Event, normalize_event_fields
 from events.schemas import EventSignupSchema
-from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS, apply_signup_open_policy
+from events.signup_schedule import (
+    reapply_signup_open_policy_if_changed,
+    signup_policy_snapshot,
+)
 from events.start_mention import build_start_mention_messages, start_mention_payload
 from org.models import Organization
 from org.permissions import has_org_staff_access
@@ -104,11 +107,12 @@ class _Source:
 class _Built:
     gate: GateResult
     destination: Destination | None = None
-    messages: list[DiscordMessage] | None = None
-    variants: list[Variant] | None = None
+    messages: list[DiscordMessage] = field(default_factory=list)
+    variants: list[Variant] = field(default_factory=list)
     scheduled_event: ScheduledEventPreview | None = None
-    notes: list[NoteCode] | None = None
-    mentions: dict[str, str] | None = None
+    notes: list[NoteCode] = field(default_factory=list)
+    note_args: dict[str, str] = field(default_factory=dict)
+    mentions: dict[str, str] = field(default_factory=dict)
 
 
 def _message(wire: ChannelMessagePayload) -> tuple[DiscordMessage, str | None]:
@@ -285,19 +289,26 @@ def _start_mention(src: _Source) -> _Built:
         for s in src.signups
         if s.user_data and s.user_data.discordId in mentioned
     }
-    gate = start_mention_gate(
-        event,
-        discord_state=state,
-        already_fired=_fired("start_mention", event),
+    reasons: list[GateCode] = list(
+        start_mention_gate(
+            event,
+            discord_state=state,
+            already_fired=_fired("start_mention", event),
+        ).reasons
     )
+    note_args: dict[str, str] = {}
+    if not built.chunks:
+        reasons.append("no_recipients")
+        note_args["header"] = built.header
     return _Built(
-        gate=gate,
+        gate=GateResult(would_send=not reasons, reasons=reasons),
         destination=Destination(
             type="reply",
             channel_id=signup_post_channel(state) if reply_to else None,
             reply_to_message_id=reply_to,
         ),
         messages=messages,
+        note_args=note_args,
         mentions=users,
     )
 
@@ -360,8 +371,8 @@ def _scheduled_event_sync(src: _Source) -> _Built:
     event = src.event
     sync = build_scheduled_event_sync_payload(
         event,
-        getattr(event, "signup_count", 0),
-        getattr(event, "confirmed_count", 0),
+        event.signup_count,
+        event.confirmed_count,
     )
     created_id = (
         latest_message_log_discord_id("create_discord_event", event.pk)
@@ -382,7 +393,7 @@ def _scheduled_event_sync(src: _Source) -> _Built:
     )
 
 
-KIND_BUILDERS: dict[str, Callable[[_Source], _Built]] = {
+KIND_BUILDERS: dict[PreviewKind, Callable[[_Source], _Built]] = {
     "scheduled_event": _scheduled_event,
     "scheduled_event_sync": _scheduled_event_sync,
     "signup_reminder": _signup_reminder,
@@ -424,21 +435,12 @@ def _validated_values(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def apply_event_overrides(event: Event, validated: dict[str, Any]) -> None:
-    before = {
-        f: getattr(event, f) for f in (*SIGNUP_OPEN_POLICY_FIELDS, "scheduled_at")
-    }
+    before = signup_policy_snapshot(event)
     upcoming = event.state == EventState.UPCOMING
     for attr, value in validated.items():
         setattr(event, attr, value)
     if upcoming:
-        policy_changed = any(
-            before[f] != getattr(event, f) for f in SIGNUP_OPEN_POLICY_FIELDS
-        )
-        moved = before["scheduled_at"] != event.scheduled_at
-        if policy_changed or (
-            moved and event.signup_open_mode != SignupOpenMode.MANUAL
-        ):
-            apply_signup_open_policy(event, timezone.now())
+        reapply_signup_open_policy_if_changed(event, before, timezone.now())
     normalize_event_fields(event)
 
 
@@ -454,11 +456,12 @@ def _response(
         saved=saved,
         gate=Gate(would_send=built.gate.would_send, reasons=built.gate.reasons),
         destination=destination,
-        messages=built.messages or [],
-        variants=built.variants or [],
+        messages=built.messages,
+        variants=built.variants,
         scheduled_event=built.scheduled_event,
-        notes=built.notes or [],
-        mentions=Mentions(users=built.mentions or {}),
+        notes=built.notes,
+        note_args=built.note_args,
+        mentions=Mentions(users=built.mentions),
     )
 
 

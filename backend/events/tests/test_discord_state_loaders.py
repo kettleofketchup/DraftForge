@@ -4,6 +4,7 @@ from unittest.mock import patch
 from discordbot.models import DiscordMessageLog
 from discordbot.schemas import DiscordEventStateSchema
 from events.discord.state import (
+    latest_message_log_discord_id,
     load_discord_event_state,
     load_signups_for_embed,
     message_log_exists,
@@ -94,6 +95,45 @@ class DiscordStateLoaderTest(DiscordStateFixture):
             [True, True, False, False],
         )
 
+    def test_latest_message_log_discord_id_matches_endpoint(self) -> None:
+        rows = [
+            ("create_discord_event", 201, "sent", True),
+            ("create_discord_event", 202, "failed", False),
+            ("create_discord_event", 203, "pending", None),
+            ("event_reminder", 204, "other-source", True),
+        ]
+        for source, source_id, message_id, success in rows:
+            DiscordMessageLog.objects.create(
+                channel_id="1",
+                embed_data={},
+                source=source,
+                source_id=source_id,
+                discord_message_id=message_id,
+                success=success,
+            )
+
+        for source_id in (201, 202, 203, 204, 205):
+            with self.subTest(source_id=source_id):
+                endpoint = self.client.get(
+                    "/api/internal/discord/message-logs/",
+                    {
+                        "source": "create_discord_event",
+                        "source_id": source_id,
+                        "success": "true",
+                        "limit": 1,
+                    },
+                    **HEADERS,
+                ).json()
+                expected = endpoint[0]["discord_message_id"] if endpoint else None
+                self.assertEqual(
+                    latest_message_log_discord_id("create_discord_event", source_id),
+                    expected,
+                )
+        self.assertEqual(
+            latest_message_log_discord_id("create_discord_event", 201), "sent"
+        )
+        self.assertIsNone(latest_message_log_discord_id("create_discord_event", 202))
+
     def test_loaders_do_no_http(self) -> None:
         event, _ = self.seed_discord_event()
         signup_event = self.seed_signups()
@@ -111,3 +151,4 @@ class DiscordStateLoaderTest(DiscordStateFixture):
             load_signups_for_embed(signup_event.pk)
             load_discord_event_state(event.pk)
             message_log_exists("event_reminder", 1)
+            latest_message_log_discord_id("create_discord_event", 1)
