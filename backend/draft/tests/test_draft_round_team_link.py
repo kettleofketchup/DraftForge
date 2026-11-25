@@ -96,3 +96,50 @@ class DraftRoundTeamAccessorTests(TestCase):
             DraftRound.objects.nocache().get(pk=rnd.pk).drafting_team_id,
             self.team_a.pk,
         )
+
+
+class BuildRoundsTeamTests(TestCase):
+    def setUp(self) -> None:
+        self.org = Organization.objects.create(name="Build Org")
+        self.league = League.objects.create(
+            organization=self.org, name="Build League", steam_league_id=94002
+        )
+        self.tournament = Tournament.objects.create(
+            name="Build Cup", date_played=timezone.now(), league=self.league
+        )
+        self.teams: list[Team] = []
+        for order, name in enumerate(("a", "b", "c"), start=1):
+            captain = CustomUser.objects.create_user(
+                username=f"build_{name}", password="x"
+            )
+            self.tournament.users.add(captain)
+            self.teams.append(
+                Team.objects.create(
+                    tournament=self.tournament,
+                    name=f"Build {name}",
+                    captain=captain,
+                    draft_order=order,
+                )
+            )
+
+    def test_build_rounds_stores_drafting_team(self) -> None:
+        team_by_captain = {t.captain_id: t.pk for t in self.teams}
+        for style in ("snake", "normal"):
+            with self.subTest(draft_style=style):
+                draft, _ = Draft.objects.update_or_create(
+                    tournament=self.tournament, defaults={"draft_style": style}
+                )
+                draft.build_rounds()
+                rounds = list(
+                    DraftRound.objects.nocache()
+                    .filter(draft=draft)
+                    .select_related("drafting_team")
+                )
+                self.assertEqual(len(rounds), 4 * len(self.teams))
+                for rnd in rounds:
+                    self.assertEqual(
+                        rnd.drafting_team_id, team_by_captain[rnd.captain_id]
+                    )
+                    self.assertEqual(
+                        rnd.drafting_team.tournament_id, draft.tournament_id
+                    )

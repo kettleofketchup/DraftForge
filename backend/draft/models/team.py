@@ -588,12 +588,14 @@ class Draft(models.Model):
         phase = 1
 
         def create_draft_round(
-            draft: "Draft", captain: CustomUser, pick_num: int, phase_num: int
+            draft: "Draft", team: Team, pick_num: int, phase_num: int
         ) -> bool:
+            captain = team.captain
             try:
                 draft_round = DraftRound.objects.create(
                     draft=draft,
                     captain=captain,
+                    drafting_team=team,
                     pick_number=pick_num,
                     pick_phase=phase_num,
                 )
@@ -602,6 +604,7 @@ class Draft(models.Model):
                     system="tournament",
                     subsystem="draft",
                     draft_round_id=draft_round.pk,
+                    team_id=team.pk,
                     username=captain.username,
                     pick_phase=phase_num,
                     pick_number=pick_num,
@@ -612,6 +615,7 @@ class Draft(models.Model):
                     "draft_round_integrity_error",
                     system="tournament",
                     subsystem="draft",
+                    team_id=team.pk,
                     username=captain.username,
                     pick_phase=phase_num,
                     pick_number=pick_num,
@@ -635,7 +639,7 @@ class Draft(models.Model):
             # Create draft rounds for this phase
             for team in pick_order:
                 if pick_number <= total_picks:
-                    create_draft_round(self, team.captain, pick_number, phase)
+                    create_draft_round(self, team, pick_number, phase)
                     pick_number += 1
 
             # Increment phase after all teams have picked

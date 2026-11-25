@@ -20,6 +20,7 @@ from draft.models import (
     TeamDraftState,
 )
 from draft.serializers.hero import HeroDraftSerializer
+from draft.serializers.team import DraftRoundSerializer
 from draft.services.hero_state import herodraft_state_queryset
 from events.eligibility import UNMET_LABELS, Unmet, unmet_codes
 from events.models import Event
@@ -37,7 +38,11 @@ from tests.populate.utils import ensure_org_user
 from tournament.models import Game, Team, TeamLog, Tournament
 from tournament.models.team import LeadershipProblem
 from tournament.models.team_log import TeamLogAction, TeamLogVia
-from tournament.serializers.draft import users_remaining_pks
+from tournament.serializers.draft import (
+    DraftRoundForDraftSerializer,
+    DraftRoundSerializerSlim,
+    users_remaining_pks,
+)
 from tournament.services import team_management
 from tournament.services.team_management import (
     DEFAULT_MAX_STANDINS,
@@ -67,6 +72,32 @@ def _problems(team: Team) -> dict[str, LeadershipProblem]:
     return Team.leadership_problems(
         member_pks, fresh.captain_id, fresh.deputy_captain_id
     )
+
+
+def _serialized_team_pk(data: dict[str, Any]) -> int | None:
+    team = data["team"]
+    return team["pk"] if team else None
+
+
+def _round_team_pks(
+    tournament: Tournament, round_pks: set[int]
+) -> dict[str, dict[int, int | None]]:
+    """Team pk per round via `.team` and each serializer, fresh and prefetched."""
+    fresh = list(DraftRound.objects.nocache().filter(pk__in=round_pks))
+    state = tournament_state_queryset(fresh=True).get(pk=tournament.pk)
+    prefetched = [r for r in state.draft.draft_rounds.all() if r.pk in round_pks]
+    result: dict[str, dict[int, int | None]] = {}
+    for path, rounds in (("fresh", fresh), ("prefetched", prefetched)):
+        result[f"{path}.team"] = {r.pk: (r.team.pk if r.team else None) for r in rounds}
+        for serializer in (
+            DraftRoundSerializerSlim,
+            DraftRoundForDraftSerializer,
+            DraftRoundSerializer,
+        ):
+            result[f"{path}.{serializer.__name__}"] = {
+                r.pk: _serialized_team_pk(serializer(r).data) for r in rounds
+            }
+    return result
 
 
 class TeamManagementFixture:
@@ -1568,6 +1599,31 @@ class DraftBookkeepingTests(TeamManagementFixture, TestCase):
             "old_captain_leads_other_team",
         )
 
+    def test_rounds_keep_team_when_old_captain_leads_another_team(self) -> None:
+        Team.objects.filter(pk=self.team.pk).update(draft_order=1)
+        Team.objects.filter(pk=self.other.pk).update(draft_order=2)
+        self.draft.build_rounds()
+        own = set(
+            DraftRound.objects.nocache()
+            .filter(draft=self.draft, captain=self.c)
+            .values_list("pk", flat=True)
+        )
+        self.assertEqual(len(own), 4)
+        Team.objects.filter(pk=self.other.pk).update(captain=self.c)
+
+        change = set_captain(
+            self.team, self.m1, actor=self.actor, via=TeamLogVia.WEB, reason="r"
+        )
+
+        self.assertEqual(
+            change.log.details["draft_rounds_skipped_reason"],
+            "old_captain_leads_other_team",
+        )
+        expected = dict.fromkeys(own, self.team.pk)
+        for path, team_pks in _round_team_pks(self.tournament, own).items():
+            with self.subTest(path=path):
+                self.assertEqual(team_pks, expected)
+
     def test_rebuild_with_rounds_refused_after_staff_changes(self) -> None:
         self.pick(self.c, self.p1, 1)
         add_standin(
@@ -1888,6 +1944,32 @@ class ReplaceCaptainTests(TeamManagementFixture, TestCase):
         captains = dict(DraftRound.objects.nocache().values_list("pk", "captain_id"))
         self.assertEqual(captains[o1_round.pk], self.o1.pk)
         self.assertEqual(captains[c_round.pk], self.c.pk)
+
+    def test_player_of_eliminated_team_rounds_keep_team(self) -> None:
+        draft = Draft.objects.create(
+            tournament=self.tournament,
+            state=TeamDraftState.COMPLETED,
+            draft_style="snake",
+        )
+        Team.objects.filter(pk=self.team.pk).update(draft_order=1)
+        Team.objects.filter(pk=self.other.pk).update(draft_order=2)
+        draft.build_rounds()
+        rounds = DraftRound.objects.nocache().filter(draft=draft)
+        own = set(rounds.filter(captain=self.c).values_list("pk", flat=True))
+        others = set(rounds.filter(captain=self.o1).values_list("pk", flat=True))
+        self.assertEqual((len(own), len(others)), (4, 4))
+        eliminate(self.other, 3)
+
+        change = self.replace(self.o1)
+
+        self.assertEqual(
+            change.log.details["draft_rounds_skipped_reason"],
+            "old_captain_leads_other_team",
+        )
+        expected = dict.fromkeys(own, self.team.pk)
+        for path, team_pks in _round_team_pks(self.tournament, own).items():
+            with self.subTest(path=path):
+                self.assertEqual(team_pks, expected)
 
     def test_player_of_live_team_refused(self) -> None:
         before = self.team_state(self.team)

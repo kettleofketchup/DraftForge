@@ -145,6 +145,11 @@ class DraftRestartWithLinkedRoundsTests(TestCase):
         resp = self.init_draft()
 
         self.assertEqual(resp.status_code, 201, getattr(resp, "data", None))
+        team_by_captain = {t.captain_id: t.pk for t in self.teams}
+        rebuilt = list(DraftRound.objects.nocache().filter(draft=draft))
+        self.assertTrue(rebuilt)
+        for rnd in rebuilt:
+            self.assertEqual(rnd.drafting_team_id, team_by_captain[rnd.captain_id])
 
 
 class TeamUsageTests(TeamReferencesFixture, TestCase):

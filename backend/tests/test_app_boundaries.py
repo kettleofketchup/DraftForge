@@ -539,6 +539,8 @@ _TOURNAMENT_RETIRED_DEFS = {
         "TeamManagementFixture",
         "TournamentCacheTests",
         "_problems",
+        "_round_team_pks",
+        "_serialized_team_pk",
         "eliminate",
     ),
     "app.tests.test_team_signals": (
