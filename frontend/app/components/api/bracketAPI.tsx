@@ -10,7 +10,7 @@ import {
 import type { BracketMatch } from '~/components/bracket/types';
 import { api } from './axios';
 
-// set_team_placement in backend/app/views/bracket.py
+// set_team_placement in backend/tournament/views/bracket.py
 export const SetTeamPlacementResponseSchema = z.object({
   team_id: z.number(),
   placement: z.number().nullable(),
