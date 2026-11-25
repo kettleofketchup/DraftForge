@@ -1,10 +1,12 @@
 """Durable state for the event-promotion contact sync.
 
-``ExternalPromotionReceipt`` is a contact some other system recorded
-for an event. Its source facts and ``source_hash`` never change after
-import; only the DraftForge association (``user``, ``org_user``,
-``association_*``) is updated. It is suppression evidence, never a
-``PromoSend`` or a contribution award.
+``ExternalPromotionReceipt`` is one contact of the bound guild recorded in
+the external contact log. Its source facts, Discord IDs and event change
+only inside ``ExternalPromotionReceipt.source_update()`` (the supersede path
+in ``org.integration.points``); the DraftForge association (``user``,
+``org_user``, ``association_*``) and the promotion-point state are updated
+freely. It never becomes a ``PromoSend``; its point lives in the
+contribution ledger.
 
 ``PromotionContactOutbox`` is one row per recorded ``PromoSend``, written in
 the same transaction. It keeps the send's identity as scalars instead of
@@ -13,7 +15,9 @@ it freezes the contracted payload and its hash once materialised.
 """
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, ClassVar
 
 from django.db import models
@@ -102,9 +106,37 @@ class ContactMethod(models.TextChoices):
     OTHER = "OTHER", "Other"
 
 
-class ContactLinkage(models.TextChoices):
-    OCCASION = "occasion", "Occasion"
-    EVENT_DATE = "event_date", "Event date"
+class ContactReason(models.TextChoices):
+    EVENT_INVITE = "EVENT_INVITE", "Event invite"
+    FOLLOW_UP = "FOLLOW_UP", "Follow-up"
+    GENERAL = "GENERAL", "General"
+
+
+class PointStatus(models.TextChoices):
+    """How an imported contact settled its (event, player) promotion point."""
+
+    NOT_APPLICABLE = "not_applicable", "Not applicable"
+    ECHO = "echo", "Echo of a local send"
+    CREDITED = "credited", "Credited"
+    UNCREDITED = "uncredited", "Uncredited"
+    DUPLICATE = "duplicate", "Duplicate"
+    RETRACTED = "retracted", "Retracted"
+
+
+class PointReason(models.TextChoices):
+    """Why a point-holding contact credits nobody."""
+
+    NONE = "", "None"
+    PROMOTER_UNRESOLVED = "promoter_unresolved", "Promoter unresolved"
+    PROMOTER_UNMATCHED = "promoter_unmatched", "Promoter unmatched"
+    PROMOTER_NOT_MEMBER = "promoter_not_member", "Promoter not a member"
+    SELF_CONTACT = "self_contact", "Self contact"
+
+
+HOLDING_STATUSES: tuple[str, ...] = (PointStatus.CREDITED, PointStatus.UNCREDITED)
+
+# Set while ``ExternalPromotionReceipt.source_update()`` is active.
+_SOURCE_UPDATE: ContextVar[bool] = ContextVar("receipt_source_update", default=False)
 
 
 class AssociationState(models.TextChoices):
@@ -126,22 +158,30 @@ class AssociationReason(models.TextChoices):
 
 
 class ExternalPromotionReceipt(models.Model):
-    """One contact recorded by an external source for an event."""
+    """One contact of the bound guild recorded in the external contact log."""
 
+    # Never change.
     IMMUTABLE_FIELDS: ClassVar[tuple[str, ...]] = (
         "organization",
         "source",
         "source_contact_id",
-        "event",
-        "discord_id",
-        "recorded_at",
-        "contact_method",
-        "linkage",
-        "source_hash",
         "first_imported_at",
     )
+    # Change only inside ``source_update()``.
+    SOURCE_FIELDS: ClassVar[tuple[str, ...]] = (
+        "recorded_at",
+        "contact_date_ny",
+        "contact_method",
+        "contact_reason",
+        "occasion_id",
+        "event_date",
+        "forced",
+        "source_hash",
+        "discord_id",
+        "promoter_discord_id",
+        "event",
+    )
 
-    # Immutable source facts.
     organization = models.ForeignKey(
         "org.Organization",
         on_delete=models.CASCADE,
@@ -149,17 +189,34 @@ class ExternalPromotionReceipt(models.Model):
     )
     source = models.CharField(max_length=16, choices=ReceiptSource.choices)
     source_contact_id = models.BigIntegerField()
+    first_imported_at = models.DateTimeField(default=timezone.now)
+
+    # Source facts (hashed into source_hash).
+    recorded_at = models.DateTimeField()
+    contact_date_ny = models.DateField()
+    contact_method = models.CharField(max_length=24, choices=ContactMethod.choices)
+    contact_reason = models.CharField(max_length=16, choices=ContactReason.choices)
+    occasion_id = models.BigIntegerField(null=True, blank=True)
+    event_date = models.DateTimeField(null=True, blank=True)
+    forced = models.BooleanField(default=False)
+    source_hash = models.CharField(max_length=64)
+
+    # Derived identity: the target's and promoter's current primary Discord
+    # accounts ("" promoter = unresolved), and the bound event.
+    discord_id = models.CharField(max_length=20)
+    promoter_discord_id = models.CharField(max_length=20, blank=True, default="")
     event = models.ForeignKey(
         "events.Event",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="external_promotion_receipts",
     )
-    discord_id = models.CharField(max_length=20)
-    recorded_at = models.DateTimeField()
-    contact_method = models.CharField(max_length=24, choices=ContactMethod.choices)
-    linkage = models.CharField(max_length=16, choices=ContactLinkage.choices)
-    source_hash = models.CharField(max_length=64)
-    first_imported_at = models.DateTimeField(default=timezone.now)
+
+    # Supersede and retraction audit.
+    source_revision = models.PositiveIntegerField(default=0)
+    source_updated_at = models.DateTimeField(null=True, blank=True)
+    retracted_at = models.DateTimeField(null=True, blank=True)
 
     # Mutable DraftForge association.
     user = models.ForeignKey(
@@ -189,6 +246,18 @@ class ExternalPromotionReceipt(models.Model):
     )
     association_updated_at = models.DateTimeField(null=True, blank=True)
 
+    # Promotion-point state, written by org.integration.points.
+    point_status = models.CharField(
+        max_length=16,
+        choices=PointStatus.choices,
+        default=PointStatus.NOT_APPLICABLE,
+    )
+    point_reason = models.CharField(
+        max_length=24, choices=PointReason.choices, default=PointReason.NONE, blank=True
+    )
+    holds_point = models.BooleanField(default=False)
+    origin_send_id = models.BigIntegerField(null=True, blank=True)
+
     objects = _GuardedQuerySet.as_manager()
 
     class Meta:
@@ -197,16 +266,80 @@ class ExternalPromotionReceipt(models.Model):
                 fields=["organization", "source", "source_contact_id"],
                 name="uniq_external_promo_receipt_source_id",
             ),
+            models.UniqueConstraint(
+                fields=["organization", "event", "discord_id"],
+                condition=models.Q(holds_point=True),
+                name="uniq_external_promo_point",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(occasion_id__isnull=False, event_date__isnull=True)
+                    | models.Q(occasion_id__isnull=True, event_date__isnull=False)
+                ),
+                name="ck_ext_promo_rcpt_occasion_xor_date",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(forced=False) | models.Q(occasion_id__isnull=False),
+                name="ck_ext_promo_rcpt_forced_occasion",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(holds_point=False) | models.Q(event__isnull=False),
+                name="ck_ext_promo_rcpt_point_has_event",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    holds_point=True, point_status__in=list(HOLDING_STATUSES)
+                )
+                | (
+                    models.Q(holds_point=False)
+                    & ~models.Q(point_status__in=list(HOLDING_STATUSES))
+                ),
+                name="ck_ext_promo_rcpt_point_status",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(retracted_at__isnull=True)
+                    & ~models.Q(point_status=PointStatus.RETRACTED)
+                )
+                | models.Q(
+                    retracted_at__isnull=False, point_status=PointStatus.RETRACTED
+                ),
+                name="ck_ext_promo_rcpt_retracted",
+            ),
         ]
         indexes = [
             models.Index(
                 fields=["event", "discord_id"], name="ext_promo_rcpt_event_discord"
             ),
+            models.Index(
+                fields=["organization", "discord_id", "recorded_at"],
+                name="ext_promo_rcpt_org_discord_at",
+            ),
+            models.Index(
+                fields=["organization", "contact_date_ny"],
+                name="ext_promo_rcpt_org_date",
+            ),
         ]
 
     @classmethod
     def frozen_field_names(cls) -> set[str]:
-        return _model_fields(cls, cls.IMMUTABLE_FIELDS)
+        if _SOURCE_UPDATE.get():
+            return _model_fields(cls, cls.IMMUTABLE_FIELDS)
+        return _model_fields(cls, cls.IMMUTABLE_FIELDS + cls.SOURCE_FIELDS)
+
+    @staticmethod
+    @contextmanager
+    def source_update() -> Iterator[None]:
+        """Allow writes to ``SOURCE_FIELDS`` for the duration of the block.
+
+        Only the supersede path uses it, under the event lock. Identity
+        fields (``IMMUTABLE_FIELDS``) stay frozen even here.
+        """
+        token = _SOURCE_UPDATE.set(True)
+        try:
+            yield
+        finally:
+            _SOURCE_UPDATE.reset(token)
 
     def save(self, *args: Any, **kwargs: Any) -> None:
         if not self._state.adding:

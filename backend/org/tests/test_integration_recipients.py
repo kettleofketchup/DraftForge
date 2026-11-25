@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
@@ -34,8 +34,8 @@ from org.integration.cursors import encode_cursor
 from org.integration.subjects import authorized_event_subjects
 from org.models import Organization, OrgUser, PromoSend
 from org.models_promotion_sync import (
-    ContactLinkage,
     ContactMethod,
+    ContactReason,
     ExternalPromotionReceipt,
     ReceiptSource,
 )
@@ -47,6 +47,7 @@ GUILD = "770000000000000001"
 FETCH = "org.promotion.recipients.get_discord_members_data"
 GUILD_ONLY_ID = "990000000000000001"
 IMPORTED_ONLY_ID = "990000000000000002"
+OCCASION_ID = 88
 
 
 def guild_member(discord_id: str, *, days_ago: float, bot: bool = False) -> dict:
@@ -197,7 +198,9 @@ class UniverseTests(_RecipientsBase):
             discord_id=IMPORTED_ONLY_ID,
             recorded_at=datetime(2026, 11, 1, tzinfo=UTC),
             contact_method=ContactMethod.DISCORD_DM,
-            linkage=ContactLinkage.OCCASION,
+            contact_date_ny=date(2026, 11, 1),
+            contact_reason=ContactReason.EVENT_INVITE,
+            occasion_id=OCCASION_ID,
             source_hash="a" * 64,
         )
 
@@ -276,7 +279,9 @@ class UniverseTests(_RecipientsBase):
             discord_id=IMPORTED_ONLY_ID,
             recorded_at=datetime(2026, 11, 1, tzinfo=UTC),
             contact_method=ContactMethod.DISCORD_DM,
-            linkage=ContactLinkage.OCCASION,
+            contact_date_ny=date(2026, 11, 1),
+            contact_reason=ContactReason.EVENT_INVITE,
+            occasion_id=OCCASION_ID,
             source_hash="b" * 64,
         )
         rows, _ = self.all_pages()
@@ -300,7 +305,9 @@ class UniverseTests(_RecipientsBase):
             discord_id=sent_to.discordId,
             recorded_at=datetime(2026, 11, 1, tzinfo=UTC),
             contact_method=ContactMethod.DISCORD_DM,
-            linkage=ContactLinkage.OCCASION,
+            contact_date_ny=date(2026, 11, 1),
+            contact_reason=ContactReason.EVENT_INVITE,
+            occasion_id=OCCASION_ID,
             source_hash="c" * 64,
         )
         rows, _ = self.all_pages()

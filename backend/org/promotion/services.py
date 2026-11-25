@@ -146,6 +146,13 @@ def record_promo_send(
     )
 
 
+def _discord_snapshot(discord_id: str | None) -> str:
+    """The recipient's Discord ID as stored on the send, or "" if unusable."""
+    if discord_id and len(discord_id) <= 20:
+        return discord_id
+    return ""
+
+
 def _record_locked(
     *,
     sender: CustomUser,
@@ -168,6 +175,7 @@ def _record_locked(
         organization=event.organization,
         event=event,
         recipient=recipient,
+        recipient_discord_id=_discord_snapshot(recipient.discordId),
         sender=sender,
         template=template,
         text=text,

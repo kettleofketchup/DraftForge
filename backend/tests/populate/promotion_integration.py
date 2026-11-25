@@ -19,6 +19,7 @@ real contact log, adaptor or Discord endpoint is contacted. All IDs are syntheti
 from datetime import timedelta
 from types import MappingProxyType
 from typing import Any, Final
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.utils import timezone
@@ -29,8 +30,8 @@ from org.integration.receipts import _legacy_import_source_hash
 from org.models import Organization, OrgUser
 from org.models_promotion_sync import (
     AssociationState,
-    ContactLinkage,
     ContactMethod,
+    ContactReason,
     ExternalPromotionReceipt,
     PromotionContactOutbox,
     ReceiptSource,
@@ -39,6 +40,7 @@ from tests.data.org_features import FEATURES_ORG, ORG_FEATURES_PLAYERS
 from tests.populate.promotion_audiences import GUILD_ID
 
 OCCASION_ID: Final[int] = 7001
+CONTACT_TZ: Final = ZoneInfo("America/New_York")
 NON_MEMBER = ORG_FEATURES_PLAYERS[9]
 _NOT_SET: Final = object()
 _original_sync: Any = _NOT_SET
@@ -92,7 +94,7 @@ def seed_promotion_integration(
             "discord_id": ref["discord_id"],
             "recorded_at": recorded_at,
             "contact_method": ContactMethod.DISCORD_DM.value,
-            "linkage": ContactLinkage.OCCASION.value,
+            "linkage": "occasion",
         }
         org_user = (
             OrgUser.objects.nocache()
@@ -108,8 +110,11 @@ def seed_promotion_integration(
             event=event,
             discord_id=ref["discord_id"],
             recorded_at=recorded_at,
+            contact_date_ny=recorded_at.astimezone(CONTACT_TZ).date(),
             contact_method=ContactMethod.DISCORD_DM,
-            linkage=ContactLinkage.OCCASION,
+            contact_reason=ContactReason.EVENT_INVITE,
+            occasion_id=OCCASION_ID,
+            forced=False,
             source_hash=_legacy_import_source_hash(entry),
             first_imported_at=now - timedelta(minutes=5),
             user_id=ref["pk"],

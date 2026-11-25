@@ -7,7 +7,7 @@ pin the same digests as the adaptor's Go golden fixtures.
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from django.db import IntegrityError, transaction
@@ -15,20 +15,23 @@ from django.utils import timezone
 from django_test_migrations.contrib.unittest_case import MigratorTestCase
 
 from events.models import Event
+from org.contributions.kinds import ContributionKind
 from org.integration.receipts import (
     ImmutableFieldError,
     _legacy_import_source_hash,
     canonical_receipt_hash,
     canonical_receipt_json,
 )
-from org.models import OrgUser, PromoSend
+from org.models import ContributionEntry, OrgLog, OrgUser, PromoSend
 from org.models_promotion_sync import (
     AssociationReason,
     AssociationState,
-    ContactLinkage,
     ContactMethod,
+    ContactReason,
     ExternalPromotionReceipt,
     OutboxState,
+    PointReason,
+    PointStatus,
     PromotionContactOutbox,
     ReceiptSource,
 )
@@ -81,6 +84,15 @@ class CanonicalHashGoldenTest(_SendFixture):
 
 
 class ExternalPromotionReceiptModelTest(_SendFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.other_event = Event.objects.create(
+            organization=self.org,
+            name="Receipt Other Event",
+            scheduled_at=timezone.now(),
+            created_by=self.owner,
+        )
+
     def _receipt(self, **overrides: object) -> ExternalPromotionReceipt:
         fields: dict[str, object] = {
             "organization": self.org,
@@ -89,8 +101,11 @@ class ExternalPromotionReceiptModelTest(_SendFixture):
             "event": self.event,
             "discord_id": "123456789012345678",
             "recorded_at": datetime(2026, 11, 24, 11, 30, tzinfo=UTC),
+            "contact_date_ny": date(2026, 11, 24),
             "contact_method": ContactMethod.DISCORD_DM,
-            "linkage": ContactLinkage.OCCASION,
+            "contact_reason": ContactReason.EVENT_INVITE,
+            "occasion_id": 88,
+            "forced": False,
             "source_hash": "a" * 64,
         }
         fields.update(overrides)
@@ -140,21 +155,193 @@ class ExternalPromotionReceiptModelTest(_SendFixture):
         self.assertEqual(receipt.association_state, AssociationState.LINKED)
         self.assertEqual(receipt.source_hash, "a" * 64)
 
-    def test_source_facts_are_immutable(self) -> None:
+    def test_source_facts_immutable_outside_bypass(self) -> None:
         receipt = self._receipt()
+        changes: dict[str, object] = {
+            "recorded_at": datetime(2026, 11, 24, 12, 0, tzinfo=UTC),
+            "contact_date_ny": date(2026, 11, 25),
+            "contact_method": ContactMethod.OTHER,
+            "contact_reason": ContactReason.FOLLOW_UP,
+            "occasion_id": 89,
+            "forced": True,
+            "source_hash": "b" * 64,
+            "discord_id": "123456789012345679",
+            "promoter_discord_id": "223456789012345678",
+            "event": self.other_event,
+        }
+        for field, value in changes.items():
+            with self.subTest(field=field):
+                setattr(receipt, field, value)
+                with self.assertRaises(ImmutableFieldError):
+                    receipt.save(update_fields=[field])
+                with self.assertRaises(ImmutableFieldError):
+                    ExternalPromotionReceipt.objects.filter(pk=receipt.pk).update(
+                        **{field: value}
+                    )
+                with self.assertRaises(ImmutableFieldError):
+                    ExternalPromotionReceipt.objects.bulk_update([receipt], [field])
+                receipt.refresh_from_db()
+        with self.assertRaises(ImmutableFieldError):
+            receipt.save()
+        self.assertEqual(receipt.source_hash, "a" * 64)
+        self.assertEqual(receipt.event_id, self.event.pk)
+
+    def test_identity_fields_immutable_even_in_bypass(self) -> None:
+        receipt = self._receipt()
+        with ExternalPromotionReceipt.source_update():
+            for field, value in (
+                ("source_contact_id", 9999),
+                ("organization", self.other_org),
+                ("first_imported_at", timezone.now()),
+            ):
+                with self.subTest(field=field):
+                    setattr(receipt, field, value)
+                    with self.assertRaises(ImmutableFieldError):
+                        receipt.save(update_fields=[field])
+                    receipt.refresh_from_db()
+
+    def test_source_update_bypass_allows_supersede_fields(self) -> None:
+        receipt = self._receipt()
+        fields = [
+            "recorded_at",
+            "contact_date_ny",
+            "contact_reason",
+            "occasion_id",
+            "source_hash",
+            "discord_id",
+            "promoter_discord_id",
+            "event",
+            "source_revision",
+            "source_updated_at",
+        ]
+        with ExternalPromotionReceipt.source_update():
+            receipt.recorded_at = datetime(2026, 11, 24, 12, 0, tzinfo=UTC)
+            receipt.contact_date_ny = date(2026, 11, 25)
+            receipt.contact_reason = ContactReason.GENERAL
+            receipt.occasion_id = 89
+            receipt.source_hash = "b" * 64
+            receipt.discord_id = "123456789012345679"
+            receipt.promoter_discord_id = "223456789012345678"
+            receipt.event = self.other_event
+            receipt.source_revision = 1
+            receipt.source_updated_at = timezone.now()
+            receipt.save(update_fields=fields)
+            ExternalPromotionReceipt.objects.filter(pk=receipt.pk).update(forced=True)
+        receipt.refresh_from_db()
+        self.assertEqual(receipt.source_hash, "b" * 64)
+        self.assertEqual(receipt.event_id, self.other_event.pk)
+        self.assertEqual(receipt.promoter_discord_id, "223456789012345678")
+        self.assertTrue(receipt.forced)
+        self.assertEqual(receipt.source_revision, 1)
+        receipt.source_hash = "c" * 64
+        with self.assertRaises(ImmutableFieldError):
+            receipt.save(update_fields=["source_hash"])
+
+    def test_source_update_bypass_resets_after_error(self) -> None:
+        receipt = self._receipt()
+        with self.assertRaises(RuntimeError):
+            with ExternalPromotionReceipt.source_update():
+                raise RuntimeError("boom")
         receipt.source_hash = "b" * 64
         with self.assertRaises(ImmutableFieldError):
             receipt.save(update_fields=["source_hash"])
-        with self.assertRaises(ImmutableFieldError):
-            receipt.save()
-        with self.assertRaises(ImmutableFieldError):
-            ExternalPromotionReceipt.objects.filter(pk=receipt.pk).update(
-                recorded_at=timezone.now()
-            )
-        with self.assertRaises(ImmutableFieldError):
-            ExternalPromotionReceipt.objects.bulk_update([receipt], ["source_hash"])
+
+    def test_new_field_defaults(self) -> None:
+        receipt = self._receipt()
         receipt.refresh_from_db()
-        self.assertEqual(receipt.source_hash, "a" * 64)
+        self.assertEqual(receipt.point_status, PointStatus.NOT_APPLICABLE)
+        self.assertEqual(receipt.point_reason, PointReason.NONE)
+        self.assertFalse(receipt.holds_point)
+        self.assertIsNone(receipt.origin_send_id)
+        self.assertEqual(receipt.promoter_discord_id, "")
+        self.assertEqual(receipt.source_revision, 0)
+        self.assertIsNone(receipt.source_updated_at)
+        self.assertIsNone(receipt.retracted_at)
+        self.assertIsNone(receipt.event_date)
+        self.assertFalse(hasattr(receipt, "linkage"))
+
+    def _assert_check(self, name: str, **overrides: object) -> None:
+        with self.assertRaisesMessage(IntegrityError, name), transaction.atomic():
+            self._receipt(**overrides)
+
+    def test_point_unique_per_event_and_player(self) -> None:
+        held = {"holds_point": True, "point_status": PointStatus.CREDITED}
+        self._receipt(**held)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._receipt(source_contact_id=8022, **held)
+        self._receipt(
+            source_contact_id=8023,
+            holds_point=False,
+            point_status=PointStatus.DUPLICATE,
+        )
+        self._receipt(source_contact_id=8024, event=self.other_event, **held)
+        names = {c.name for c in ExternalPromotionReceipt._meta.constraints}
+        self.assertIn("uniq_external_promo_point", names)
+
+    def test_occasion_xor_date_constraint(self) -> None:
+        self._assert_check(
+            "ck_ext_promo_rcpt_occasion_xor_date", occasion_id=None, event_date=None
+        )
+        self._assert_check(
+            "ck_ext_promo_rcpt_occasion_xor_date",
+            event_date=datetime(2026, 11, 30, tzinfo=UTC),
+        )
+        self._receipt(occasion_id=None, event_date=datetime(2026, 11, 30, tzinfo=UTC))
+
+    def test_forced_needs_occasion_constraint(self) -> None:
+        self._assert_check(
+            "ck_ext_promo_rcpt_forced_occasion",
+            forced=True,
+            occasion_id=None,
+            event_date=datetime(2026, 11, 30, tzinfo=UTC),
+        )
+        self._receipt(forced=True)
+
+    def test_point_has_event_constraint(self) -> None:
+        self._assert_check(
+            "ck_ext_promo_rcpt_point_has_event",
+            event=None,
+            holds_point=True,
+            point_status=PointStatus.UNCREDITED,
+            point_reason=PointReason.SELF_CONTACT,
+        )
+
+    def test_point_status_constraint(self) -> None:
+        self._assert_check(
+            "ck_ext_promo_rcpt_point_status",
+            holds_point=True,
+            point_status=PointStatus.DUPLICATE,
+        )
+        self._assert_check(
+            "ck_ext_promo_rcpt_point_status",
+            holds_point=False,
+            point_status=PointStatus.CREDITED,
+        )
+
+    def test_retracted_constraint(self) -> None:
+        self._assert_check("ck_ext_promo_rcpt_retracted", retracted_at=timezone.now())
+        self._assert_check(
+            "ck_ext_promo_rcpt_retracted", point_status=PointStatus.RETRACTED
+        )
+        self._receipt(point_status=PointStatus.RETRACTED, retracted_at=timezone.now())
+
+    def test_phase_b_indexes_exist(self) -> None:
+        names = {index.name for index in ExternalPromotionReceipt._meta.indexes}
+        self.assertTrue(
+            {
+                "ext_promo_rcpt_event_discord",
+                "ext_promo_rcpt_org_discord_at",
+                "ext_promo_rcpt_org_date",
+            }
+            <= names
+        )
+
+    def test_event_deletion_keeps_contact(self) -> None:
+        receipt = self._receipt()
+        self.event.delete()
+        receipt.refresh_from_db()
+        self.assertIsNone(receipt.event_id)
+        self.assertEqual(receipt.source_contact_id, 8021)
 
     def test_queryset_update_of_association_is_allowed(self) -> None:
         receipt = self._receipt()
@@ -171,6 +358,143 @@ class ExternalPromotionReceiptModelTest(_SendFixture):
         receipt.refresh_from_db()
         self.assertIsNone(receipt.user_id)
         self.assertEqual(receipt.source_contact_id, 8021)
+
+
+class LedgerReversalModelTest(_SendFixture):
+    """``ContributionEntry`` fields that link credits, voids and restores."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.org_user, _ = OrgUser.objects.get_or_create(
+            user=self.promoter, organization=self.org
+        )
+        self.receipt = ExternalPromotionReceipt.objects.create(
+            organization=self.org,
+            source=ReceiptSource.CONTACT_LOG,
+            source_contact_id=8021,
+            event=self.event,
+            discord_id="123456789012345678",
+            recorded_at=datetime(2026, 11, 24, 11, 30, tzinfo=UTC),
+            contact_date_ny=date(2026, 11, 24),
+            contact_method=ContactMethod.DISCORD_DM,
+            contact_reason=ContactReason.EVENT_INVITE,
+            occasion_id=88,
+            forced=False,
+            source_hash="a" * 64,
+        )
+
+    def _entry(self, **overrides: object) -> ContributionEntry:
+        fields: dict[str, object] = {
+            "organization": self.org,
+            "org_user": self.org_user,
+            "kind": ContributionKind.PROMO_MESSAGE,
+            "points": 1,
+            "event": self.event,
+            "occurred_at": datetime(2026, 11, 24, 11, 30, tzinfo=UTC),
+        }
+        fields.update(overrides)
+        return ContributionEntry.objects.create(**fields)
+
+    def test_uniq_external_promo_credit(self) -> None:
+        first = self._entry(external_contact=self.receipt)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self._entry(external_contact=self.receipt)
+        ContributionEntry.objects.filter(pk=first.pk).update(voided=True)
+        second = self._entry(external_contact=self.receipt)
+        self.assertEqual(
+            set(self.receipt.ledger_entries.values_list("pk", flat=True)),
+            {first.pk, second.pk},
+        )
+
+    def test_reversal_link_constraint(self) -> None:
+        credit = self._entry()
+        for kind in (ContributionKind.PROMO_VOID, ContributionKind.PROMO_RESTORE):
+            with self.subTest(kind=kind):
+                with (
+                    self.assertRaisesMessage(IntegrityError, "ck_promo_reversal_link"),
+                    transaction.atomic(),
+                ):
+                    self._entry(kind=kind, points=-1)
+        with (
+            self.assertRaisesMessage(IntegrityError, "ck_promo_reversal_link"),
+            transaction.atomic(),
+        ):
+            self._entry(kind=ContributionKind.MANUAL, reversal_of=credit, event=None)
+        void = self._entry(
+            kind=ContributionKind.PROMO_VOID, points=-1, reversal_of=credit
+        )
+        self.assertEqual(list(credit.reversals.all()), [void])
+
+    def test_reversal_not_voided_constraint(self) -> None:
+        credit = self._entry()
+        with (
+            self.assertRaisesMessage(IntegrityError, "ck_promo_reversal_not_voided"),
+            transaction.atomic(),
+        ):
+            self._entry(
+                kind=ContributionKind.PROMO_VOID,
+                points=-1,
+                reversal_of=credit,
+                voided=True,
+            )
+
+    def test_reversal_cascade_on_entry_delete(self) -> None:
+        credit = self._entry()
+        void = self._entry(
+            kind=ContributionKind.PROMO_VOID, points=-1, reversal_of=credit
+        )
+        restore = self._entry(
+            kind=ContributionKind.PROMO_RESTORE, points=1, reversal_of=credit
+        )
+        credit.delete()
+        self.assertFalse(
+            ContributionEntry.objects.filter(pk__in=[void.pk, restore.pk]).exists()
+        )
+
+    def test_external_contact_deletion_keeps_entry(self) -> None:
+        credit = self._entry(external_contact=self.receipt)
+        self.receipt.delete()
+        credit.refresh_from_db()
+        self.assertIsNone(credit.external_contact_id)
+        self.assertFalse(credit.voided)
+
+    def test_ledger_audit_actions(self) -> None:
+        actions = dict(OrgLog.ACTION_CHOICES)
+        self.assertEqual(actions["void_promo_point"], "Void Promotion Point")
+        self.assertEqual(actions["restore_promo_point"], "Restore Promotion Point")
+        self.assertEqual(actions["update_external_contact"], "Update External Contact")
+
+
+class PromoSendSnapshotTest(_SendFixture):
+    def test_recipient_discord_id_set_at_send_and_immutable(self) -> None:
+        discord_id = self.recipient.discordId
+        send = self._send(self.promoter)
+        send.refresh_from_db()
+        self.assertEqual(send.recipient_discord_id, discord_id)
+        self.recipient.discordId = "999000000000000001"
+        self.recipient.save()
+        send.refresh_from_db()
+        self.assertEqual(send.recipient_discord_id, discord_id)
+        send.recipient_discord_id = "999000000000000001"
+        with self.assertRaises(ImmutableFieldError):
+            send.save(update_fields=["recipient_discord_id"])
+        with self.assertRaises(ImmutableFieldError):
+            send.save()
+        send.refresh_from_db()
+        self.assertEqual(send.recipient_discord_id, discord_id)
+        send.earns_points = False
+        send.save(update_fields=["earns_points"])
+        send.save()
+
+    def test_recipient_without_discord_snapshots_blank(self) -> None:
+        send = PromoSend.objects.create(
+            organization=self.org,
+            event=self.event,
+            recipient=self.no_discord,
+            sender=self.promoter,
+            text="hi",
+        )
+        self.assertEqual(send.recipient_discord_id, "")
 
 
 class PromotionContactOutboxModelTest(_SendFixture):

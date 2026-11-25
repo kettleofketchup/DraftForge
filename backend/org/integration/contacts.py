@@ -37,9 +37,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Final, Literal
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db import IntegrityError, models
+from django.db import IntegrityError
 from django.db.models import Max
 from django.utils import timezone
 
@@ -78,8 +79,8 @@ from org.models import Organization, OrgUser
 from org.models_promotion_sync import (
     AssociationReason,
     AssociationState,
-    ContactLinkage,
     ContactMethod,
+    ContactReason,
     ExternalPromotionReceipt,
     ReceiptSource,
 )
@@ -114,7 +115,9 @@ ENTRY_KEYS: Final[tuple[str, ...]] = (
     "linkage",
 )
 # v1 supports occasion linkage only; no event-date fallback is configured.
-SUPPORTED_LINKAGE: Final[str] = ContactLinkage.OCCASION
+SUPPORTED_LINKAGE: Final[str] = "occasion"
+LINKAGES: Final[tuple[str, ...]] = ("occasion", "event_date")
+CONTACT_TZ: Final = ZoneInfo("America/New_York")
 HISTORY_WARNING: Final[str] = "history_may_be_incomplete"
 
 Status = Literal["applied", "unchanged", "quarantined"]
@@ -160,7 +163,7 @@ def _parse_entry(value: Any, index: int) -> ImportEntry:
     event_id = parse_id(raw["event_id"], f"{path}.event_id")
     discord_id = parse_id(raw["discord_id"], f"{path}.discord_id")
     assert source_contact_id is not None and event_id is not None
-    linkage = parse_choice(raw["linkage"], f"{path}.linkage", ContactLinkage.values)
+    linkage = parse_choice(raw["linkage"], f"{path}.linkage", LINKAGES)
     if linkage != SUPPORTED_LINKAGE:
         raise invalid(f"{path}.linkage", "is not the event's configured linkage")
     return ImportEntry(
@@ -194,12 +197,6 @@ def _parse(payload: Any) -> tuple[str, list[ImportEntry]]:
     if len({e.event_id for e in entries}) > 1:
         raise invalid("entries", "must all be for one event")
     return version, entries
-
-
-class ContactReason(models.TextChoices):
-    EVENT_INVITE = "EVENT_INVITE", "Event invite"
-    FOLLOW_UP = "FOLLOW_UP", "Follow-up"
-    GENERAL = "GENERAL", "General"
 
 
 BATCH_KEYS: Final[tuple[str, ...]] = (
@@ -442,6 +439,7 @@ def _new_association(entry: ImportEntry) -> AssociationState:
 def _apply_entries(
     org: Organization,
     event: Event,
+    occasion_id: int,
     entries: list[ImportEntry],
     retained: dict[int, ExternalPromotionReceipt],
 ) -> tuple[list[Status], int]:
@@ -459,8 +457,11 @@ def _apply_entries(
                 event=event,
                 discord_id=entry.discord_id,
                 recorded_at=entry.recorded_at,
+                contact_date_ny=entry.recorded_at.astimezone(CONTACT_TZ).date(),
                 contact_method=entry.contact_method,
-                linkage=entry.linkage,
+                contact_reason=ContactReason.EVENT_INVITE,
+                occasion_id=occasion_id,
+                forced=False,
                 source_hash=entry.source_hash,
                 first_imported_at=now,
                 user_id=entry.user_id,
@@ -491,7 +492,7 @@ def import_contact_receipts(org: Organization, payload: dict) -> dict[str, Any]:
         get_org_binding(org.pk)
         return _result([], 0)
     event_id = entries[0].event_id
-    get_event_binding(org.pk, event_id)
+    binding = get_event_binding(org.pk, event_id)
     # The guild read is network I/O; on SQLite the locked transaction below
     # holds the database-wide write lock, so it must happen first. Inside
     # the lock only the database sources and the version are re-checked.
@@ -508,7 +509,9 @@ def import_contact_receipts(org: Organization, payload: dict) -> dict[str, Any]:
             raise IntegrationError("mapping_changed", 409)
         _authorize(universe, entries)
         retained = _retained(org, entries)
-        statuses, updated = _apply_entries(org, event, entries, retained)
+        statuses, updated = _apply_entries(
+            org, event, binding.occasion_id, entries, retained
+        )
         return _result(statuses, updated)
 
     try:

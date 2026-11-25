@@ -1,7 +1,10 @@
 from django.core.validators import MaxLengthValidator
 from django.db import models
 
+from org.contributions.kinds import REVERSAL_KINDS, ContributionKind
 from org.standing.kinds import ONCE_PER_EVENT_KINDS
+
+_REVERSALS = sorted(kind.value for kind in REVERSAL_KINDS)
 
 
 class ContributionPointValue(models.Model):
@@ -75,6 +78,26 @@ class ContributionEntry(models.Model):
         blank=True,
         related_name="+",
     )
+    # The imported external contact behind an external credit, or behind a
+    # void or restore an import caused.
+    external_contact = models.ForeignKey(
+        "org.ExternalPromotionReceipt",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ledger_entries",
+    )
+    # Set only on promo_void/promo_restore rows. CASCADE keeps the net at
+    # zero when the reversed entry itself is deleted (an undone send).
+    reversal_of = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="reversals",
+    )
+    # True while the entry's voids outnumber its restores.
+    voided = models.BooleanField(default=False)
     occurred_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -91,6 +114,22 @@ class ContributionEntry(models.Model):
                 fields=["promo_send"],
                 condition=models.Q(promo_send__isnull=False),
                 name="uniq_entry_per_promo_send",
+            ),
+            models.UniqueConstraint(
+                fields=["external_contact"],
+                condition=models.Q(kind=ContributionKind.PROMO_MESSAGE.value)
+                & models.Q(external_contact__isnull=False)
+                & models.Q(voided=False),
+                name="uniq_external_promo_credit",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(kind__in=_REVERSALS, reversal_of__isnull=False)
+                | (~models.Q(kind__in=_REVERSALS) & models.Q(reversal_of__isnull=True)),
+                name="ck_promo_reversal_link",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(kind__in=_REVERSALS, voided=True),
+                name="ck_promo_reversal_not_voided",
             ),
         ]
         indexes = [

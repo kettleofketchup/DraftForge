@@ -173,8 +173,10 @@ class RollbackOnDisposableDatabaseTest(MigratorTestCase):
             event_id=self.seed["event"],
             discord_id="13",
             recorded_at=AT,
+            contact_date_ny=AT.date(),
             contact_method="DISCORD_DM",
-            linkage="occasion",
+            contact_reason="EVENT_INVITE",
+            occasion_id=88,
             source_hash="a" * 64,
         )
         Outbox = apps.get_model("org", "PromotionContactOutbox")
@@ -215,3 +217,50 @@ class RollbackOnDisposableDatabaseTest(MigratorTestCase):
             new.apps.get_model("org", "PromotionContactOutbox").objects.exists()
         )
         self.assertEqual(_sends(new.apps, self.seed["sends"]), self.sends_before)
+
+
+class RecipientDiscordIdBackfillTest(MigratorTestCase):
+    """0027 snapshots each existing send's recipient Discord ID."""
+
+    migrate_from = OPERATIONS
+    migrate_to = RECEIPTS
+
+    def prepare(self) -> None:
+        apps = self.old_state.apps
+        CustomUser = apps.get_model("app", "CustomUser")
+        Organization = apps.get_model("org", "Organization")
+        Event = apps.get_model("events", "Event")
+        PromoSend = apps.get_model("org", "PromoSend")
+        owner = CustomUser.objects.create(username="bf_owner", discordId="21")
+        linked = CustomUser.objects.create(
+            username="bf_linked", discordId="123456789012345678"
+        )
+        unlinked = CustomUser.objects.create(username="bf_unlinked")
+        org = Organization.objects.create(name="Backfill Org", owner=owner)
+        event = Event.objects.create(
+            organization=org, name="Backfill Event", scheduled_at=AT, created_by=owner
+        )
+        self.sends = {
+            name: PromoSend.objects.create(
+                organization=org,
+                event=event,
+                recipient=recipient,
+                sender=owner,
+                text=name,
+            ).pk
+            for name, recipient in (
+                ("linked", linked),
+                ("unlinked", unlinked),
+                ("deleted", None),
+            )
+        }
+
+    def test_0027_backfills_recipient_discord_id(self) -> None:
+        PromoSend = self.new_state.apps.get_model("org", "PromoSend")
+        got = {
+            name: PromoSend.objects.get(pk=pk).recipient_discord_id
+            for name, pk in self.sends.items()
+        }
+        self.assertEqual(
+            got, {"linked": "123456789012345678", "unlinked": "", "deleted": ""}
+        )

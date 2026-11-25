@@ -47,25 +47,27 @@ from user.models import ProfileClaimRequest
 # that quarantines its receipts, cancels its open outbox rows and redacts the
 # payloads of every outbox row naming it (one UPDATE each); after a merge
 # that hook finds none of the merged rows. The send view also reads the new
-# send's outbox summary for its writeback field (one SELECT).
+# send's outbox summary for its writeback field (one SELECT). Deleting
+# ledger rows is no longer a fast delete: the collector reads the rows and
+# then their promotion-point reversals (reversal_of cascades), two SELECTs.
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
 CLOSE_AUTO_CANCEL_QUERIES = 42
 CLOSE_ADMIN_CANCEL_QUERIES = 12
 CLOSE_AUTO_CANCEL_NO_STAFF_QUERIES = 12
-REOPEN_QUERIES = 12
+REOPEN_QUERIES = 14
 PATCH_NAME_QUERIES = 21
 PATCH_UNRELATED_QUERIES = 15
-STAFF_PUT_QUERIES = 39
+STAFF_PUT_QUERIES = 41
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 229
-MERGE_CLAIM_QUERIES = 206
-DELETE_API_QUERIES = 122
-DELETE_ADMIN_QUERIES = 175
+MERGE_DISCORD_QUERIES = 231
+MERGE_CLAIM_QUERIES = 208
+DELETE_API_QUERIES = 124
+DELETE_ADMIN_QUERIES = 177
 DELETE_ADMIN_CONFIRM_QUERIES = 55
 PROMO_SEND_QUERIES = 29
-PROMO_UNDO_QUERIES = 8
-PROMO_RELEASE_QUERIES = 135
+PROMO_UNDO_QUERIES = 10
+PROMO_RELEASE_QUERIES = 137
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8
