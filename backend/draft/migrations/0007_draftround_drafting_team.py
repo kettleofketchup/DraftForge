@@ -2,6 +2,65 @@
 
 import django.db.models.deletion
 from django.db import migrations, models
+from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+from django.db.migrations.state import StateApps
+from django.db.models import F, IntegerField, OuterRef, Subquery
+from django.db.models.fields.json import KeyTextTransform
+from django.db.models.functions import Cast
+
+
+def _snapshot_captain_id(side: str) -> Cast:
+    return Cast(
+        KeyTextTransform("captain_id", KeyTextTransform(side, "details")),
+        IntegerField(),
+    )
+
+
+def backfill_drafting_team(
+    apps: StateApps, schema_editor: BaseDatabaseSchemaEditor
+) -> None:
+    DraftRound = apps.get_model("draft", "DraftRound")
+    Team = apps.get_model("tournament", "Team")
+    TeamLog = apps.get_model("tournament", "TeamLog")
+
+    captain_acquired_at = Subquery(
+        TeamLog.objects.annotate(
+            before_captain_id=_snapshot_captain_id("before"),
+            after_captain_id=_snapshot_captain_id("after"),
+        )
+        .filter(team=OuterRef("pk"), after_captain_id=OuterRef("captain_id"))
+        .exclude(before_captain_id=OuterRef("captain_id"))
+        .order_by("-created_at")
+        .values("created_at")[:1]
+    )
+
+    tournament_ids = (
+        DraftRound.objects.filter(captain__isnull=False, drafting_team__isnull=True)
+        .order_by()
+        .values_list("draft__tournament_id", flat=True)
+        .distinct()
+    )
+    for tournament_id in tournament_ids:
+        team_by_captain: dict[int, int] = {}
+        for team_id, captain_id in (
+            Team.objects.filter(tournament_id=tournament_id, captain__isnull=False)
+            .annotate(captain_acquired_at=captain_acquired_at)
+            .order_by(F("captain_acquired_at").asc(nulls_first=True), "pk")
+            .values_list("pk", "captain_id")
+        ):
+            team_by_captain.setdefault(captain_id, team_id)
+
+        rounds = []
+        for draft_round in DraftRound.objects.filter(
+            draft__tournament_id=tournament_id,
+            captain__isnull=False,
+            drafting_team__isnull=True,
+        ).only("pk", "captain"):
+            team_id = team_by_captain.get(draft_round.captain_id)
+            if team_id is not None:
+                draft_round.drafting_team_id = team_id
+                rounds.append(draft_round)
+        DraftRound.objects.bulk_update(rounds, ["drafting_team"], batch_size=500)
 
 
 class Migration(migrations.Migration):
@@ -23,4 +82,5 @@ class Migration(migrations.Migration):
                 to="tournament.team",
             ),
         ),
+        migrations.RunPython(backfill_drafting_team, migrations.RunPython.noop),
     ]
