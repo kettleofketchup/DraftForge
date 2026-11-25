@@ -640,7 +640,7 @@ class CreatePathLedgerTests(LedgerContractMixin, EventTestCase):
         event = self.make_event()
         old = self._cancelled_after_signup(event)
         signup = process_rsvp(event, self.subject, actor=self.member_actor)
-        self.assertNotEqual(signup.pk, old.pk)
+        self.assertEqual(signup.pk, old.pk)
         self.assert_single_entry(
             event,
             action=SignupAction.RESIGNED_UP,

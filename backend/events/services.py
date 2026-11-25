@@ -48,7 +48,13 @@ from events.eligibility import (
     validate_friend_id,
 )
 from events.ledger import SignupActor, record_signup_change, snapshot
-from events.line import restamp_to_back, waitlist_rank
+from events.line import (
+    forfeits_on_withdraw,
+    restamp_to_back,
+    restamps_on_switch,
+    start_first_fields,
+    waitlist_rank,
+)
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -244,9 +250,10 @@ def _create_signup(
     for_staff_placement: bool = False,
     reason: str = "",
 ) -> EventSignup:
-    """Internal: create a signup with no state check.
+    """Internal: create a signup, or bring the user's CANCELLED, REJECTED or
+    TENTATIVE row back in place, with no state check.
 
-    Handles existing-signup detection, waitlist placement, auto-approve / auto-confirm,
+    Handles waitlist placement, auto-approve / auto-confirm, the line rules,
     tournament addition, and notify hooks. State authorization is the caller's job.
 
     INVARIANT: invalidate_after_commit MUST be registered before any transaction.on_commit
@@ -259,8 +266,6 @@ def _create_signup(
         .filter(event=event, user=user)
         .first()
     )
-    carry = _first_fields_carry(existing)
-    before: SignupSnapshot | None = None
     if existing:
         logger.info(
             "signup_existing_found",
@@ -271,29 +276,9 @@ def _create_signup(
             status=existing.status,
             signup_id=existing.id,
         )
-        if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            before = snapshot(existing)
-            existing.delete()
-            logger.info(
-                "signup_cancelled_deleted",
-                system="events",
-                subsystem="services",
-                user_id=user.pk,
-                event_id=event.pk,
-            )
-        elif existing.status == SignupStatus.TENTATIVE:
-            before = snapshot(existing)
-            existing.delete()
-            logger.info(
-                "signup_tentative_upgraded",
-                system="events",
-                subsystem="services",
-                user_id=user.pk,
-                event_id=event.pk,
-            )
-        elif existing.status == SignupStatus.DROPPED:
+        if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
-        else:
+        if existing.status not in _RETURNABLE_STATUSES:
             raise ValueError("User has already signed up for this event.")
 
     action = _create_action(existing, for_staff_placement=for_staff_placement)
@@ -302,57 +287,79 @@ def _create_signup(
     eligibility = eligibility_values(result)
 
     locked = lock_event(event)
-    if not has_free_seat(locked):
-        max_pos = (
-            EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
-            .order_by("-waitlist_position")
-            .values_list("waitlist_position", flat=True)
-            .first()
-        ) or 0
+    waitlisted = not has_free_seat(locked)
+    status = (
+        SignupStatus.WAITLISTED if waitlisted else _decide_signup_status(event, result)
+    )
+    waitlist_position = _next_waitlist_position(locked) if waitlisted else None
+    before: SignupSnapshot | None = None
+    if existing is None:
         signup = EventSignup.objects.create(
             event=event,
             user=user,
             event_team=event_team,
             signup_type=signup_type,
-            status=SignupStatus.WAITLISTED,
-            waitlist_position=max_pos + 1,
+            status=status,
+            waitlist_position=waitlist_position,
             self_made=not for_staff_placement,
             **eligibility,
-            **carry,
         )
-        _record_leaf(
-            signup,
-            event=locked,
-            actor=actor,
-            action=action,
-            before=before,
-            reason=reason,
+    else:
+        before = _ranked_snapshot(existing)
+        prior_status = existing.status
+        restamp = _return_restamp_reason(
+            existing, locked, for_staff_placement=for_staff_placement
         )
-        invalidate_after_commit(event)
-        log.info(
-            "signup_post_commit_hooks_scheduled",
-            system="events",
-            subsystem="services",
-            signup_id=signup.pk,
-            event_id=event.pk,
-        )
-        transaction.on_commit(lambda: notify_signup_changed(event))
-        return signup
+        existing.event = locked
+        existing.status = status
+        existing.commitment = Commitment.MAIN
+        existing.event_team = event_team
+        existing.signup_type = signup_type
+        existing.self_made = not for_staff_placement
+        existing.waitlist_position = waitlist_position
+        for name, value in eligibility.items():
+            setattr(existing, name, value)
+        fields = [
+            "status",
+            "commitment",
+            "event_team",
+            "signup_type",
+            "self_made",
+            "waitlist_position",
+            *eligibility,
+            "updated_at",
+        ]
+        if restamp is not None:
+            fields += restamp_to_back(existing, reason=restamp)
+            if existing.first_signed_up_at is None:
+                fields += start_first_fields(existing)
+        existing.save(update_fields=fields)
+        signup = existing
+        context: dict[str, Any] = {
+            "system": "events",
+            "subsystem": "services",
+            "signup_id": signup.pk,
+            "user_id": user.pk,
+            "event_id": event.pk,
+            "prior_status": prior_status,
+            "status": status,
+            "restamp_reason": restamp,
+        }
+        if prior_status == SignupStatus.TENTATIVE:
+            logger.info("signup_switched_to_main_in_place", **context)
+        else:
+            logger.info("signup_resigned_up_in_place", **context)
 
-    status = _decide_signup_status(event, result)
-    signup = EventSignup.objects.create(
-        event=event,
-        user=user,
-        event_team=event_team,
-        signup_type=signup_type,
-        status=status,
-        self_made=not for_staff_placement,
-        **eligibility,
-        **carry,
-    )
-    _roster_add_if_joins(signup)
+    if not waitlisted:
+        _roster_add_if_joins(signup)
     _record_leaf(
-        signup, event=locked, actor=actor, action=action, before=before, reason=reason
+        signup,
+        event=locked,
+        actor=actor,
+        action=action,
+        before=before,
+        after=_ranked_snapshot(signup),
+        reason=reason,
     )
     invalidate_after_commit(event)
     log.info(
@@ -366,6 +373,33 @@ def _create_signup(
     if status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
         transaction.on_commit(lambda: notify_mark_interested(event, user.pk))
     return signup
+
+
+_RETURNABLE_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.CANCELLED, SignupStatus.REJECTED, SignupStatus.TENTATIVE}
+)
+
+
+def _return_restamp_reason(
+    signup: EventSignup, event: Event, *, for_staff_placement: bool
+) -> str | None:
+    """Why a returning row goes to the back of the line, or None to keep its place."""
+    if for_staff_placement:
+        return "staff_add"
+    if signup.first_signed_up_at is None:
+        return "bare_decline"
+    if signup.status == SignupStatus.TENTATIVE:
+        return "switch" if restamps_on_switch(event) else None
+    return "resign_up" if forfeits_on_withdraw(event) else None
+
+
+def _next_waitlist_position(event: Event) -> int:
+    max_pos = (
+        EventSignup.objects.nocache()
+        .filter(event=event, status=SignupStatus.WAITLISTED)
+        .aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
+    )
+    return (max_pos or 0) + 1
 
 
 @transaction.atomic
@@ -1011,14 +1045,8 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
     lock_event(signup.event)
     before = snapshot(signup, waitlist_rank=None)
-    max_pos = (
-        EventSignup.objects.nocache()
-        .filter(event=signup.event, status=SignupStatus.WAITLISTED)
-        .aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
-        or 0
-    )
     signup.status = SignupStatus.WAITLISTED
-    signup.waitlist_position = max_pos + 1
+    signup.waitlist_position = _next_waitlist_position(signup.event)
     restamped = restamp_to_back(signup, reason="demote")
     signup.save(update_fields=["status", "waitlist_position", *restamped, "updated_at"])
     _roster_remove_if_left(signup)

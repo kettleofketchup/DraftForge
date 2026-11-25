@@ -140,13 +140,13 @@ class StaffAddSignupTest(TestCase):
     def test_staff_add_re_rsvps_after_cancellation(self):
         """Cancelled signups can be staff-added again (covers _create_signup re-RSVP branch)."""
         event = self._make_event(EventState.ROLL_CALL)
-        EventSignup.objects.create(
+        cancelled = EventSignup.objects.create(
             event=event,
             user=self.user,
             status=SignupStatus.CANCELLED,
         )
         signup = staff_add_signup(event, self.user, actor=SYSTEM)
-        # The original cancelled row was deleted; the new one should NOT be cancelled.
+        assert signup.pk == cancelled.pk
         assert signup.status != SignupStatus.CANCELLED
 
     def test_staff_add_auto_confirm_during_roll_call(self):

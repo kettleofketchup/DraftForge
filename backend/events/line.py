@@ -44,6 +44,12 @@ def first_value(signup: EventSignup, first: str, *, at: datetime | None = None) 
     return getattr(signup, first.removeprefix("first_"))
 
 
+def start_first_fields(signup: EventSignup) -> list[str]:
+    for first in FIRST_FIELDS:
+        setattr(signup, first, first_value(signup, first, at=signup.signed_up_at))
+    return list(FIRST_FIELDS)
+
+
 def next_line_seq(event: Event) -> int:
     current = event.signups.nocache().aggregate(m=Max("line_seq"))["m"]
     return (current or 0) + 1

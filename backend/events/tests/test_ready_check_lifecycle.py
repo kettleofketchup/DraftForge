@@ -131,14 +131,14 @@ class LateEnrolmentTests(LifecycleTestCase):
         )
         self._assert_staff_row(asked, self.helper, check)
 
-    def test_staff_readd_after_cancel_relinks_entry(self) -> None:
+    def test_staff_readd_after_cancel_keeps_entry(self) -> None:
         member = self._signup(SignupStatus.APPROVED)
         check = self._open()
         entry = check.entries.get(signup=member)
         member.status = SignupStatus.CANCELLED
         member.save(update_fields=["status"])
         readded = staff_add_signup(self.rc_event, member.user, actor=self.admin_actor)
-        self.assertNotEqual(readded.pk, member.pk)
+        self.assertEqual(readded.pk, member.pk)
         entry.refresh_from_db()
         self.assertEqual(entry.signup_id, readded.pk)
         self.assertEqual(check.entries.filter(user=member.user).count(), 1)
