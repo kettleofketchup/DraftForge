@@ -13,7 +13,7 @@ Infrastructure created:
 
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from league.models import League
 from org.models import Organization
 from tests.data.leagues import USER_EDIT_LEAGUE
@@ -26,6 +26,7 @@ from tests.populate.utils import (
     ensure_org_user,
 )
 from tournament.models import Tournament
+from user.models import PositionsModel
 
 
 def populate_user_edit_data(force=False):

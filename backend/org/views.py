@@ -17,7 +17,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit
-from app.models import CustomUser, PositionsModel, ProfileClaimRequest
+from app.models import CustomUser
 from draft.models import DraftRound
 from draft.services.hero_chat import repoint_chat_attribution
 from events.eligibility import apply_admin_steam_account_id
@@ -41,6 +41,7 @@ from org.standing import api as standing
 from steam.models import LeaguePlayerStats, PlayerMatchStats
 from telemetry.logging import get_logger
 from tournament.models import Team
+from user.models import PositionsModel, ProfileClaimRequest
 from user.steam_accounts import log_steam_verification_change
 
 log = get_logger(__name__)

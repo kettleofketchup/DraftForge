@@ -5,11 +5,12 @@ import itertools
 from django.test import TestCase
 from django.utils import timezone
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from events.tests.actors import SYSTEM
 from org.views import ClaimRequestViewSet
 from tournament.models import Team, Tournament
 from tournament.services.team_leadership import teams_with_leadership_problems
+from user.models import PositionsModel
 
 _discord_ids = itertools.count(571500)
 
