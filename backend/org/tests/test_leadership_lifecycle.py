@@ -14,7 +14,12 @@ from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.leadership import lifecycle
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
-from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
+from org.models_leadership import (
+    CaptainReview,
+    CaptainReviewDraft,
+    EventCaptain,
+    OrgLeadershipSettings,
+)
 from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase
 from tournament.models import Team
@@ -250,6 +255,26 @@ class ReopenTest(LeadershipTestCase):
         self.assertEqual(CaptainReview.objects.get().void_kind, "lifecycle")
         self.assertFalse(EventCaptain.objects.filter(voided_at__isnull=True).exists())
         self.assertEqual(list(ContributionEntry.objects.all()), [host])
+
+    def test_void_event_deletes_drafts(self) -> None:
+        self.close()
+        other_event, other_tournament = self.make_event("Other Cup")
+        self.make_team("Gamma", self.cap_a, self.mates_a, tournament=other_tournament)
+        for user in [self.cap_a, *self.mates_a]:
+            self.admit(user, other_event)
+        self.close(other_event)
+        for snap in (self.snapshot(self.cap_a), self.snapshot(self.cap_b)):
+            mate = snap.teammates.order_by("pk")[0]
+            CaptainReviewDraft.objects.create(
+                event_captain=snap, rater=mate, scores={"1": 3}
+            )
+        other_snap = self.snapshot(self.cap_a, other_event)
+        kept = CaptainReviewDraft.objects.create(
+            event_captain=other_snap, rater=self.org_user(self.mates_a[0])
+        )
+        with transaction.atomic():
+            lifecycle.void_event(self.event, now=tz.now())
+        self.assertEqual(list(CaptainReviewDraft.objects.all()), [kept])
 
     def test_cancel_after_close_voids(self) -> None:
         self.close()

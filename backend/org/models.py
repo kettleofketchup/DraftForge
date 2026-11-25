@@ -20,6 +20,7 @@ from org.models_contributions import (
 from org.models_features import OrgFeature  # noqa: F401
 from org.models_leadership import (
     CaptainReview,  # noqa: F401
+    CaptainReviewDraft,  # noqa: F401
     CaptainTrait,  # noqa: F401
     CaptainTraitScore,  # noqa: F401
     EventCaptain,  # noqa: F401

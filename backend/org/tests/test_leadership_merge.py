@@ -6,6 +6,9 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 
 from app.models import CustomUser
+from discordbot import dm_ledger
+from discordbot.dm_keys import leadership_review_key
+from discordbot.models import DiscordDM, DMKind, DMStatus, DMSubject
 from events.models import Event
 from org.contributions.services import award_entry, delete_user_entries
 from org.leadership import maintenance
@@ -18,7 +21,12 @@ from org.models import (
     OrgLog,
     OrgUser,
 )
-from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
+from org.models_leadership import (
+    CaptainReview,
+    CaptainReviewDraft,
+    EventCaptain,
+    OrgLeadershipSettings,
+)
 from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase
 
@@ -196,6 +204,27 @@ class ReassignMemberTest(LeadershipTestCase):
         CaptainReview.objects.filter(pk=review.pk).update(
             updated_at=tz.now() - timedelta(minutes=minutes)
         )
+
+    def test_reassign_member_drops_source_drafts(self) -> None:
+        self.close()
+        snap = self.snapshot(self.cap_a)
+        CaptainReviewDraft.objects.create(
+            event_captain=snap, rater=self.ou(self.mates_a[0]), scores={"1": 2}
+        )
+        kept = CaptainReviewDraft.objects.create(
+            event_captain=snap, rater=self.ou(self.mates_a[1]), scores={"1": 5}
+        )
+        self.reassign(self.mates_a[0], self.mates_a[1])
+        self.assertEqual(list(CaptainReviewDraft.objects.all()), [kept])
+
+    def test_reassign_into_captain_drops_keep_self_drafts(self) -> None:
+        self.close()
+        snap = self.snapshot(self.cap_a)
+        CaptainReviewDraft.objects.create(
+            event_captain=snap, rater=self.ou(self.mates_a[0]), scores={"1": 2}
+        )
+        self.reassign(self.cap_a, self.mates_a[0])
+        self.assertFalse(CaptainReviewDraft.objects.exists())
 
     def test_cross_org_raises(self) -> None:
         other = Organization.objects.create(name="Other", owner=self.admin)
@@ -534,3 +563,98 @@ class DeleteUserRowsTest(LeadershipTestCase):
 
     def test_user_without_rows_is_noop(self) -> None:
         self.assertEqual(self.delete_rows(self.make_user("ld_none")), 0)
+
+
+class LeadershipLedgerScrubTest(LeadershipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.close()
+
+    def seed_row(
+        self, user: CustomUser, discord_id: str, *, part: int = 1
+    ) -> DiscordDM:
+        user.discordId = discord_id
+        user.save(update_fields=["discordId"])
+        snap = self.snapshot(self.cap_a)
+        key = leadership_review_key(
+            snapshot_id=snap.pk, rater_org_user_id=self.ou(user).pk, part=part
+        )
+        now = tz.now()
+        token = f"local:{user.pk:08x}"
+        message_id = str(880000 + user.pk * 10 + part)
+        result = dm_ledger.claim(
+            dm_ledger.DMClaim(
+                kind=DMKind.LEADERSHIP_REVIEW,
+                idempotency_key=key,
+                claim_token=token,
+                discord_user_id=discord_id,
+                recipient_user_id=user.pk,
+                organization_id=self.org.pk,
+                subject_type=DMSubject.CAPTAIN_SNAPSHOT,
+                subject_id=snap.pk,
+                context={
+                    "snapshot_id": snap.pk,
+                    "part": part,
+                    "parts": 1,
+                    "trait_ids": [1, 2],
+                },
+                has_components=True,
+            ),
+            now=now,
+        )
+        dm_ledger.finalize(
+            result.id,
+            dm_ledger.DMFinal(
+                status=DMStatus.SENT,
+                discord_channel_id="55",
+                discord_message_id=message_id,
+            ),
+            claim_token=token,
+            now=now,
+        )
+        dm_ledger.record_click(
+            discord_message_id=message_id, discord_user_id=discord_id, now=now
+        )
+        return DiscordDM.objects.get(pk=result.id)
+
+    def assert_scrubbed(self, row: DiscordDM, discord_id: str, old_key: str) -> None:
+        fresh = DiscordDM.objects.get(pk=row.pk)
+        self.assertEqual(fresh.discord_user_id, "")
+        self.assertIsNone(fresh.first_clicked_at)
+        self.assertIsNone(fresh.last_clicked_at)
+        self.assertEqual(fresh.click_count, 1)
+        self.assertEqual(fresh.idempotency_key, f"scrubbed:leadership_review:{row.pk}")
+        for name in (f.attname for f in DiscordDM._meta.concrete_fields):
+            value = getattr(fresh, name)
+            if isinstance(value, str):
+                with self.subTest(field=name):
+                    self.assertNotIn(discord_id, value)
+                    self.assertNotEqual(value, old_key)
+
+    def test_delete_user_scrubs_leadership_ledger_rows(self) -> None:
+        self.review(self.mates_a[0], self.cap_a)
+        self.expire_window()
+        row = self.seed_row(self.mates_a[0], "4242424242")
+        other = self.seed_row(self.mates_a[1], "5151515151")
+        old_key = row.idempotency_key
+        with transaction.atomic():
+            standing.on_user_deleted(self.mates_a[0], actor=self.admin)
+            self.mates_a[0].delete()
+        self.assert_scrubbed(row, "4242424242", old_key)
+        self.assertIsNone(DiscordDM.objects.get(pk=row.pk).recipient_id)
+        untouched = DiscordDM.objects.get(pk=other.pk)
+        self.assertEqual(untouched.discord_user_id, "5151515151")
+        self.assertEqual(untouched.idempotency_key, other.idempotency_key)
+        self.assertIsNotNone(untouched.first_clicked_at)
+
+    def test_delete_user_without_leadership_still_scrubs(self) -> None:
+        row = self.seed_row(self.mates_a[2], "7373737373")
+        old_key = row.idempotency_key
+        EventCaptain.teammates.through.objects.filter(
+            orguser_id=self.ou(self.mates_a[2]).pk
+        ).delete()
+        with transaction.atomic():
+            maintenance.delete_user_rows(
+                self.mates_a[2], actor=self.admin, now=tz.now()
+            )
+        self.assert_scrubbed(row, "7373737373", old_key)

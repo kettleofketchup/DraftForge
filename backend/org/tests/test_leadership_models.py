@@ -12,6 +12,7 @@ from org.leadership.constants import RATER_REVIVABLE, VoidKind
 from org.models import Organization, OrgLog, OrgUser
 from org.models_leadership import (
     CaptainReview,
+    CaptainReviewDraft,
     CaptainTrait,
     CaptainTraitScore,
     EventCaptain,
@@ -208,3 +209,22 @@ class LeadershipModelsTest(EventTestCase):
         self.assertEqual(
             names(CaptainTraitScore), {"uniq_review_trait", "captain_trait_score_range"}
         )
+
+    def test_draft_unique_per_snapshot_rater(self) -> None:
+        draft = CaptainReviewDraft.objects.create(
+            event_captain=self.snapshot, rater=self.rater, scores={"1": 3}
+        )
+        self.assertEqual(draft.scores, {"1": 3})
+        self.assertIsNone(draft.seeded_from_review_at)
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            CaptainReviewDraft.objects.create(
+                event_captain=self.snapshot, rater=self.rater
+            )
+        other = CaptainReviewDraft.objects.create(
+            event_captain=self.snapshot, rater=self.captain
+        )
+        self.assertEqual(other.scores, {})
+
+    def test_draft_not_cached(self) -> None:
+        self.assertNotIn("org.captainreviewdraft", settings.CACHEOPS)
+        self.assertNotIn("org.*", settings.CACHEOPS)

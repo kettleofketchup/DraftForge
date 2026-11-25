@@ -13,6 +13,7 @@ from org.feature_keys import FeatureKey
 from org.features import org_has_feature
 from org.leadership.constants import VoidKind
 from org.leadership.kinds import PLACEMENT_KINDS, RATED_KINDS, LeadershipKind
+from org.leadership.reviews import delete_drafts
 from org.leadership.settings import get_leadership_settings
 from org.models import OrgUser
 from org.models_conduct import AttendanceOutcome
@@ -247,6 +248,7 @@ def void_event(event: Event, *, now: datetime) -> VoidResult:
     CaptainReview.objects.nocache().filter(
         event_captain_id__in=ids, void_kind=VoidKind.MODERATED, moderated_from=""
     ).update(moderated_from=VoidKind.LIFECYCLE, updated_at=now)
+    drafts = delete_drafts(snapshot_ids=ids)
     revoked = ledger.revoke_event_kinds(event, kinds=kinds_for("leadership"))
     log.info(
         "leadership_event_voided",
@@ -255,6 +257,7 @@ def void_event(event: Event, *, now: datetime) -> VoidResult:
         org_id=event.organization_id,
         event_id=event.pk,
         reviews_voided=voided,
+        drafts_deleted=drafts,
         revoked=revoked,
     )
     return VoidResult(reviews_voided=voided, revoked=revoked)
