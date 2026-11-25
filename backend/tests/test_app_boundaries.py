@@ -680,7 +680,12 @@ _TOURNAMENT_RETIRED_DEFS = {
         "ManualPlacementOverrideTest",
         "UnsetWinnerTest",
         "AdvanceWinnerPersistenceTest",
+        "RosterGuardHelpers",
         "PlacementClearGuardTests",
+        "SingleEliminationGuardBracket",
+        "PlacementRequestGuardTests",
+        "PlacementApplyGuardTests",
+        "SingleEliminationFinalUnsetTests",
     ),
     "app.tests.test_bracket_queries": (
         "_user_ids",
@@ -1183,8 +1188,8 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     },
     "tournament": {
         "app/exception_handler.py": BackEdge(
-            frozenset({"TeamManagementError"}),
-            "global DRF handler maps TeamManagementError",
+            frozenset({"PlacementRosterConflict", "TeamManagementError"}),
+            "global DRF handler maps TeamManagementError and PlacementRosterConflict",
         ),
         "app/views_main.py": BackEdge(
             frozenset({"Game", "Tournament"}),

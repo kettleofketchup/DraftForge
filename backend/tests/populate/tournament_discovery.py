@@ -2,7 +2,7 @@
 
 Explicit pks: orgs 30-32, leagues 30-32, user 1100, tournaments 900-906.
 Tournament 906's source event (org 32, keyed by name) is SIGNUPS_OPEN.
-Used by frontend/tests/playwright/e2e/03-tournaments/04-discovery.spec.ts.
+Used by frontend/tests/playwright/e2e/tournaments/discovery.spec.ts.
 """
 
 from app.cache_utils import invalidate_obj

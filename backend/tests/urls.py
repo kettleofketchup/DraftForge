@@ -129,7 +129,7 @@ urlpatterns = [
         name="login-event-league-staff",
     ),
     # Auth-matrix role logins — isolated org/league for the role-context
-    # matrix in frontend/tests/playwright/e2e/17-auth/.
+    # matrix in frontend/tests/playwright/e2e/auth/.
     path(
         "login-auth-matrix-org-owner/",
         login_auth_matrix_org_owner,

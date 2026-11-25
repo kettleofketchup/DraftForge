@@ -130,7 +130,7 @@ def _complete_team_draft(tournament: Tournament) -> None:
 
 def populate_captain_takeover_tournament(force: bool = False) -> Tournament:
     """The team management fixture under its own name, so the captain takeover
-    spec never resets the tournament 06-team-management is using."""
+    spec never resets the tournament team-management is using."""
     return populate_team_management_tournament(
         force=force, name=CAPTAIN_TAKEOVER_TOURNAMENT_NAME
     )

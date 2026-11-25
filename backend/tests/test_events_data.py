@@ -1,4 +1,4 @@
-"""GET /api/tests/events/data/: the seeded 16-events pks (TEST=true only)."""
+"""GET /api/tests/events/data/: the seeded events pks (TEST=true only)."""
 
 from typing import Any
 
@@ -40,7 +40,7 @@ USERS = {
 def events_test_data() -> dict[str, Any] | None:
     org = Organization.objects.filter(name=EVENTS_ORG.name).first()
     event = Event.objects.filter(organization=org, name=EVENTS_EVENT_NAME).first()
-    # By name: spec 16-events/10 edits steam_league_id.
+    # By name: spec events/edit-league-and-event-fields edits steam_league_id.
     leagues = {
         lg.name: lg
         for lg in League.objects.filter(

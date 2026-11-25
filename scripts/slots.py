@@ -1343,6 +1343,7 @@ TEST_FILE: Final = "docker-compose.test.yaml"
 CI_FILE: Final = "docker-compose.ci.override.yaml"
 SLOT_FILE: Final = "docker-compose.slot.yaml"
 OFFLINE_FILE: Final = "docker-compose.slot-offline.yaml"
+DEFAULT_TEST_CGROUP_PARENT: Final = "df-tests.slice"
 RUN_FILE: Final = "docker-compose.run.yaml"
 STACK_FILES: Final[dict[str, str]] = {
     "dev": "docker-compose.debug.yaml",
@@ -1472,7 +1473,15 @@ def compose_env(stack: Stack, slot: SlotEnv | None = None) -> dict[str, str]:
         "DF_HTTPS_PORT": str(slot.https_port),
         "DF_HTTP_PORT": "" if slot.http_port is None else str(slot.http_port),
         "DF_BASE_URL": slot.base_url,
+        "DF_TEST_CGROUP_PARENT": limits_cgroup_parent(),
     }
+
+
+def limits_cgroup_parent() -> str:
+    """The systemd slice scripts/test-limits.sh caps; empty in CI or with DF_TEST_LIMITS=0."""
+    if is_ci() or os.environ.get("CI") or os.environ.get("DF_TEST_LIMITS") == "0":
+        return ""
+    return os.environ.get("DF_TEST_CGROUP_PARENT") or DEFAULT_TEST_CGROUP_PARENT
 
 
 def compose_cmd(
@@ -1694,6 +1703,7 @@ def _run_ephemeral(args: Sequence[str], root: Path, host: Host) -> int:
         "DF_HTTPS_PORT": "0",
         "DF_HTTP_PORT": "",
         "DF_BASE_URL": "https://localhost",
+        "DF_TEST_CGROUP_PARENT": limits_cgroup_parent(),
     }
     print(OFFLINE_NOTE, file=sys.stderr)
     try:

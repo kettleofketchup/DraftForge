@@ -128,6 +128,7 @@ class AutoLinkResultSerializer(serializers.Serializer):
 
     auto_linked_count = serializers.IntegerField()
     suggestions_created_count = serializers.IntegerField()
+    skipped_roster_conflict_count = serializers.IntegerField()
 
 
 class SyncStatusSerializer(serializers.Serializer):

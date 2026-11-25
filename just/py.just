@@ -41,7 +41,7 @@ script *args:
 # pytest on the host with docker/.env.test loaded and the cache on, as in the test container
 [group('py')]
 test *args:
-    {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
+    {{quote(root / "scripts/test-limits.sh")}} wrap {{quote(root / "scripts/in-env.sh")}} test backend {{quote(python)}} -m pytest "$@"
 
 # Write frontend/app/lib/opsnotices/noticeTypes.generated.ts from backend/*/ops_notices.py
 [group('py')]
