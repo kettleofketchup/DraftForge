@@ -24,6 +24,8 @@ from tournament.serializers.game import (
 from tournament.serializers.users import TEAM_USER_INDEX, build_team_user_index
 from tournament.services.bracket_placement import (
     apply_bracket_placements,
+    decides_tournament_winner,
+    max_single_elimination_winners_round,
     placement_for_game,
     tournament_bracket_placements,
 )
@@ -353,7 +355,9 @@ def _unset_winner(game: Game) -> Response:
             losing_team = game.radiant_team
 
     teams_to_reset = [losing_team]
-    if game.bracket_type == "grand_finals":
+    if decides_tournament_winner(
+        game, max_single_elimination_winners_round(game.tournament_id)
+    ):
         teams_to_reset.append(winning_team)
     reopening = [t for t in teams_to_reset if t is not None and t.placement is not None]
     for team in reopening:
