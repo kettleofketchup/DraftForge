@@ -136,7 +136,7 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Users | 1100 | Tournament discovery (`discovery_member`, member of org 30 only). Exception: sits just past the 1000-1099 roles range instead of a fresh 1000-increment block |
 | Tournament | 900-906 | Tournament discovery (live, future, past and stale rows; 2099 / 2020 dates). 906 belongs to org 32 and its source event "Discovery Open Signups Event" (keyed by name, pk auto-assigned) is SIGNUPS_OPEN |
 | Org / League | 50 (steam=17944) | Per-game org MMR ("Game MMR Org" / "Game MMR League"). Created by a late step of `populate_all` |
-| Users | 8000-8007 | Per-game org MMR: 8000-8004 read-only display, 8005 owned by `04-game-org-mmr` (b), 8006 by (a) (edit user), 8007 approve user (Deadlock rank "Phantom 4 (e2e)") |
+| Users | 8000-8007 | Per-game org MMR: 8000-8004 read-only display, 8005 owned by `game-org-mmr` (b), 8006 by (a) (edit user), 8007 approve user (Deadlock rank "Phantom 4 (e2e)") |
 | Org | 60 | Signup history ("Signup History Org", no league). Created by the second-to-last step of `populate_all`; its "Signup History Event" (pk auto-assigned) gets real ledger entries through the events services |
 | Users | 9000-9006 | Signup history: 9000 org admin, 9001-9005 members, 9006 non-member outsider (Steam account IDs 309000000 + pk, Discord IDs 900000000000000000 + pk) |
 | Tournament | 950 | Discord Activity bracket ("Activity Bracket Test", DTX League, match ids 9000000601+). Created by the last `populate_all` step; `create_dyn_tournaments` skips it (`OWN_STEP_CONFIG_PKS`) |

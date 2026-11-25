@@ -9,7 +9,7 @@ Creates ORG_DELETE_ORG (pk=10) with four distinct users:
 
 The org uses pk=10 because pk=8 belongs to `Auth Matrix Test Org`.
 
-Used by frontend/tests/playwright/e2e/21-org-delete/ to verify the
+Used by frontend/tests/playwright/e2e/org-delete/ to verify the
 permission matrix on the Danger Zone UI.
 """
 

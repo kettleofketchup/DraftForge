@@ -29,7 +29,7 @@ for p in \
 done
 
 for p in \
-  frontend/tests/playwright/e2e/01-navigation.spec.ts \
+  frontend/tests/playwright/e2e/navigation.spec.ts \
   frontend/tests/unit/foo.test.ts \
   frontend/app/components/ui/button.test.tsx \
   frontend/app/features/events/__tests__/api.test.ts \
