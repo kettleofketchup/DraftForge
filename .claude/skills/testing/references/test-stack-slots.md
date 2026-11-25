@@ -30,7 +30,7 @@ not be your worktree. Never hardcode `https://localhost`: Playwright code import
 | `just test::down` / `stop` / `logs` / `ps` / `exec` / `restart` | This slot only; error if no slot or it was taken |
 | `just test::run '<cmd>'` | Never allocates; without a slot runs in a throwaway `df-run-<hex>` project |
 | `just test::compose <args>` | Compose against this slot; `--stack dev` for `df-dev`. Use instead of raw `docker compose` / `docker exec <name>` |
-| `just test::dota-lobby [up\|down\|restart\|logs\|ps]` | The simulated dota_lobby (service `dota-lobby`, profile `dota-lobby`) for the 18-dota-lobby specs. `up` runs the slot's `up -d` with the profile on |
+| `just test::dota-lobby [up\|down\|restart\|logs\|ps]` | The simulated dota_lobby (service `dota-lobby`, profile `dota-lobby`) for the 22-dota-lobby specs. `up` runs the slot's `up -d` with the profile on |
 | `just test::background on\|off` | Discord bot + celery beat + real tokens for this N ≥ 1 slot (one project at a time) |
 | `just test::slot-release` | Release own slot (stack must be down) |
 | `just test::slot-release --slot N` | Release someone else's idle slot. Pre-checks first (Rules) |

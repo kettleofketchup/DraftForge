@@ -10,13 +10,13 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from app.models import CustomUser
-from app.serializers import TournamentUserSerializer
 from league.models import League, LeagueLog, LeagueUser
 from league.permissions import has_league_admin_access
 from org.member_resolution import member_nick, resolve_member_user
 from org.mmr import LEAGUE_GAME, org_mmr_for
 from org.models import OrgUser
 from org.permissions import has_org_admin_access
+from user.serializers import TournamentUserSerializer
 
 
 @api_view(["POST"])

@@ -39,7 +39,7 @@ const KEYS = {
   orgRepeaters: repeaterKeys.list({ organization: ORG }),
   detail: repeaterKeys.detail(REPEATER),
   subscribers: repeaterKeys.subscribers(REPEATER),
-  repeaterEvents: repeaterKeys.events(REPEATER),
+  seriesEvents: ['events', { event_repeater: REPEATER }],
   otherDetail: repeaterKeys.detail(OTHER),
   forecast: conductKeys.forecast(ORG, 11, 5),
 };
@@ -121,7 +121,7 @@ describe('repeater mutations', () => {
 
     expect(api.deleteEventRepeater).toHaveBeenCalledWith(REPEATER);
     expect(client.getQueryState(KEYS.detail)).toBeUndefined();
-    expect(client.getQueryState(KEYS.repeaterEvents)).toBeUndefined();
+    expect(isStale(client, KEYS.seriesEvents)).toBe(true);
     expect(isStale(client, KEYS.allEvents)).toBe(true);
     expect(isStale(client, KEYS.orgEvents)).toBe(true);
     expect(isStale(client, KEYS.allRepeaters)).toBe(true);

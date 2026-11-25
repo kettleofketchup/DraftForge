@@ -7,12 +7,9 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from app.auth import InternalServiceUser
-from app.display_names import user_display_name
 from app.models import CustomUser
 from app.permissions import request_user
 from app.permissions_steam import VOUCH_EXCLUDED_STATUSES
-from app.serializers import TournamentUserSerializer
-from app.user_cache import serialize_users_core
 from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupOpenMode
@@ -59,6 +56,9 @@ from org.models import Organization, OrgUser
 from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
 from org.permissions import can_view_org_members
 from tournament.serializers.users import _serialize_users_with_mmr
+from user.cache import serialize_users_core
+from user.display_names import user_display_name
+from user.serializers import TournamentUserSerializer
 
 # The lobby password is write-only on every events serializer: event and
 # series payloads are cached, public and handed to Celery. Staff and
@@ -588,6 +588,9 @@ class EventSerializer(
     user_can_manage_event_staff = serializers.BooleanField(
         read_only=True, default=False
     )
+    manage_viewer_pk = serializers.IntegerField(
+        read_only=True, allow_null=True, default=None
+    )
     user_is_event_operator = serializers.BooleanField(read_only=True, default=False)
     host = EventStaffUserSerializer(read_only=True)
     helpers = EventStaffUserSerializer(many=True, read_only=True)
@@ -719,6 +722,7 @@ class EventSerializer(
             "dota_lobby_password",
             "user_can_manage",
             "user_can_manage_event_staff",
+            "manage_viewer_pk",
             "user_is_event_operator",
             "is_off_schedule",
         ]
@@ -849,15 +853,9 @@ class EventSerializer(
                 "event_repeater",
                 self.instance.event_repeater if self.instance else None,
             )
-            # On create, fall back to False when the field is absent — matches
-            # original behavior so callers that don't explicitly set this field
-            # aren't surprised. The model default of True remains a latent
-            # inconsistency (events get saved with reminder=True but the
-            # validator silently allows it on create); fix is out of scope here
-            # since correcting it would require a model migration + sweep of
-            # ~10 Playwright tests that don't pass this field. Tracked
-            # separately. The validator still rejects explicit signup_reminder=True
-            # on a single event.
+            # On create an absent field is validated as False, but the model
+            # default (True) is what gets saved, so a single event can still end
+            # up with reminder=True. An explicit True on a single event is rejected.
             default_reminder = (
                 self.instance.discord_signup_reminder if self.instance else False
             )

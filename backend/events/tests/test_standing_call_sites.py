@@ -9,8 +9,7 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.admin import CustomUserAdmin
-from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from events.admin import EventAdmin
 from events.completion import close_event
 from events.constants import EventState, SignupStatus
@@ -31,6 +30,8 @@ from org.models import Organization, OrgLog, OrgUser
 from org.standing import registry
 from org.standing.registry import override_tracks
 from org.tests.standing_fakes import FakeTrack, atomic_baseline
+from user.discord_accounts import merge_discord_accounts
+from user.models import ProfileClaimRequest
 
 
 class StandingCallSiteTest(TestCase):

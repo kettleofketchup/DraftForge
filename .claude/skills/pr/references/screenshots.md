@@ -1,8 +1,8 @@
 # Phase 4 — Before/after screenshots
 
 Post one PR comment (never the PR body) that pairs a BEFORE and an AFTER image for
-each visual change. Run this on every new PR, on a reused PR that has never had a
-screenshot comment, and again whenever new commits change what the UI looks like.
+each change. Run this on every new PR, on a reused PR that has never had a
+screenshot comment, and again whenever new commits touch non-test frontend code.
 
 Throughout: `<n>` is the PR number, `<wt>` the PR head worktree, `<base-wt>` the
 before worktree, `<main>` = `/home/kettle/git_repos/draftforge` (the main checkout:
@@ -20,22 +20,29 @@ runs the recipe in the main checkout; `db::populate::fresh` there deletes the ma
 checkout's test DB. Use this form for every `just` call below, including populate,
 migrate, slot and compose recipes.
 
-## 1. Gate: does the diff have visual changes?
+## 1. Gate: does the diff touch non-test frontend code?
 
 ```bash
-gh pr diff <n> --name-only | grep -E '^frontend/app/(components|routes|features)/|^frontend/app/app\.css$|tokens'
+gh pr diff <n> --name-only | <wt>/.claude/skills/pr/scripts/frontend-screenshot-gate.sh
 ```
 
-- **No match** → post the skip comment and go to Phase 5:
+The gate prints every changed `frontend/` file that is not a test, test utility, test
+config or Markdown file; exit 0 means screenshots are required.
+
+- **No output** → post the skip comment and go to Phase 5:
 
   ```bash
-  gh pr comment <n> --body "No screenshots: this PR has no visual changes (no files under frontend/app/components, routes or features, app.css or design tokens)."
+  gh pr comment <n> --body "No screenshots: this PR changes no non-test frontend code."
   ```
 
   Name what the diff does touch when it helps ("backend and CI only").
-- **Match** → list each visual change: the page (URL path), the user role that sees it,
-  and the states it affects. This list is the shot list; every entry gets a before and
-  an after.
+- **Any output** → screenshots are required; never post the skip comment. List each
+  change: the page (URL path), the user role that sees it, and the states it affects.
+  For a file with no UI of its own (`lib/`, `store/`, `hooks/`, API schemas, i18n,
+  `package.json`, build config), find the pages and states that run it (grep its
+  importers) and shoot those. This list is the shot list; every entry gets a before and
+  an after. When the change has no visible difference, the pair still proves the page
+  renders unchanged; say so in the caption.
 
 ## 2. Shot list
 
@@ -66,6 +73,10 @@ cp <main>/backend/.env <main>/.worktrees/pr-<n>-base/backend/.env
 npm --prefix <main>/.worktrees/pr-<n>-base/frontend ci       # else the frontend container crash-loops: "could not determine executable to run"
 setfacl -R -m u:100999:rwX -m d:u:100999:rwX <main>/.worktrees/pr-<n>-base/frontend <main>/.worktrees/pr-<n>-base/backend
 ```
+
+Run `setfacl` after `npm ci` so `node_modules` gets the ACL too. If the frontend
+already started without them, restart it with nginx:
+`cd <base-wt> && just test::compose restart frontend nginx  # allow-cd`.
 
 Then, in the base worktree (cd form for each):
 

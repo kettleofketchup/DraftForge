@@ -114,7 +114,7 @@ league *args:
 herodraft *args:
     {{pw}} tests/playwright/e2e/herodraft/ "$@"
 
-# The 18-dota-lobby specs. With this slot's simulator running
+# The 22-dota-lobby specs. With this slot's simulator running
 # (just test::dota-lobby up) they must use it: a skip is an error.
 [group('test::pw')]
 dota-lobby *args:
@@ -158,7 +158,7 @@ cicd-events *args:
 cicd-org-features *args:
     {{cicd}} --project=org-features-sequential --no-deps "$@"
 
-# The 18-dota-lobby specs in order (dota-lobby-sequential): they share one
+# The 22-dota-lobby specs in order (dota-lobby-sequential): they share one
 # simulated dota_lobby. Specs that need it skip unless `just test::dota-lobby up`
 # ran, and then fail rather than skip when it never becomes available.
 [group('test::pw')]

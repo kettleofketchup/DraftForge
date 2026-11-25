@@ -4,12 +4,18 @@ import type {
   CreateSeriesEventInput,
   EligibilityReason,
   EventEligibility,
+  EventListItem,
+  EventResponse,
   EventSignupType,
   EventType,
   ReadyCheckFields,
   RollCallMode,
   SignupOpenMode,
   StartMentionScope,
+} from '~/components/events/schemas';
+import {
+  eventListItemSchema,
+  eventResponseSchema,
 } from '~/components/events/schemas';
 import {
   signupHistoryPageSchema,
@@ -25,7 +31,7 @@ export async function getEvents(params?: {
   search?: string;
   ordering?: string;
   event_repeater?: number;
-}): Promise<EventType[]> {
+}): Promise<EventListItem[]> {
   const sp = new URLSearchParams();
   if (params?.organization) sp.set('organization', String(params.organization));
   if (params?.state) sp.set('state', params.state);
@@ -35,13 +41,13 @@ export async function getEvents(params?: {
   if (params?.event_repeater)
     sp.set('event_repeater', String(params.event_repeater));
   const q = sp.toString();
-  const { data } = await axios.get<EventType[]>(`/events/${q ? `?${q}` : ''}`);
-  return data;
+  const { data } = await axios.get(`/events/${q ? `?${q}` : ''}`);
+  return z.array(eventListItemSchema).parse(data);
 }
 
-export async function getEvent(eventId: number): Promise<EventType> {
-  const { data } = await axios.get<EventType>(`/events/${eventId}/`);
-  return data;
+export async function getEvent(eventId: number): Promise<EventResponse> {
+  const { data } = await axios.get(`/events/${eventId}/`);
+  return eventResponseSchema.parse(data);
 }
 
 /** An event create/update body: the readable fields plus the write-only password. */

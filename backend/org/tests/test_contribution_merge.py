@@ -10,8 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from app.discord_accounts import merge_discord_accounts
-from app.models import CustomUser, ProfileClaimRequest
+from app.models import CustomUser
 from events.constants import EventState
 from events.models import Event
 from events.staff import dedupe_host_helpers
@@ -26,6 +25,8 @@ from org.models import (
     OrgFeature,
     OrgUser,
 )
+from user.discord_accounts import merge_discord_accounts
+from user.models import ProfileClaimRequest
 
 
 class _LedgerFixture(TestCase):
@@ -576,7 +577,7 @@ class UserDeleteWithContributionsTest(_LedgerFixture):
         response = MagicMock()
         response.json.return_value = []
         with patch(
-            "app.management.commands.sync_prod_users.requests.get",
+            "user.management.commands.sync_prod_users.requests.get",
             return_value=response,
         ):
             call_command("sync_prod_users")

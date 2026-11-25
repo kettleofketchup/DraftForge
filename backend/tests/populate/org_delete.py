@@ -7,18 +7,16 @@ Creates ORG_DELETE_ORG (pk=10) with four distinct users:
 - ORG_DELETE_STAFF  (pk=6002) — added to org.staff
 - ORG_DELETE_MEMBER (pk=6003) — plain OrgUser, no special role
 
-PK note: Original target was pk=8 but `Auth Matrix Test Org` (from auth-matrix
-branch) occupies that slot. Shifted to 10. If auth-matrix lands separately,
-no remediation needed — PKs are independent.
+The org uses pk=10 because pk=8 belongs to `Auth Matrix Test Org`.
 
-Used by frontend/tests/playwright/e2e/17-org-delete/ to verify the
+Used by frontend/tests/playwright/e2e/21-org-delete/ to verify the
 permission matrix on the Danger Zone UI.
 """
 
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
 from org.models import ContributionEntry, Organization
@@ -32,6 +30,7 @@ from tests.data.org_delete import (
     ORG_DELETE_STAFF,
 )
 from tests.populate.utils import delete_ledger_for_users, ensure_org_user
+from user.models import PositionsModel
 
 
 def _get_or_create_user(user_data: TestUser, force: bool) -> CustomUser:

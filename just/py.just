@@ -72,3 +72,10 @@ gen-discord-connect-api *args:
     {{quote(python)}} -I {{quote(backend / "discordbot/export_install_schema.py")}} \
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/features/discord-connect/api.generated.ts")}} "$@"
+
+# Regenerate frontend/app/features/bot-access/schemas.generated.ts from backend/lobby/bot_access/schemas.py; --check fails instead of writing when stale
+[group('py')]
+gen-bot-access-api *args:
+    {{quote(python)}} -I {{quote(backend / "lobby/export_bot_access_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/bot-access/schemas.generated.ts")}} "$@"

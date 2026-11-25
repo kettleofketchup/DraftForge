@@ -40,7 +40,6 @@ const LIST_KEYS = [
   ['events', { states: ['upcoming', 'signups_open'] }],
   ['events', { organization: 3 }],
   ['events', { event_repeater: 8 }],
-  ['repeater-events', 8],
 ] as const;
 
 function setup() {

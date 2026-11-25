@@ -214,7 +214,10 @@ def test_dota_lobby_simulator_matches_the_test_env() -> None:
     # The bots administer the league the dota_lobby test data uses.
     data = (ROOT / "backend" / "tests" / "data" / "dota_lobby.py").read_text()
     league = int(re.search(r"^LOBBY_STEAM_LEAGUE_ID = (\d+)$", data, re.M).group(1))
-    assert all(bot["leagues"] == [league] for bot in config["bots"])
+    # Except league-less bots, which the Lobby bots tab shows as missing access.
+    leagues = [bot["leagues"] for bot in config["bots"]]
+    assert all(held in ([league], []) for held in leagues)
+    assert leagues.count([league]) >= 1 and leagues.count([]) == 1
 
 
 @pytest.mark.parametrize(

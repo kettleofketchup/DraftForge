@@ -5,9 +5,10 @@ from django.db import connection
 from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient, APITestCase
 
-from app.models import CustomUser, PositionsModel
-from app.steam_accounts import mark_steam_account_verified
+from app.models import CustomUser
 from steam.services.account_lookup import SteamLookupRateLimited, cached_exists_key
+from user.models import PositionsModel
+from user.steam_accounts import mark_steam_account_verified
 
 URL = "/api/profile_update"
 ENSURE = "events.eligibility.steam.ensure_steam_account_exists"
@@ -79,7 +80,7 @@ class ProfileUpdateFriendIdTests(APITestCase):
 
         with (
             patch(ENSURE, side_effect=claim_first),
-            patch("app.functions.user.validate_friend_id", return_value=525252),
+            patch("user.views_profile.validate_friend_id", return_value=525252),
         ):
             resp = self._post(525252)
         self.assertEqual(resp.status_code, 409)

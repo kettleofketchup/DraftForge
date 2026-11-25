@@ -40,8 +40,11 @@ from pydantic import BaseModel, ValidationError
 
 from config.dota_lobby import DotaLobbyConfig
 from lobby.schemas import (
+    BotLeagues,
+    BotView,
     CreateResult,
     InviteResult,
+    LeagueRefreshResult,
     LeagueView,
     LobbyEvent,
     LobbyView,
@@ -59,6 +62,7 @@ RETRY_BACKOFF_SECONDS: tuple[float, ...] = (1.0, 3.0)
 # fails fast instead of holding a web worker for both timeouts.
 CONNECT_TIMEOUT_SECONDS = 3.0
 GATEWAY_STATUSES = frozenset({502, 503, 504})
+REFRESH_MIN_TIMEOUT_SECONDS = 20.0
 LIST_PAGE_SIZE = 200
 EVENTS_PAGE_SIZE = 500
 
@@ -274,13 +278,46 @@ class DotaLobbyClient:
                 return
             after = next_after
 
+    # ---- bots ----
+
+    def list_bots(self) -> list[BotView]:
+        """GET /v1/bots, in config order. Not retried."""
+        data = self._json(self._request("GET", "/v1/bots", retry=False))
+        return [self._validate(raw, BotView) for raw in data.get("bots") or []]
+
+    def get_bot_leagues(self, name: str, *, timeout: float | None = None) -> BotLeagues:
+        """GET /v1/bots/{name}/leagues. Not retried; the bot name stays out of logs."""
+        resp = self._request(
+            "GET",
+            f"/v1/bots/{quote(name, safe='')}/leagues",
+            retry=False,
+            timeout=timeout,
+            log_path="/v1/bots/{name}/leagues",
+        )
+        return self._parse(resp, BotLeagues)
+
     # ---- leagues ----
 
-    def get_league(self, league_id: int) -> LeagueView:
+    def get_league(self, league_id: int, *, retry: bool = True) -> LeagueView:
         """GET /v1/leagues/{id}: which bots hold the league, and how many are free."""
         return self._parse(
-            self._request("GET", f"/v1/leagues/{int(league_id)}"), LeagueView
+            self._request("GET", f"/v1/leagues/{int(league_id)}", retry=retry),
+            LeagueView,
         )
+
+    def refresh_leagues(self) -> LeagueRefreshResult:
+        """POST /v1/leagues/refresh: every bot re-reads its GC league list. Not retried.
+
+        The read timeout outlasts upstream's own GC request timeout.
+        """
+        resp = self._request(
+            "POST",
+            "/v1/leagues/refresh",
+            json={},
+            retry=False,
+            timeout=max(self.timeout, REFRESH_MIN_TIMEOUT_SECONDS),
+        )
+        return self._parse(resp, LeagueRefreshResult)
 
     # ---- transport ----
 
@@ -292,21 +329,27 @@ class DotaLobbyClient:
         json: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
         retry: bool = True,
+        timeout: float | None = None,
+        log_path: str | None = None,
     ) -> requests.Response:
+        """`log_path`, when given, is logged instead of `path` and the problem
+        detail is dropped, since both may carry a name that must stay out of logs."""
         attempts = 1 + (len(self._backoff) if retry else 0)
         for attempt in range(1, attempts + 1):
             try:
-                return self._send(method, path, json=json, params=params)
+                return self._send(
+                    method, path, json=json, params=params, timeout=timeout
+                )
             except DotaLobbyError as exc:
                 last = attempt == attempts
                 (log.warning if last or not exc.retryable else log.info)(
                     "dota_lobby_request_failed",
                     http_method=method,
-                    http_path=path,
+                    http_path=log_path or path,
                     http_status_code=exc.status,
                     code=exc.code,
                     retryable=exc.retryable,
-                    detail=exc.detail,
+                    detail=None if log_path else exc.detail,
                     attempt=attempt,
                     will_retry=exc.retryable and not last,
                     **_LOG,
@@ -323,14 +366,16 @@ class DotaLobbyClient:
         *,
         json: Mapping[str, Any] | None,
         params: Mapping[str, Any] | None,
+        timeout: float | None = None,
     ) -> requests.Response:
+        read = timeout if timeout is not None else self.timeout
         try:
             resp = self.session.request(
                 method,
                 f"{self.base_url}{path}",
                 json=json,
                 params=params,
-                timeout=(min(CONNECT_TIMEOUT_SECONDS, self.timeout), self.timeout),
+                timeout=(min(CONNECT_TIMEOUT_SECONDS, read), read),
                 allow_redirects=False,
             )
         except (requests.Timeout, requests.ConnectionError) as exc:

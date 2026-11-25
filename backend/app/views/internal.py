@@ -12,7 +12,6 @@ from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
-from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone as tz
@@ -848,96 +847,6 @@ def auto_close_event(request: Request, pk: int) -> Response:
         expected_from=[s for s, t in _AUTO_CLOSE_TARGETS.items() if t == target],
     )
     return Response({"closed": result.closed, "state": result.state})
-
-
-# ---------------------------------------------------------------------------
-# User avatar management
-# ---------------------------------------------------------------------------
-
-
-@api_view(["GET"])
-@authentication_classes(_auth)
-@permission_classes(_perm)
-def list_users_for_avatar_check(request: Request) -> Response:
-    """Return users with Discord IDs for avatar validation.
-
-    Query params:
-        has_avatar: "true" (only users with existing avatar) or "false"
-        limit: max results (default 100)
-        offset: pagination offset (default 0)
-    """
-
-    User = get_user_model()
-
-    qs = User.objects.filter(discordId__isnull=False)
-
-    has_avatar = request.query_params.get("has_avatar")
-    # avatar lives on base_profile; ORM filters need the relation path
-    if has_avatar == "true":
-        qs = qs.exclude(base_profile__avatar__isnull=True).exclude(
-            base_profile__avatar=""
-        )
-    elif has_avatar == "false":
-        qs = qs.filter(
-            Q(base_profile__avatar__isnull=True) | Q(base_profile__avatar="")
-        )
-
-    limit = int(request.query_params.get("limit", 100))
-    offset = int(request.query_params.get("offset", 0))
-
-    users = qs[offset : offset + limit]
-    return Response(
-        [
-            {
-                "pk": u.pk,
-                "discord_id": u.discordId,
-                "avatar": u.avatar,
-                "username": u.username,
-            }
-            for u in users
-        ]
-    )
-
-
-@api_view(["PATCH"])
-@authentication_classes(_auth)
-@permission_classes(_perm)
-def update_user_avatar(request: Request, pk: int) -> Response:
-    """Update a user's avatar hash.
-
-    Body: {"avatar": "new_avatar_hash"} or {"avatar": null} to clear.
-    """
-
-    User = get_user_model()
-
-    try:
-        user = User.objects.get(pk=pk)
-    except User.DoesNotExist:
-        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    # Discord avatar hashes are 32 chars (or 34 with the `a_` animated prefix).
-    # Cap at 64 to defend the TextField from accidental URL/blob payloads —
-    # this endpoint is internal-only but the only celery-driven ingress for
-    # avatar refresh, so a sanity cap closes a tail-risk.
-    avatar = request.data.get("avatar")
-    if avatar is not None:
-        if not isinstance(avatar, str):
-            return Response(
-                {"error": "avatar must be a string or null"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if len(avatar) > 64:
-            return Response(
-                {"error": "avatar exceeds 64 characters"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-    # avatar setter persists + invalidates base_profile; also evict the user
-    # row since UserSerializer.avatar reads through base_profile.
-    user.avatar = avatar
-    invalidate_after_commit(user)
-
-    return Response({"pk": user.pk, "avatar": user.avatar})
 
 
 # ---------------------------------------------------------------------------

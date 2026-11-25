@@ -5,12 +5,6 @@ from zoneinfo import available_timezones
 import nh3
 from rest_framework import serializers
 
-from app.models import ProfileClaimRequest
-from app.serializers import (
-    STEAM_VERIFICATION_READ_FIELDS,
-    PositionsSerializer,
-    TournamentUserSerializer,
-)
 from common.game import GameType
 from league.models import LeagueUser
 from org import settings_constants
@@ -18,6 +12,12 @@ from org.mmr import get_org_mmrs, resolve_game_type
 from org.models import Organization, OrgSettings, OrgUser, OrgUserGameMmr
 from org.settings_constants import StaffOverridePolicy
 from org.settings_service import normalize_warning_codes
+from user.models import ProfileClaimRequest
+from user.serializers import (
+    STEAM_VERIFICATION_READ_FIELDS,
+    PositionsSerializer,
+    TournamentUserSerializer,
+)
 
 
 @cache

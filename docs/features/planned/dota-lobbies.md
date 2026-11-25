@@ -78,7 +78,9 @@ without a scored result, was abandoned: the game goes back to pending and may ge
    once no attempt is in flight: each attempt holds the row for two minutes, and a retryable
    failure holds it until the task's own retry is due plus those two minutes
    (`next_attempt_at`). Any error (`league_not_held`, `invalid_request`, ...) ends the row in
-   state `error` with `last_error_code` for organizers. A `409 conflict` is resolved by
+   state `error` with `last_error_code` for organizers. For `league_not_held`, league admins
+   can check which bots hold the league on the
+   [Lobby bots tab](../lobby-bot-league-access.md). A `409 conflict` is resolved by
    looking up the lobby holding the reference: DraftForge adopts it when it is the same row's,
    closes it and retries when it is an earlier lobby of the same game, and gives up otherwise.
 
@@ -301,7 +303,7 @@ announcements. The opt-in Discord lobby info DM still sends it to the game's ros
 
 ### End-to-end tests
 
-`frontend/tests/playwright/e2e/18-dota-lobby/` runs the integration against the real
+`frontend/tests/playwright/e2e/22-dota-lobby/` runs the integration against the real
 dota_lobby service in simulation mode, the test stack's `dota-lobby` service (see
 [Test Stack Slots](../../development/test-stack-slots.md#simulated-dota_lobby)). The
 specs use their own data (Lobby Test Org and League, the Lobby Test Series with a fixed

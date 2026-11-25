@@ -10,11 +10,7 @@ from datetime import time, timedelta
 from cacheops import invalidate_obj
 from django.utils import timezone as tz
 
-from app.models import CustomUser, GameType, PositionsModel
-from app.steam_accounts import (
-    clear_steam_account_verification,
-    mark_steam_account_verified,
-)
+from app.models import CustomUser, GameType
 from discordbot.models import DiscordEvent
 from events.constants import (
     EventState,
@@ -58,6 +54,11 @@ from tests.data.users import (
 from tests.populate.constants import STEAM_VERIFY_EVENT_NAME
 from tests.populate.utils import ensure_league_user, ensure_org_user
 from tournament.models import Team, Tournament
+from user.models import PositionsModel
+from user.steam_accounts import (
+    clear_steam_account_verification,
+    mark_steam_account_verified,
+)
 
 
 def populate_events_data(force: bool = False) -> None:

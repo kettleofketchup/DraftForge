@@ -1,0 +1,1 @@
+- The event series page now shows an event's new state, name, date and signup count, and drops deleted events, when you return to it after changing the event.

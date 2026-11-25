@@ -13,10 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
-from app.display_names import user_display_name
-from app.models import CustomUser, GameType, PositionsModel
-from app.serializers import TournamentUserSerializer
-from app.steam_accounts import log_steam_verification_change
+from app.models import CustomUser, GameType
 from events.eligibility import apply_admin_steam_account_id
 from league.models import LeagueUser
 from org.mmr import (
@@ -31,6 +28,10 @@ from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
 from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
+from user.display_names import user_display_name
+from user.models import PositionsModel
+from user.serializers import TournamentUserSerializer
+from user.steam_accounts import log_steam_verification_change
 
 if TYPE_CHECKING:
     from league.models import League

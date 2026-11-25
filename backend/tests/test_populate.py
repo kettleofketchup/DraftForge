@@ -15,7 +15,6 @@ from rest_framework.test import APIRequestFactory
 
 from app.models import CustomUser
 from app.permissions_steam import can_verify_steam_account
-from app.steam_accounts import mark_steam_account_verified
 from draft.models import Draft, DraftRound
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
@@ -113,6 +112,7 @@ from tests.test_org_features import (
     reset_org_features,
 )
 from tournament.models import Tournament
+from user.steam_accounts import mark_steam_account_verified
 
 
 def _released_captains(event_pk: int) -> set[int]:
