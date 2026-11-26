@@ -214,12 +214,63 @@ class TaskScheduleEndpointTest(TestCase):
         self.assertIn("announcement channel", row["description"].lower())
         self.assertIsNone(re.search(r"\bDM", row["description"]))
 
-    def test_profile_reminder_description_names_announcement_channel(self) -> None:
+    def test_profile_reminder_description_names_its_channel(self) -> None:
         row = self._profile_reminder_row(self.event)
         self.assertNotEqual(row["status"], "misconfigured")
+        self.assertIn("its own channel", row["description"])
         self.assertIn("announcement channel", row["description"].lower())
         self.assertIn("4h", row["description"])
         self.assertIsNone(re.search(r"\bDM", row["description"]))
+
+    def _row(self, event: Event, task: str) -> dict[str, Any]:
+        resp = self.client.get(f"/api/events/{event.pk}/task-schedule/")
+        return next(t for t in resp.json() if t["task"] == task)
+
+    def _own_channel_event(self, name: str, **fields: Any) -> Event:
+        return Event.objects.create(
+            organization=self.org,
+            name=name,
+            state="signups_open",
+            scheduled_at=timezone.now() + timedelta(hours=24),
+            discord_announcement=False,
+            discord_announcement_channel_id="",
+            **fields,
+        )
+
+    def test_confirm_attendance_enabled_with_only_own_channel(self) -> None:
+        event = self._own_channel_event(
+            "Attendance Own Channel",
+            discord_confirm_attendance=True,
+            discord_confirm_attendance_hours=3,
+            discord_confirm_attendance_channel_id="777",
+        )
+        row = self._row(event, "confirm_attendance")
+        self.assertNotIn(row["status"], ("misconfigured", "disabled"))
+        self.assertIn("its own channel", row["description"])
+        self.assertIn("3h", row["description"])
+
+    def test_confirm_attendance_misconfigured_when_both_blank(self) -> None:
+        event = self._own_channel_event(
+            "Attendance No Channel", discord_confirm_attendance=True
+        )
+        row = self._row(event, "confirm_attendance")
+        self.assertEqual(row["status"], "misconfigured")
+        self.assertFalse(row["can_fire"])
+        self.assertEqual(
+            row["description"],
+            "Enabled but no channel is set: pick one or set an announcement channel",
+        )
+
+    def test_profile_reminder_enabled_with_only_own_channel(self) -> None:
+        event = self._own_channel_event(
+            "Profile Own Channel",
+            discord_profile_reminder=True,
+            discord_profile_reminder_hours=4,
+            discord_profile_reminder_channel_id="888",
+        )
+        row = self._profile_reminder_row(event)
+        self.assertNotIn(row["status"], ("misconfigured", "disabled"))
+        self.assertTrue(row["can_fire"])
 
     def test_profile_reminder_disabled_without_channel_is_not_misconfigured(
         self,
@@ -235,7 +286,7 @@ class TaskScheduleEndpointTest(TestCase):
         row = self._profile_reminder_row(event)
         self.assertEqual(row["status"], "disabled")
         self.assertNotIn("Enabled", row["description"])
-        self.assertNotIn("no announcement channel", row["description"].lower())
+        self.assertNotIn("no channel is set", row["description"].lower())
 
     def test_profile_reminder_fired_with_channel_keeps_new_description(self) -> None:
         DiscordMessageLog.objects.create(

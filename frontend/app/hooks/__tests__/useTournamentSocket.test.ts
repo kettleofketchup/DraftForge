@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleTournamentMessage } from '../useTournamentSocket';
 
-type Msg = { type: string; game_id?: number | null; state?: string | null };
+type Msg = {
+  type: string;
+  game_id?: number | null;
+  state?: string | null;
+  kind?: string;
+  team_id?: number | null;
+};
 
 function keys(msg: Msg, bracket?: unknown) {
   const queryClient = {
@@ -76,6 +82,34 @@ describe('handleTournamentMessage', () => {
       ['bracket', 7],
       ['tournament', 7],
     ]);
+  });
+
+  it('refetches the tournament, the team and the bracket on a team change', () => {
+    expect(
+      keys({ type: 'tournament_update', kind: 'team', team_id: 5 }),
+    ).toEqual([
+      ['team', 5],
+      ['bracket', 7],
+      ['tournament', 7],
+    ]);
+  });
+
+  it('refetches the tournament and the placed team on a placement change', () => {
+    expect(
+      keys({ type: 'tournament_update', kind: 'placement', team_id: 5 }),
+    ).toEqual([
+      ['team', 5],
+      ['tournament', 7],
+    ]);
+  });
+
+  it('refetches only the tournament on a settings or members change', () => {
+    expect(keys({ type: 'tournament_update', kind: 'settings' })).toEqual([
+      ['tournament', 7],
+    ]);
+    expect(
+      keys({ type: 'tournament_update', kind: 'members', team_id: null }),
+    ).toEqual([['tournament', 7]]);
   });
 
   it('refetches only the tournament for other events', () => {

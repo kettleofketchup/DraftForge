@@ -1,5 +1,11 @@
-import { RefreshCw, Volume2 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshCw, Volume2, X } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+} from 'react';
 import { getDiscordChannels, type DiscordChannel } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import {
@@ -10,12 +16,18 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 
-interface DiscordChannelPickerProps {
+type TriggerA11yProps = Pick<
+  ComponentPropsWithoutRef<'button'>,
+  'id' | 'aria-describedby' | 'aria-invalid' | 'aria-labelledby'
+>;
+
+interface DiscordChannelPickerProps extends TriggerA11yProps {
   organizationId: number;
   value: string;
   onChange: (channelId: string) => void;
   disabled?: boolean;
   kind?: 'text' | 'voice';
+  clearable?: { label: string; fallbackChannelId?: string };
   'data-testid'?: string;
 }
 
@@ -25,7 +37,9 @@ export function DiscordChannelPicker({
   onChange,
   disabled,
   kind = 'text',
+  clearable,
   'data-testid': testId,
+  ...triggerProps
 }: DiscordChannelPickerProps) {
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [channelsKind, setChannelsKind] = useState(kind);
@@ -60,6 +74,15 @@ export function DiscordChannelPicker({
     if (organizationId) fetchChannels();
   }, [organizationId, fetchChannels]);
 
+  const fallbackName = clearable?.fallbackChannelId
+    ? channels.find((ch) => ch.id === clearable.fallbackChannelId)?.name
+    : undefined;
+  const emptyLabel = clearable
+    ? fallbackName
+      ? `${clearable.label} (#${fallbackName})`
+      : clearable.label
+    : 'Select channel';
+
   return (
     <div className="flex items-center gap-2">
       <Select
@@ -67,10 +90,12 @@ export function DiscordChannelPicker({
         onValueChange={onChange}
         disabled={disabled || loading}
       >
-        <SelectTrigger className="w-full min-w-0" data-testid={testId}>
-          <SelectValue
-            placeholder={loading ? 'Loading...' : 'Select channel'}
-          />
+        <SelectTrigger
+          {...triggerProps}
+          className="w-full min-w-0"
+          data-testid={testId}
+        >
+          <SelectValue placeholder={loading ? 'Loading...' : emptyLabel} />
         </SelectTrigger>
         <SelectContent>
           {error && (
@@ -103,6 +128,21 @@ export function DiscordChannelPicker({
           ))}
         </SelectContent>
       </Select>
+      {clearable && value !== '' && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          onClick={() => onChange('')}
+          disabled={disabled}
+          aria-label="Clear channel"
+          title="Clear channel"
+          data-testid={testId ? `${testId}-clear` : undefined}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
       <Button
         type="button"
         variant="ghost"

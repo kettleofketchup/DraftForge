@@ -23,6 +23,7 @@ import './bracket-styles.css';
 
 import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { useOrganization } from '~/components/organization';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { useBracketQuery } from '~/hooks/useBracket';
 import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { cn } from '~/lib/utils';
@@ -74,7 +75,6 @@ function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
 
   const edges = matches
     .filter((m) => {
-      // Must have a next match and a winner
       if (!m.nextMatchId || !m.winner) return false;
       return true;
     })
@@ -82,12 +82,10 @@ function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
       const targetMatch = matchMap.get(match.nextMatchId!);
       if (!targetMatch) return null;
 
-      // Get the winning team
       const winningTeam =
         match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
       if (!winningTeam?.pk) return null;
 
-      // Check if winning team is actually in the target match
       const winnerInTarget =
         targetMatch.radiantTeam?.pk === winningTeam.pk ||
         targetMatch.direTeam?.pk === winningTeam.pk;
@@ -107,9 +105,6 @@ function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
   return edges;
 }
 
-/**
- * Convert matches to ReactFlow nodes
- */
 function matchesToNodes(
   matches: BracketMatch[],
   badgeMapping: BadgeMapping,
@@ -162,7 +157,11 @@ function BracketFlowInner({
   // Use individual selectors to prevent unnecessary re-renders
   const matches = useBracketStore((state) => state.matches);
   const isDirty = useBracketStore((state) => state.isDirty);
-  const { isLoading, data: bracketData } = useBracketQuery(tournamentId);
+  const {
+    isLoading,
+    data: bracketData,
+    serverChanged,
+  } = useBracketQuery(tournamentId);
 
   const { getLayoutedElements } = useElkLayout();
   const { setViewport, getViewport, fitView } = useReactFlow();
@@ -220,7 +219,6 @@ function BracketFlowInner({
         // Open hero draft modal directly instead of going through match modal
         setHeroDraftId(pendingDraftId);
         setShowHeroDraftModal(true);
-        // Clear the pending draft ID after processing
         setPendingDraftId(null);
       }
     }
@@ -245,16 +243,13 @@ function BracketFlowInner({
 
       if (matchToOpen) {
         setSelectedMatchId(matchToOpen.id);
-        // Clear the pending match ID after processing
         setPendingMatchId(null);
       }
     }
   }, [embedded, pendingMatchId, matches, setPendingMatchId]);
 
-  // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
 
-  // Layout matches using ELK when matches change
   useEffect(() => {
     if (matches.length === 0) {
       setNodes([]);
@@ -264,24 +259,21 @@ function BracketFlowInner({
     }
 
     const layoutBracket = async () => {
-      // Separate matches by bracket type
       const winnersMatches = matches.filter((m) => m.bracketType === 'winners');
       const losersMatches = matches.filter((m) => m.bracketType === 'losers');
       const grandFinalsMatches = matches.filter(
         (m) => m.bracketType === 'grand_finals',
       );
 
-      // Create nodes
       const winnersNodes = matchesToNodes(winnersMatches, badgeMapping);
       const losersNodes = matchesToNodes(losersMatches, badgeMapping);
 
-      // Create structural edges for layout
       const winnersEdges = createStructuralEdges(winnersMatches);
       const losersEdges = createStructuralEdges(losersMatches);
 
       /**
-       * Custom bracket layout with collision detection
-       * Places nodes by round, vertically centered to their targets
+       * Places nodes by round, each vertically centered between its source
+       * matches, then pushes overlapping nodes in a round apart.
        */
       const layoutBracketNodes = (
         nodes: MatchNodeType[],
@@ -289,11 +281,9 @@ function BracketFlowInner({
       ): MatchNodeType[] => {
         if (nodes.length === 0) return nodes;
 
-        // Create lookup maps
         const nodeById = new Map(nodes.map((n) => [n.id, n]));
         const matchById = new Map(matchList.map((m) => [m.id, m]));
 
-        // Group nodes by round
         const roundGroups = new Map<number, MatchNodeType[]>();
         nodes.forEach((node) => {
           const round = (node.data as MatchNodeData).round;
@@ -301,7 +291,6 @@ function BracketFlowInner({
           roundGroups.get(round)!.push(node);
         });
 
-        // Sort rounds
         const rounds = Array.from(roundGroups.keys()).sort((a, b) => a - b);
 
         // Position round 1 nodes first (they have no source)
@@ -332,7 +321,6 @@ function BracketFlowInner({
           roundNodes.forEach((node) => {
             node.position.x = xPos;
 
-            // Find source nodes that feed into this node
             const sourceNodes: MatchNodeType[] = [];
             matchList.forEach((match) => {
               if (match.nextMatchId === node.id) {
@@ -342,7 +330,6 @@ function BracketFlowInner({
             });
 
             if (sourceNodes.length > 0) {
-              // Center between source nodes
               const sourceYs = sourceNodes.map(
                 (n) => n.position.y + NODE_HEIGHT / 2,
               );
@@ -353,7 +340,6 @@ function BracketFlowInner({
           });
         }
 
-        // Collision detection - resolve overlaps
         const resolveCollisions = (
           nodes: MatchNodeType[],
           maxIterations = 10,
@@ -370,7 +356,6 @@ function BracketFlowInner({
             });
 
             byRound.forEach((roundNodes) => {
-              // Sort by Y position
               roundNodes.sort((a, b) => a.position.y - b.position.y);
 
               for (let i = 0; i < roundNodes.length - 1; i++) {
@@ -379,7 +364,6 @@ function BracketFlowInner({
 
                 const gap = nodeB.position.y - (nodeA.position.y + NODE_HEIGHT);
                 if (gap < NODE_VERTICAL_GAP) {
-                  // Collision detected - push apart
                   const overlap = NODE_VERTICAL_GAP - gap;
                   nodeA.position.y -= overlap / 2;
                   nodeB.position.y += overlap / 2;
@@ -396,23 +380,18 @@ function BracketFlowInner({
         return nodes;
       };
 
-      // Layout winners bracket with custom algorithm
       const layoutedWinners = layoutBracketNodes(winnersNodes, winnersMatches);
 
-      // Layout losers bracket with custom algorithm
       const layoutedLosers = layoutBracketNodes(losersNodes, losersMatches);
 
-      // Calculate offset for losers bracket
       const winnersMaxY = Math.max(
         ...layoutedWinners.map((n) => n.position.y + NODE_HEIGHT),
         0,
       );
       const losersOffset = winnersMaxY + BRACKET_SECTION_GAP;
 
-      // Set divider position
       setDividerY(winnersMaxY + BRACKET_SECTION_GAP / 2);
 
-      // Apply offset to losers nodes
       const offsetLosers: MatchNodeType[] = layoutedLosers.map((node) => ({
         ...node,
         position: { x: node.position.x, y: node.position.y + losersOffset },
@@ -427,7 +406,6 @@ function BracketFlowInner({
       const grandFinalsX =
         Math.max(winnersMaxX, losersMaxX) + ROUND_HORIZONTAL_GAP * 1.5; // Extra space for grand finals
 
-      // Find the winners final for vertical alignment
       const winnersFinal = layoutedWinners.find((n) => {
         const match = winnersMatches.find((m) => m.id === n.id);
         return match && match.nextMatchId?.startsWith('gf-');
@@ -448,7 +426,6 @@ function BracketFlowInner({
         }),
       );
 
-      // Calculate bracket bounds for divider - extend far beyond visible area
       const allMatchNodes = [
         ...layoutedWinners,
         ...offsetLosers,
@@ -526,7 +503,6 @@ function BracketFlowInner({
           ...matchNodes.map((n) => n.position.y + NODE_HEIGHT),
         );
 
-        // Calculate container height (700px) and content height
         const containerHeight = 700;
         const contentHeight = maxY - minY + NODE_HEIGHT;
 
@@ -604,6 +580,25 @@ function BracketFlowInner({
           data-testid="bracket-unsaved-changes"
         >
           Unsaved changes
+        </div>
+      )}
+
+      {isDirty && serverChanged && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 bg-warning/10 text-warning text-sm px-3 py-1 rounded"
+          data-testid="bracket-server-changed"
+        >
+          <span>
+            Someone else changed this bracket since you started editing.
+          </span>
+          <SecondaryButton
+            size="sm"
+            onClick={() => useBracketStore.setState({ isDirty: false })}
+            data-testid="bracket-load-latest"
+          >
+            Discard my edits and load theirs
+          </SecondaryButton>
         </div>
       )}
 

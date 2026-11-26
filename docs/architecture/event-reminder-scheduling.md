@@ -152,6 +152,19 @@ Deletes performed by realign go through `services.teardown_event`, not a bare qu
 
 The other reminders (`discord_announcement`, `discord_confirm_attendance`, `discord_profile_reminder`, `discord_start_mention`) work on both single events and series.
 
+### Channel resolution
+
+Senders never read `discord_announcement_channel_id` directly for a post that has its own channel. They call the resolvers in `backend/events/discord/channels.py`, which take a model instance or an `EventTaskSchema`:
+
+| Resolver | Used by | Returns |
+|---|---|---|
+| `attendance_reminder_channel` | `send_attendance_reminder` | `discord_confirm_attendance_channel_id`, else the announcement channel |
+| `profile_reminder_channel` | `send_profile_reminder` | `discord_profile_reminder_channel_id`, else the announcement channel |
+| `new_event_channel` | `_send_new_event_notification_impl`, `dispatch.notify_new_event` | `discord_new_event_channel_id`, else the announcement channel; not gated on `discord_announcement` |
+| `reminder_channel(event, reminder_type)` | `fire_event_reminder` | the matching resolver above for `confirm_attendance` and `profile_reminder`, the announcement channel for anything else |
+
+An empty result means the sender skips without claiming a lease. `get_event_task_schedule` uses the same resolvers, so a reminder that is on with neither channel set shows as `misconfigured`. The signup post (`discord_post_signups_channel_id`, falling back to the announcement channel only while `discord_announcement` is on) and the pre-day announcement keep their own logic in `events/tasks.py`.
+
 ### Start mention
 
 `discord_start_mention` (registry key `start_mention`, `minutes_field="discord_start_mention_minutes"`, default 15) runs `events.tasks.send_start_mention` in `signups_open` and `roll_call`. It mentions the members in `discord_start_mention_scope` who have a Discord ID: `main` is the seat-holding main list without Maybe RSVPs; `all_active` (default) is every signup that is not cancelled, rejected or dropped. Mentions go out as replies to the signup post (inside the thread for forum posts), at most 80 per message and 2000 characters, with `allowed_mentions={"users": [...]}` so no role or `@everyone` ping can leak. One `start_mention` lease row covers every chunk; members skipped for having no Discord ID are counted in the `start_mention_sent` log line and the lease row's `response_data`. Staff can fire it from the task schedule; a second fire returns 409.

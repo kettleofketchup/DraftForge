@@ -284,7 +284,7 @@ describe('EventFormDialog search', () => {
   it('finds the signup reminder by searching for subscribers', () => {
     render(<Harness />);
     type('subscribers');
-    expect(hit('Send signup reminder')).toBeInTheDocument();
+    expect(hit('Signup reminder DM')).toBeInTheDocument();
   });
 
   it('matches registry keywords for rendered fields', () => {

@@ -33,6 +33,8 @@ from org.accounts import (
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.integration import points as promotion_points
+from org.integration.lifecycle import reconcile_promotion_identity
 from org.mmr import merge_org_mmrs
 from org.mmr_requests.services import repoint_mmr_requests
 from org.models import OrgLog, OrgUser, PromoSend
@@ -246,6 +248,9 @@ class ClaimRequestViewSet(
         - Then deletes target_user
         """
         stub_steam_id = target_user.steam_account_id
+        # Both Discord IDs, before anything is merged, for the promotion
+        # points settled once the sends have moved.
+        merged_discord_ids = {claimer.discordId or "", target_user.discordId or ""}
 
         if target_user.nickname and not claimer.nickname:
             claimer.nickname = target_user.nickname
@@ -392,8 +397,10 @@ class ClaimRequestViewSet(
         LeagueLog.objects.filter(target_user=target_user).update(target_user=claimer)
 
         demote_colliding_earning_sends(claimer, target_user)
+        reconcile_promotion_identity(claimer, target_user)
         PromoSend.objects.filter(sender=target_user).update(sender=claimer)
         PromoSend.objects.filter(recipient=target_user).update(recipient=claimer)
+        promotion_points.settle_after_merge(claimer, merged_discord_ids)
 
         for org in list(target_user.promoter_organizations.all()):
             org.promoters.add(claimer)

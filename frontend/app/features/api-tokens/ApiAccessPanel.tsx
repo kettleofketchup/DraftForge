@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Copy } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -15,7 +15,9 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
 import { Skeleton } from '~/components/ui/skeleton';
+import { Switch } from '~/components/ui/switch';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { useIsSuperuser } from '~/hooks/usePermissions';
 import { extractApiError } from '~/lib/apiError';
@@ -33,7 +35,10 @@ import {
 import {
   ApiLimitsFormSchema,
   CreateTokenFormSchema,
+  DEFAULT_TOKEN_OPERATIONS,
+  TOKEN_FEATURE_LABELS,
   TOKEN_NAME_MAX_LENGTH,
+  TOKEN_OPERATIONS,
   USAGE_DAYS,
   isLimitField,
   type ApiLimits,
@@ -41,9 +46,38 @@ import {
   type ApiToken,
   type CreateTokenForm,
   type CreatedApiToken,
+  type TokenFeature,
+  type TokenOperation,
 } from './schemas';
 
 const log = getLogger('ApiAccessPanel');
+
+type TokenFeatureFlags = Pick<
+  OrgFeatureAccess,
+  'mmrSyncEnabled' | 'promotionEnabled'
+>;
+
+function featureEnabled(access: TokenFeatureFlags, feature: TokenFeature) {
+  switch (feature) {
+    case 'mmr_sync':
+      return access.mmrSyncEnabled;
+    case 'promotion':
+      return access.promotionEnabled;
+  }
+}
+
+function anyTokenFeature(access: TokenFeatureFlags): boolean {
+  return TOKEN_OPERATIONS.some((op) => featureEnabled(access, op.feature));
+}
+
+/** The MMR pair, minus any operation whose feature is locked. */
+function defaultOperations(access: TokenFeatureFlags): TokenOperation[] {
+  return DEFAULT_TOKEN_OPERATIONS.filter((value) =>
+    TOKEN_OPERATIONS.some(
+      (op) => op.value === value && featureEnabled(access, op.feature),
+    ),
+  );
+}
 
 export interface ApiAccessPanelProps {
   orgId: number;
@@ -99,13 +133,19 @@ export function ApiAccessPanel({
           <code className="font-mono text-xs">Authorization: Bearer</code>{' '}
           header. Requests count against your own daily usage.
         </p>
-        {!access.mmrSyncEnabled && (
+        <p className="mt-1 text-sm text-muted-foreground">
+          Each token can only do what it was granted when created. The adaptor
+          needs the promotion operations; new tokens get the MMR pair unless you
+          choose otherwise.
+        </p>
+        {!anyTokenFeature(access) && (
           <p
             className="mt-2 text-sm text-warning"
             data-testid="api-access-locked"
           >
-            The MMR sync API is locked for this organization. Unlock it under
-            Locked features before creating tokens.
+            The MMR sync API and Promotion are both locked for this
+            organization. Unlock one under Locked features before creating
+            tokens.
           </p>
         )}
       </div>
@@ -130,7 +170,7 @@ export function ApiAccessPanel({
               <PrimaryButton
                 size="sm"
                 data-testid="api-token-create"
-                disabled={!access.mmrSyncEnabled}
+                disabled={!anyTokenFeature(access)}
                 onClick={() => setCreateOpen(true)}
               >
                 Create token
@@ -291,25 +331,44 @@ function CreateTokenDialog({
   onCreated,
 }: CreateTokenDialogProps) {
   const create = useCreateApiToken(orgId, access);
+  const { mmrSyncEnabled, promotionEnabled } = access;
+  // Keyed on the flags: `access` is a fresh object on every render.
+  const defaults = useMemo(
+    () => defaultOperations({ mmrSyncEnabled, promotionEnabled }),
+    [mmrSyncEnabled, promotionEnabled],
+  );
   const form = useForm<CreateTokenForm>({
     resolver: zodResolver(CreateTokenFormSchema),
-    defaultValues: { name: '' },
+    defaultValues: { name: '', operations: defaults },
   });
 
   useEffect(() => {
-    if (open) form.reset({ name: '' });
-  }, [open, form]);
+    if (open) form.reset({ name: '', operations: defaults });
+  }, [open, form, defaults]);
 
-  const submit = form.handleSubmit(async ({ name }) => {
+  const submit = form.handleSubmit(async ({ name, operations }) => {
     try {
-      const token = await create.mutateAsync(name);
+      const token = await create.mutateAsync({ name, operations });
       onCreated(token);
     } catch (err) {
       log.error('Failed to create API token', { orgId, err });
+      const response = (
+        err as { response?: { status?: number; data?: unknown } }
+      ).response;
+      const opsErrors = (response?.data as { operations?: unknown } | undefined)
+        ?.operations;
+      if (Array.isArray(opsErrors) && opsErrors.length > 0) {
+        form.setError('operations', { message: String(opsErrors[0]) });
+        return;
+      }
       const message = extractApiError(err) ?? 'Could not create the token';
-      form.setError('name', { message });
+      // 403 here means an operation's feature is locked or not permitted.
+      form.setError(response?.status === 403 ? 'operations' : 'name', {
+        message,
+      });
     }
   });
+  const operationsError = form.formState.errors.operations?.message;
 
   return (
     <FormDialog
@@ -343,6 +402,82 @@ function CreateTokenDialog({
               </FormControl>
               <FormMessage />
             </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="operations"
+          render={({ field }) => (
+            <fieldset
+              className="mt-4 flex flex-col gap-3"
+              aria-describedby={
+                operationsError ? 'api-token-operations-error' : undefined
+              }
+              data-testid="api-token-operations"
+            >
+              <legend className="mb-2 text-sm font-medium">Operations</legend>
+              {TOKEN_OPERATIONS.map((op) => {
+                const enabled = featureEnabled(access, op.feature);
+                const id = `api-token-op-${op.value.replace(':', '-')}`;
+                const checked = field.value.includes(op.value);
+                return (
+                  <div key={op.value} className="flex items-start gap-3">
+                    <Switch
+                      id={id}
+                      checked={checked}
+                      disabled={!enabled}
+                      aria-describedby={enabled ? undefined : `${id}-locked`}
+                      onCheckedChange={(on) =>
+                        field.onChange(
+                          on
+                            ? TOKEN_OPERATIONS.map((o) => o.value).filter(
+                                (v) =>
+                                  v === op.value || field.value.includes(v),
+                              )
+                            : field.value.filter((v) => v !== op.value),
+                        )
+                      }
+                      data-testid={`api-token-op-${op.value}`}
+                    />
+                    <div className="flex min-w-0 flex-col">
+                      <Label htmlFor={id} className="text-sm">
+                        {op.label}
+                      </Label>
+                      <code className="font-mono text-xs text-muted-foreground">
+                        {op.value}
+                      </code>
+                      {op.description && (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          data-testid={`api-token-op-${op.value}-description`}
+                        >
+                          {op.description}
+                        </span>
+                      )}
+                      {!enabled && (
+                        <span
+                          id={`${id}-locked`}
+                          className="text-xs text-warning"
+                          data-testid={`api-token-op-${op.value}-locked`}
+                        >
+                          {TOKEN_FEATURE_LABELS[op.feature]} is locked for this
+                          organization.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {operationsError && (
+                <p
+                  id="api-token-operations-error"
+                  className="text-sm font-medium text-destructive"
+                  data-testid="api-token-operations-error"
+                >
+                  {operationsError}
+                </p>
+              )}
+            </fieldset>
           )}
         />
       </Form>
