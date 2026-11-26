@@ -1,8 +1,8 @@
 # Backend App Extraction
 
-`backend/app` started as the only Django app and still holds most of the backend. We are splitting it into domain apps one slice per PR, models included. Each PR moves one slice, and `app/` only ever gets smaller.
+`backend/app` started as the only Django app and now holds the user model and shared infrastructure. We are splitting it into domain apps one slice per PR, models included. Each PR moves one slice, and `app/` only ever gets smaller.
 
-The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. The third moved `Organization`, `OrgLog` and the org permissions into the existing `org` app, the fourth moved the league domain into the existing `league` app, and the fifth moved `Tournament`, `Team`, `Game`, `TeamLog` and all tournament, team and game code into the new `tournament` app in three stacked PRs. The sixth moved `PositionsModel`, `ProfileClaimRequest` and the user-only code into the existing `user` app in two stacked PRs. This page is the recipe they followed, written so later slices can repeat it step by step.
+The first slice moved the hero draft family into the new `draft` app, and the second moved the team draft family into the same app. The third moved `Organization`, `OrgLog` and the org permissions into the existing `org` app, the fourth moved the league domain into the existing `league` app, and the fifth moved `Tournament`, `Team`, `Game`, `TeamLog` and all tournament, team and game code into the new `tournament` app in three stacked PRs. The sixth moved `PositionsModel`, `ProfileClaimRequest` and the user-only code into the existing `user` app in two stacked PRs. The seventh moved `Joke` and the tangoes API into the web-only `joke` app. This page is the recipe they followed, written so later slices can repeat it step by step.
 
 Planned slices, in order:
 
@@ -16,11 +16,11 @@ Planned slices, in order:
 | Bracket models (later: `TournamentBracket`, `BracketSlot`; bracket views and URL wiring already live in `tournament`) | `bracket` | `tournament` |
 | User, 6a (done: account, display-name, Steam/Discord identity and social-auth pipeline modules, serializers, payload cache, views, SSR, search, avatar and internal endpoints, tasks, internal client, management commands, `is_site_admin`) | `app`, `org` | `user` |
 | User, 6b (done: `PositionsModel`, `ProfileClaimRequest`) | `app` | `user` |
-| Jokes (later) | `app` | to be decided |
+| Jokes (done: tangoes counter) | `app` | `joke` |
 
 `CustomUser` stays in `app` (it is `AUTH_USER_MODEL`).
 
-After the user slice, `app/models.py` holds `CustomUser` and `Joke`, and imports `BaseUserProfile`, `DotaUserProfile` and `PositionsModel` from `user.models` at module top for the `CustomUser` profile accessors (an `ALLOWED_BACK_EDGES["user"]` entry). The `"league.League"` and `"league.LeagueUser"` lazy strings left with `Tournament`, `Game` and `Team`. Two lazy `"org.Organization"` strings remain, on `CustomUser.default_organization` and `user.ProfileClaimRequest.organization` (it left `app` with the user slice and keeps `related_name="claim_requests"`). Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`. `app.models` still re-exports `GameType` from `common.game` for its many importers outside `app`.
+After the joke slice, `app/models.py` holds only `CustomUser`, and `app.serializers` is gone. It imports `BaseUserProfile`, `DotaUserProfile` and `PositionsModel` from `user.models` at module top for the `CustomUser` profile accessors (an `ALLOWED_BACK_EDGES["user"]` entry). The `"league.League"` and `"league.LeagueUser"` lazy strings left with `Tournament`, `Game` and `Team`. Two lazy `"org.Organization"` strings remain, on `CustomUser.default_organization` and `user.ProfileClaimRequest.organization` (it left `app` with the user slice and keeps `related_name="claim_requests"`). Lazy strings are not import edges, so they are not in `ALLOWED_BACK_EDGES`. `app.models` still re-exports `GameType` from `common.game` for its many importers outside `app`.
 
 ## Rules for every slice
 
@@ -94,8 +94,8 @@ grep -rniE "['\"]app\.(draft|draftround|draftevent|draftoptions)['\"]" $B/*/migr
 For a new app:
 
 - Add `backend/<new_app>/` with `apps.py`, and empty `models/__init__.py`, `migrations/__init__.py`, `tests/__init__.py`.
-- Add it to `MODEL_APPS` in `backend/config/installed_apps.py`. Celery installs only `MODEL_APPS`.
-- Add it to the `apps` list in `just/db/mod.just` **and** to `APPS` in `scripts/slot_tests/test_just_recipes.py`. `scripts/slot_tests/test_app_lists.py` fails if any `MODEL_APPS` entry with migrations is missing from either list.
+- Add it to `MODEL_APPS` in `backend/config/installed_apps.py` if worker-reachable code imports its models. Celery installs only `MODEL_APPS`. Otherwise register it web-only in `backend/settings.py`, list it in the guard's `WEB_ONLY_APPS`, and pin its models unloaded in the worker boot test. Preserve the existing apps' relative order: that order also controls admin routes.
+- Add it to the `apps` list in `just/db/mod.just` **and** to `APPS` in `scripts/slot_tests/test_just_recipes.py`. `scripts/slot_tests/test_app_lists.py` fails if any app with a migrations directory is missing from either list.
 - Add `backend/<new_app>/**` to the matching label in `.github/labeler.yml`.
 
 Not every source app is `app`:
@@ -340,9 +340,12 @@ python manage.py migrate org 0021
 python manage.py migrate steam 0008
 python manage.py migrate tournament zero
 python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='tournament', model__in=['tournament', 'team', 'game', 'teamlog']).delete()"
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='joke', model__in=['joke']).delete()"
 ```
 
 `migrate app 0114` reverses the relabel first. Each other app goes back only to the migration before its `retarget` migration. `user/0005_move_user_models_from_app` depends on `app/0115`, so `migrate app 0114` also unapplies `user/0005` and `app/0117` and rolls back the user slice (and `app/0116_customuser_steam_account_verified`, which drops the Steam verification columns), relabelling its ContentTypes to `app`; no move migration is left applied, so no duplicate ContentTypes remain. `tournament` has no other models yet, but the delete still filters on model names, as later slices may add some. The 5a and 5b PRs have no migrations, so they stay if only 5c is rolled back.
+
+The tournament rollback also unapplies `app/0118` and `joke/0001`. Its extra delete removes the `(joke, joke)` ContentType recreated by `post_migrate`.
 
 For the user slice, the clean rollback is:
 
@@ -350,9 +353,21 @@ For the user slice, the clean rollback is:
 python manage.py migrate app 0116
 python manage.py migrate user 0004
 python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='user', model__in=['positionsmodel', 'profileclaimrequest']).delete()"
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='joke', model__in=['joke']).delete()"
 ```
 
 `migrate app 0116` unapplies `app/0117_move_user_models_to_user`, which reverses the relabel. `migrate user 0004` then unapplies `user/0005_move_user_models_from_app`; no other migration depends on it. Both steps are state-only. The delete is required: `post_migrate` after `migrate app 0116` recreates `(user, positionsmodel)` and `(user, profileclaimrequest)` ContentTypes with fresh permissions next to the relabelled `app` rows. Left in place, they make a later forward `migrate` skip the relabel (`contenttype_relabel_skipped`) and strand existing grants on the `app` rows. Never delete `app_label='user'` alone: `user` holds `BaseUserProfile`, `DotaUserProfile` and `DeadlockUserProfile`. The 6a PR has no migrations, so it stays if only 6b is rolled back.
+
+The user rollback also unapplies `app/0118` and `joke/0001`; the extra delete prevents duplicate Joke ContentTypes on the next deploy.
+
+For the joke slice, while the new image is still running:
+
+```bash
+python manage.py migrate joke zero
+python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='joke', model__in=['joke']).delete()"
+```
+
+Then deploy the previous image. `migrate joke zero` first reverses `app/0118`, relabelling the ContentType to `app`, then removes `joke/0001` from migration state. No table changes. The delete removes the destination ContentType recreated by `post_migrate`, so a subsequent forward migration can relabel the original row and keep permission grants. `migrate app 0117` alone is incomplete: it leaves `joke/0001` applied.
 
 !!! danger "Never delete by `app_label` alone"
     `ContentType.objects.filter(app_label='<new_app>').delete()` also hits every other model in the destination app, including slices moved earlier. The delete cascades through `auth_permission`, `auth_user_user_permissions` and `auth_group_permissions`, so their real grants are wiped, and `django_admin_log.content_type` is set to NULL for their log entries. Always filter on the moved model names.
@@ -431,3 +446,15 @@ python manage.py shell -c "from django.contrib.contenttypes.models import Conten
     | After 6b, `main` merged | 118s (280) | — | 319s (18) | 377s (25) | 395s (6437) |
 
     The split cut the slowest backend group from 782s to 343s. After 6b, `migrations-user` grew 10% with six new move-migration tests, and `rest` grew 12% with 488 more tests (moved `app` tests and merged `main`). `migrations-draft` grew 19% with the same 18 tests, because its rollbacks now step through the app move migration and `user/0005`. An earlier run of that group on the same branch took 368s, so host load also plays a part. No group grew more than 20%, so the groups stay as they are.
+
+
+## What the joke slice learned
+
+- **One-model apps can stay flat.** `joke/models.py` holds one model; no models package is needed.
+- **A web-only target does not need `MODEL_APPS`.** No worker-reachable code imports Joke. It sits just after `corsheaders` in web settings, with `WEB_ONLY_APPS` and a worker boot pin enforcing that separation. Existing apps keep their relative order, and admin routes are unchanged.
+- **App lists follow migration directories, not worker registration.** The app-list unit check includes web-only apps such as `bracket` and `joke`. No `.github/labeler.yml` entry was needed: `backend/**` already covers this slice.
+- **Move-migration tests assert one leaf per app, not its name.** The user move test pinned `app/0117`; adding `app/0118` broke it. Count leaves instead.
+- **New tests belong outside a retired module's home.** Add methods to a moved test class or create a separate module. New top-level definitions in the exact home of a retired module fail the retired-def guard.
+- **Log model labels follow the model.** The Discord merge test now takes its expected value from `Joke._meta.label`, rather than pinning `app.Joke`.
+- **Rollback the destination app to zero before rolling back the image.** Delete only the moved model's recreated ContentType after the migration command; grants keep the original ContentType id. Earlier slices' rollback commands can also unapply this slice.
+- **Read-modify-write counters lose updates.** `buy_tango` now uses a database-side `F()` increment and reloads the value for the response. A stale-instance test proves concurrent increments are preserved.

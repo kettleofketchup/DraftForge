@@ -31,7 +31,7 @@ export const RosterUserSchema = z
   .passthrough();
 export type RosterUser = z.infer<typeof RosterUserSchema>;
 
-// TournamentSerializerBase in backend/app/serializers.py
+// TournamentSerializerBase in backend/tournament/serializers/team.py
 const ManagedTeamTournamentSchema = z.object({
   pk: z.number(),
   name: z.string(),

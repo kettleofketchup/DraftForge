@@ -1,0 +1,1 @@
+- Prevented concurrent tango purchases from losing increments by updating the counter atomically in the database.
