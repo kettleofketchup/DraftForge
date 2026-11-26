@@ -37,6 +37,17 @@ class OrgEventDefaultsPermissionTests(EventTestCase):
         self.defaults.refresh_from_db()
         self.assertNotEqual(self.defaults.max_players, 12)
 
+    def test_org_staff_cannot_patch_post_channels(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.patch(
+            self.url,
+            {"discord_new_event_channel_id": "123456789012345678"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.defaults.refresh_from_db()
+        self.assertEqual(self.defaults.discord_new_event_channel_id, "")
+
     def test_org_admin_can_patch(self) -> None:
         self.assertEqual(self._patch(self.org_admin).status_code, 200)
         self.defaults.refresh_from_db()

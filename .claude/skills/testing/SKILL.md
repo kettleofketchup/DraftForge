@@ -36,6 +36,11 @@ See [references/feature-isolation.md](references/feature-isolation.md) for the f
 just test::run 'python manage.py test tournament.tests.test_csv_import -v 2'
 # Same thing through the slot-aware compose wrapper (never raw docker compose)
 just test::compose run --rm --entrypoint "" backend python manage.py test tournament.tests.test_csv_import -v 2
+# Only what this branch's changes reach (backend import graph + whole apps Django
+# loads by name, `vitest related`); --plan prints the selection and why. Use it
+# while iterating; the full suites below are the gate.
+just test::affected
+just test::affected --plan
 # Whole backend suite, exactly what CI runs (no labels = discover all of backend/)
 just test::run 'python manage.py test -v 2'
 # CI discovers new modules automatically; write TestCase/SimpleTestCase classes,

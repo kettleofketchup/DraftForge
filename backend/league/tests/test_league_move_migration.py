@@ -46,16 +46,12 @@ BEFORE_MOVE = [
     ("events", "0035_retarget_organization_to_org"),
 ]
 MOVE_MIGRATION = ("app", "0112_move_league_models_to_league")
-MOVE_LEAGUE_STATE = ("league", "0003_move_league_models_from_app")
 RETARGETS = (
     ("league", "0003_move_league_models_from_app"),
     ("org", "0017_retarget_default_league_to_league"),
     ("events", "0036_retarget_tournament_league_to_league"),
 )
-AFTER_MOVE = [
-    MOVE_LEAGUE_STATE,
-    ("events", "0036_retarget_tournament_league_to_league"),
-]
+AFTER_MOVE = [MOVE_MIGRATION, *RETARGETS]
 MIGRATED_APPS = ("app", "league", "org", "events")
 APP = "app"
 LEAGUE = "league"
@@ -223,12 +219,13 @@ class LeagueMoveMigrationTests(TransactionTestCase):
                 "league_leagueuser": 1,
             },
         )
+        schema_head = _schema_rows()
+        self.assertEqual(
+            {row[2] for row in schema_head}, set(MOVED_TABLES + REFERRING_TABLES)
+        )
+        self.assertTrue(any(row[0] == "index" for row in schema_head))
         self._migrate(AFTER_MOVE)
         schema_before = _schema_rows()
-        self.assertEqual(
-            {row[2] for row in schema_before}, set(MOVED_TABLES + REFERRING_TABLES)
-        )
-        self.assertTrue(any(row[0] == "index" for row in schema_before))
 
         self._migrate(BEFORE_MOVE)
 
@@ -246,10 +243,9 @@ class LeagueMoveMigrationTests(TransactionTestCase):
         self._assert_grant(perm, user, group, ids["league"])
         self._assert_grant(member_perm, member_user, member_group, member_ct)
         self.assertEqual(_row_counts(), counts)
+        self._assert_links(league)
         self._migrate(AFTER_MOVE)
         self.assertEqual(_schema_rows(), schema_before)
-        self._forward()
-        self._assert_links(league)
 
     def test_duplicate_contenttypes_survive_both_directions(self) -> None:
         original, _ = ContentType.objects.get_or_create(

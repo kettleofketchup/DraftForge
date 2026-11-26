@@ -25,9 +25,30 @@ vi.mock('~/hooks/useLobbyPassword', () => ({
 }));
 
 vi.mock('../DiscordChannelPicker', () => ({
-  DiscordChannelPicker: (p: { 'data-testid'?: string }) => (
-    <div data-testid={p['data-testid'] ?? 'channel-picker'} />
-  ),
+  DiscordChannelPicker: (p: {
+    value?: string;
+    onChange: (value: string) => void;
+    clearable?: { label: string; fallbackChannelId?: string };
+    'data-testid'?: string;
+  }) => {
+    const testId = p['data-testid'] ?? 'channel-picker';
+    return (
+      <div
+        data-testid={testId}
+        data-value={p.value ?? ''}
+        data-clear-label={p.clearable?.label ?? ''}
+        data-fallback={p.clearable?.fallbackChannelId ?? ''}
+      >
+        {p.clearable && p.value ? (
+          <button
+            type="button"
+            data-testid={`${testId}-clear`}
+            onClick={() => p.onChange('')}
+          />
+        ) : null}
+      </div>
+    );
+  },
 }));
 vi.mock('../DiscordRolePicker', () => ({
   DiscordRolePicker: () => <div data-testid="role-picker" />,
@@ -38,6 +59,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { EditRepeaterModal } from '../EditRepeaterModal';
+import { NEW_EVENTS_DESCRIPTION } from '../form/settingsFields';
 
 const searchHits = (prefix: string) =>
   screen.queryAllByTestId(`${prefix}-search-hit`).map((el) => {
@@ -142,6 +164,9 @@ const repeater = {
   discord_post_signups_channel_id: '',
   discord_announcement: false,
   discord_announcement_channel_id: '',
+  discord_confirm_attendance_channel_id: '',
+  discord_profile_reminder_channel_id: '',
+  discord_new_event_channel_id: '',
   discord_announcement_hours: 24,
   discord_announcement_role_ids: ['111'],
   discord_signup_role_ids: ['222'],
@@ -202,7 +227,7 @@ describe('EditRepeaterModal tabs', () => {
     expect(sections).not.toContain('Approval');
   });
 
-  it('describes the new-event toggle as an announcement-channel post', async () => {
+  it('describes the new-event toggle as a channel post', async () => {
     render(
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
       { wrapper: Wrapper },
@@ -218,7 +243,8 @@ describe('EditRepeaterModal tabs', () => {
     );
     const label = screen.getByText('Post new events');
     const block = label.closest('div.rounded-md') as HTMLElement;
-    const description = within(block).getByText(/announcement channel/i);
+    const description = within(block).getByText(NEW_EVENTS_DESCRIPTION);
+    expect(description.textContent).toMatch(/announcement channel/i);
     for (const el of [label, description]) {
       expect(el.textContent).not.toMatch(/\bDM\b|subscri|cancel/i);
     }

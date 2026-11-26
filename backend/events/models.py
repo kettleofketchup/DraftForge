@@ -291,13 +291,20 @@ class DiscordEventConfigMixin(models.Model):
     discord_confirm_attendance = models.BooleanField(
         default=False,
         help_text=(
-            "Post an attendance reminder in the announcement channel before the event. "
+            "Post an attendance reminder in its channel (announcement channel when blank). "
             "Replies are not tracked; use the ready check to require confirmation."
         ),
     )
     discord_confirm_attendance_hours = models.IntegerField(
         default=2,
         help_text="Hours before event to post the attendance reminder",
+    )
+    discord_confirm_attendance_channel_id = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        validators=[discord_id_validator],
+        help_text="Channel for the attendance reminder (blank = announcement channel)",
     )
     discord_profile_reminder = models.BooleanField(
         default=False,
@@ -306,6 +313,20 @@ class DiscordEventConfigMixin(models.Model):
     discord_profile_reminder_hours = models.IntegerField(
         default=24,
         help_text="Hours before event to send profile update reminder",
+    )
+    discord_profile_reminder_channel_id = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        validators=[discord_id_validator],
+        help_text="Channel for the profile reminder (blank = announcement channel)",
+    )
+    discord_new_event_channel_id = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        validators=[discord_id_validator],
+        help_text="Channel for the new-event notice (blank = announcement channel)",
     )
     discord_mark_interested = models.BooleanField(
         default=False,
