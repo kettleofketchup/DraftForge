@@ -56,7 +56,53 @@ const SINGLE_REASON = [
   ['reinstate', reinstateSignup],
 ] as const;
 
+const steamOnlySignup = {
+  ...signup,
+  username: 'Steam Player',
+  user_data: {
+    pk: 2,
+    username: null,
+    nickname: 'Steam Player',
+    avatar: null,
+    discordId: null,
+    discordNickname: null,
+    positions: null,
+    steam_account_id: 123456789,
+    steam_account_verified: false,
+    steam_account_verified_at: null,
+    steam_account_exists_checked: true,
+    steam_account_verified_org_name: null,
+    avatarUrl: null,
+  },
+};
+
+const SIGNUP_ACTIONS = [
+  ...SINGLE_REASON,
+  ['approve', (id: number) => approveSignup(id)],
+  ['admin add', () => adminAddSignup(1, 2)],
+] as const;
+
 describe('signup action reasons', () => {
+  it.each(SIGNUP_ACTIONS)(
+    '%s accepts a Steam-only user without a site username',
+    async (_path, fn) => {
+      post.mockResolvedValue({ data: steamOnlySignup });
+      await expect(fn(5)).resolves.toEqual(steamOnlySignup);
+    },
+  );
+
+  it.each(SIGNUP_ACTIONS)(
+    '%s rejects an invalid nested username',
+    async (_path, fn) => {
+      post.mockResolvedValue({
+        data: {
+          ...steamOnlySignup,
+          user_data: { ...steamOnlySignup.user_data, username: 123 },
+        },
+      });
+      await expect(fn(5)).rejects.toThrow();
+    },
+  );
   it.each(SINGLE_REASON)(
     '%s rejects a malformed response',
     async (_path, fn) => {

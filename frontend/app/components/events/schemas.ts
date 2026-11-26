@@ -488,7 +488,7 @@ export const eventSignupSchema = z.object({
   user_data: z
     .object({
       pk: z.number(),
-      username: z.string(),
+      username: z.string().nullable(),
       nickname: z.string().nullable(),
       avatar: z.string().nullable(),
       discordId: z.string().nullable(),
