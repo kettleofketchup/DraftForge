@@ -105,8 +105,10 @@ If the ledger cannot be reached, no DM is sent:
 | `before_send_failed` | The caller's `on_claimed` hook raised | yes |
 | `permanent` | Discord codes 50007 (DMs closed), 10013 (unknown user), 50278, or an empty payload | no |
 
-Read timeouts, other connection errors and 5xx finalize `unknown`. A 401 finalizes
-`failed` and is re-raised so the bot-token alarm fires.
+Read timeouts, other connection errors and 5xx finalize `unknown`. A 401 logs
+`discord_auth_failed` and finalizes `failed`; `send_dm` returns `auth_rejected=True`
+rather than re-raising. Tournament, lobby and leadership sender loops record the
+failure and stop sending to further recipients.
 
 ### Stuck sending
 
