@@ -1,6 +1,7 @@
 """Views for joke-related endpoints (tangoes, etc.)."""
 
 from django.db.models import F
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -25,7 +26,9 @@ def get_tangoes(request: Request) -> Response:
 def buy_tango(request: Request) -> Response:
     """Increment user's tango count by 1."""
     joke, _ = Joke.objects.get_or_create(user=request.user)
-    Joke.objects.filter(pk=joke.pk).update(tangoes_purchased=F("tangoes_purchased") + 1)
+    Joke.objects.filter(pk=joke.pk).update(
+        tangoes_purchased=F("tangoes_purchased") + 1, updated_at=timezone.now()
+    )
     joke.refresh_from_db(fields=["tangoes_purchased"])
 
     return Response(

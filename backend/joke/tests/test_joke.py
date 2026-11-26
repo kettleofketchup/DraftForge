@@ -1,9 +1,11 @@
 """Tests for joke API endpoints."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.db.models import F
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -12,10 +14,7 @@ from joke.models import Joke
 
 
 class JokeAPITest(TestCase):
-    """Test joke API endpoints."""
-
     def setUp(self) -> None:
-        """Create test user."""
         self.user = CustomUser.objects.create_user(
             username="testuser",
             password="test123",
@@ -23,12 +22,10 @@ class JokeAPITest(TestCase):
         self.client = APIClient()
 
     def test_get_tangoes_requires_auth(self) -> None:
-        """GET /api/jokes/tangoes/ requires authentication."""
         response = self.client.get("/api/jokes/tangoes/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_get_tangoes_creates_joke_if_not_exists(self) -> None:
-        """GET /api/jokes/tangoes/ creates Joke record if none exists."""
         self.client.force_authenticate(user=self.user)
 
         self.assertFalse(Joke.objects.filter(user=self.user).exists())
@@ -40,7 +37,6 @@ class JokeAPITest(TestCase):
         self.assertTrue(Joke.objects.filter(user=self.user).exists())
 
     def test_get_tangoes_returns_existing_count(self) -> None:
-        """GET /api/jokes/tangoes/ returns existing tango count."""
         self.client.force_authenticate(user=self.user)
         Joke.objects.create(user=self.user, tangoes_purchased=42)
 
@@ -50,12 +46,10 @@ class JokeAPITest(TestCase):
         self.assertEqual(response.data["tangoes_purchased"], 42)
 
     def test_buy_tango_requires_auth(self) -> None:
-        """POST /api/jokes/tangoes/buy/ requires authentication."""
         response = self.client.post("/api/jokes/tangoes/buy/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_buy_tango_increments_count(self) -> None:
-        """POST /api/jokes/tangoes/buy/ increments tango count."""
         self.client.force_authenticate(user=self.user)
         Joke.objects.create(user=self.user, tangoes_purchased=10)
 
@@ -82,8 +76,20 @@ class JokeAPITest(TestCase):
         self.assertEqual(stale_joke.tangoes_purchased, 12)
         self.assertEqual(response.data["tangoes_purchased"], 12)
 
+    def test_buy_tango_updates_timestamp(self) -> None:
+        self.client.force_authenticate(user=self.user)
+        joke = Joke.objects.create(user=self.user)
+        previous = timezone.now() - timedelta(days=1)
+        Joke.objects.filter(pk=joke.pk).update(updated_at=previous)
+        before_purchase = timezone.now()
+
+        response = self.client.post("/api/jokes/tangoes/buy/")
+
+        joke.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(joke.updated_at, before_purchase)
+
     def test_buy_tango_creates_joke_if_not_exists(self) -> None:
-        """POST /api/jokes/tangoes/buy/ creates Joke if none exists."""
         self.client.force_authenticate(user=self.user)
 
         response = self.client.post("/api/jokes/tangoes/buy/")
