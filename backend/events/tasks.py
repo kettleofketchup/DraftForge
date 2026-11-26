@@ -43,7 +43,9 @@ from discordbot.utils import (
     DISCORD_API_BASE,
     MessageDeletedError,
     _get_headers,
+    send_to_configured_channel,
     sync_edit_message,
+    sync_send_configured_channel,
     sync_send_dm,
     sync_send_embed_with_components,
     sync_send_embed_with_components_no_log,
@@ -645,8 +647,10 @@ def _send_event_announcement_impl(event_id: int) -> str:
 
     # Step 2: Post lightweight announcement linking to the signup post
     notice_result = build_announcement_notice(event, signup_message_link)
-    notice_api_result = sync_send_embed_with_components(
+    notice_delivery = send_to_configured_channel(
         channel_id=event.discord_announcement_channel_id,
+        expected_guild_id=guild_id,
+        title=thread_name,
         embed=notice_result["embed"],
         source="event_notice",
         source_id=event.pk,
@@ -654,12 +658,13 @@ def _send_event_announcement_impl(event_id: int) -> str:
         allowed_mentions=notice_result.get("allowed_mentions"),
     )
 
-    if notice_api_result:
+    if notice_delivery.receipt is not None:
+        notice_message_id = notice_delivery.receipt.message_id
         ann_resp = create_or_update_announcement(
             event_id=event.pk,
             channel_id=event.discord_announcement_channel_id,
             has_posted=True,
-            message_id=notice_api_result.get("id"),
+            message_id=notice_message_id,
             message_last_updated=datetime.now(tz.utc).isoformat(),
         )
         ann_pk = ann_resp.json().get("id") if ann_resp and ann_resp.ok else None
@@ -669,7 +674,7 @@ def _send_event_announcement_impl(event_id: int) -> str:
                 discord_event_id=discord_event_pk,
                 action="send_announcement_notice",
                 target_type="DiscordEventMsgAnnouncement",
-                message_id=notice_api_result.get("id"),
+                message_id=notice_message_id,
                 success=True,
             )
 
@@ -682,7 +687,7 @@ def send_attendance_reminder(event_id: int) -> str:
 
     A blank channel falls back to the announcement channel.
 
-    Idempotency via sync_send_embed_with_components's claim/finalize lease:
+    Idempotency via sync_send_configured_channel's claim/finalize lease:
     one HTTP send per (source, source_id).
     """
 
@@ -699,8 +704,10 @@ def send_attendance_reminder(event_id: int) -> str:
         result = build_attendance_reminder_embed(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("send_attendance_reminder", event_id, exc)
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=result["embed"],
         components=result.get("components"),
         source="attendance_reminder",
@@ -718,7 +725,7 @@ def send_attendance_reminder(event_id: int) -> str:
                 discord_event_id=de_resp.json().get("id"),
                 action="attendance_reminder",
                 target_type="DiscordMessageLog",
-                message_id=response.get("id"),
+                message_id=response.get("message", response).get("id"),
                 message_log_id=response.get("_message_log_id"),
                 success=True,
             )
@@ -732,7 +739,7 @@ def send_profile_reminder(event_id: int) -> str:
 
     A blank channel falls back to the announcement channel.
 
-    Idempotency via sync_send_embed_with_components's lease pattern.
+    Idempotency via sync_send_configured_channel's lease pattern.
     """
 
     event = get_event_for_task(event_id)
@@ -748,8 +755,10 @@ def send_profile_reminder(event_id: int) -> str:
         result = build_profile_reminder_embed(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("send_profile_reminder", event_id, exc)
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=result["embed"],
         components=result.get("components"),
         source="profile_reminder",
@@ -766,7 +775,7 @@ def send_profile_reminder(event_id: int) -> str:
                 discord_event_id=de_resp.json().get("id"),
                 action="profile_reminder",
                 target_type="DiscordMessageLog",
-                message_id=response.get("id"),
+                message_id=response.get("message", response).get("id"),
                 message_log_id=response.get("_message_log_id"),
                 success=True,
             )
@@ -1166,8 +1175,10 @@ def _send_new_event_notification_impl(event_id: int) -> str:
     embed = build_new_event_embed(event)
     # Lease-wrapped send: claims (new_event, event_id) before the HTTP POST, so a
     # retry or double dispatch can't double-post the embed.
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=embed,
         source="new_event",
         source_id=event.pk,
@@ -1519,8 +1530,10 @@ def fire_event_reminder(
         result = builder(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("fire_event_reminder", event_id, exc)
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=result["embed"],
         components=result.get("components"),
         source=source,
@@ -1534,7 +1547,7 @@ def fire_event_reminder(
         de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
         if de_resp and de_resp.ok:
             discord_event_pk = de_resp.json().get("id")
-            msg_id = response.get("id") if response else None
+            msg_id = response.get("message", response).get("id") if response else None
             msg_log_id = response.get("_message_log_id") if response else None
             create_event_log(
                 discord_event_id=discord_event_pk,

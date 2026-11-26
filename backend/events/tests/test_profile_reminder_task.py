@@ -5,18 +5,25 @@ from unittest.mock import MagicMock, patch
 from app.models import GameType
 from discordbot.models import DiscordMessageLog
 from events.tasks import send_profile_reminder
-from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
+from events.tests.test_discord_tasks import _configured_response, _DiscordTaskTestCase
 
-OWN_CHANNEL = "333333333333333333"
-ANNOUNCEMENT_CHANNEL = "1482767177063858216"
+OWN_CHANNEL = "100000000000000001"
+ANNOUNCEMENT_CHANNEL = "100000000000000003"
 
 
 class SendProfileReminderTaskTest(_DiscordTaskTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.org.discord_server_id = "200000000000000001"
+        self.org.save()
+
     @patch("discordbot.utils._rate_limited_request")
-    def test_sends_profile_embed_to_announcement_channel(self, mock_req):
-        mock_req.return_value = _ok_response({"id": "prof_msg_1"})
+    def test_sends_profile_embed_to_announcement_channel(
+        self, mock_req: MagicMock
+    ) -> None:
+        mock_req.side_effect = _configured_response
         self.event.discord_profile_reminder = True
-        self.event.discord_announcement_channel_id = "1482767177063858216"
+        self.event.discord_announcement_channel_id = ANNOUNCEMENT_CHANNEL
         self.event.state = "signups_open"
         self.event.save()
 
@@ -24,14 +31,14 @@ class SendProfileReminderTaskTest(_DiscordTaskTestCase):
         log = DiscordMessageLog.objects.get(
             source="profile_reminder", source_id=self.event.pk, success=True
         )
-        self.assertEqual(log.channel_id, "1482767177063858216")
-        self.assertEqual(log.discord_message_id, "prof_msg_1")
+        self.assertEqual(log.channel_id, ANNOUNCEMENT_CHANNEL)
+        self.assertEqual(log.discord_message_id, "100000000000000002")
 
     @patch("discordbot.utils._rate_limited_request")
     def test_posted_embed_lists_event_requirements(self, mock_req: MagicMock) -> None:
-        mock_req.return_value = _ok_response({"id": "prof_msg_2"})
+        mock_req.side_effect = _configured_response
         self.event.discord_profile_reminder = True
-        self.event.discord_announcement_channel_id = "1482767177063858216"
+        self.event.discord_announcement_channel_id = ANNOUNCEMENT_CHANNEL
         self.event.game_type = GameType.DOTA2
         self.event.require_steam_id = True
         self.event.require_mmr_verified = True
@@ -44,7 +51,7 @@ class SendProfileReminderTaskTest(_DiscordTaskTestCase):
 
     @patch("discordbot.utils._rate_limited_request")
     def test_sends_to_own_channel_when_set(self, mock_req: MagicMock) -> None:
-        mock_req.return_value = _ok_response({"id": "prof_msg_x_2"})
+        mock_req.side_effect = _configured_response
         self.event.discord_profile_reminder = True
         self.event.discord_profile_reminder_channel_id = OWN_CHANNEL
         self.event.discord_announcement_channel_id = ANNOUNCEMENT_CHANNEL
@@ -59,7 +66,7 @@ class SendProfileReminderTaskTest(_DiscordTaskTestCase):
 
     @patch("discordbot.utils._rate_limited_request")
     def test_blank_own_channel_uses_announcement(self, mock_req: MagicMock) -> None:
-        mock_req.return_value = _ok_response({"id": "prof_msg_x_3"})
+        mock_req.side_effect = _configured_response
         self.event.discord_profile_reminder = True
         self.event.discord_profile_reminder_channel_id = ""
         self.event.discord_announcement_channel_id = ANNOUNCEMENT_CHANNEL
@@ -76,7 +83,7 @@ class SendProfileReminderTaskTest(_DiscordTaskTestCase):
     def test_own_channel_without_announcement_channel_sends(
         self, mock_req: MagicMock
     ) -> None:
-        mock_req.return_value = _ok_response({"id": "prof_msg_x_4"})
+        mock_req.side_effect = _configured_response
         self.event.discord_profile_reminder = True
         self.event.discord_profile_reminder_channel_id = OWN_CHANNEL
         self.event.discord_announcement_channel_id = ""
@@ -84,14 +91,16 @@ class SendProfileReminderTaskTest(_DiscordTaskTestCase):
 
         send_profile_reminder(self.event.pk)
 
-        mock_req.assert_called_once()
+        self.assertEqual(
+            [call.args[0] for call in mock_req.call_args_list], ["GET", "POST"]
+        )
         log = DiscordMessageLog.objects.get(
             source="profile_reminder", source_id=self.event.pk, success=True
         )
         self.assertEqual(log.channel_id, OWN_CHANNEL)
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_skips_when_no_announcement_channel(self, mock_req):
+    def test_skips_when_no_announcement_channel(self, mock_req: MagicMock) -> None:
         self.event.discord_profile_reminder = True
         self.event.discord_announcement_channel_id = ""
         self.event.save()
@@ -100,6 +109,6 @@ class SendProfileReminderTaskTest(_DiscordTaskTestCase):
         mock_req.assert_not_called()
         self.assertIn("no channel", result.lower())
 
-    def test_acks_late_decorator(self):
+    def test_acks_late_decorator(self) -> None:
         self.assertTrue(send_profile_reminder.acks_late)
         self.assertTrue(send_profile_reminder.reject_on_worker_lost)

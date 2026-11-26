@@ -1,3 +1,4 @@
+import json
 from contextlib import ExitStack
 from datetime import time, timedelta
 from itertools import product
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from celery.exceptions import Retry
 from django.test import override_settings
 from django.utils import timezone
+from requests import Response
 from requests.exceptions import HTTPError
 from structlog.testing import capture_logs
 
@@ -38,6 +40,18 @@ def _ok_response(payload: dict[str, Any]) -> MagicMock:
     resp.json = MagicMock(return_value=payload)
     resp.raise_for_status = MagicMock()
     return resp
+
+
+def _configured_response(method: str, url: str, **kwargs: Any) -> Response:
+    payload = (
+        {"id": url.rsplit("/", 1)[-1], "guild_id": "200000000000000001", "type": 0}
+        if method == "GET"
+        else {"id": "100000000000000002"}
+    )
+    result = Response()
+    result.status_code = 200
+    result._content = json.dumps(payload).encode()
+    return result
 
 
 class _DiscordTaskTestCase(DiscordTestMixin, EventTestCase):
@@ -79,9 +93,11 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
 
     @patch("discordbot.utils._rate_limited_request")
     def test_signup_destination_matrix(self, mock_req: MagicMock) -> None:
+        self.org.discord_server_id = "200000000000000001"
+        self.org.save()
         for signup, announcement in product(
-            destination_pairs("signup-channel"),
-            destination_pairs("announcement-channel"),
+            destination_pairs("100000000000000001"),
+            destination_pairs("100000000000000003"),
         ):
             with self.subTest(signup=signup, announcement=announcement):
                 event = self.make_event(
@@ -91,7 +107,7 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                     discord_announcement_channel_id=announcement[1] or "",
                 )
                 mock_req.reset_mock()
-                mock_req.return_value = _ok_response({"id": "signup-message"})
+                mock_req.side_effect = _configured_response
                 with patch(
                     "events.tasks.build_announcement_v2", wraps=build_announcement_v2
                 ) as build:
@@ -103,11 +119,11 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                 expected = []
                 if has_signup:
                     expected.append(
-                        f"{DISCORD_API_BASE}/channels/signup-channel/threads"
+                        f"{DISCORD_API_BASE}/channels/100000000000000001/threads"
                     )
                 if has_announcement:
                     expected.append(
-                        f"{DISCORD_API_BASE}/channels/announcement-channel/messages"
+                        f"{DISCORD_API_BASE}/channels/100000000000000003/messages"
                     )
                 self.assertEqual(urls, expected)
                 if not expected:
@@ -127,12 +143,12 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                 self.assertTrue(log.success)
                 self.assertEqual(
                     log.channel_id,
-                    "signup-channel" if has_signup else "announcement-channel",
+                    "100000000000000001" if has_signup else "100000000000000003",
                 )
                 row = DiscordEventMsgSignup.objects.get(event=event)
                 self.assertTrue(row.has_posted)
                 self.assertEqual(row.channel_id, log.channel_id)
-                self.assertEqual(row.message_id, "signup-message")
+                self.assertEqual(row.message_id, "100000000000000002")
                 self.assertEqual(
                     DiscordEvent.objects.get(event=event).signup_message_id, row.pk
                 )
@@ -549,11 +565,13 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
 
 
 class FireEventReminderChannelTest(_DiscordTaskTestCase):
-    OWN_CHANNEL = "333333333333333333"
-    ANNOUNCEMENT_CHANNEL = "1482767177063858216"
+    OWN_CHANNEL = "100000000000000001"
+    ANNOUNCEMENT_CHANNEL = "100000000000000003"
 
     def setUp(self) -> None:
         super().setUp()
+        self.org.discord_server_id = "200000000000000001"
+        self.org.save()
         self.event.discord_announcement_channel_id = self.ANNOUNCEMENT_CHANNEL
         self.event.discord_confirm_attendance = True
         self.event.discord_profile_reminder = True
@@ -564,7 +582,7 @@ class FireEventReminderChannelTest(_DiscordTaskTestCase):
     def test_fire_confirm_attendance_uses_own_channel(
         self, mock_req: MagicMock
     ) -> None:
-        mock_req.return_value = _ok_response({"id": "fire_att"})
+        mock_req.side_effect = _configured_response
         self.event.discord_confirm_attendance_channel_id = self.OWN_CHANNEL
         self.event.save(update_fields=["discord_confirm_attendance_channel_id"])
 
@@ -577,7 +595,7 @@ class FireEventReminderChannelTest(_DiscordTaskTestCase):
 
     @patch("discordbot.utils._rate_limited_request")
     def test_fire_profile_reminder_uses_own_channel(self, mock_req: MagicMock) -> None:
-        mock_req.return_value = _ok_response({"id": "fire_prof"})
+        mock_req.side_effect = _configured_response
         self.event.discord_profile_reminder_channel_id = self.OWN_CHANNEL
         self.event.save(update_fields=["discord_profile_reminder_channel_id"])
 
@@ -592,7 +610,7 @@ class FireEventReminderChannelTest(_DiscordTaskTestCase):
     def test_fire_blank_own_channel_uses_announcement(
         self, mock_req: MagicMock
     ) -> None:
-        mock_req.return_value = _ok_response({"id": "fire_att_blank"})
+        mock_req.side_effect = _configured_response
 
         fire_event_reminder(self.event.pk, "confirm_attendance")
 
