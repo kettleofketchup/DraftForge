@@ -1,7 +1,7 @@
 /**
- * Line-order rules for every event, series and org-defaults form. Every form
- * schema merges signupLineSchema (through discordConfigSchema), so the
- * narrowing cast below is sound.
+ * Line-order rules and the staff reason policy for every event, series and
+ * org-defaults form. Every form schema merges signupLineSchema (through
+ * discordConfigSchema), so the narrowing cast below is sound.
  */
 
 import type { Control, FieldValues } from 'react-hook-form';
@@ -11,11 +11,26 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormMessage,
 } from '~/components/ui/form';
-import type { SignupLineFields } from './schemas';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { EVENT_SECTION_FIELDS } from './form/settingsFields';
+import {
+  STAFF_REASON_POLICIES,
+  STAFF_REASON_POLICY_LABELS,
+  type SignupLineFields,
+} from './schemas';
+
+type LineRuleField = 'line_withdraw_forfeits' | 'line_switch_restamps';
 
 const RULES: ReadonlyArray<{
-  name: keyof SignupLineFields;
+  name: LineRuleField;
   label: string;
   description: string;
 }> = [
@@ -32,6 +47,9 @@ const RULES: ReadonlyArray<{
       'Moving between Main and Maybe sends the signup to the back of the line. When off, it keeps its place.',
   },
 ];
+
+const STAFF_REASON_META = EVENT_SECTION_FIELDS.approval.staff_reason_policy;
+const STAFF_REASON_TEST_ID = 'signup-line-staff_reason_policy';
 
 interface SignupLineConfigSectionProps<
   T extends FieldValues & SignupLineFields,
@@ -75,6 +93,41 @@ export function SignupLineConfigSection<
           )}
         />
       ))}
+      <FormField
+        control={control}
+        name="staff_reason_policy"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{STAFF_REASON_META.label}</FormLabel>
+            {/* Bare Select, not BrandSelect: matches the neutral selects in these dialogs (component-substitutions.md exception). */}
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger
+                  className="w-full"
+                  data-testid={STAFF_REASON_TEST_ID}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {STAFF_REASON_POLICIES.map((policy) => (
+                  <SelectItem
+                    key={policy}
+                    value={policy}
+                    data-testid={`${STAFF_REASON_TEST_ID}-${policy}`}
+                  >
+                    {STAFF_REASON_POLICY_LABELS[policy]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormDescription className="text-xs">
+              {STAFF_REASON_META.description}
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 }

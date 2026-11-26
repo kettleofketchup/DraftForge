@@ -1,10 +1,21 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useForm } from 'react-hook-form';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { Form } from '~/components/ui/form';
 import { SignupLineConfigSection } from '../SignupLineConfigSection';
-import { SIGNUP_LINE_DEFAULTS, type SignupLineFields } from '../schemas';
+import {
+  SIGNUP_LINE_DEFAULTS,
+  STAFF_REASON_POLICIES,
+  STAFF_REASON_POLICY_LABELS,
+  type SignupLineFields,
+} from '../schemas';
+
+beforeAll(() => {
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.releasePointerCapture ??= () => undefined;
+  Element.prototype.scrollIntoView ??= () => undefined;
+});
 
 function Harness({ onValues }: { onValues?: (v: SignupLineFields) => void }) {
   const form = useForm<SignupLineFields>({
@@ -46,6 +57,38 @@ describe('SignupLineConfigSection', () => {
     render(<Harness />);
     const root = screen.getByTestId('signup-line-section');
     expect(root.querySelector('form')).toBeNull();
+  });
+
+  it('shows the default policy and saves the selected policy', async () => {
+    let submitted: SignupLineFields | undefined;
+    render(<Harness onValues={(v) => (submitted = v)} />);
+    const select = screen.getByRole('combobox', { name: 'Staff reasons' });
+    expect(select).toHaveTextContent('Optional');
+    expect(select).toHaveAttribute(
+      'data-testid',
+      'signup-line-staff_reason_policy',
+    );
+    fireEvent.pointerDown(select, {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse',
+    });
+    for (const policy of STAFF_REASON_POLICIES) {
+      expect(
+        screen.getByTestId(`signup-line-staff_reason_policy-${policy}`),
+      ).toHaveTextContent(STAFF_REASON_POLICY_LABELS[policy]);
+    }
+    fireEvent.click(
+      screen.getByRole('option', { name: 'Required for placements' }),
+    );
+    expect(select).toHaveTextContent('Required for placements');
+    fireEvent.click(screen.getByText('go'));
+    await waitFor(() =>
+      expect(submitted).toEqual({
+        ...SIGNUP_LINE_DEFAULTS,
+        staff_reason_policy: 'placements',
+      }),
+    );
   });
 
   it.each(['line_withdraw_forfeits', 'line_switch_restamps'] as const)(

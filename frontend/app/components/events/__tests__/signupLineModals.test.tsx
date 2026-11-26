@@ -92,6 +92,26 @@ beforeEach(() => {
 });
 
 describe('EditEventModal signup line', () => {
+  it('keeps the saved staff reason policy through reset and submit', async () => {
+    render(
+      <EditEventModal
+        event={{ ...event, staff_reason_policy: 'all_staff_changes' }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    openTab(/approval/i);
+    expect(
+      await screen.findByTestId('signup-line-staff_reason_policy'),
+    ).toHaveTextContent('Required for every staff change');
+    submit();
+    await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
+    expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
+      staff_reason_policy: 'all_staff_changes',
+    });
+  });
+
   it.each(FIELDS)('sends %s false once unchecked', async (name) => {
     render(<EditEventModal event={event} open onOpenChange={() => {}} />, {
       wrapper: Wrapper,
@@ -125,6 +145,26 @@ describe('EditEventModal signup line', () => {
 });
 
 describe('EditRepeaterModal signup line', () => {
+  it('keeps the saved staff reason policy through reset and submit', async () => {
+    render(
+      <EditRepeaterModal
+        repeater={{ ...repeater, staff_reason_policy: 'all_staff_changes' }}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper: Wrapper },
+    );
+    openTab(/^event$/i);
+    expect(
+      await screen.findByTestId('signup-line-staff_reason_policy'),
+    ).toHaveTextContent('Required for every staff change');
+    submit();
+    await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
+    expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
+      staff_reason_policy: 'all_staff_changes',
+    });
+  });
+
   it.each(FIELDS)('sends %s false once unchecked', async (name) => {
     render(
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
@@ -162,6 +202,23 @@ describe('org event defaults signup line', () => {
         line_withdraw_forfeits: name !== 'line_withdraw_forfeits',
         line_switch_restamps: name !== 'line_switch_restamps',
       },
+    });
+  });
+
+  it('keeps the saved staff reason policy through reset and submit', async () => {
+    api.getOrgEventDefaults.mockResolvedValue({
+      ...orgDefaults,
+      staff_reason_policy: 'all_staff_changes',
+    });
+    await renderLoaded();
+    openTab(/^event$/i);
+    expect(
+      await screen.findByTestId('signup-line-staff_reason_policy'),
+    ).toHaveTextContent('Required for every staff change');
+    submit();
+    await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
+    expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
+      data: { staff_reason_policy: 'all_staff_changes' },
     });
   });
 

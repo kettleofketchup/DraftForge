@@ -229,6 +229,19 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
         'tentative',
       ],
     },
+    staff_reason_policy: {
+      label: 'Staff reasons',
+      description:
+        'When staff must give a reason for changing a signup. Placements are adding, approving from the waitlist, demoting and reinstating. A member changing their own signup never needs one.',
+      keywords: [
+        'reason',
+        'audit',
+        'staff',
+        'placement',
+        'justification',
+        'history',
+      ],
+    },
   },
   ready: {
     roll_call_enabled: {
