@@ -133,6 +133,7 @@ class PermissionCheckIn(Request):
     channel_id: Snowflake | None
     role_ids: list[Snowflake] = Field(default_factory=list, max_length=25)
     include_rsvp: bool = False
+    fallback: bool = Field(default_factory=bool)
 
 
 class PermissionChecksRequest(Request):

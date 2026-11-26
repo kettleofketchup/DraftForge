@@ -2,6 +2,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import replace
 from datetime import datetime
+from typing import Literal
 
 from django.utils import timezone
 
@@ -26,13 +27,23 @@ def preview_checks(checks: list[PermissionCheckIn]) -> list[ResolvedCheckInput]:
         ActionKind.SCHEDULED_EVENT_UPDATE,
         ActionKind.SCHEDULED_EVENT_DELETE,
     }
+
+    def source(
+        check: PermissionCheckIn,
+    ) -> Literal["configured", "fallback", "prospective"]:
+        if check.action in prospective:
+            return "prospective"
+        if check.action == ActionKind.SIGNUP_FALLBACK or (
+            check.fallback and REGISTRY[check.action].scope == "channel"
+        ):
+            return "fallback"
+        return "configured"
+
     return [
         ResolvedCheckInput(
             key=check.key,
             action=check.action,
-            destination_source="prospective"
-            if check.action in prospective
-            else "configured",
+            destination_source=source(check),
             channel_id=check.channel_id,
             role_ids=tuple(check.role_ids),
             include_rsvp=check.include_rsvp,

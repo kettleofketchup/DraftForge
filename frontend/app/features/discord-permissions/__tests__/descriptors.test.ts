@@ -76,6 +76,35 @@ describe('settingsDescriptors', () => {
     );
   });
 
+  it('marks only inherited channels as fallback destinations', () => {
+    const announcement = '900000000000000003';
+    const own = '900000000000000007';
+    const descriptors = settingsDescriptors(
+      {
+        ...DISCORD_CONFIG_DEFAULTS,
+        discord_announcement: true,
+        discord_announcement_channel_id: announcement,
+        discord_post_signups: true,
+        discord_confirm_attendance: true,
+        discord_confirm_attendance_channel_id: own,
+        discord_profile_reminder: true,
+        discord_profile_reminder_channel_id: '',
+      },
+      { isRepeater: false, showNotifyNewEvents: false },
+    );
+    const byKey = Object.fromEntries(descriptors.map((d) => [d.key, d]));
+    expect(byKey.attendance_reminder).toMatchObject({
+      channel_id: own,
+      fallback: false,
+    });
+    expect(byKey.profile_reminder).toMatchObject({
+      channel_id: announcement,
+      fallback: true,
+    });
+    expect(byKey.signup_fallback.fallback).toBe(true);
+    expect(byKey.announcement.fallback).toBe(false);
+  });
+
   it('uses separate fallback transport and prospective start destination', () => {
     const descriptors = settingsDescriptors(
       {

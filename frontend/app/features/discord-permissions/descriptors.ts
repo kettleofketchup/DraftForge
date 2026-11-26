@@ -59,9 +59,22 @@ export function settingsDescriptors(
     action: ActionKind,
     channel_id: string | null = null,
     role_ids: string[] = [],
+    fallback = false,
   ) => {
-    checks.push({ key, action, channel_id, role_ids, include_rsvp: false });
+    checks.push({
+      key,
+      action,
+      channel_id,
+      role_ids,
+      include_rsvp: false,
+      fallback,
+    });
   };
+  const own = (channel: string): [string | null, string[], boolean] => [
+    channel || announcement,
+    [],
+    !channel && !!announcement,
+  ];
   add('scheduled_event_create', 'scheduled_event_create');
   if (values.discord_create_event) {
     add('scheduled_event_update', 'scheduled_event_update');
@@ -69,7 +82,7 @@ export function settingsDescriptors(
   }
   if (signup || !fallback)
     add('signup_post', 'signup_create', signup, values.discord_signup_role_ids);
-  if (fallback) add('signup_fallback', 'signup_fallback', fallback);
+  if (fallback) add('signup_fallback', 'signup_fallback', fallback, [], true);
   add(
     'announcement',
     'announcement',
@@ -79,18 +92,18 @@ export function settingsDescriptors(
   add(
     'attendance_reminder',
     'attendance_reminder',
-    values.discord_confirm_attendance_channel_id || announcement,
+    ...own(values.discord_confirm_attendance_channel_id),
   );
   add(
     'profile_reminder',
     'profile_reminder',
-    values.discord_profile_reminder_channel_id || announcement,
+    ...own(values.discord_profile_reminder_channel_id),
   );
   if (opts.showNotifyNewEvents)
     add(
       'new_event_notice',
       'new_event_notice',
-      values.discord_new_event_channel_id || announcement,
+      ...own(values.discord_new_event_channel_id),
     );
   add(
     'start_mention',

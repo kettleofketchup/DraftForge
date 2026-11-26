@@ -286,6 +286,33 @@ class EventPermissionTests(EventTestCase):
         ):
             self.assertNotIn(key, results)
 
+    def test_preview_fallback_source_matches_saved_resolver(self) -> None:
+        self.event.discord_confirm_attendance = True
+        self.event.discord_confirm_attendance_channel_id = ""
+        self.event.save()
+        saved = self.results()["attendance_reminder"]["destination"]
+        response = self.client.post(
+            self.url,
+            {
+                "checks": [
+                    {
+                        "key": "attendance_reminder",
+                        "action": "attendance_reminder",
+                        "channel_id": C,
+                        "fallback": True,
+                    }
+                ]
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        preview = response.json()["checks"][0]["destination"]
+        self.assertEqual(saved["source"], "fallback")
+        self.assertEqual(
+            (preview["source"], preview["channel_id"]),
+            (saved["source"], saved["channel_id"]),
+        )
+
     def test_preview_start_mention_remains_prospective(self) -> None:
         signup = DiscordEventMsgSignup.objects.create(
             event=self.event, channel_id=T, message_id=M, has_posted=True

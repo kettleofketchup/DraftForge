@@ -74,6 +74,7 @@ export const PermissionCheckInSchema = z
       .max(25)
       .optional(),
     include_rsvp: z.boolean(),
+    fallback: z.boolean().optional(),
   })
   .strict();
 export type PermissionCheckIn = z.infer<typeof PermissionCheckInSchema>;

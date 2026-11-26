@@ -116,6 +116,45 @@ class PermissionApiTests(APITestCase):
         self.assertEqual(result["status"], "unconfigured")
         self.assertIn("missing_reference", [b["code"] for b in result["blockers"]])
 
+    def test_preview_reports_inherited_destination_as_fallback(self) -> None:
+        response = self.post(
+            checks=[
+                {"key": "own", "action": "attendance_reminder", "channel_id": C},
+                {
+                    "key": "inherited",
+                    "action": "attendance_reminder",
+                    "channel_id": C,
+                    "fallback": True,
+                },
+                {"key": "signup", "action": "signup_fallback", "channel_id": C},
+            ]
+        )
+        self.assertEqual(response.status_code, 200)
+        sources = {
+            check["key"]: check["destination"]["source"]
+            for check in response.json()["checks"]
+        }
+        self.assertEqual(
+            sources,
+            {"own": "configured", "inherited": "fallback", "signup": "fallback"},
+        )
+
+    def test_fallback_flag_never_relabels_prospective_or_guild_checks(self) -> None:
+        response = self.post(
+            checks=[
+                {
+                    "key": "start",
+                    "action": "start_mention",
+                    "channel_id": C,
+                    "fallback": True,
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["checks"][0]["destination"]["source"], "prospective"
+        )
+
     def test_rejects_oversize_and_duplicate_keys(self) -> None:
         check = {"key": "post", "action": "announcement", "channel_id": C}
         for checks in (
