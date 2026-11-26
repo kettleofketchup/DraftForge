@@ -47,7 +47,12 @@ from events.eligibility import (
     stamp_eligibility,
     validate_friend_id,
 )
-from events.ledger import SignupActor, record_signup_change, snapshot
+from events.ledger import (
+    SignupActor,
+    record_signup_change,
+    require_staff_reason,
+    snapshot,
+)
 from events.line import (
     forfeits_on_withdraw,
     restamp_to_back,
@@ -231,26 +236,8 @@ def _create_action(
     return SignupAction.SIGNED_UP
 
 
-@transaction.atomic
-def _create_signup(
-    event: Event,
-    user: CustomUser,
-    event_team: EventTeam | None = None,
-    *,
-    actor: SignupActor,
-    for_staff_placement: bool = False,
-    reason: str = "",
-) -> EventSignup:
-    """Internal: create a signup, or bring the user's CANCELLED, REJECTED or
-    TENTATIVE row back in place, with no state check.
-
-    Handles waitlist placement, auto-approve / auto-confirm, the line rules,
-    tournament addition, and notify hooks. State authorization is the caller's job.
-
-    INVARIANT: invalidate_after_commit MUST be registered before any transaction.on_commit
-    notify hook. Notify handlers may re-query, and reading through a stale cache would
-    re-warm it with stale data.
-    """
+def _existing_signup_or_refuse(event: Event, user: CustomUser) -> EventSignup | None:
+    """The user's returnable signup on the event, or None; raise if it can't return."""
     existing = (
         EventSignup.objects.nocache()
         .select_related("user__base_profile")
@@ -271,7 +258,30 @@ def _create_signup(
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
         if existing.status not in _RETURNABLE_STATUSES:
             raise ValueError("User has already signed up for this event.")
+    return existing
 
+
+@transaction.atomic
+def _create_signup(
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    actor: SignupActor,
+    for_staff_placement: bool = False,
+    reason: str = "",
+) -> EventSignup:
+    """Internal: create a signup, or bring the user's CANCELLED, REJECTED or
+    TENTATIVE row back in place, with no state check.
+
+    Handles waitlist placement, auto-approve / auto-confirm, the line rules,
+    tournament addition, and notify hooks. State authorization is the caller's job.
+
+    INVARIANT: invalidate_after_commit MUST be registered before any transaction.on_commit
+    notify hook. Notify handlers may re-query, and reading through a stale cache would
+    re-warm it with stale data.
+    """
+    existing = _existing_signup_or_refuse(event, user)
     action = _create_action(existing, for_staff_placement=for_staff_placement)
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     result = evaluate_signup(event, user, for_staff_placement=for_staff_placement)
@@ -752,6 +762,16 @@ def staff_add_signup(
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
         raise ValueError(NOT_ACCEPTING_MESSAGE)
+    _existing_signup_or_refuse(event, user)
+    reason = require_staff_reason(
+        event_id=event.pk,
+        policy=event.staff_reason_policy,
+        actor=actor,
+        subject_id=user.pk,
+        action=SignupAction.STAFF_ADDED,
+        from_status=None,
+        reason=reason,
+    )
     # Admin-added users join the organization so per-org data (MMR, history)
     # has somewhere to live before they're approved.
     if event.organization_id:
@@ -790,6 +810,24 @@ def _reread_signup(signup: EventSignup) -> None:
     )
 
 
+def _require_reason(
+    signup: EventSignup,
+    *,
+    actor: SignupActor,
+    action: SignupAction,
+    reason: str,
+) -> str:
+    return require_staff_reason(
+        event_id=signup.event_id,
+        policy=signup.event.staff_reason_policy,
+        actor=actor,
+        subject_id=signup.user_id,
+        action=action,
+        from_status=signup.status,
+        reason=reason,
+    )
+
+
 def _record_leaf(
     signup: EventSignup,
     *,
@@ -819,15 +857,21 @@ def _record_leaf(
 
 @transaction.atomic
 def approve_signup(
-    signup: EventSignup, mmr_override: int | None = None, *, actor: SignupActor
+    signup: EventSignup,
+    mmr_override: int | None = None,
+    *,
+    actor: SignupActor,
+    reason: str = "",
 ) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
+    lock_event(signup.event)
     _reread_signup(signup)
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.APPROVED, reason=reason
+    )
     in_roll_call = signup.event.state == EventState.ROLL_CALL
-    if in_roll_call:
-        lock_event(signup.event)
     before = _ranked_snapshot(signup)
     extra: dict[str, Any] | None = None
 
@@ -859,6 +903,7 @@ def approve_signup(
         action=SignupAction.APPROVED,
         before=before,
         extra=extra,
+        reason=reason,
     )
     if in_roll_call:
         enrol_signup_if_live(signup, actor=actor)
@@ -868,11 +913,16 @@ def approve_signup(
 
 
 @transaction.atomic
-def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def reject_signup(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Reject a signup."""
     _reread_signup(signup)
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.REJECTED, reason=reason
+    )
     before = _ranked_snapshot(signup)
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
@@ -885,6 +935,7 @@ def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
         actor=actor,
         action=SignupAction.REJECTED,
         before=before,
+        reason=reason,
     )
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event, cause=entry)
@@ -925,9 +976,13 @@ def confirm_signup(
     return signup
 
 
-def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
+def _check_withdrawable(signup: EventSignup) -> None:
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
+
+
+def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
+    _check_withdrawable(signup)
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.waitlist_position = None
@@ -952,9 +1007,15 @@ def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
 
 
 @transaction.atomic
-def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def cancel_signup(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Cancel a signup."""
     _reread_signup(signup)
+    _check_withdrawable(signup)
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.WITHDREW, reason=reason
+    )
     before = _ranked_snapshot(signup)
     prior_status = _withdraw(signup, by_member=_by_member(actor))
     entry = _record_leaf(
@@ -963,6 +1024,7 @@ def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
         actor=actor,
         action=SignupAction.WITHDREW,
         before=before,
+        reason=reason,
     )
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event, cause=entry)
@@ -1061,11 +1123,16 @@ def _rank_among(
 
 
 @transaction.atomic
-def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def unconfirm_signup(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
     _reread_signup(signup)
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.UNCONFIRMED, reason=reason
+    )
     check = None
     if signup.event.state == EventState.ROLL_CALL:
         check = live_ready_check(lock_event(signup.event), lock=True)
@@ -1085,6 +1152,7 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
         actor=actor,
         action=SignupAction.UNCONFIRMED,
         before=before,
+        reason=reason,
         correlation_id=f"rc{check.pk}:unconfirm" if check is not None else "",
     )
     invalidate_after_commit(signup, signup.event)
@@ -1093,12 +1161,17 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
 
 
 @transaction.atomic
-def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def demote_to_waitlist(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Move an active signup to the end of the waitlist. Staff fill the freed
     seat by hand; nobody is promoted."""
     _reread_signup(signup)
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.DEMOTED, reason=reason
+    )
     lock_event(signup.event)
     before = snapshot(signup, waitlist_rank=None)
     signup.status = SignupStatus.WAITLISTED
@@ -1113,6 +1186,7 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
         action=SignupAction.DEMOTED,
         before=before,
         after=_ranked_snapshot(signup),
+        reason=reason,
     )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
@@ -1121,7 +1195,11 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
 
 @transaction.atomic
 def reinstate_signup(
-    signup: EventSignup, *, actor: SignupActor, for_staff_placement: bool = True
+    signup: EventSignup,
+    *,
+    actor: SignupActor,
+    for_staff_placement: bool = True,
+    reason: str = "",
 ) -> EventSignup:
     """Bring a removed signup back into the active list.
 
@@ -1147,6 +1225,9 @@ def reinstate_signup(
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
+        reason = _require_reason(
+            signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
+        )
         before = _ranked_snapshot(signup)
         locked = lock_event(event)
         check = live_ready_check(locked, lock=True)
@@ -1175,7 +1256,9 @@ def reinstate_signup(
             check.entries.filter(
                 signup_id=signup.pk, state=ReadyCheckEntryState.DROPPED
             ).update(state=ReadyCheckEntryState.EXCUSED)
-        _record_reinstated(signup, before, event=event, actor=actor, check=check)
+        _record_reinstated(
+            signup, before, event=event, actor=actor, check=check, reason=reason
+        )
         enrol_signup_if_live(signup, actor=actor)
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
@@ -1185,6 +1268,9 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
+    )
     before = _ranked_snapshot(signup)
     locked = lock_event(event)
     result = evaluate_signup(
@@ -1213,7 +1299,9 @@ def reinstate_signup(
             "updated_at",
         ]
     )
-    _record_reinstated(signup, before, event=locked, actor=actor, check=None)
+    _record_reinstated(
+        signup, before, event=locked, actor=actor, check=None, reason=reason
+    )
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
@@ -1246,6 +1334,7 @@ def _record_reinstated(
     event: Event,
     actor: SignupActor,
     check: ReadyCheck | None,
+    reason: str,
 ) -> None:
     _record_leaf(
         signup,
@@ -1254,6 +1343,7 @@ def _record_reinstated(
         action=SignupAction.REINSTATED,
         before=before,
         after=_ranked_snapshot(signup),
+        reason=reason,
         correlation_id=f"rc{check.pk}:reinstate" if check is not None else "",
     )
 
