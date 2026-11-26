@@ -26,6 +26,7 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from discordbot.delivery_types import valid_discord_id
 from discordbot.models import (
     ChannelType,
     DiscordEvent,
@@ -36,6 +37,10 @@ from discordbot.models import (
     DiscordMessageLog,
     DiscordTournamentLog,
     ScheduledEvent,
+)
+from discordbot.signup_delivery import (
+    blocked_signup_event_ids,
+    clear_signup_state_for_deleted_message,
 )
 from events.capacity import with_signup_counts
 from events.completion import close_event
@@ -390,6 +395,9 @@ def get_sync_discord_state(request: Request) -> Response:
             "events_with_signup": list(events_with_signup),
             "events_with_scheduled": list(events_with_scheduled),
             "events_with_recent_attempt": list(events_with_recent_attempt),
+            "events_with_signup_blocked": sorted(
+                blocked_signup_event_ids(event["pk"] for event in active_events)
+            ),
         }
     )
 
@@ -640,6 +648,29 @@ def clear_event_signup_state(request: Request) -> Response:
     if err:
         return err
     event_id = request.data["event_id"]
+    expected_message_id = request.data.get("expected_message_id")
+    if "expected_message_id" in request.data:
+        if (
+            type(event_id) is not int
+            or not 0 < event_id <= 2**63 - 1
+            or not valid_discord_id(expected_message_id)
+        ):
+            return Response(
+                {"error": "invalid_request"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not Event.objects.nocache().filter(pk=event_id).exists():
+            return Response(
+                {"error": "event_not_found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        cleared = clear_signup_state_for_deleted_message(event_id, expected_message_id)
+        log.info(
+            "events_signup_deleted_message_cleared",
+            system="events",
+            subsystem="discord",
+            event_id=event_id,
+            cleared=cleared,
+        )
+        return Response({"event_id": event_id, "cleared": cleared})
 
     result = clear_signup_dedup_state(event_id)
     log.info(

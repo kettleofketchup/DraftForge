@@ -35,6 +35,12 @@ from app.views.internal import (
 from app.views.ssr import EventSSRView
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
+from discordbot.internal_signup_delivery_views import (
+    begin_signup_delivery,
+    complete_signup_delivery,
+    mark_signup_delivery_sending,
+    signup_delivery_blocked,
+)
 from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
 from league.ssr import LeagueSSRView
@@ -433,6 +439,22 @@ urlpatterns += [
 urlpatterns += [
     path("api/internal/discord/message-log/", create_discord_message_log),
     path("api/internal/discord/message-log/claim/", claim_discord_message_log),
+    path(
+        "api/internal/discord/signup-delivery/begin/",
+        begin_signup_delivery,
+    ),
+    path(
+        "api/internal/discord/signup-delivery/sending/",
+        mark_signup_delivery_sending,
+    ),
+    path(
+        "api/internal/discord/signup-delivery/complete/",
+        complete_signup_delivery,
+    ),
+    path(
+        "api/internal/discord/signup-delivery/blocked/",
+        signup_delivery_blocked,
+    ),
     path(
         "api/internal/discord/message-log/<int:log_id>/finalize/",
         finalize_discord_message_log,

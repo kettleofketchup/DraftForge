@@ -4,12 +4,17 @@ events, signup/announcement messages, scheduled-event and DM records, sync state
 from typing import TYPE_CHECKING, Any
 
 import requests
+from pydantic import BaseModel, ValidationError
 
 from app.internal_client import transport
 from discordbot.delivery_types import ClaimResult
 from discordbot.schemas import (
     DiscordEventStateSchema,
     MessageLogSchema,
+    SignupDeliveryBeginReply,
+    SignupDeliveryBlockedReply,
+    SignupDeliveryCompleteReply,
+    SignupDeliverySendingReply,
     SyncDiscordStateSchema,
 )
 from telemetry.logging import get_logger
@@ -240,14 +245,101 @@ def create_or_update_signup_message(**data: Any) -> requests.Response | None:
     return transport.post("/discord/signup-message/", data)
 
 
-def clear_event_signup_state(event_id: int) -> requests.Response | None:
+def clear_event_signup_state(
+    event_id: int, expected_message_id: str | None = None
+) -> requests.Response | None:
     """Reset signup dedup state for an event (auto-recovery + manual repost).
 
-    Flips DiscordEventMsgSignup.has_posted=False AND DiscordMessageLog.success=False
-    for the event_announcement source. The next sync_discord_events run (within
-    60s) will treat the event as having no signup post and recreate it.
+    With ``expected_message_id`` the reset applies only while that message is
+    the event's current signup post; the reply carries ``cleared``.
     """
-    return transport.post("/discord/signup-message/clear/", {"event_id": event_id})
+    payload: dict[str, Any] = {"event_id": event_id}
+    if expected_message_id is not None:
+        payload["expected_message_id"] = expected_message_id
+    return transport.post("/discord/signup-message/clear/", payload)
+
+
+def _parse_ok[ModelT: BaseModel](
+    resp: requests.Response | None, model: type[ModelT]
+) -> ModelT | None:
+    if resp is None or resp.status_code != 200:
+        return None
+    try:
+        return model.model_validate(resp.json())
+    except (ValueError, ValidationError):
+        return None
+
+
+def begin_signup_delivery(
+    event_id: int, generation: int | None
+) -> SignupDeliveryBeginReply | None:
+    """Reserve a signup post attempt. None means the decision is unavailable."""
+    payload: dict[str, Any] = {"event_id": event_id}
+    if generation is not None:
+        payload["generation"] = generation
+    return _parse_ok(
+        transport.post("/discord/signup-delivery/begin/", payload),
+        SignupDeliveryBeginReply,
+    )
+
+
+def mark_signup_delivery_sending(
+    event_id: int, generation: int, attempt_token: str, log_id: int | None
+) -> bool:
+    if log_id is None:
+        return False
+    reply = _parse_ok(
+        transport.post(
+            "/discord/signup-delivery/sending/",
+            {
+                "event_id": event_id,
+                "generation": generation,
+                "attempt_token": attempt_token,
+                "log_id": log_id,
+            },
+        ),
+        SignupDeliverySendingReply,
+    )
+    return reply is not None and reply.outcome == "ok"
+
+
+def complete_signup_delivery(
+    event_id: int,
+    generation: int,
+    attempt_token: str,
+    outcome: str,
+    receipt: dict | None = None,
+    failure: dict | None = None,
+    log_id: int | None = None,
+) -> SignupDeliveryCompleteReply | None:
+    """Record an attempt's result. None means it was not confirmed recorded."""
+    payload: dict[str, Any] = {
+        "event_id": event_id,
+        "generation": generation,
+        "attempt_token": attempt_token,
+        "outcome": outcome,
+    }
+    for key, value in (("receipt", receipt), ("failure", failure), ("log_id", log_id)):
+        if value is not None:
+            payload[key] = value
+    return _parse_ok(
+        transport.post("/discord/signup-delivery/complete/", payload),
+        SignupDeliveryCompleteReply,
+    )
+
+
+def get_signup_blocked_event_ids(event_ids: list[int]) -> set[int] | None:
+    """Events whose signup post is cooling down, exhausted, uncertain or active."""
+    if not event_ids:
+        return set()
+    reply = _parse_ok(
+        transport.get(
+            "/discord/signup-delivery/blocked/",
+            {"event_ids": ",".join(str(event_id) for event_id in event_ids)},
+        ),
+        SignupDeliveryBlockedReply,
+    )
+    return set(reply.event_ids) if reply is not None else None
 
 
 def create_or_update_announcement(**data: Any) -> requests.Response | None:
