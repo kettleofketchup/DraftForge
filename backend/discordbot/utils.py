@@ -607,7 +607,13 @@ def _send_configured_payload(
             failure = failure_from_response(response, FailurePhase.CREATE)
     except requests.RequestException as exc:
         failure = failure_from_exception(exc, FailurePhase.CREATE)
-        if failure.status is None:
+        if (
+            isinstance(
+                exc,
+                (requests.Timeout, requests.ConnectionError, DiscordRateLimitTimeout),
+            )
+            or failure.status is None
+        ):
             log.warning(
                 "configured_send_uncertain",
                 system="discord",

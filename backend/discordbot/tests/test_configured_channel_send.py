@@ -2,7 +2,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import requests
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from structlog.testing import capture_logs
 
 from app import internal_client
@@ -29,6 +29,44 @@ def response(
     result.status_code = status
     result._content = body if body is not None else json.dumps(data).encode()
     return result
+
+
+class ConfiguredTransportAmbiguityTest(SimpleTestCase):
+    def test_transport_exception_with_response_keeps_pending_lease(self) -> None:
+        for error in (
+            requests.Timeout(response=response(201, {"id": MESSAGE})),
+            requests.ConnectionError(response=response(500, {})),
+            utils.DiscordRateLimitTimeout(response=response(429, {})),
+        ):
+            with (
+                self.subTest(error=type(error)),
+                patch(
+                    "discordbot.utils.requests.request",
+                    side_effect=[
+                        response(200, {"id": CHANNEL, "guild_id": GUILD, "type": 0}),
+                        error,
+                    ],
+                ),
+                patch("discordbot.utils._acquire_rate_limit_token"),
+                patch(
+                    "app.internal_client.claim_discord_message_log_result",
+                    return_value=ClaimResult("claimed", 7),
+                ),
+                patch("app.internal_client.finalize_discord_message_log") as finalize,
+            ):
+                result = utils.send_to_configured_channel(
+                    CHANNEL,
+                    GUILD,
+                    {},
+                    title="Synthetic Event",
+                    source="synthetic",
+                    source_id=1,
+                )
+                self.assertEqual(result.outcome, SendOutcome.UNCERTAIN)
+                self.assertFalse(result.fallback_safe)
+                self.assertFalse(result.finalized)
+                self.assertEqual(result.failure.status, error.response.status_code)
+                finalize.assert_not_called()
 
 
 class ConfiguredChannelSendTest(DiscordTestMixin, TestCase):
