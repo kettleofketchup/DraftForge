@@ -269,7 +269,8 @@ beforeEach(() => {
   rendered();
 });
 
-describe('OrgSettingsDialog renders', () => {
+// Each test mounts the whole dialog and opens every tab: ~5s alone.
+describe('OrgSettingsDialog renders', { timeout: 20_000 }, () => {
   it('an edit re-renders only its own field, not the other sections', async () => {
     await renderDialog();
 
