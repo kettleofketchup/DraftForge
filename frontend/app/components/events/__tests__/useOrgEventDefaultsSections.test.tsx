@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { StrictMode, type ReactNode, type RefObject } from 'react';
 import { I18nextProvider } from 'react-i18next';
@@ -121,7 +122,9 @@ function Harness(): ReactNode {
   return (
     <form>
       {sections.map((s) => (
-        <section key={s.value}>{s.content}</section>
+        <section key={s.value} data-section={s.value}>
+          {s.content}
+        </section>
       ))}
     </form>
   );
@@ -312,6 +315,46 @@ describe('useOrgEventDefaultsSections discord', () => {
       discord_start_mention_scope: 'main',
       discord_announcement_role_ids: ['111', '112'],
       discord_signup_role_ids: ['222'],
+    });
+  });
+});
+
+describe('useOrgEventDefaultsSections direct messages', () => {
+  const discordSection = () =>
+    document.querySelector<HTMLElement>('[data-section="defaults-discord"]')!;
+
+  it('renders the signup reminder default in the Discord section', async () => {
+    renderHarness();
+    await ready();
+    const section = discordSection();
+    expect(
+      section.querySelector('[data-field="discord_signup_reminder"]'),
+    ).not.toBeNull();
+    expect(
+      within(section).getByText('Signup reminder DM (default for new series)'),
+    ).toBeInTheDocument();
+    expect(
+      within(section).queryByTestId('discord-direct-messages-series-only'),
+    ).toBeNull();
+  });
+
+  it('saves per-post channels and the signup reminder default', async () => {
+    vi.mocked(api.getOrgEventDefaults).mockResolvedValueOnce({
+      ...defaults,
+      discord_confirm_attendance_channel_id: '666',
+      discord_profile_reminder_channel_id: '777',
+    } as unknown as Awaited<ReturnType<typeof api.getOrgEventDefaults>>);
+    renderHarness();
+    await ready();
+    fireEvent.click(screen.getByTestId('discord-discord_signup_reminder'));
+    expect(await save()).toBe(true);
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0][0].data).toMatchObject({
+      discord_confirm_attendance_channel_id: '666',
+      discord_profile_reminder_channel_id: '777',
+      discord_signup_reminder: true,
+      discord_signup_reminder_hours: 24,
     });
   });
 });

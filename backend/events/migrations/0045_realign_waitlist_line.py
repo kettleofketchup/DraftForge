@@ -11,7 +11,7 @@ def forward(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("events", "0043_line_order_rules"),
+        ("events", "0044_line_order_rules"),
     ]
 
     operations = [

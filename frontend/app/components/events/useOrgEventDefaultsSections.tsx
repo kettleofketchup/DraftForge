@@ -435,6 +435,7 @@ function defaultsContent({
         control={form.control}
         isRepeater={false}
         organizationId={organizationId}
+        showSignupReminder
       />,
     ),
     ready: wrap(

@@ -513,6 +513,7 @@ _TOURNAMENT_RETIRED_DEFS = {
         "sync_tournament_on_game_result",
         "track_game_winner_change",
         "team_roster_changed",
+        "broadcast_roster_change",
     ),
     "app.management.commands.audit_team_leadership": ("Command",),
     "app.management.commands.import_prod_tournament": ("Command", "requests"),

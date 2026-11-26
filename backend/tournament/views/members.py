@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from app.cache_utils import invalidate_after_commit, invalidate_obj
 from org.member_resolution import resolve_member_user
+from tournament.broadcast import tournament_changed_on_commit
 from tournament.functions import serialize_tournament
 from tournament.models import Tournament
 from tournament.permissions import can_edit_tournament
@@ -44,6 +45,7 @@ def add_tournament_member(request: Request, tournament_id: int) -> Response:
 
     invalidate_obj(tournament)
     invalidate_after_commit(tournament)
+    tournament_changed_on_commit(tournament.pk, "members")
 
     tournament.refresh_from_db()
     return Response({"status": "added", "tournament": serialize_tournament(tournament)})

@@ -53,7 +53,12 @@ from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import ActorRole, Commitment, EventState, SignupAction
-from events.discord import notify_create_discord_event, notify_signup_changed
+from events.discord import (
+    attendance_reminder_channel,
+    notify_create_discord_event,
+    notify_signup_changed,
+    profile_reminder_channel,
+)
 from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
@@ -2166,7 +2171,15 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         return entry
 
     has_channel = bool(event.discord_announcement_channel_id)
-    profile_misconfigured: bool = event.discord_profile_reminder and not has_channel
+    attendance_channel: str = attendance_reminder_channel(event)
+    profile_channel: str = profile_reminder_channel(event)
+    attendance_misconfigured: bool = (
+        event.discord_confirm_attendance and not attendance_channel
+    )
+    profile_misconfigured: bool = event.discord_profile_reminder and not profile_channel
+    no_post_channel: str = (
+        "Enabled but no channel is set: pick one or set an announcement channel"
+    )
     # Mirrored in frontend/app/components/events/startMentionPrerequisite.ts
     has_signup_post = (event.discord_announcement and has_channel) or (
         event.discord_post_signups and bool(event.discord_post_signups_channel_id)
@@ -2225,7 +2238,7 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
         _task(
             "confirm_attendance",
             "Attendance Reminder",
-            enabled=event.discord_confirm_attendance and has_channel,
+            enabled=event.discord_confirm_attendance and bool(attendance_channel),
             fires_at=(
                 event.scheduled_at
                 - timedelta(hours=event.discord_confirm_attendance_hours)
@@ -2234,12 +2247,18 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             ),
             log_source="attendance_reminder",
             check_interval="Every 30s",
-            description=f"Posts {event.discord_confirm_attendance_hours}h before event",
+            misconfigured=attendance_misconfigured,
+            description=(
+                no_post_channel
+                if attendance_misconfigured
+                else f"Posts {event.discord_confirm_attendance_hours}h before event "
+                "in its own channel, or the announcement channel when none is set"
+            ),
         ),
         _task(
             "profile_reminder",
             "Profile Reminder",
-            enabled=event.discord_profile_reminder and has_channel,
+            enabled=event.discord_profile_reminder and bool(profile_channel),
             fires_at=(
                 event.scheduled_at
                 - timedelta(hours=event.discord_profile_reminder_hours)
@@ -2250,9 +2269,10 @@ def get_event_task_schedule(request: Request, event_id: int) -> Response:
             check_interval="Every 30s",
             misconfigured=profile_misconfigured,
             description=(
-                "Enabled but no announcement channel is set"
+                no_post_channel
                 if profile_misconfigured
-                else f"Posts in the announcement channel {event.discord_profile_reminder_hours}h before event"
+                else f"Posts {event.discord_profile_reminder_hours}h before event "
+                "in its own channel, or the announcement channel when none is set"
             ),
         ),
         _task(

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventRepeaterType } from '~/components/api/api';
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -151,6 +157,9 @@ const repeater = {
   discord_post_signups_channel_id: '',
   discord_announcement: false,
   discord_announcement_channel_id: '',
+  discord_confirm_attendance_channel_id: '',
+  discord_profile_reminder_channel_id: '',
+  discord_new_event_channel_id: '',
   discord_announcement_hours: 24,
   discord_announcement_role_ids: ['111'],
   discord_signup_role_ids: ['222'],
@@ -224,6 +233,26 @@ describe('CreateSeriesEventModal', () => {
     );
     expect(screen.queryByText('Post new events')).toBeNull();
     expect(screen.queryByText('Message interested users')).toBeNull();
+  });
+
+  it('one-off series event shows the signup reminder DM', async () => {
+    renderModal();
+    fireEvent.mouseDown(screen.getByTestId('one-off-tab-discord'), {
+      button: 0,
+    });
+    const group = await screen.findByTestId(
+      'discord-subsection-direct-messages',
+    );
+    expect(
+      within(group).getByTestId('discord-discord_signup_reminder'),
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByTestId('discord-signup-reminder-subscribe-note'),
+    ).toBeInTheDocument();
+    expect(within(group).queryByRole('alert')).toBeNull();
+    expect(
+      screen.queryByTestId('discord-direct-messages-series-only'),
+    ).toBeNull();
   });
 });
 

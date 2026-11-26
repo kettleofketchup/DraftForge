@@ -44,6 +44,9 @@ const baseDiscordConfig = {
   discord_announcement: false,
   discord_announcement_channel_id: '',
   discord_announcement_hours: 24,
+  discord_confirm_attendance_channel_id: '',
+  discord_profile_reminder_channel_id: '',
+  discord_new_event_channel_id: '',
   discord_announcement_role_ids: [],
   discord_signup_role_ids: [],
   discord_require_rank_screenshot: false,
@@ -190,6 +193,55 @@ describe('eventSchema end and staff fields', () => {
   });
 });
 
+describe('per-post channel fields', () => {
+  const POST_CHANNEL_KEYS = [
+    'discord_confirm_attendance_channel_id',
+    'discord_profile_reminder_channel_id',
+    'discord_new_event_channel_id',
+  ] as const;
+  const pick = { discord_announcement_channel_id: true } as const;
+
+  it('parses an event payload without the post channel fields as blank', () => {
+    const response = eventResponseSchema
+      .pick({
+        ...pick,
+        discord_confirm_attendance_channel_id: true,
+        discord_profile_reminder_channel_id: true,
+        discord_new_event_channel_id: true,
+      })
+      .parse({ discord_announcement_channel_id: '123' });
+    const event = z
+      .object({
+        discord_announcement_channel_id:
+          eventSchema.shape.discord_announcement_channel_id,
+        discord_confirm_attendance_channel_id:
+          eventSchema.shape.discord_confirm_attendance_channel_id,
+        discord_profile_reminder_channel_id:
+          eventSchema.shape.discord_profile_reminder_channel_id,
+        discord_new_event_channel_id:
+          eventSchema.shape.discord_new_event_channel_id,
+      })
+      .parse({ discord_announcement_channel_id: '123' });
+    for (const key of POST_CHANNEL_KEYS) {
+      expect(response[key]).toBe('');
+      expect(event[key]).toBe('');
+    }
+  });
+
+  it('keeps a stored post channel id', () => {
+    const parsed = eventResponseSchema
+      .pick({ discord_new_event_channel_id: true })
+      .parse({ discord_new_event_channel_id: '987654321098765432' });
+    expect(parsed.discord_new_event_channel_id).toBe('987654321098765432');
+  });
+
+  it('defaults every post channel to blank', () => {
+    for (const key of POST_CHANNEL_KEYS) {
+      expect(DISCORD_CONFIG_DEFAULTS[key]).toBe('');
+    }
+  });
+});
+
 describe('eventSchema leadership viewer flags', () => {
   const flags = z.object({
     can_review_captains: eventSchema.shape.can_review_captains,
@@ -243,6 +295,9 @@ const DISCORD_KEYS = [
   'discord_announcement',
   'discord_announcement_channel_id',
   'discord_announcement_hours',
+  'discord_confirm_attendance_channel_id',
+  'discord_profile_reminder_channel_id',
+  'discord_new_event_channel_id',
   'discord_announcement_role_ids',
   'discord_signup_role_ids',
   'discord_start_mention',

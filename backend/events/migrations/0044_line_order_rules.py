@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0042_eventsignup_self_made'),
+        ('events', '0043_discord_post_channels'),
     ]
 
     operations = [

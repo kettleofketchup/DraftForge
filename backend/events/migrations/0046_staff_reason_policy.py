@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('events', '0044_realign_waitlist_line'),
+        ('events', '0045_realign_waitlist_line'),
     ]
 
     operations = [

@@ -25,6 +25,7 @@ from org.feature_errors import not_permitted
 from org.models import Organization, OrgUserGameMmr
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+from tournament.broadcast import tournament_changed_on_commit
 from tournament.models import Game, Team, TeamLog, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.permissions import CanEditTeam, can_create_team, can_edit_tournament
@@ -288,7 +289,8 @@ class TeamView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer: BaseSerializer) -> None:
         _check_can_create_team(self.request.user, serializer)
-        serializer.save()
+        team = serializer.save()
+        tournament_changed_on_commit(team.tournament_id, "team", team_id=team.pk)
 
     def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "history":
@@ -673,6 +675,10 @@ class TeamView(viewsets.ModelViewSet):
                 if moved_to is not None:
                     to_invalidate.append(moved_to)
                 invalidate_after_commit(*to_invalidate)
+            elif team is not None:
+                tournament_changed_on_commit(
+                    team.tournament_id, "team", team_id=team.pk
+                )
 
         if deleted:
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -691,4 +697,5 @@ class TeamCreateView(generics.CreateAPIView):
     @transaction.atomic
     def perform_create(self, serializer: TeamSerializer) -> None:
         _check_can_create_team(self.request.user, serializer)
-        serializer.save()
+        team = serializer.save()
+        tournament_changed_on_commit(team.tournament_id, "team", team_id=team.pk)
