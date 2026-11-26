@@ -53,7 +53,9 @@ import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { SignupInLineSince } from '~/components/events/SignupInLineSince';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
+import { StaffReasonDialog } from '~/components/events/StaffReasonDialog';
 import { startTournamentErrorMessage } from '~/components/events/startTournamentError';
+import { useStaffAction } from '~/components/events/useStaffAction';
 import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -108,6 +110,10 @@ export default function RollCallPage() {
   );
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+  const { run, dialogProps } = useStaffAction({
+    policy: undefined,
+    currentUserId: undefined,
+  });
 
   const { organization: eventOrg, refetch: refetchEventOrg } = useOrganization(
     event?.organization ?? undefined,
@@ -487,21 +493,29 @@ export default function RollCallPage() {
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);
         }}
-        onApprove={(signupId, mmr) => {
+        onApprove={async (signupId, mmr, reason) => {
           const target = approvalSignup;
-          if (target) advanceFrom(target);
-          setApprovalSignup(null);
-          signupActions.approve.mutate(
-            { id: signupId, mmr },
-            {
-              onError: () =>
-                toast.error(
-                  `Failed to approve ${target ? DisplayName(target) : 'signup'}`,
-                ),
-            },
+          if (!target) return false;
+          const success = await run(
+            'approve',
+            target,
+            (r) =>
+              signupActions.approve.mutateAsync({
+                id: signupId,
+                mmr,
+                reason: r,
+              }),
+            { reason },
           );
+          if (success) {
+            advanceFrom(target);
+            setApprovalSignup(null);
+          }
+          return success;
         }}
       />
+
+      <StaffReasonDialog {...dialogProps} />
 
       {/* Per-row Confirm (approved → confirmed) */}
       <ConfirmDialog

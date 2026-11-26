@@ -60,6 +60,7 @@ import { toast } from 'sonner';
 
 import { useQueryClient } from '@tanstack/react-query';
 import type { AddMemberPayload } from '~/components/api/api';
+import { isStaffReasonRequiredError } from '~/components/api/overridesAPI';
 import { EventStateBadge } from '~/components/events';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
@@ -77,6 +78,7 @@ import {
   SignupHistorySheet,
 } from '~/components/events/SignupHistorySheet';
 import { SignupInLineSince } from '~/components/events/SignupInLineSince';
+import { StaffReasonDialog } from '~/components/events/StaffReasonDialog';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import {
@@ -87,6 +89,7 @@ import type {
   EventSignupType,
   EventType,
   HistorySubject,
+  StaffReasonPolicy,
 } from '~/components/events/schemas';
 import { EventState, rollCallLabel } from '~/components/events/schemas';
 import {
@@ -96,10 +99,12 @@ import {
 } from '~/components/events/signupPartitions';
 import { signupRowMmr } from '~/components/events/signupRowMmr';
 import { rollCallSummary } from '~/components/events/signupRules';
+import { staffReasonMode } from '~/components/events/staffReasonPolicy';
 import {
   signupHoldReason,
   signupSuccessMessage,
 } from '~/components/events/unmetRequirements';
+import { useStaffAction } from '~/components/events/useStaffAction';
 import {
   GAME_LABEL,
   isGameType,
@@ -688,6 +693,8 @@ export default function EventPage() {
               autoApprove={event.auto_approve}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               eventId={event.id}
               orgId={event.organization}
@@ -703,6 +710,8 @@ export default function EventPage() {
               signups={tentativeSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               state={event.state}
               eventTimezone={event.timezone}
@@ -715,6 +724,8 @@ export default function EventPage() {
               signups={waitlistedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               state={event.state}
               eventTimezone={event.timezone}
@@ -727,6 +738,8 @@ export default function EventPage() {
               signups={removedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               state={event.state}
               eventTimezone={event.timezone}
@@ -967,7 +980,11 @@ function SignupsTab({
   conductMemberFor,
   onShowHistory,
   eventTimezone,
+  currentUserId,
+  staffReasonPolicy,
 }: {
+  currentUserId: number | undefined;
+  staffReasonPolicy: StaffReasonPolicy | undefined;
   conductMemberFor?: ConductMemberLookup;
   onShowHistory?: (user: HistorySubject) => void;
   eventTimezone?: string;
@@ -991,6 +1008,18 @@ function SignupsTab({
     name: string;
   } | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
+  const { run, collect, dialogProps } = useStaffAction({
+    policy: staffReasonPolicy,
+    currentUserId,
+  });
+  const reasonMode = (
+    action: Parameters<typeof staffReasonMode>[1],
+    signup: EventSignupType | null,
+  ) =>
+    staffReasonMode(staffReasonPolicy, action, {
+      fromStatus: signup?.status,
+      isSelf: signup?.user === currentUserId,
+    });
   const queryClient = useQueryClient();
   const gameType = useContextGameType();
 
@@ -1016,7 +1045,34 @@ function SignupsTab({
           'Select a site user — adding a Discord member directly is not supported here yet.',
         );
       }
-      const resp = await adminAdd({ userId: payload.user_id });
+      const userId = payload.user_id;
+      const collectReason = async () => {
+        const reason = await collect('admin_add', {
+          userId,
+          title: 'Add user to event',
+        });
+        if (reason === null)
+          throw new Error('Not added: a reason is required.');
+        return reason;
+      };
+      let reason: string | undefined;
+      if (
+        staffReasonMode(staffReasonPolicy, 'admin_add', {
+          isSelf: userId === currentUserId,
+        }) === 'required'
+      ) {
+        reason = await collectReason();
+      }
+      const add = () =>
+        adminAdd({ userId, ...(reason === undefined ? {} : { reason }) });
+      let resp;
+      try {
+        resp = await add();
+      } catch (error) {
+        if (!isStaffReasonRequiredError(error)) throw error;
+        reason = await collectReason();
+        resp = await add();
+      }
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
       const added = resp.user_data;
@@ -1029,7 +1085,7 @@ function SignupsTab({
           }
         : { pk: payload.user_id, username: null };
     },
-    [adminAdd],
+    [adminAdd, collect, staffReasonPolicy, currentUserId],
   );
   const checkIsAdded = useCallback(
     (user: UserType) => (user.pk != null ? signupUserPks.has(user.pk) : false),
@@ -1077,7 +1133,12 @@ function SignupsTab({
           // "Waitlist" fires the server's `demote` mutation
           // (approved/rsvp → waitlisted); named so the label/mutation gap is explicit.
           const handleWaitlist = () =>
-            signupActions.demote.mutate({ id: signup.id });
+            void run('demote', signup, (reason) =>
+              signupActions.demote.mutateAsync({
+                id: signup.id,
+                ...(reason === undefined ? {} : { reason }),
+              }),
+            );
 
           const adminActions = isAdmin ? (
             <div className="flex gap-1 [&_button]:min-h-11 sm:[&_button]:min-h-8">
@@ -1128,7 +1189,12 @@ function SignupsTab({
                         color="blue"
                         size="sm"
                         onClick={() =>
-                          signupActions.confirm.mutate({ id: signup.id })
+                          void run('confirm', signup, (reason) =>
+                            signupActions.confirm.mutateAsync({
+                              id: signup.id,
+                              ...(reason === undefined ? {} : { reason }),
+                            }),
+                          )
                         }
                         disabled={signupActions.confirm.isPending}
                       >
@@ -1165,7 +1231,12 @@ function SignupsTab({
                       color="orange"
                       size="sm"
                       onClick={() =>
-                        signupActions.unconfirm.mutate({ id: signup.id })
+                        void run('unconfirm', signup, (reason) =>
+                          signupActions.unconfirm.mutateAsync({
+                            id: signup.id,
+                            ...(reason === undefined ? {} : { reason }),
+                          }),
+                        )
                       }
                       disabled={signupActions.unconfirm.isPending}
                     >
@@ -1202,7 +1273,12 @@ function SignupsTab({
                       size="sm"
                       data-testid="event-restore-btn"
                       onClick={() =>
-                        signupActions.reinstate.mutate({ id: signup.id })
+                        void run('reinstate', signup, (reason) =>
+                          signupActions.reinstate.mutateAsync({
+                            id: signup.id,
+                            ...(reason === undefined ? {} : { reason }),
+                          }),
+                        )
                       }
                       disabled={signupActions.reinstate.isPending}
                     >
@@ -1335,78 +1411,94 @@ function SignupsTab({
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);
         }}
-        onApprove={(signupId, mmr) => {
-          const previousMmr = approvalSignup?.org_user_mmr ?? null;
-          const playerName = approvalSignup
-            ? DisplayName(approvalSignup)
-            : `User #${signupId}`;
-          signupActions.approve.mutate(
-            { id: signupId, mmr },
-            {
-              onSuccess: () => {
-                setApprovalSignup(null);
-                if (orgId) {
-                  void queryClient.invalidateQueries({
-                    queryKey: orgUsersQueryKey(orgId),
-                  });
-                }
-                if (previousMmr != null && previousMmr !== mmr) {
-                  const delta = mmr - previousMmr;
-                  toast.success(
-                    `Approved ${playerName} — MMR ${previousMmr.toLocaleString()} → ${mmr.toLocaleString()} (${delta > 0 ? '+' : ''}${delta.toLocaleString()})`,
-                  );
-                } else if (previousMmr == null) {
-                  toast.success(
-                    `Approved ${playerName} at MMR ${mmr.toLocaleString()}`,
-                  );
-                } else {
-                  toast.success(
-                    `Approved ${playerName} (MMR unchanged at ${mmr.toLocaleString()})`,
-                  );
-                }
-              },
-            },
+        reasonMode={reasonMode('approve', liveApprovalSignup)}
+        onApprove={async (signupId, mmr, reason) => {
+          if (!liveApprovalSignup) return false;
+          const previousMmr = liveApprovalSignup.org_user_mmr ?? null;
+          const playerName = DisplayName(liveApprovalSignup);
+          const success = await run(
+            'approve',
+            liveApprovalSignup,
+            (r) =>
+              signupActions.approve.mutateAsync({
+                id: signupId,
+                mmr,
+                reason: r,
+              }),
+            { reason },
           );
+          if (!success) return false;
+          setApprovalSignup(null);
+          if (orgId) {
+            void queryClient.invalidateQueries({
+              queryKey: orgUsersQueryKey(orgId),
+            });
+          }
+          if (previousMmr != null && previousMmr !== mmr) {
+            const delta = mmr - previousMmr;
+            toast.success(
+              `Approved ${playerName} — MMR ${previousMmr.toLocaleString()} → ${mmr.toLocaleString()} (${delta > 0 ? '+' : ''}${delta.toLocaleString()})`,
+            );
+          } else if (previousMmr == null) {
+            toast.success(
+              `Approved ${playerName} at MMR ${mmr.toLocaleString()}`,
+            );
+          } else {
+            toast.success(
+              `Approved ${playerName} (MMR unchanged at ${mmr.toLocaleString()})`,
+            );
+          }
+          return true;
         }}
         isApproving={signupActions.approve.isPending}
         isRejecting={signupActions.reject.isPending}
-        onReject={(signupId) => {
-          const playerName = approvalSignup
-            ? DisplayName(approvalSignup)
-            : `User #${signupId}`;
-          signupActions.reject.mutate(
-            { id: signupId },
-            {
-              onSuccess: () => {
-                setApprovalSignup(null);
-                toast.success(`Rejected signup for ${playerName}`);
-              },
-              onError: () => toast.error(`Failed to reject ${playerName}`),
-            },
-          );
+        onReject={async (signupId) => {
+          if (!liveApprovalSignup) return;
+          const playerName = DisplayName(liveApprovalSignup);
+          if (
+            await run('reject', liveApprovalSignup, (reason) =>
+              signupActions.reject.mutateAsync({
+                id: signupId,
+                ...(reason === undefined ? {} : { reason }),
+              }),
+            )
+          ) {
+            setApprovalSignup(null);
+            toast.success(`Rejected signup for ${playerName}`);
+          }
         }}
       />
-      <ConfirmDialog
+      <StaffReasonDialog
+        key={removeSignup?.signup.id ?? 'remove'}
         open={!!removeSignup}
         onOpenChange={(open) => {
           if (!open) setRemoveSignup(null);
         }}
         title="Remove User"
         description={`Remove ${removeSignup?.name ?? 'this user'} from the event? They will lose their signup position and need to re-sign up.`}
-        confirmLabel="Remove"
-        variant="destructive"
-        isLoading={signupActions.cancel.isPending}
-        onConfirm={() => {
-          if (removeSignup) {
-            signupActions.cancel.mutate(
-              { id: removeSignup.signup.id },
-              {
-                onSuccess: () => setRemoveSignup(null),
-              },
-            );
-          }
+        actionLabel="Remove"
+        destructive
+        required={
+          reasonMode('cancel', removeSignup?.signup ?? null) === 'required'
+        }
+        submitting={signupActions.cancel.isPending}
+        onConfirm={async (reason) => {
+          if (!removeSignup) return false;
+          const success = await run(
+            'cancel',
+            removeSignup.signup,
+            (r) =>
+              signupActions.cancel.mutateAsync({
+                id: removeSignup.signup.id,
+                reason: r,
+              }),
+            { reason },
+          );
+          if (success) setRemoveSignup(null);
+          return success;
         }}
       />
+      <StaffReasonDialog {...dialogProps} />
     </div>
   );
 }

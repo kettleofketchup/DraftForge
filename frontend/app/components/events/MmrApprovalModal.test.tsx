@@ -55,7 +55,7 @@ function wrap(node: ReactNode) {
 }
 
 function renderModal(gameType: GameTypeValue, s: EventSignupType) {
-  const onApprove = vi.fn();
+  const onApprove = vi.fn().mockResolvedValue(true);
   withGameType(gameType);
   render(
     wrap(
@@ -135,7 +135,7 @@ describe('MmrApprovalModal gameType', () => {
     await setInput('2500');
     await submit();
     await confirm();
-    expect(onApprove).toHaveBeenCalledWith(7, 2500);
+    expect(onApprove).toHaveBeenCalledWith(7, 2500, '');
   });
 
   it('Dota 0 is allowed and submits 0', async () => {
@@ -143,7 +143,7 @@ describe('MmrApprovalModal gameType', () => {
     await setInput('0');
     await submit();
     await confirm();
-    expect(onApprove).toHaveBeenCalledWith(7, 0);
+    expect(onApprove).toHaveBeenCalledWith(7, 0, '');
   });
 
   it('Dota empty input blocks approve (no || 0 fallback)', async () => {
