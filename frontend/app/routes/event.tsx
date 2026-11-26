@@ -1046,9 +1046,10 @@ function SignupsTab({
         );
       }
       const userId = payload.user_id;
-      const collectReason = async () => {
+      const collectReason = async (forceRequired = false) => {
         const reason = await collect('admin_add', {
           userId,
+          forceRequired,
           title: 'Add user to event',
         });
         if (reason === null)
@@ -1070,7 +1071,7 @@ function SignupsTab({
         resp = await add();
       } catch (error) {
         if (!isStaffReasonRequiredError(error)) throw error;
-        reason = await collectReason();
+        reason = await collectReason(true);
         resp = await add();
       }
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup

@@ -114,7 +114,7 @@ export function useStaffAction({
 
   const collect = (
     action: StaffSignupAction,
-    target: { userId: number; title?: string },
+    target: { userId: number; title?: string; forceRequired?: boolean },
   ): Promise<string | null> =>
     ask({
       action,
@@ -122,6 +122,7 @@ export function useStaffAction({
       actionLabel: 'Confirm',
       errorLabel: action.replaceAll('_', ' '),
       required:
+        target.forceRequired ||
         staffReasonMode(policy, action, {
           isSelf: target.userId === currentUserId,
         }) === 'required',

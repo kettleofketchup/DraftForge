@@ -421,7 +421,8 @@ describe('event signup staff reasons', () => {
     expect(screen.queryByTestId('staff-reason-dialog')).toBeNull();
   });
 
-  it('prompts and retries once when admin-add sees a stale policy', async () => {
+  it('requires a nonblank reason and retries once when admin-add sees a stale policy', async () => {
+    h.policy = 'optional';
     h.actions.adminAdd.mutateAsync.mockRejectedValueOnce({
       isAxiosError: true,
       response: { status: 400, data: { error: 'reason_required' } },
@@ -430,6 +431,17 @@ describe('event signup staff reasons', () => {
     fireEvent.click(screen.getByTestId('admin-add-signup-btn'));
     fireEvent.click(screen.getByTestId('mock-add-5'));
     await screen.findByTestId('staff-reason-dialog');
+    expect(screen.getByLabelText('Reason (recorded in signup history)')).toBe(
+      screen.getByTestId('staff-reason-input'),
+    );
+    expect(screen.getByTestId('staff-reason-confirm')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('staff-reason-input'), {
+      target: { value: '   ' },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('staff-reason-confirm')).toBeDisabled(),
+    );
+    expect(h.actions.adminAdd.mutateAsync).toHaveBeenCalledTimes(1);
     await sendReason('updated policy');
     await waitFor(() =>
       expect(h.actions.adminAdd.mutateAsync).toHaveBeenLastCalledWith({
