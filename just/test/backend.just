@@ -14,14 +14,17 @@ all *args:
     #!/usr/bin/env bash
     set -euo pipefail
     {{just}} test::upd
-    # One group at a time: each already uses every core (--parallel auto), so running the
-    # four at once oversubscribes the CPU and measured slower than this, not faster.
+    # One group at a time: all four at once oversubscribes the CPU and measured slower.
     summary=() fail=0 start=$SECONDS
+    procs=()
+    if [[ "${GITHUB_ACTIONS-}" != true && -z "${CI-}" ]]; then
+        procs=(-e "DJANGO_TEST_PROCESSES=${DJANGO_TEST_PROCESSES:-6}")
+    fi
     run() {
         local name=$1 t=$SECONDS status=pass
         shift
         echo "==> $name"
-        {{just}} test::compose exec -T backend python manage.py "$@" || { status=FAIL; fail=1; }
+        {{just}} test::compose exec -T "${procs[@]}" backend python manage.py "$@" || { status=FAIL; fail=1; }
         summary+=("$(printf '%-17s %-4s %4ss' "$name" "$status" $((SECONDS - t)))")
     }
     run makemigrations makemigrations --check --dry-run
