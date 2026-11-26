@@ -59,7 +59,7 @@ redelivery of the same task does not.
 | `sent` | Discord accepted the message |
 | `failed` | Not delivered. Claimed again only when `retryable` is true |
 | `unknown` | The request may have reached Discord (read timeout, connection reset, 5xx). Never claimed again |
-| `skipped_test_mode` | A test stack (`TEST=True`) and the recipient is not `TEST_DISCORD_USER_ID`. With that setting empty, every DM is skipped |
+| `skipped_test_mode` | A test stack (`TEST=True`) and the recipient is not `TEST_DISCORD_USER_ID`. With that setting or `DISCORD_BOT_TOKEN` empty, every DM is skipped |
 | `skipped_no_discord` | The recipient has no Discord id |
 | `skipped_disabled` | The feature that sends this DM was turned off before the send |
 
