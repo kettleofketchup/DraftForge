@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from app.models import CustomUser
 from events.models import Event
+from org.contributions.kinds import REVERSAL_KINDS
 from org.membership import resolve_or_create_org_user
 from org.models import (
     ContributionEntry,
@@ -18,9 +19,19 @@ from org.models import (
     OrgUser,
     PromoSend,
 )
+from org.models_promotion_sync import ExternalPromotionReceipt
 from org.standing.kinds import KINDS
 from org.standing.periods import Period
 from org.standing.types import TrackKey
+
+
+def live_entries() -> Count:
+    """Count of rows that are entries.
+
+    A voided point and its void or restore rows add points that net out,
+    but no entries.
+    """
+    return Count("pk", filter=Q(voided=False) & ~Q(kind__in=sorted(REVERSAL_KINDS)))
 
 
 def _check_kind(kind: str) -> str:
@@ -111,7 +122,7 @@ def sum_by_member(
     return (
         _scoped(org_id, track=track, period=period, where=where)
         .values("org_user")
-        .annotate(total=Sum("points"), entries=Count("pk"))
+        .annotate(total=Sum("points"), entries=live_entries())
         .filter(~Q(total=0))
         .order_by(f"-{sort}", "org_user__user__username", "org_user")
     )
@@ -128,6 +139,7 @@ def award(
     promo_send: PromoSend | None = None,
     reason: str = "",
     awarded_by: CustomUser | None = None,
+    external_contact: ExternalPromotionReceipt | None = None,
 ) -> ContributionEntry:
     kind = _check_kind(kind)
     if points is None:
@@ -145,6 +157,7 @@ def award(
         awarded_by=awarded_by,
         occurred_at=occurred_at,
         promo_send=promo_send,
+        external_contact=external_contact,
     )
 
 

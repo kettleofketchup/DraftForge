@@ -351,7 +351,7 @@ def _reset_next_shuffle_round(draft: Draft, undone_pick_number: int) -> None:
         .first()
     )
     if next_round is not None:
-        next_round.captain = None
+        next_round.assign_team(None)
         next_round.was_tie = False
         next_round.tie_roll_data = None
         next_round.save()

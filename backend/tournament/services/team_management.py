@@ -221,7 +221,7 @@ def follow_captain(
 ) -> dict[str, Any]:
     """Move the team's rounds to the new captain, reset presence, refresh live drafts.
 
-    Picked rounds move too: rounds resolve their team by captain, and the
+    Picked rounds move too; each round keeps its drafting team, and the
     player_picked DraftEvent keeps who actually picked.
     """
     extras: dict[str, Any] = {}
@@ -234,7 +234,7 @@ def follow_captain(
         .exclude(pk=team.pk)
         .exists()
     ):
-        # Rounds have no team FK: with a shared captain they can't be told apart.
+        # A shared captain's rounds would mix both teams; each round's drafting_team keeps its team.
         extras["draft_rounds_updated"] = 0
         extras["draft_rounds_skipped_reason"] = "old_captain_leads_other_team"
         log.warning(

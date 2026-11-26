@@ -1,12 +1,14 @@
 import hashlib
 import hmac
 import secrets
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from django.db import transaction
 from django.utils import timezone
 
 from app.models import CustomUser
+from org.api_tokens.operations import default_operations, parse_operations
 from org.models import Organization, OrgApiToken, OrgLog
 from telemetry.logging import get_logger
 
@@ -34,7 +36,23 @@ def _new_prefix() -> str:
             return prefix
 
 
-def issue_token(org: Organization, user: CustomUser, name: str) -> IssuedToken:
+def issue_token(
+    org: Organization,
+    user: CustomUser,
+    name: str,
+    *,
+    operations: Iterable[str] | None = None,
+) -> IssuedToken:
+    """Create a token. Without ``operations`` it gets the MMR pair only.
+
+    Raises ValueError for an empty or unknown operation list. Callers check
+    that the org has each operation's feature before issuing.
+    """
+    granted = (
+        default_operations()
+        if operations is None
+        else parse_operations([str(op) for op in operations])
+    )
     prefix = _new_prefix()
     secret = secrets.token_urlsafe(SECRET_BYTES)
     with transaction.atomic():
@@ -44,12 +62,18 @@ def issue_token(org: Organization, user: CustomUser, name: str) -> IssuedToken:
             name=name,
             prefix=prefix,
             secret_hash=hash_secret(secret),
+            operations=granted,
         )
         OrgLog.objects.create(
             organization=org,
             actor=user,
             action="create_api_token",
-            details={"token_id": token.pk, "prefix": prefix, "name": name},
+            details={
+                "token_id": token.pk,
+                "prefix": prefix,
+                "name": name,
+                "operations": granted,
+            },
         )
     log.info(
         "org_api_token_created",
@@ -58,6 +82,7 @@ def issue_token(org: Organization, user: CustomUser, name: str) -> IssuedToken:
         org_id=org.pk,
         token_id=token.pk,
         user_id=user.pk,
+        operations=granted,
     )
     return IssuedToken(token=token, raw=f"{TOKEN_SCHEME}_{prefix}_{secret}")
 

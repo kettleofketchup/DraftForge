@@ -10,6 +10,7 @@ import {
 } from '~/components/ui/data-table';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { ContactRecordedStatus } from './ContactRecordedStatus';
 import { relativeFromIso } from './feedback';
 import { isLinked, type CandidateRow, type CandidateSource } from './schemas';
 
@@ -52,19 +53,27 @@ export interface PromotionActionContext {
   hideUndoFor: number | null;
 }
 
+/** Why Message and Mark as sent are off for a player contacted elsewhere. */
+export const EXTERNAL_CONTACT_HINT =
+  'Contact recorded externally, so messaging is off for this player.';
+
 export function promotionRowActions(
   row: CandidateRow,
   ctx: PromotionActionContext,
 ): DataTableRowAction[] {
   const id = candidateRowId(row);
   const preparing = ctx.pendingRowId === id;
+  // An imported contact cannot be undone here, so the player stays blocked.
+  const external = row.external_contact != null;
+  const hint = external ? EXTERNAL_CONTACT_HINT : undefined;
   const actions: DataTableRowAction[] = [
     {
       key: 'message',
       label: preparing ? 'Preparing...' : 'Message',
       icon: <MessageSquare className="mr-1 size-4" aria-hidden />,
       onSelect: () => ctx.onCompose(row, 'message'),
-      disabled: preparing,
+      disabled: preparing || external,
+      hint,
       testId: `${ctx.testIdPrefix}-message-${id}`,
     },
     {
@@ -72,7 +81,8 @@ export function promotionRowActions(
       label: 'Mark as sent',
       icon: <NotebookPen className="mr-1 size-4" aria-hidden />,
       onSelect: () => ctx.onCompose(row, 'record'),
-      disabled: preparing,
+      disabled: preparing || external,
+      hint,
       testId: `${ctx.testIdPrefix}-record-${id}`,
     },
   ];
@@ -230,6 +240,15 @@ export function makePromotionColumns({
                     {messagedText(r, previewOptions)}
                   </span>
                 )}
+                {r.external_contact && (
+                  <span className="text-xs text-muted-foreground">
+                    <ContactRecordedStatus
+                      externalContact={r.external_contact}
+                      localLastMessaged={null}
+                      testId={`stacked-${id}`}
+                    />
+                  </span>
+                )}
               </span>
             </div>
           </div>
@@ -295,7 +314,16 @@ export function makePromotionColumns({
                 {messagedText(r, previewOptions)}
               </span>
             )}
-            {!r.signed_up && isLinked(r) && !r.last_messaged && (
+            {r.external_contact && (
+              <span className="text-xs text-muted-foreground">
+                <ContactRecordedStatus
+                  externalContact={r.external_contact}
+                  localLastMessaged={null}
+                  testId={candidateRowId(r)}
+                />
+              </span>
+            )}
+            {!r.signed_up && isLinked(r) && !r.contact_recorded && (
               <span className="text-xs text-muted-foreground">
                 Not messaged
               </span>

@@ -31,6 +31,7 @@ import {
   renderPromo,
   resolveDiscordMember,
   sendPromo,
+  undoPromoSend,
 } from '../api';
 import { PromotionDashboard } from '../PromotionDashboard';
 import type {
@@ -39,6 +40,12 @@ import type {
   CandidatesResponse,
   PromoEvent,
 } from '../schemas';
+import {
+  EXTERNAL_CONTACT,
+  NO_SYNC,
+  SYNC_CONFIGURED,
+  candidatesResponse,
+} from './fixtures';
 
 vi.mock('../api', () => ({
   getCandidates: vi.fn(),
@@ -51,7 +58,7 @@ vi.mock('../api', () => ({
 }));
 
 vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
 beforeAll(() => {
@@ -96,6 +103,8 @@ const candidate: CandidateRow = {
   mmr: 4100,
   recent_count: 2,
   last_messaged: null,
+  contact_recorded: false,
+  external_contact: null,
   earning_send_exists: false,
   signed_up: false,
 };
@@ -120,6 +129,7 @@ function candidatesFor(filters: CandidateFilters): CandidatesResponse {
     min_mmr: null,
     max_mmr: null,
     rows: [candidate, newcomer],
+    contact_sync: NO_SYNC,
   };
 }
 
@@ -224,6 +234,7 @@ describe('PromotionDashboard', () => {
       earns_points: true,
       points_awarded: 1,
       sent_at: '2026-11-24T10:00:00Z',
+      writeback: { state: null, reason: null, delivery_id: null },
     });
     renderDashboard();
     await ready();
@@ -248,7 +259,7 @@ describe('PromotionDashboard', () => {
       }),
     );
     expect(await screen.findByTestId('promo-sent-banner')).toHaveTextContent(
-      'You earned 1 points.',
+      'You earned 1 point.',
     );
     expect(screen.getByTestId('promo-undo-77')).toBeInTheDocument();
   });
@@ -401,5 +412,225 @@ describe('PromotionDashboard', () => {
       expect(screen.queryByTestId('promo-message-text')).toBeNull(),
     );
     expect(screen.getByTestId('promo-pick-player')).toBeInTheDocument();
+  });
+});
+
+describe('PromotionDashboard recorded contacts', () => {
+  const contacted: CandidateRow = {
+    ...candidate,
+    contact_recorded: true,
+    external_contact: EXTERNAL_CONTACT,
+  };
+
+  it('does not open a resolved member whose contact is already recorded', async () => {
+    vi.mocked(resolveDiscordMember).mockResolvedValue({
+      ...newcomer,
+      user_pk: 77,
+      contact_recorded: true,
+      external_contact: EXTERNAL_CONTACT,
+    });
+    renderDashboard();
+    await ready();
+    fireEvent.click(
+      screen.getByTestId('promo-candidate-message-discord-990777'),
+    );
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        'A contact with this player is already recorded externally',
+      ),
+    );
+    expect(screen.queryByTestId('promo-message-dialog')).toBeNull();
+  });
+
+  it('drops an open recipient who disappears from the hidden-messaged list after a refetch', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    const qc = renderDashboard();
+    await ready();
+    fireEvent.click(screen.getByTestId('promo-candidate-message-42'));
+    expect(await screen.findByTestId('promo-message-text')).toBeInTheDocument();
+
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([], { contact_sync: SYNC_CONFIGURED }),
+    );
+    await act(async () => {
+      await qc.invalidateQueries();
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-message-dialog')).toBeNull(),
+    );
+    expect(screen.getByTestId('promo-pick-player')).toBeInTheDocument();
+  });
+
+  it('drops an open recipient whose refreshed row now has an external contact', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    const qc = renderDashboard();
+    await ready();
+    fireEvent.click(screen.getByTestId('promo-hide-messaged'));
+    await waitFor(() =>
+      expect(vi.mocked(getCandidates).mock.lastCall?.[2]).toMatchObject({
+        hideMessaged: false,
+      }),
+    );
+    // Let the refetch settle so the click lands on the current row.
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-candidate-count')).toHaveTextContent(
+        /^1 player$/,
+      ),
+    );
+    fireEvent.click(screen.getByTestId('promo-candidate-message-42'));
+    expect(await screen.findByTestId('promo-message-text')).toBeInTheDocument();
+
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([contacted], { contact_sync: SYNC_CONFIGURED }),
+    );
+    await act(async () => {
+      await qc.invalidateQueries();
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-message-dialog')).toBeNull(),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-candidate-message-42')).toBeDisabled(),
+    );
+  });
+
+  it('still drops a stale recipient after a failed send', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    vi.mocked(sendPromo).mockRejectedValue({
+      response: { status: 500, data: { detail: 'boom' } },
+    });
+    const qc = renderDashboard();
+    await ready();
+    fireEvent.click(screen.getByTestId('promo-candidate-message-42'));
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-message-text')).toHaveValue('Hey ana'),
+    );
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    await waitFor(() => expect(sendPromo).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-mark-sent-btn')).toBeEnabled(),
+    );
+    expect(screen.queryByTestId('promo-sent-banner')).toBeNull();
+
+    // The failed send recorded nothing, so a later disappearance from the
+    // hidden-messaged list means someone else contacted this player.
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([], { contact_sync: SYNC_CONFIGURED }),
+    );
+    await act(async () => {
+      await qc.invalidateQueries();
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-message-dialog')).toBeNull(),
+    );
+  });
+
+  it('keeps the dialog open when the backend says the contact is already recorded, then closes it', async () => {
+    vi.mocked(sendPromo).mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          code: 'contact_already_recorded',
+          detail: 'a contact with this player is already recorded externally',
+        },
+      },
+    });
+    renderDashboard();
+    await ready();
+    fireEvent.click(screen.getByTestId('promo-candidate-message-42'));
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-message-text')).toHaveValue('Hey ana'),
+    );
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        'A contact with ana is already recorded externally',
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-message-dialog')).toBeNull(),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps an open recipient that only a changed search filter leaves out', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    renderDashboard();
+    await ready();
+    fireEvent.click(screen.getByTestId('promo-candidate-message-42'));
+    expect(await screen.findByTestId('promo-message-text')).toBeInTheDocument();
+
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([], { contact_sync: SYNC_CONFIGURED }),
+    );
+    fireEvent.change(screen.getByTestId('promo-candidate-search'), {
+      target: { value: 'zz' },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(getCandidates).mock.lastCall?.[2]).toMatchObject({
+        q: 'zz',
+      }),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId('promo-message-text')).toBeInTheDocument();
+  });
+
+  it('keeps the dialog and its undo after this promoter marks the send, and shows the writeback state', async () => {
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([candidate], { contact_sync: SYNC_CONFIGURED }),
+    );
+    vi.mocked(sendPromo).mockResolvedValue({
+      id: 77,
+      earns_points: true,
+      points_awarded: 1,
+      sent_at: '2026-11-14T00:00:00Z',
+      writeback: { state: 'pending', reason: null, delivery_id: 'd-77' },
+    });
+    renderDashboard();
+    await ready();
+    fireEvent.click(screen.getByTestId('promo-candidate-message-42'));
+    await waitFor(() =>
+      expect(screen.getByTestId('promo-message-text')).toHaveValue('Hey ana'),
+    );
+    vi.mocked(getCandidates).mockResolvedValue(
+      candidatesResponse([], { contact_sync: SYNC_CONFIGURED }),
+    );
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    expect(await screen.findByTestId('promo-sent-banner')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-candidate-row-42')).toBeNull(),
+    );
+    expect(screen.getByTestId('promo-sent-banner')).toBeInTheDocument();
+    expect(screen.getByTestId('promo-external-writeback')).toHaveAttribute(
+      'data-state',
+      'pending',
+    );
+
+    // Undoing that send keeps the dialog open so it can be marked again, even
+    // while the list has not caught up yet.
+    vi.mocked(undoPromoSend).mockResolvedValue({
+      writeback: { state: 'pending', reason: null, delivery_id: 'd-77' },
+    });
+    fireEvent.click(screen.getByTestId('promo-undo-77'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('promo-sent-banner')).toBeNull(),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId('promo-message-text')).toBeInTheDocument();
+    expect(screen.getByTestId('promo-mark-sent-btn')).toBeEnabled();
   });
 });

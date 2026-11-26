@@ -8,6 +8,7 @@ import {
   type ApiLimits,
   type ApiToken,
   type ApiUsage,
+  type CreateApiTokenInput,
   type CreatedApiToken,
 } from './schemas';
 
@@ -20,9 +21,12 @@ export async function listApiTokens(orgId: number): Promise<ApiToken[]> {
 
 export async function createApiToken(
   orgId: number,
-  name: string,
+  input: CreateApiTokenInput,
 ): Promise<CreatedApiToken> {
-  const response = await api.post(`${base(orgId)}/api-tokens/`, { name });
+  const response = await api.post(`${base(orgId)}/api-tokens/`, {
+    name: input.name,
+    operations: input.operations,
+  });
   return CreatedApiTokenSchema.parse(response.data);
 }
 
