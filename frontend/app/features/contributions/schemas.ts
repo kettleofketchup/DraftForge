@@ -27,7 +27,7 @@ export const KIND_LABELS: Record<ContributionKind, string> = {
   promo_restore: 'Promotion point restored',
 };
 
-/** Ledger points with their sign: a void is negative, everything else positive. */
+/** Format points with an explicit sign, including +0. */
 export function signedPoints(points: number): string {
   return points < 0 ? `-${Math.abs(points)}` : `+${points}`;
 }
