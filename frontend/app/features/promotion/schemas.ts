@@ -44,6 +44,50 @@ export const LastMessagedSchema = z.object({
 });
 export type LastMessaged = z.infer<typeof LastMessagedSchema>;
 
+// Hand-written from backend/org/integration/ticks.py (_contact): a contact
+// recorded externally and imported here. It is a recorded claim, not proof the
+// DM was delivered, and it can never be undone from DraftForge.
+export const ExternalContactSchema = z.object({
+  source: z.literal('contact_log'),
+  recorded_at: z.string(),
+  delivery_verified: z.boolean(),
+  can_undo: z.boolean(),
+});
+export type ExternalContact = z.infer<typeof ExternalContactSchema>;
+
+export const CONTACT_SYNC_WARNINGS = ['history_may_be_incomplete'] as const;
+
+// Hand-written from backend/org/integration/contacts.py (contact_sync_status).
+// last_receipt_imported_at is when the newest receipt arrived, not proof the
+// imported history is complete.
+export const ContactSyncSchema = z.object({
+  configured: z.boolean(),
+  last_receipt_imported_at: z.string().nullable(),
+  warning: z.enum(CONTACT_SYNC_WARNINGS).nullable(),
+});
+export type ContactSync = z.infer<typeof ContactSyncSchema>;
+
+export const EXTERNAL_WRITEBACK_STATES = [
+  'pending',
+  'in_flight',
+  'retry',
+  'paused',
+  'reconciliation_required',
+  'applied',
+  'canceled',
+] as const;
+export type ExternalWritebackState = (typeof EXTERNAL_WRITEBACK_STATES)[number];
+
+// Hand-written from backend/org/integration/outbox.py (outbox_summary). The
+// state of writing one local send to the external contact log; only
+// `applied` means it is stored there.
+export const ExternalWritebackSchema = z.object({
+  state: z.enum(EXTERNAL_WRITEBACK_STATES).nullable(),
+  reason: z.string().nullable(),
+  delivery_id: z.string().nullable(),
+});
+export type ExternalWriteback = z.infer<typeof ExternalWritebackSchema>;
+
 export const CandidateRowSchema = z.object({
   user_pk: z.number().nullable(),
   username: z.string(),
@@ -59,6 +103,9 @@ export const CandidateRowSchema = z.object({
   last_active_at: z.string().nullish(),
   discord_joined_at: z.string().nullish(),
   last_messaged: LastMessagedSchema.nullable(),
+  /** A local send or an imported external contact exists for this event. */
+  contact_recorded: z.boolean(),
+  external_contact: ExternalContactSchema.nullable(),
   earning_send_exists: z.boolean(),
   signed_up: z.boolean(),
 });
@@ -78,6 +125,7 @@ export const CandidatesResponseSchema = z.object({
   min_mmr: z.number().nullable(),
   max_mmr: z.number().nullable(),
   rows: z.array(CandidateRowSchema),
+  contact_sync: ContactSyncSchema,
 });
 export type CandidatesResponse = z.infer<typeof CandidatesResponseSchema>;
 
@@ -120,8 +168,15 @@ export const PromoSendResultSchema = z.object({
   earns_points: z.boolean(),
   points_awarded: z.number().nullable(),
   sent_at: z.string(),
+  writeback: ExternalWritebackSchema,
 });
 export type PromoSendResult = z.infer<typeof PromoSendResultSchema>;
+
+/** Undo removes the local send; its external receipt stays and is reported. */
+export const PromoUndoResultSchema = z.object({
+  writeback: ExternalWritebackSchema,
+});
+export type PromoUndoResult = z.infer<typeof PromoUndoResultSchema>;
 
 export const promoSendSchema = z.object({
   text: z

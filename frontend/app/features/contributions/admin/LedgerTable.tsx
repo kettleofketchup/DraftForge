@@ -32,6 +32,7 @@ import {
   CONTRIBUTION_KINDS,
   ENTRIES_PAGE_SIZE,
   KIND_LABELS,
+  signedPoints,
   type AdminEntry,
   type ContributionKind,
   type EntriesFilters,
@@ -219,7 +220,7 @@ export function LedgerTable({
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <span className="mr-1 font-semibold tabular-nums">
-                  +{entry.points}
+                  {signedPoints(entry.points)}
                 </span>
                 {entry.kind === 'manual' && (
                   <>

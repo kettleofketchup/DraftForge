@@ -12,6 +12,10 @@ from org.contributions.services import (
     has_promo_entry,
     revoke_promo_entry,
 )
+from org.integration.event_lock import lock_event, with_event_mutation
+from org.integration.outbox import enqueue_send
+from org.integration.points import external_point_held, external_point_held_for
+from org.integration.ticks import external_contact_for
 from org.models import PromoSend, PromoTemplate
 from org.permissions import (
     has_org_promoter_access,
@@ -36,6 +40,17 @@ class PromoSendError(ValueError):
         self.field = field
 
 
+class ContactAlreadyRecorded(PromoSendError):
+    """An external contact for this recipient and event is recorded."""
+
+    code: Final[str] = "contact_already_recorded"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "recipient_id", "a contact with this player is already recorded externally"
+        )
+
+
 def _earning_send_exists(event: Event, recipient: CustomUser) -> bool:
     return PromoSend.objects.filter(
         event=event, recipient=recipient, earns_points=True
@@ -43,9 +58,13 @@ def _earning_send_exists(event: Event, recipient: CustomUser) -> bool:
 
 
 def will_earn(sender: CustomUser, event: Event, recipient: CustomUser) -> bool:
-    return is_org_role_holder(
-        sender, event.organization_id
-    ) and not _earning_send_exists(event, recipient)
+    """Whether a send now would earn the point: the sender holds a role, no
+    send earns it yet and no imported contact holds it."""
+    return (
+        is_org_role_holder(sender, event.organization_id)
+        and not _earning_send_exists(event, recipient)
+        and not external_point_held(event, recipient)
+    )
 
 
 def _lock_event(event: Event) -> Event:
@@ -106,7 +125,6 @@ def _award_send(send: PromoSend, event: Event, sender: CustomUser) -> None:
     )
 
 
-@transaction.atomic
 def record_promo_send(
     *,
     sender: CustomUser,
@@ -115,20 +133,66 @@ def record_promo_send(
     template: PromoTemplate | None,
     text: str,
 ) -> PromoSend:
-    event = _lock_event(event)
+    """Record one manual promotion DM, its outbox receipt and any award.
+
+    Runs under the event's mutation lock, the same one an external contact
+    import takes, so a recipient whose external contact has committed can
+    no longer be sent to (``ContactAlreadyRecorded``). The same holds when
+    an imported contact holds the recipient's point without ticking this
+    row, so a send is never accepted and then denied its point.
+    """
+    return with_event_mutation(
+        event.pk,
+        lambda: _record_locked(
+            sender=sender,
+            event_id=event.pk,
+            recipient=recipient,
+            template=template,
+            text=text,
+        ),
+    )
+
+
+def _discord_snapshot(discord_id: str | None) -> str:
+    """The recipient's Discord ID as stored on the send, or "" if unusable."""
+    if discord_id and len(discord_id) <= 20:
+        return discord_id
+    return ""
+
+
+def _record_locked(
+    *,
+    sender: CustomUser,
+    event_id: int,
+    recipient: CustomUser,
+    template: PromoTemplate | None,
+    text: str,
+) -> PromoSend:
+    event = Event.objects.nocache().select_related("organization").get(pk=event_id)
     _validate_send(
         sender=sender, event=event, recipient=recipient, template=template, text=text
     )
-    earns = will_earn(sender, event, recipient)
+    ticked = bool(recipient.discordId) and (
+        external_contact_for(event.pk, recipient.discordId, user_id=recipient.pk)
+        is not None
+    )
+    if ticked or external_point_held(event, recipient):
+        raise ContactAlreadyRecorded()
+    # ``will_earn`` without its external check, which just passed.
+    earns = is_org_role_holder(
+        sender, event.organization_id
+    ) and not _earning_send_exists(event, recipient)
     send = PromoSend.objects.create(
         organization=event.organization,
         event=event,
         recipient=recipient,
+        recipient_discord_id=_discord_snapshot(recipient.discordId),
         sender=sender,
         template=template,
         text=text,
         earns_points=earns,
     )
+    enqueue_send(send)
     if earns:
         _award_send(send, event, sender)
     log.info(
@@ -149,6 +213,8 @@ def record_promo_send(
 def _promote_next_send(
     event: Event, recipient_id: int, *, exclude_sender_id: int | None = None
 ) -> PromoSend | None:
+    if external_point_held_for(event.pk, recipient_id):
+        return None
     remaining = (
         PromoSend.objects.filter(
             event=event,
@@ -214,7 +280,10 @@ def release_earning_sends(user: CustomUser) -> int:
 
 @transaction.atomic
 def undo_promo_send(send: PromoSend, *, actor: CustomUser | None) -> None:
-    event = _lock_event(send.event)
+    # The lock an external contact import takes, so an undo and an import
+    # of the same event run one after the other.
+    lock_event(send.event_id)
+    event = Event.objects.nocache().select_related("organization").get(pk=send.event_id)
     locked = PromoSend.objects.select_for_update().filter(pk=send.pk).first()
     if locked is None:
         return

@@ -31,8 +31,12 @@ import type {
   PromoSendResult,
   PromoTemplate,
   PromoTemplateForm,
+  PromoUndoResult,
   RenderResponse,
 } from './schemas';
+
+/** How often an open candidate list refetches while contacts are imported. */
+export const CANDIDATE_POLL_MS = 30_000;
 
 function canUse(access: OrgFeatureAccess): boolean {
   return access.settled && access.canUsePromotion;
@@ -75,6 +79,12 @@ export function useCandidates(
     ),
     queryFn: () => getCandidates(orgId, eventId!, filters),
     enabled: canUse(access) && eventId != null,
+    // External contacts are imported out of band, so a configured org's list
+    // refreshes while it is on screen. Polling stops while the page is hidden.
+    refetchInterval: (query) =>
+      query.state.data?.contact_sync.configured ? CANDIDATE_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[1] === orgId &&
       previousQuery.queryKey[2] === access.viewerPk &&
@@ -164,7 +174,7 @@ export function useResolveDiscordMember(
 export function useUndoPromoSend(
   orgId: number,
   access: OrgFeatureAccess,
-): UseMutationResult<void, unknown, number> {
+): UseMutationResult<PromoUndoResult, unknown, number> {
   const invalidate = useInvalidatePromoLedger(orgId, access);
   return useMutation({
     mutationFn: (sendId) => undoPromoSend(orgId, sendId),

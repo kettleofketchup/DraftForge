@@ -1,6 +1,8 @@
+import { Info } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { GAME_LABEL, toGameType } from '~/components/game/constants';
+import { Alert, AlertDescription, AlertTitle } from '~/components/ui/alert';
 import { Badge } from '~/components/ui/badge';
 import {
   BrandSelect,
@@ -17,7 +19,12 @@ import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import {
+  relativeFromIso,
+  reportPromoError,
+  undoToastDescription,
+  usePreviewOptions,
+} from './feedback';
 import { parseMmrBound, validateMmrRange } from './mmrFilter';
 import type { ComposeMode } from './promotionColumns';
 import { PromotionTable } from './PromotionTable';
@@ -29,6 +36,7 @@ import {
   type CandidateFilters,
   type CandidateRow,
   type CandidateSource,
+  type ContactSync,
 } from './schemas';
 
 const log = getLogger('CandidateList');
@@ -67,6 +75,36 @@ const EMPTY_MESSAGE: Record<CandidateSource, string> = {
 };
 
 const DEBOUNCE_MS = 300;
+
+/**
+ * External contact history arrives by import, so it can lag or miss contacts.
+ * The notice says so; it never blocks messaging an otherwise eligible player.
+ */
+function ContactSyncNotice({ sync }: { sync: ContactSync }) {
+  const previewOptions = usePreviewOptions();
+  const imported = sync.last_receipt_imported_at;
+  return (
+    <Alert
+      role="note"
+      className="border-warning/40 bg-warning/10"
+      data-testid="promo-contact-sync-warning"
+    >
+      <Info className="size-4" aria-hidden="true" />
+      <AlertTitle>History may be incomplete</AlertTitle>
+      <AlertDescription className="text-muted-foreground">
+        Contacts recorded externally are ticked here once imported, and the
+        external contact log may hold contacts that have not arrived yet.
+        Players without a tick can still be messaged.
+        {imported && (
+          <span className="block" data-testid="promo-contact-sync-imported">
+            Last external receipt imported{' '}
+            {relativeFromIso(imported, previewOptions)}.
+          </span>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 /** Commits `value` through `commit` once it stops changing. */
 function useDebouncedCommit<T>(
@@ -204,10 +242,15 @@ export function CandidateList({
     }
   }, []);
 
+  const syncConfigured = data?.contact_sync.configured ?? false;
+
   const onUndo = useCallback(
     (sendId: number): void => {
       undo.mutate(sendId, {
-        onSuccess: () => toast.success('Send undone'),
+        onSuccess: (result) =>
+          toast.success('Send undone', {
+            description: undoToastDescription(result, syncConfigured),
+          }),
         onError: (err) => {
           const message = reportPromoError(log, 'promo_undo_failed', err, {
             orgId,
@@ -217,7 +260,7 @@ export function CandidateList({
         },
       });
     },
-    [undo, orgId],
+    [undo, orgId, syncConfigured],
   );
 
   const gameLabel = data ? GAME_LABEL[toGameType(data.game_type)] : 'Game';
@@ -434,6 +477,10 @@ export function CandidateList({
           </SecondaryButton>
         )}
       </div>
+
+      {data?.contact_sync.configured && (
+        <ContactSyncNotice sync={data.contact_sync} />
+      )}
 
       {isError && (
         <p
