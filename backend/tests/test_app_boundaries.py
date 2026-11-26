@@ -1130,8 +1130,7 @@ MOVED_SLICES: tuple[MovedSlice, ...] = (
 # Installed for the web only: nothing worker-reachable imports them.
 WEB_ONLY_APPS: frozenset[str] = frozenset({"joke"})
 
-# Slices cut before the rule that a retired module's defs go into `moved`;
-# their modules were renamed or split on the way out.
+# `moved` omits retired-module definitions for these renamed or split modules.
 RETIRED_DEFS_GRANDFATHERED: frozenset[str] = frozenset(
     {HERO_DRAFT.name, TEAM_DRAFT.name, ORG.name}
 )
