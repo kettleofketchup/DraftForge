@@ -153,7 +153,7 @@ export function DiscordPreviewButton<T>({
         open={open}
         onOpenChange={onOpenChange}
         title={title}
-        description={description ?? t('dialog.description', { title })}
+        description={description ?? t('dialog.description')}
         closeLabel={t('dialog.close')}
         size="lg"
         data-testid="discord-preview-dialog"

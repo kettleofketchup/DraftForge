@@ -111,6 +111,39 @@ describe('DiscordMessagePreview: unsafe urls', () => {
 });
 
 describe('DiscordMessagePreview: embeds', () => {
+  it('stacks inline fields on mobile and preserves whole words', () => {
+    renderMessages([
+      {
+        embeds: [
+          {
+            fields: [
+              { name: 'When', value: 'Wednesday', inline: true },
+              { name: 'Max Players', value: '10', inline: true },
+              {
+                name: 'Event Page',
+                value: '[View](https://example.test)',
+                inline: true,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const row = screen.getByTestId('discord-embed-field-row');
+    expect(row).toHaveClass(
+      'grid-cols-1',
+      '@xs:grid-cols-2',
+      '@sm:grid-cols-3',
+    );
+    expect(row).not.toHaveClass('grid-cols-3');
+    expect(
+      row
+        .closest('[data-testid="discord-embed"]')
+        ?.querySelector('.\\@container'),
+    ).not.toBeNull();
+    expect(screen.getByText('Wednesday')).toHaveClass('break-normal');
+    expect(screen.getByText('Max Players')).toHaveClass('break-normal');
+  });
   it('groups up to three inline fields per row and breaks on a non-inline field', () => {
     renderMessages([
       {

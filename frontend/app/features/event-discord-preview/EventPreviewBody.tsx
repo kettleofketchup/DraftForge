@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next';
 import { Info, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
+  DiscordMarkdown,
   DiscordMessagePreview,
   DiscordScheduledEventCard,
   useOrgDiscordResolver,
@@ -91,7 +92,11 @@ function DestinationLine({
   const lines: string[] = [];
   switch (destination.type) {
     case 'channel':
-      lines.push(t('destination.channel', { channel }));
+      lines.push(
+        destination.channel_id
+          ? t('destination.channel', { channel })
+          : t('destination.no_channel'),
+      );
       break;
     case 'forum_thread':
       lines.push(
@@ -207,7 +212,7 @@ export function EventPreviewBody({
           <p className="text-xs font-semibold">
             {t('start_mention.header_label')}
           </p>
-          <p>{header}</p>
+          <DiscordMarkdown text={header} resolve={resolve} />
         </div>
       ) : null}
       {data.scheduled_event ? (

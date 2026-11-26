@@ -12,6 +12,36 @@ const OPTS = {
 };
 
 describe('DiscordMarkdown', () => {
+  it('keeps timestamp chips flush with surrounding punctuation and existing spaces', () => {
+    const { container } = render(
+      <DiscordMarkdown
+        text={`on <t:${EPOCH}:F> (<t:${EPOCH}:R>)`}
+        options={OPTS}
+      />,
+    );
+    expect(container.textContent).toBe(
+      `on ${formatDiscordTimestamp(EPOCH, 'F', OPTS)} (in 3 hours)`,
+    );
+    for (const time of container.querySelectorAll('time')) {
+      expect(time).not.toHaveClass('px-0.5');
+      expect(time.textContent).toBe(time.textContent?.trim());
+    }
+  });
+
+  it.each(['t', 'T', 'd', 'D', 'f', 'F', 'R'] as const)(
+    'renders %s timestamps in message text',
+    (style) => {
+      const { container } = render(
+        <DiscordMarkdown
+          text={`Starts <t:${EPOCH}:${style}>!`}
+          options={OPTS}
+        />,
+      );
+      expect(container.textContent).toBe(
+        `Starts ${formatDiscordTimestamp(EPOCH, style, OPTS)}!`,
+      );
+    },
+  );
   it('renders a resolved role pill with its name', () => {
     render(
       <DiscordMarkdown

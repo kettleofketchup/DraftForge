@@ -14,6 +14,7 @@
     "dm": "Sent as a direct message.",
     "fallback": "If that fails, posts in {{channel}}.",
     "forum_thread": "Posts in {{channel}} as a new thread \"{{thread}}\".",
+    "no_channel": "No channel selected.",
     "reply": "Replies to the signup post in {{channel}}.",
     "reply_unknown": "Replies to the signup post.",
     "scheduled_event": "Shows in the server's Events tab.",
@@ -21,7 +22,7 @@
   },
   "dialog": {
     "close": "Close",
-    "description": "Preview of {{title}} as Discord will show it",
+    "description": "See how this will appear in Discord.",
     "loading": "Loading preview"
   },
   "error": {
@@ -30,7 +31,7 @@
   },
   "gate": {
     "already_sent": "Already sent for this event.",
-    "no_channel": "Not sent: no announcement channel is selected.",
+    "no_channel": "Not sent: no channel is selected.",
     "no_discord_server": "Not sent: this organization has no Discord server linked.",
     "no_recipients": "No one would be mentioned right now; nothing is sent.",
     "no_scheduled_event_yet": "Not sent: the Discord scheduled event has not been created yet.",
@@ -86,8 +87,8 @@
     "shown_as_posted_when_signups_open": "Shown as it will be posted when signups open.",
     "signup_link_points_to_post": "The \"Sign up here!\" link opens the signup post, which is created just before this notice.",
     "signup_post_in_signup_channel": "The signup post goes to the signup channel.",
-    "sync_overwrites_description": "Syncing signups replaces the Discord event description with this text.",
     "sync_keeps_created_name_and_time": "Syncing signups changes only the description. Discord keeps the name and times the scheduled event was created with, shown here.",
+    "sync_overwrites_description": "Syncing signups replaces the Discord event description with this text.",
     "unsaved_links": "Not saved yet: the event link opens the events list until you save."
   },
   "scheduled_event": {

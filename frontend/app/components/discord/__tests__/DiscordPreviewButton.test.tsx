@@ -111,7 +111,7 @@ describe('DiscordPreviewButton: dialog', () => {
       {
         dialog: {
           close: 'CLOSE_SENTINEL',
-          description: 'DESC_SENTINEL {{title}}',
+          description: 'DESC_SENTINEL',
         },
       },
       true,
@@ -130,9 +130,7 @@ describe('DiscordPreviewButton: dialog', () => {
     expect(
       within(dialog).getByRole('heading', { name: 'Signup post' }),
     ).toBeInTheDocument();
-    expect(
-      within(dialog).getByText('DESC_SENTINEL Signup post'),
-    ).toBeInTheDocument();
+    expect(within(dialog).getByText('DESC_SENTINEL')).toBeInTheDocument();
     expect(
       within(dialog).getByRole('button', { name: 'CLOSE_SENTINEL' }),
     ).toHaveTextContent('CLOSE_SENTINEL');

@@ -11,7 +11,12 @@ import {
 } from './timestamps';
 import type { DiscordResolver } from './types';
 
-const ROW_COLS = ['', 'grid-cols-1', 'grid-cols-2', 'grid-cols-3'] as const;
+const ROW_COLS = [
+  '',
+  'grid-cols-1',
+  'grid-cols-1 @xs:grid-cols-2',
+  'grid-cols-1 @xs:grid-cols-2 @sm:grid-cols-3',
+] as const;
 const LINK = 'hover:underline';
 
 export function groupEmbedFields(
@@ -122,7 +127,7 @@ export function DiscordEmbed({
         )}
       />
       <div className="flex min-w-0 flex-1 gap-4 py-2 pr-4 pl-3">
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="@container min-w-0 flex-1 space-y-2">
           {embed.author ? (
             <div className="flex items-center gap-2 text-sm font-semibold">
               <SmallImage url={embed.author.icon_url} />
@@ -148,8 +153,8 @@ export function DiscordEmbed({
             >
               {row.map((field, j) => (
                 <div key={j} className="min-w-0 text-sm">
-                  <div className="font-semibold">{field.name}</div>
-                  {md(field.value)}
+                  <div className="font-semibold break-normal">{field.name}</div>
+                  {md(field.value, 'break-normal')}
                 </div>
               ))}
             </div>

@@ -2,10 +2,14 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { I18nextProvider, setI18n } from 'react-i18next';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Form } from '~/components/ui/form';
+import { createI18nInstance, FALLBACK_LOCALE } from '~/i18n/config';
 import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 import type { DiscordPreviewContext } from '../context';
+import { EventDiscordPreviewButton } from '../EventDiscordPreviewButton';
+import { EventPreviewBody } from '../EventPreviewBody';
 import { previewResponse } from './fixtures';
 
 const mocks = vi.hoisted(() => ({
@@ -21,8 +25,6 @@ vi.mock('~/components/api/api', async (importOriginal) => ({
   getDiscordChannels: mocks.channels,
 }));
 
-import { EventDiscordPreviewButton } from '../EventDiscordPreviewButton';
-
 beforeEach(() => {
   Object.values(mocks).forEach((m) => m.mockReset());
   mocks.roles.mockResolvedValue([{ id: '111', name: 'Inhouse', color: 0 }]);
@@ -31,6 +33,10 @@ beforeEach(() => {
     { id: '5678', name: 'announcements' },
   ]);
   mocks.preview.mockResolvedValue(previewResponse());
+});
+
+afterEach(() => {
+  setI18n(createI18nInstance(FALLBACK_LOCALE));
 });
 
 function FormHarness({
@@ -75,6 +81,68 @@ async function openDialog(kind = 'signup_post') {
 }
 
 describe('EventDiscordPreviewButton', () => {
+  it.each([
+    ['en', 'See how this will appear in Discord.', 'No channel selected.'],
+    ['es', 'Así se verá en Discord.', 'No se ha seleccionado ningún canal.'],
+  ] as const)(
+    'uses natural %s subtitle and no-channel wording',
+    async (locale, subtitle, destination) => {
+      const i18n = createI18nInstance(locale);
+      render(
+        <I18nextProvider i18n={i18n}>
+          <TestQueryClientProvider>
+            <EventDiscordPreviewButton kind="signup_post" organizationId={7} />
+            <EventPreviewBody
+              organizationId={7}
+              data={previewResponse({
+                destination: {
+                  type: 'channel',
+                  channel_id: null,
+                  thread_name: null,
+                  fallback_channel_id: null,
+                  reply_to_message_id: null,
+                },
+              })}
+            />
+          </TestQueryClientProvider>
+        </I18nextProvider>,
+      );
+      await openDialog();
+      expect(
+        screen.getByTestId('discord-preview-dialog'),
+      ).toHaveAccessibleDescription(subtitle);
+      expect(
+        screen.getByTestId('discord-preview-destination').textContent,
+      ).toBe(destination);
+    },
+  );
+
+  it.each(['t', 'T', 'd', 'D', 'f', 'F', 'R'])(
+    'renders %s timestamps in the no-recipients header',
+    async (style) => {
+      mocks.preview.mockResolvedValue(
+        previewResponse({
+          kind: 'start_mention',
+          gate: { would_send: false, reasons: ['no_recipients'] },
+          messages: [],
+          note_args: {
+            header: `Friday Inhouse starts <t:1796261040:${style}>!`,
+          },
+        }),
+      );
+      renderButton({ type: 'event', eventId: 42 }, 'start_mention');
+      const dialog = await openDialog('start_mention');
+      const box = await within(dialog).findByTestId(
+        'discord-preview-start-mention-header',
+      );
+      expect(box.textContent).not.toContain('<t:');
+      expect(box.querySelector('time')).toHaveAttribute(
+        'datetime',
+        new Date(1796261040 * 1000).toISOString(),
+      );
+      expect(box.querySelector('time')?.textContent).not.toBe('');
+    },
+  );
   it.each([
     [
       { type: 'event', eventId: 42 },
@@ -160,9 +228,7 @@ describe('EventDiscordPreviewButton', () => {
       ),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByText(
-        'Not sent: no announcement channel is selected.',
-      ),
+      within(dialog).getByText('Not sent: no channel is selected.'),
     ).toBeInTheDocument();
     expect(
       within(dialog).getByText(

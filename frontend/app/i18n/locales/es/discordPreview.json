@@ -14,6 +14,7 @@
     "dm": "Se envía por mensaje directo.",
     "fallback": "Si falla, se publica en {{channel}}.",
     "forum_thread": "Se publica en {{channel}} como un hilo nuevo \"{{thread}}\".",
+    "no_channel": "No se ha seleccionado ningún canal.",
     "reply": "Responde a la publicación de inscripción en {{channel}}.",
     "reply_unknown": "Responde a la publicación de inscripción.",
     "scheduled_event": "Aparece en la pestaña Eventos del servidor.",
@@ -21,7 +22,7 @@
   },
   "dialog": {
     "close": "Cerrar",
-    "description": "Vista previa de {{title}} tal como se verá en Discord",
+    "description": "Así se verá en Discord.",
     "loading": "Cargando vista previa"
   },
   "error": {
@@ -30,7 +31,7 @@
   },
   "gate": {
     "already_sent": "Ya se envió para este evento.",
-    "no_channel": "No se envía: no hay canal de anuncios seleccionado.",
+    "no_channel": "No se envía: no hay ningún canal seleccionado.",
     "no_discord_server": "No se envía: esta organización no tiene servidor de Discord vinculado.",
     "no_recipients": "Ahora no se mencionaría a nadie; no se envía nada.",
     "no_scheduled_event_yet": "No se envía: el evento programado de Discord aún no se creó.",
@@ -86,8 +87,8 @@
     "shown_as_posted_when_signups_open": "Se muestra como se publicará al abrir las inscripciones.",
     "signup_link_points_to_post": "El enlace \"Sign up here!\" abre la publicación de inscripción, que se crea justo antes de este aviso.",
     "signup_post_in_signup_channel": "La publicación de inscripción va al canal de inscripción.",
-    "sync_overwrites_description": "Sincronizar inscripciones reemplaza la descripción del evento de Discord con este texto.",
     "sync_keeps_created_name_and_time": "Sincronizar inscripciones solo cambia la descripción. Discord conserva el nombre y los horarios con los que se creó el evento programado, que se muestran aquí.",
+    "sync_overwrites_description": "Sincronizar inscripciones reemplaza la descripción del evento de Discord con este texto.",
     "unsaved_links": "Sin guardar: el enlace del evento abre la lista de eventos hasta que guardes."
   },
   "scheduled_event": {

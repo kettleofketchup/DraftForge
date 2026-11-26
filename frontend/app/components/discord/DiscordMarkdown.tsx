@@ -212,7 +212,7 @@ function renderNode(node: MdNode, key: number, ctx: Ctx): ReactNode {
           key={key}
           dateTime={date.toISOString()}
           title={formatDiscordTimestamp(node.unix, 'F', options)}
-          className="rounded-sm bg-base-800 px-0.5"
+          className="rounded-sm bg-base-800"
         >
           {formatDiscordTimestamp(node.unix, node.style, options)}
         </time>
