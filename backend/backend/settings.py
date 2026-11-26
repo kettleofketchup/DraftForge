@@ -183,6 +183,7 @@ REST_FRAMEWORK = {
         "app.auth.InternalServiceAuth",
     ],
     "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
+    "DEFAULT_THROTTLE_RATES": {"discord_permission_refresh": "5/min"},
 }
 
 # Every entry must be async capable: one sync-only middleware makes each ASGI request

@@ -86,3 +86,10 @@ gen-bot-access-api *args:
     {{quote(python)}} -I {{quote(backend / "lobby/export_bot_access_schema.py")}} \
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/features/bot-access/schemas.generated.ts")}} "$@"
+
+# Regenerate Discord permission API schemas; --check fails when stale
+[group('py')]
+gen-discord-permissions-api *args:
+    {{quote(python)}} -I {{quote(backend / "discordbot/permissions/export_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/discord-permissions/api.generated.ts")}} "$@"
