@@ -44,7 +44,6 @@ import {
 import { Skeleton } from '~/components/ui/skeleton';
 import { useUpdateOrgDefaultsMutation } from '~/hooks/useEvent';
 import { extractApiError } from '~/lib/apiError';
-import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
   EVENT_TAB_META,
@@ -66,6 +65,7 @@ import {
   SIGNUP_OPEN_DEFAULTS,
   signupOpenSchema,
 } from './schemas';
+import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import { SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';

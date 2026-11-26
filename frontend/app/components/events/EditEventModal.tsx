@@ -16,7 +16,6 @@ import {
   useRegenerateEventLobbyPassword,
 } from '~/hooks/useLobbyPassword';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
-import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
   dotaLobbyResetValues,
@@ -43,6 +42,7 @@ import {
   SIGNUP_OPEN_DEFAULTS,
   utcToLocalInput,
 } from './schemas';
+import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import {
   SERIES_EVENT_POLICY_HELP,
@@ -323,6 +323,8 @@ export function EditEventModal({
           lazy: true,
           content: (
             <DiscordConfigSection
+              eventId={event?.id}
+              canManageEvent={event?.user_can_manage ?? false}
               control={form.control}
               isRepeater={event?.event_repeater != null}
               showNotifyNewEvents={false}

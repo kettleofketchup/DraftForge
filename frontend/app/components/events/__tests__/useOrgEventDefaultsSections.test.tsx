@@ -70,6 +70,7 @@ const defaults = vi.hoisted(() => ({
 vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/components/api/api')>()),
   getOrgEventDefaults: vi.fn().mockResolvedValue(defaults),
+  fetchOrganization: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('sonner', () => ({

@@ -13,6 +13,10 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
 
 // Mutation seam: the PATCH body is the assertion target.
+vi.mock('~/components/organization/hooks/useOrganization', () => ({
+  useOrganization: () => ({ organization: null }),
+}));
+
 const mutateAsync = vi.fn().mockResolvedValue({});
 vi.mock('~/hooks/useEvent', () => ({
   useUpdateEventRepeaterMutation: () => ({ mutateAsync, isPending: false }),

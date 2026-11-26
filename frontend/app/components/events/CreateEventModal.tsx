@@ -27,7 +27,6 @@ import {
   useCreateEventRepeaterMutation,
 } from '~/hooks/useEvent';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
-import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
   EVENT_TEMPLATE_DEFAULTS,
@@ -55,6 +54,7 @@ import {
   SIGNUP_OPEN_DEFAULTS,
   type ReadyCheckFields,
 } from './schemas';
+import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import { SERIES_IMMEDIATE_HELP, SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
