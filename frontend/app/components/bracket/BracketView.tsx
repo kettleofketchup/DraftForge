@@ -33,6 +33,7 @@ import { useUserStore } from '~/store/userStore';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { BracketEdge } from './edges/BracketEdge';
 import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
+import { bracketMatchSelectionState } from './matchSelectionNavigation';
 import { MatchStatsModal } from './modals/MatchStatsModal';
 import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -538,7 +539,10 @@ function BracketFlowInner({
       const queryString = params ? `?${params}` : '';
       navigate(
         `/tournament/${tournamentId}/bracket/match/${urlId}${queryString}`,
-        { replace: true },
+        {
+          replace: true,
+          state: bracketMatchSelectionState(tournamentId, String(urlId)),
+        },
       );
     },
     [navigate, tournamentId, matches, searchParams, embedded, onMatchOpen],

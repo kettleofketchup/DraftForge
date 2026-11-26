@@ -256,6 +256,7 @@ describe('BracketView embedded in the Activity', () => {
 
     expect(navigate).toHaveBeenCalledWith('/tournament/7/bracket/match/42', {
       replace: true,
+      state: { bracketMatchSelection: { tournamentId: 7, matchId: '42' } },
     });
   });
 });
