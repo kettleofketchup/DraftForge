@@ -474,7 +474,6 @@ def sync_discord_events() -> str:
                     error=str(e),
                 )
 
-        # 2. Discord scheduled event
         has_scheduled = (
             pk in events_with_scheduled
             or ("create_discord_event", pk) in existing_logs
@@ -591,7 +590,6 @@ def _send_event_announcement_impl(event_id: int) -> str:
         return "Failed: could not get/create DiscordEvent"
     discord_event_pk = de_resp.json().get("id")
 
-    # Step 1: Create the signup post
     signup_post_result = None
     signup_message_link = None
 
@@ -651,7 +649,6 @@ def _send_event_announcement_impl(event_id: int) -> str:
     if not announcement_available:
         return f"Posted signup for event {event.pk}"
 
-    # Step 2: Post lightweight announcement linking to the signup post
     notice_result = build_announcement_notice(event, signup_message_link)
     notice_api_result = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
@@ -1511,7 +1508,6 @@ def fire_event_reminder(
 
     source, builder = REMINDER_MAP[reminder_type]
 
-    # Idempotency check
     if check_message_log_exists(source, event_id):
         return f"Already fired: {reminder_type} for event {event_id}"
 

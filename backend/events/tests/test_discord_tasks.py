@@ -668,15 +668,9 @@ class SendSignupUpdateTaskTest(_GuildDiscordTaskTestCase):
         self.event.discord_announcement_channel_id = "1482767177063858216"
         self.event.save()
 
-        # First create the announcement
-
         send_event_announcement(self.event.pk)
-
-        # Then update it
-
         send_signup_update(self.event.pk)
 
-        # PATCH must have been called and the URL must reference the message id.
         patch_calls = [
             c for c in mock_req.call_args_list if c.args and c.args[0] == "PATCH"
         ]
@@ -701,7 +695,6 @@ class SendEventAnnouncementComponentsTest(_DiscordTaskTestCase):
 
         send_event_announcement(self.event.pk)
 
-        # Find the POST call to the messages endpoint
         post_calls = [
             c for c in mock_req.call_args_list if c.args and c.args[0] == "POST"
         ]
@@ -761,8 +754,7 @@ class SendSignupUpdateEditsMessageTest(_DiscordTaskTestCase):
 class SendSignupUpdateOrphanedMessageRecoveryTest(_DiscordTaskTestCase):
     """When Discord reports the target message no longer exists (404 + 10008),
     send_signup_update must clear the dedup state so the next sync recreates
-    the post. Prior to this fix the bot would silently retry edits forever on
-    a ghost message and never re-post.
+    the post.
     """
 
     @patch("discordbot.utils._rate_limited_request")
@@ -771,7 +763,6 @@ class SendSignupUpdateOrphanedMessageRecoveryTest(_DiscordTaskTestCase):
         self.event.discord_announcement_channel_id = "1482767177063858216"
         self.event.save()
 
-        # Phase 1: create the original post. POST returns 201.
         mock_req.return_value = _ok_response({"id": "ghost_msg"})
         send_event_announcement(self.event.pk)
 
@@ -843,10 +834,8 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
 
     The production code only writes a ``signup_reminder`` ``DiscordMessageLog``
     when ``send_subscriber_notifications`` actually attempts (or sends) a DM.
-    That requires a repeater + a subscriber with a Discord ID. Older versions
-    of these tests skipped the repeater entirely, so they could never produce
-    the log they were asserting on. We add a repeater + subscriber and stub
-    ``sync_send_dm`` so the reminder pipeline runs without hitting Discord.
+    A repeater and subscriber with a Discord ID enable that path;
+    ``sync_send_dm`` is stubbed to avoid hitting Discord.
     """
 
     def _arm_signup_reminder(self) -> None:
