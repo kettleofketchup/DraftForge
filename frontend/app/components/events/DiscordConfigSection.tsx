@@ -288,6 +288,7 @@ function CheckedDiscordConfigSection<T extends FieldValues & DiscordFields>(
   const descriptors = settingsDescriptors(values, {
     isRepeater: props.isRepeater,
     showNotifyNewEvents: props.showNotifyNewEvents ?? props.isRepeater,
+    showSignupReminder: props.showSignupReminder ?? props.isRepeater,
   });
   const query = usePermissionPreview({
     scope: props.scope,
@@ -314,6 +315,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
   const descriptors = settingsDescriptors(values, {
     isRepeater,
     showNotifyNewEvents,
+    showSignupReminder,
   });
   const diagnostic = (key: string) => {
     const descriptor = descriptors.find((d) => d.key === key);

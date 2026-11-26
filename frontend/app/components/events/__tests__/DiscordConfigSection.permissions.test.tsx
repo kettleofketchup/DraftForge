@@ -33,9 +33,13 @@ const clients: QueryClient[] = [];
 function Harness({
   scope = { kind: 'org', orgId: 7, guildId: '900000000000000001' },
   canCheck = true,
+  isRepeater = true,
+  showSignupReminder,
 }: {
   scope?: PermissionScope | null;
   canCheck?: boolean;
+  isRepeater?: boolean;
+  showSignupReminder?: boolean;
 }) {
   form = useForm<DiscordFields>({
     defaultValues: {
@@ -56,7 +60,8 @@ function Harness({
         <DiscordConfigSection
           control={form.control}
           organizationId={7}
-          isRepeater
+          isRepeater={isRepeater}
+          showSignupReminder={showSignupReminder}
           permissionScope={scope}
           canCheckPermissions={canCheck}
         />
@@ -130,6 +135,37 @@ it('batches every visible operation, renders diagnostics and never blocks saving
   expect(submit).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText('Save'));
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+});
+it('checks and badges the visible reminder in organization defaults', async () => {
+  mount({ isRepeater: false, showSignupReminder: true });
+  expect(
+    screen.getByTestId('discord-discord_signup_reminder'),
+  ).toBeInTheDocument();
+  await waitFor(() =>
+    expect(
+      screen.getByTestId('discord-permission-badge-signup_reminder'),
+    ).toHaveTextContent('Missing permissions'),
+  );
+  expect(post.mock.calls[0][1].checks).toContainEqual(
+    expect.objectContaining({
+      key: 'signup_reminder',
+      action: 'signup_reminder_dm',
+    }),
+  );
+});
+it.each([
+  { isRepeater: false },
+  { isRepeater: true, showSignupReminder: false },
+])('does not check a hidden reminder: %j', async (props) => {
+  mount(props);
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+  expect(screen.queryByTestId('discord-discord_signup_reminder')).toBeNull();
+  expect(
+    screen.queryByTestId('discord-permission-badge-signup_reminder'),
+  ).toBeNull();
+  expect(post.mock.calls[0][1].checks).not.toContainEqual(
+    expect.objectContaining({ key: 'signup_reminder' }),
+  );
 });
 it('uses saved event preview for league-only staff and clears results on channel edits', async () => {
   mount({

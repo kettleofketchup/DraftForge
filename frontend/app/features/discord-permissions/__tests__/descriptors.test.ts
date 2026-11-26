@@ -63,6 +63,19 @@ describe('settingsDescriptors', () => {
     );
   });
 
+  it.each([
+    { isRepeater: false, showSignupReminder: true, visible: true },
+    { isRepeater: true, showSignupReminder: false, visible: false },
+  ])('follows explicit reminder visibility: $showSignupReminder', (opts) => {
+    const descriptors = settingsDescriptors(DISCORD_CONFIG_DEFAULTS, {
+      ...opts,
+      showNotifyNewEvents: false,
+    });
+    expect(descriptors.some((d) => d.key === 'signup_reminder')).toBe(
+      opts.visible,
+    );
+  });
+
   it('uses separate fallback transport and prospective start destination', () => {
     const descriptors = settingsDescriptors(
       {

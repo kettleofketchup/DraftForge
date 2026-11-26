@@ -44,7 +44,11 @@ export const SETTINGS_OPERATIONS: Record<
 
 export function settingsDescriptors(
   values: DiscordFields,
-  opts: { isRepeater: boolean; showNotifyNewEvents: boolean },
+  opts: {
+    isRepeater: boolean;
+    showNotifyNewEvents: boolean;
+    showSignupReminder?: boolean;
+  },
 ): CheckDescriptor[] {
   const checks: CheckDescriptor[] = [];
   const announcement = values.discord_announcement_channel_id || null;
@@ -93,6 +97,7 @@ export function settingsDescriptors(
     'start_mention',
     values.discord_post_signups ? signup || fallback : null,
   );
-  if (opts.isRepeater) add('signup_reminder', 'signup_reminder_dm');
+  if (opts.showSignupReminder ?? opts.isRepeater)
+    add('signup_reminder', 'signup_reminder_dm');
   return checks;
 }
