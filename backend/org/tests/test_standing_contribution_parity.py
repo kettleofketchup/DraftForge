@@ -48,13 +48,14 @@ from user.models import ProfileClaimRequest
 # payloads of every outbox row naming it (one UPDATE each); after a merge
 # that hook finds none of the merged rows. The send view also reads the new
 # send's outbox summary for its writeback field (one SELECT). Deleting
-# ledger rows is no longer a fast delete: the collector reads the rows and
+# ledger rows is not a fast delete: the collector reads the rows and
 # then their promotion-point reversals (reversal_of cascades), two SELECTs.
 # Whether an imported contact holds the recipient's point is one SELECT: a
 # send asks it once, and so does each send a release or undo would promote.
-# An undo takes the event lock the import uses, then reads the event (one
-# more query than the old combined lock-and-read). A merge reads which
-# points imported contacts hold for the two Discord IDs (one SELECT).
+# An undo takes the event lock the import uses, then reads the event, and
+# deleting the send cascades to its merged external keys (one DELETE). A
+# merge reads which points imported contacts hold for the two Discord IDs
+# (one SELECT).
 CLOSE_ADMIN_COMPLETE_QUERIES = 46
 CLOSE_AUTO_CANCEL_QUERIES = 42
 CLOSE_ADMIN_CANCEL_QUERIES = 12
@@ -71,7 +72,7 @@ DELETE_API_QUERIES = 124
 DELETE_ADMIN_QUERIES = 177
 DELETE_ADMIN_CONFIRM_QUERIES = 55
 PROMO_SEND_QUERIES = 30
-PROMO_UNDO_QUERIES = 12
+PROMO_UNDO_QUERIES = 13
 PROMO_RELEASE_QUERIES = 138
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
