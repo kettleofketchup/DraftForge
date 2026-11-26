@@ -15,6 +15,7 @@ from events.ledger import (
     SignupActor,
     current_interaction_id,
     event_snapshot,
+    is_placement,
     record_signup_change,
     snapshot,
     user_snapshot,
@@ -249,8 +250,36 @@ class ActorTest(EventTestCase):
         self.assertEqual(actor.role, ActorRole.SYSTEM)
         self.assertEqual(actor.means, SignupMeans.SYSTEM)
 
-    def test_placement_actions_empty(self) -> None:
-        self.assertEqual(PLACEMENT_ACTIONS, frozenset())
+    def test_placement_actions(self) -> None:
+        self.assertEqual(
+            PLACEMENT_ACTIONS,
+            frozenset(
+                {
+                    SignupAction.STAFF_ADDED,
+                    SignupAction.DEMOTED,
+                    SignupAction.REINSTATED,
+                    SignupAction.VOIDED_WITHDRAWAL,
+                    SignupAction.TRANSFERRED_OUT,
+                    SignupAction.TRANSFERRED_IN,
+                    SignupAction.SWAPPED,
+                }
+            ),
+        )
+
+    def test_is_placement(self) -> None:
+        for action in PLACEMENT_ACTIONS:
+            with self.subTest(action=action):
+                self.assertTrue(is_placement(action))
+        self.assertTrue(
+            is_placement(SignupAction.APPROVED, from_status=SignupStatus.WAITLISTED)
+        )
+        for from_status in (SignupStatus.RSVP, "pending", None):
+            with self.subTest(from_status=from_status):
+                self.assertFalse(
+                    is_placement(SignupAction.APPROVED, from_status=from_status)
+                )
+        self.assertFalse(is_placement(SignupAction.REJECTED))
+        self.assertFalse(is_placement(SignupAction.CONFIRMED))
 
     def test_reexports(self) -> None:
         self.assertIs(ledger.ActorRole, ActorRole)
