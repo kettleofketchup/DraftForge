@@ -17,6 +17,7 @@ import type {
   SignupBody,
 } from '~/components/api/api';
 import {
+  adminAddSignup as adminAddSignupAPI,
   approveSignup as approveSignupAPI,
   cancelEvent as cancelEventAPI,
   cancelSignup as cancelSignupAPI,
@@ -471,9 +472,19 @@ export function useUpdateEventMutation(eventId: number) {
   });
 }
 
-/** Mutation key shared by the staff signup actions (approve, reject, confirm, cancel). */
+/** Mutation key shared by the staff signup actions, including admin add. */
 export const signupActionKey = (eventId: number) =>
   ['signup-action', eventId] as const;
+
+export interface SignupActionVars {
+  id: number;
+  reason?: string;
+}
+
+export interface AdminAddVars {
+  userId: number;
+  reason?: string;
+}
 
 /**
  * Staff actions on individual signups. Rows update straight away: pending
@@ -485,6 +496,22 @@ export const signupActionKey = (eventId: number) =>
 export function useSignupActionMutations(eventId: number) {
   const queryClient = useQueryClient();
   const signupsKey = ['event-signups', eventId];
+  const eventOrg = () =>
+    queryClient.getQueryData<EventType>(['event', eventId])?.organization;
+
+  const invalidateAfterSignupActions = () => {
+    // This mutation still counts itself, so 1 means it is the last one.
+    if (queryClient.isMutating({ mutationKey: signupActionKey(eventId) }) > 1)
+      return;
+    queryClient.invalidateQueries({ queryKey: signupsKey });
+    queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+    void invalidateEventLists(queryClient);
+    invalidateSignupHistory(queryClient, eventId);
+    queryClient.invalidateQueries({
+      queryKey: ['event-lobby-password', eventId],
+    });
+    void invalidateConductQueries(queryClient, eventOrg());
+  };
 
   const options = <TVars>(
     action: SignupAction,
@@ -498,42 +525,61 @@ export function useSignupActionMutations(eventId: number) {
         old ? replaceSignup(old, updated) : old,
       );
     },
-    onSettled: () => {
-      // This mutation still counts itself, so 1 means it is the last one.
-      if (queryClient.isMutating({ mutationKey: signupActionKey(eventId) }) > 1)
-        return;
-      queryClient.invalidateQueries({ queryKey: signupsKey });
-      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
-      void invalidateEventLists(queryClient);
-      invalidateSignupHistory(queryClient, eventId);
-      queryClient.invalidateQueries({
-        queryKey: ['event-lobby-password', eventId],
-      });
-      void invalidateConductQueries(
-        queryClient,
-        queryClient.getQueryData<EventType>(['event', eventId])?.organization,
-      );
-    },
+    onSettled: invalidateAfterSignupActions,
   });
 
   return {
     approve: useMutation(
-      options('approve', ({ id, mmr }: { id: number; mmr?: number }) =>
-        approveSignupAPI(id, { mmr }),
+      options(
+        'approve',
+        ({ id, mmr, reason }: { id: number; mmr?: number; reason?: string }) =>
+          approveSignupAPI(id, { mmr, reason }),
       ),
     ),
-    reject: useMutation(options('reject', (id: number) => rejectSignupAPI(id))),
+    reject: useMutation(
+      options('reject', ({ id, reason }: SignupActionVars) =>
+        rejectSignupAPI(id, reason),
+      ),
+    ),
     confirm: useMutation(
-      options('confirm', (id: number) => confirmSignupAPI(id)),
+      options('confirm', ({ id, reason }: SignupActionVars) =>
+        confirmSignupAPI(id, reason),
+      ),
     ),
-    cancel: useMutation(options('cancel', (id: number) => cancelSignupAPI(id))),
+    cancel: useMutation(
+      options('cancel', ({ id, reason }: SignupActionVars) =>
+        cancelSignupAPI(id, reason),
+      ),
+    ),
     unconfirm: useMutation(
-      options('unconfirm', (id: number) => unconfirmSignupAPI(id)),
+      options('unconfirm', ({ id, reason }: SignupActionVars) =>
+        unconfirmSignupAPI(id, reason),
+      ),
     ),
-    demote: useMutation(options('demote', (id: number) => demoteSignupAPI(id))),
+    demote: useMutation(
+      options('demote', ({ id, reason }: SignupActionVars) =>
+        demoteSignupAPI(id, reason),
+      ),
+    ),
     reinstate: useMutation(
-      options('reinstate', (id: number) => reinstateSignupAPI(id)),
+      options('reinstate', ({ id, reason }: SignupActionVars) =>
+        reinstateSignupAPI(id, reason),
+      ),
     ),
+    adminAdd: useMutation({
+      mutationKey: [...signupActionKey(eventId), 'admin_add'],
+      mutationFn: ({ userId, reason }: AdminAddVars) =>
+        adminAddSignupAPI(eventId, userId, reason),
+      onSettled: () => {
+        // The backend makes the added user an OrgUser.
+        const orgId = eventOrg();
+        if (orgId)
+          void queryClient.invalidateQueries({
+            queryKey: orgUsersQueryKey(orgId),
+          });
+        invalidateAfterSignupActions();
+      },
+    }),
   };
 }
 

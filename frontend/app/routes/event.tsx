@@ -60,7 +60,6 @@ import { toast } from 'sonner';
 
 import { useQueryClient } from '@tanstack/react-query';
 import type { AddMemberPayload } from '~/components/api/api';
-import { adminAddSignup } from '~/components/api/api';
 import { EventStateBadge } from '~/components/events';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
@@ -148,14 +147,11 @@ import {
   EventLeadershipSection,
 } from '~/features/leadership';
 import {
-  invalidateConductQueries,
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
 import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
-  invalidateEventLists,
-  invalidateSignupHistory,
   removeSignupHistoryQueries,
   useEvent,
   useEventActionMutation,
@@ -805,7 +801,7 @@ export default function EventPage() {
         onConfirm={async () => {
           if (!mySignup) return;
           try {
-            await signupActions.cancel.mutateAsync(mySignup.id);
+            await signupActions.cancel.mutateAsync({ id: mySignup.id });
             toast.success('RSVP cancelled');
           } catch {
             toast.error('Failed to cancel RSVP');
@@ -1010,6 +1006,7 @@ function SignupsTab({
     [signups],
   );
   const entityContext = useMemo(() => ({ orgId }), [orgId]);
+  const { mutateAsync: adminAdd } = signupActions.adminAdd;
   const handleAddUser = useCallback(
     async (payload: AddMemberPayload): Promise<UserType> => {
       // The modal's Discord tab can hand back a discord_id with no user_id, and
@@ -1019,19 +1016,7 @@ function SignupsTab({
           'Select a site user — adding a Discord member directly is not supported here yet.',
         );
       }
-      const resp = await adminAddSignup(eventId!, payload.user_id);
-      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
-      void invalidateEventLists(queryClient);
-      invalidateSignupHistory(queryClient, eventId!);
-      void invalidateConductQueries(queryClient, orgId);
-      // Backend adds the user as an OrgUser when an admin signs them up;
-      // refetch the org members so the org page shows the new membership.
-      if (orgId) {
-        void queryClient.invalidateQueries({
-          queryKey: orgUsersQueryKey(orgId),
-        });
-      }
+      const resp = await adminAdd({ userId: payload.user_id });
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
       const added = resp.user_data;
@@ -1044,7 +1029,7 @@ function SignupsTab({
           }
         : { pk: payload.user_id, username: null };
     },
-    [eventId, orgId, queryClient],
+    [adminAdd],
   );
   const checkIsAdded = useCallback(
     (user: UserType) => (user.pk != null ? signupUserPks.has(user.pk) : false),
@@ -1091,7 +1076,8 @@ function SignupsTab({
           const position = signup.waitlist_position ?? index + 1;
           // "Waitlist" fires the server's `demote` mutation
           // (approved/rsvp → waitlisted); named so the label/mutation gap is explicit.
-          const handleWaitlist = () => signupActions.demote.mutate(signup.id);
+          const handleWaitlist = () =>
+            signupActions.demote.mutate({ id: signup.id });
 
           const adminActions = isAdmin ? (
             <div className="flex gap-1 [&_button]:min-h-11 sm:[&_button]:min-h-8">
@@ -1141,7 +1127,9 @@ function SignupsTab({
                       <SecondaryButton
                         color="blue"
                         size="sm"
-                        onClick={() => signupActions.confirm.mutate(signup.id)}
+                        onClick={() =>
+                          signupActions.confirm.mutate({ id: signup.id })
+                        }
                         disabled={signupActions.confirm.isPending}
                       >
                         <UserCheck className="h-3.5 w-3.5" />
@@ -1176,7 +1164,9 @@ function SignupsTab({
                     <SecondaryButton
                       color="orange"
                       size="sm"
-                      onClick={() => signupActions.unconfirm.mutate(signup.id)}
+                      onClick={() =>
+                        signupActions.unconfirm.mutate({ id: signup.id })
+                      }
                       disabled={signupActions.unconfirm.isPending}
                     >
                       <Undo2 className="h-3.5 w-3.5" />
@@ -1211,7 +1201,9 @@ function SignupsTab({
                     <SecondaryButton
                       size="sm"
                       data-testid="event-restore-btn"
-                      onClick={() => signupActions.reinstate.mutate(signup.id)}
+                      onClick={() =>
+                        signupActions.reinstate.mutate({ id: signup.id })
+                      }
                       disabled={signupActions.reinstate.isPending}
                     >
                       <Undo2 className="h-3.5 w-3.5" />
@@ -1382,13 +1374,16 @@ function SignupsTab({
           const playerName = approvalSignup
             ? DisplayName(approvalSignup)
             : `User #${signupId}`;
-          signupActions.reject.mutate(signupId, {
-            onSuccess: () => {
-              setApprovalSignup(null);
-              toast.success(`Rejected signup for ${playerName}`);
+          signupActions.reject.mutate(
+            { id: signupId },
+            {
+              onSuccess: () => {
+                setApprovalSignup(null);
+                toast.success(`Rejected signup for ${playerName}`);
+              },
+              onError: () => toast.error(`Failed to reject ${playerName}`),
             },
-            onError: () => toast.error(`Failed to reject ${playerName}`),
-          });
+          );
         }}
       />
       <ConfirmDialog
@@ -1403,9 +1398,12 @@ function SignupsTab({
         isLoading={signupActions.cancel.isPending}
         onConfirm={() => {
           if (removeSignup) {
-            signupActions.cancel.mutate(removeSignup.signup.id, {
-              onSuccess: () => setRemoveSignup(null),
-            });
+            signupActions.cancel.mutate(
+              { id: removeSignup.signup.id },
+              {
+                onSuccess: () => setRemoveSignup(null),
+              },
+            );
           }
         }}
       />

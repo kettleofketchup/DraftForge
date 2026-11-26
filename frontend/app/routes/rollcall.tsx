@@ -173,9 +173,13 @@ export default function RollCallPage() {
   const handleRestore = useCallback(
     (signup: EventSignupType) => {
       advanceFrom(signup);
-      reinstate(signup.id, {
-        onError: () => toast.error(`Failed to restore ${DisplayName(signup)}`),
-      });
+      reinstate(
+        { id: signup.id },
+        {
+          onError: () =>
+            toast.error(`Failed to restore ${DisplayName(signup)}`),
+        },
+      );
     },
     [reinstate, advanceFrom],
   );
@@ -539,10 +543,13 @@ export default function RollCallPage() {
           const target = confirmSignup;
           if (!target) return;
           advanceFrom(target);
-          signupActions.confirm.mutate(target.id, {
-            onError: () =>
-              toast.error(`Failed to confirm ${DisplayName(target)}`),
-          });
+          signupActions.confirm.mutate(
+            { id: target.id },
+            {
+              onError: () =>
+                toast.error(`Failed to confirm ${DisplayName(target)}`),
+            },
+          );
         }}
         confirmTestId="rollcall-confirm-dialog-confirm"
         cancelTestId="rollcall-confirm-dialog-cancel"
@@ -587,10 +594,13 @@ export default function RollCallPage() {
           const target = rejectSignup;
           if (!target) return;
           advanceFrom(target);
-          signupActions.reject.mutate(target.id, {
-            onError: () =>
-              toast.error(`Failed to remove ${DisplayName(target)}`),
-          });
+          signupActions.reject.mutate(
+            { id: target.id },
+            {
+              onError: () =>
+                toast.error(`Failed to remove ${DisplayName(target)}`),
+            },
+          );
         }}
         confirmTestId="rollcall-reject-dialog-confirm"
         cancelTestId="rollcall-reject-dialog-cancel"
@@ -634,10 +644,13 @@ export default function RollCallPage() {
           const target = cancelSignup;
           if (!target) return;
           advanceFrom(target);
-          signupActions.cancel.mutate(target.id, {
-            onError: () =>
-              toast.error(`Failed to remove ${DisplayName(target)}`),
-          });
+          signupActions.cancel.mutate(
+            { id: target.id },
+            {
+              onError: () =>
+                toast.error(`Failed to remove ${DisplayName(target)}`),
+            },
+          );
         }}
         confirmTestId="rollcall-cancel-dialog-confirm"
         cancelTestId="rollcall-cancel-dialog-cancel"

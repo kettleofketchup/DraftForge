@@ -166,9 +166,9 @@ describe('event mutations refresh conduct queries', () => {
     const { hook, keys, invalid, thisOrgConductInvalid } = setup(true);
     let first: Promise<unknown> = Promise.resolve();
     act(() => {
-      first = hook.result.current.signups.confirm.mutateAsync(3);
+      first = hook.result.current.signups.confirm.mutateAsync({ id: 3 });
     });
-    await act(() => hook.result.current.signups.confirm.mutateAsync(4));
+    await act(() => hook.result.current.signups.confirm.mutateAsync({ id: 4 }));
     expect(invalid(keys.forecast)).toBe(false);
     await act(async () => {
       releaseFirst(signup);

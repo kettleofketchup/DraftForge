@@ -7,6 +7,7 @@ import type { EventSignupType, EventType } from '~/components/events/schemas';
 
 const api = vi.hoisted(() => ({
   signupForEvent: vi.fn(),
+  adminAddSignup: vi.fn(),
   openSignups: vi.fn(),
   startRollCall: vi.fn(),
   startTournament: vi.fn(),
@@ -80,6 +81,7 @@ describe('event mutations refresh every events list', () => {
       api[name].mockResolvedValue(event);
     api.deleteEvent.mockResolvedValue(undefined);
     api.signupForEvent.mockResolvedValue(signup);
+    api.adminAddSignup.mockResolvedValue(signup);
     api.approveSignup.mockResolvedValue(signup);
     api.confirmSignup.mockResolvedValue(signup);
     api.cancelSignup.mockResolvedValue(signup);
@@ -114,10 +116,18 @@ describe('event mutations refresh every events list', () => {
     'staff signup action %s',
     async (name) => {
       const { hook, listsInvalid } = setup();
-      await act(() => hook.result.current.signups[name].mutateAsync(3));
+      await act(() => hook.result.current.signups[name].mutateAsync({ id: 3 }));
       expect(listsInvalid()).toBe(true);
     },
   );
+
+  it('staff admin add', async () => {
+    const { hook, listsInvalid } = setup();
+    await act(() =>
+      hook.result.current.signups.adminAdd.mutateAsync({ userId: 9 }),
+    );
+    expect(listsInvalid()).toBe(true);
+  });
 
   it('staff approve', async () => {
     const { hook, listsInvalid } = setup();
@@ -131,7 +141,9 @@ describe('event mutations refresh every events list', () => {
     api.confirmSignup.mockRejectedValueOnce(new Error('nope'));
     const { hook, listsInvalid } = setup();
     await act(async () => {
-      await hook.result.current.signups.confirm.mutateAsync(3).catch(() => {});
+      await hook.result.current.signups.confirm
+        .mutateAsync({ id: 3 })
+        .catch(() => {});
     });
     expect(listsInvalid()).toBe(true);
   });

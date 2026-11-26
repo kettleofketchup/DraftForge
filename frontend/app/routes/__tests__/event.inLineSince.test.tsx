@@ -58,7 +58,10 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => {
     useEventSignups: () => ({ data: h.signups }),
     useEventSignupUsers: () => undefined,
     useEventActionMutation: () => new Proxy({}, { get: () => mutation() }),
-    useSignupActionMutations: () => signupActions,
+    useSignupActionMutations: (eventId: number) => ({
+      ...signupActions,
+      adminAdd: actual.useSignupActionMutations(eventId).adminAdd,
+    }),
     useSignupMutation: () => mutation(),
   };
 });
