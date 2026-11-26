@@ -156,7 +156,11 @@ def _test_mode_skips(discord_user_id: str) -> bool:
     if not getattr(settings, "TEST", False):
         return False
     target = str(getattr(settings, "TEST_DISCORD_USER_ID", "") or "")
-    return not target or discord_user_id != target
+    return (
+        not target
+        or not getattr(settings, "DISCORD_BOT_TOKEN", "")
+        or discord_user_id != target
+    )
 
 
 def _claim_body(

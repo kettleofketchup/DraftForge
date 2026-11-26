@@ -29,6 +29,7 @@ def _env_bool(key: str, default: bool = False) -> bool:
 
 # Test-mode flag for Discord DM safety in tasks.
 # When TEST=true, discordbot.dm.send_dm only sends DMs to TEST_DISCORD_USER_ID
+# (and only when DISCORD_BOT_TOKEN is set, so tokenless CI never calls Discord)
 # and records everyone else as skipped_test_mode in the ledger (callers count
 # it as delivered, so recipient_count > 0 in tests without spamming real users).
 DISCORD_ACTIVITY_ENABLED = _env_bool("DISCORD_ACTIVITY_ENABLED")
