@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 from structlog.contextvars import get_contextvars
 
+from events.discord.channels import new_event_channel
 from events.signup_post_lock import mark_dirty, mark_pending
 from telemetry.logging import get_logger
 
@@ -98,8 +99,8 @@ def notify_signup_changed(event: "Event") -> None:
 
 
 def notify_new_event(event: "Event") -> None:
-    """Dispatch the new-event channel post if an announcement channel is set."""
-    if not event.discord_announcement_channel_id:
+    """Dispatch the new-event channel post if it has a channel."""
+    if not new_event_channel(event):
         _log_skipped(event, "no_channel_id", "send_new_event_notification")
         return
     # local: cycle: events.tasks -> events.discord -> dispatch

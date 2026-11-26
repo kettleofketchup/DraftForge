@@ -1,12 +1,20 @@
 from asgiref.sync import async_to_sync
+from cacheops.invalidation import invalidate_dict
 from channels import layers
 from django.db import transaction
-from django.db.models.signals import m2m_changed, pre_save
+from django.db.models.signals import m2m_changed, pre_delete, pre_save
 from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
-from draft.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
+from draft.models import (
+    Draft,
+    DraftRound,
+    DraftTeam,
+    HeroDraft,
+    HeroDraftRound,
+    HeroDraftState,
+)
 from draft.services.hero_chat import (
     chat_roster_field,
     reconcile_draft_memberships,
@@ -59,6 +67,41 @@ def herodraft_chat_roster_tenure(
         schedule_roster_tenure(changed, [instance.pk])
     else:
         schedule_roster_tenure([instance.pk], changed)
+
+
+@receiver(
+    pre_delete,
+    sender="tournament.Team",
+    dispatch_uid="draft_invalidate_rounds_for_deleted_team",
+)
+def invalidate_rounds_for_deleted_team(
+    sender: type[Team], instance: Team, **kwargs: object
+) -> None:
+    """SET_NULL on drafting_team is a plain UPDATE that cacheops never sees."""
+    draft_ids = sorted(
+        set(
+            DraftRound.objects.nocache()
+            .filter(drafting_team=instance)
+            .values_list("draft_id", flat=True)
+        )
+    )
+    if not draft_ids:
+        return
+    log.debug(
+        "draft_rounds_team_deleted",
+        system="tournament",
+        subsystem="draft",
+        team_id=instance.pk,
+        draft_ids=draft_ids,
+    )
+    drafts = list(Draft.objects.nocache().filter(pk__in=draft_ids))
+
+    def _invalidate_rounds() -> None:
+        for draft_id in draft_ids:
+            invalidate_dict(DraftRound, {"draft_id": draft_id})
+
+    transaction.on_commit(_invalidate_rounds)
+    invalidate_after_commit(*drafts)
 
 
 @receiver(

@@ -76,7 +76,7 @@ BROADCAST_EVENT_QUERIES: int = DRAFT_STATE_QUERIES + 1
 # Includes the OrgUserGameMmr prefetch in the broadcast state and tournament response.
 RESUME_ENDPOINT_QUERIES: int = 56
 # Includes the hero draft chat tenure lookup the roster change triggers.
-UNDO_ENDPOINT_QUERIES: int = 68
+UNDO_ENDPOINT_QUERIES: int = 67
 
 
 def organization_pk(tournament: Tournament) -> int | None:
@@ -167,7 +167,7 @@ class RecentDraftEventsTests(TestCase):
 
 
 class DraftRoundTeamTests(TestCase):
-    """Prefetched DraftRound.team matches the filter(...).first() lookup."""
+    """Prefetched DraftRound.team fallback matches the filter(...).first() lookup."""
 
     def setUp(self) -> None:
         fx = mid_draft_fixture(4, "rt")
@@ -177,6 +177,7 @@ class DraftRoundTeamTests(TestCase):
             tournament=fx.tournament, name="SharedCaptain", captain=fx.captains[1]
         )
         rounds = list(fx.draft.draft_rounds.order_by("pick_number"))
+        DraftRound.objects.filter(draft=fx.draft).update(drafting_team=None)
         DraftRound.objects.filter(pk=rounds[-1].pk).update(captain=fx.players[-1])
         DraftRound.objects.filter(pk=rounds[-2].pk).update(captain=None)
 

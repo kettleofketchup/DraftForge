@@ -124,5 +124,3 @@ Move the player back first, then clear the placement.
   teammate ratings, placement award) is saved once, on the team they captained from the
   start. A team taken over by a captain from another team gets no leadership record for
   that event.
-- **Team draft board.** After a takeover, a completed team draft board can show the
-  new captain's picks under the wrong team. Only the display is affected.

@@ -207,6 +207,24 @@ dota-lobby action="up":
 compose *args:
     {{compose}} "$@"
 
+# Run only the tests this branch's changes reach (--plan lists them); the full suites still gate CI
+[group('test')]
+affected *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{quote(root)}}
+    run=--run
+    pass=()
+    for a in "$@"; do
+        if [[ "$a" == --plan ]]; then run=; else pass+=("$a"); fi
+    done
+    exec {{quote(python)}} -m scripts.affected_tests $run "${pass[@]}"
+
+# affected-tests selector unit tests (no containers)
+[group('test')]
+affected-unit *args:
+    cd {{quote(root)}} && {{quote(python)}} -m pytest -p no:django -p no:cacheprovider scripts/test_affected_tests.py -q "$@"
+
 # Slot helper unit tests (no containers)
 [group('test')]
 slots-unit *args:

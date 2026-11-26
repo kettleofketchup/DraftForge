@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
 from draft.services.hero import new_herodraft_for_game
+from tournament.broadcast import bracket_changed_on_commit
 from tournament.models import Game
 
 _auth = [InternalServiceAuth]
@@ -85,6 +86,7 @@ def create_herodraft_for_game(request: Request, game_id: int) -> Response:
 
         herodraft = new_herodraft_for_game(game)
         invalidate_after_commit(game)
+        bracket_changed_on_commit(game.tournament_id, game.pk)
 
     return Response(
         {"id": herodraft.pk, "created": True},

@@ -6,7 +6,7 @@ from django.db import connection
 from events.models import Event
 from org.tests.leadership_base import LeadershipTestCase
 
-migration = import_module("events.migrations.0043_event_leadership_review_dm_dispatch")
+migration = import_module("events.migrations.0044_event_leadership_review_dm_dispatch")
 
 
 class ReviewDMDispatchBackfillTest(LeadershipTestCase):

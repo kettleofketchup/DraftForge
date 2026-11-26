@@ -812,6 +812,70 @@ class SubscriberReminderLedgerTest(_DiscordTaskTestCase):
         self.assertEqual(refire.status_code, 409)
 
 
+class FireEventReminderChannelTest(_DiscordTaskTestCase):
+    OWN_CHANNEL = "333333333333333333"
+    ANNOUNCEMENT_CHANNEL = "1482767177063858216"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.event.discord_announcement_channel_id = self.ANNOUNCEMENT_CHANNEL
+        self.event.discord_confirm_attendance = True
+        self.event.discord_profile_reminder = True
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.save()
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_fire_confirm_attendance_uses_own_channel(
+        self, mock_req: MagicMock
+    ) -> None:
+        mock_req.return_value = _ok_response({"id": "fire_att"})
+        self.event.discord_confirm_attendance_channel_id = self.OWN_CHANNEL
+        self.event.save(update_fields=["discord_confirm_attendance_channel_id"])
+
+        fire_event_reminder(self.event.pk, "confirm_attendance")
+
+        log = DiscordMessageLog.objects.get(
+            source="attendance_reminder", source_id=self.event.pk, success=True
+        )
+        self.assertEqual(log.channel_id, self.OWN_CHANNEL)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_fire_profile_reminder_uses_own_channel(self, mock_req: MagicMock) -> None:
+        mock_req.return_value = _ok_response({"id": "fire_prof"})
+        self.event.discord_profile_reminder_channel_id = self.OWN_CHANNEL
+        self.event.save(update_fields=["discord_profile_reminder_channel_id"])
+
+        fire_event_reminder(self.event.pk, "profile_reminder")
+
+        log = DiscordMessageLog.objects.get(
+            source="profile_reminder", source_id=self.event.pk, success=True
+        )
+        self.assertEqual(log.channel_id, self.OWN_CHANNEL)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_fire_blank_own_channel_uses_announcement(
+        self, mock_req: MagicMock
+    ) -> None:
+        mock_req.return_value = _ok_response({"id": "fire_att_blank"})
+
+        fire_event_reminder(self.event.pk, "confirm_attendance")
+
+        log = DiscordMessageLog.objects.get(
+            source="attendance_reminder", source_id=self.event.pk, success=True
+        )
+        self.assertEqual(log.channel_id, self.ANNOUNCEMENT_CHANNEL)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_fire_reminder_blank_channels_skips(self, mock_req: MagicMock) -> None:
+        self.event.discord_announcement_channel_id = ""
+        self.event.save(update_fields=["discord_announcement_channel_id"])
+
+        result = fire_event_reminder(self.event.pk, "profile_reminder")
+
+        mock_req.assert_not_called()
+        self.assertIn("No channel configured", result)
+
+
 class SignupReadUnavailableTest(_DiscordTaskTestCase):
     """A failed signup read must never post or edit with an empty list."""
 

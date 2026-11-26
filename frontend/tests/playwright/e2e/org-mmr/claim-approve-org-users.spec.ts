@@ -23,7 +23,7 @@ async function searchMembers(page: Page, query: string): Promise<void> {
   await search.fill(query);
 }
 
-test.describe('Approving a profile claim', () => {
+test.describe('Approving a profile claim (@cicd)', () => {
   test('updates the org Users tab without a reload', async ({
     page,
     context,
@@ -52,9 +52,12 @@ test.describe('Approving a profile claim', () => {
     );
     const usersTab = page.getByTestId('org-tab-users');
     const members = page.getByRole('tabpanel');
+    const targetCardName = members
+      .getByTestId('usercard-name')
+      .filter({ hasText: claim.target_nickname });
 
     await searchMembers(page, suffix);
-    await expect(members.getByText(claim.target_nickname)).toBeVisible();
+    await expect(targetCardName).toBeVisible();
     await expect(
       members.getByTestId(`usercard-${claim.claimer_username}`),
     ).toHaveCount(0);
@@ -69,7 +72,7 @@ test.describe('Approving a profile claim', () => {
     await expect(
       members.getByTestId(`usercard-${claim.claimer_username}`),
     ).toHaveCount(1);
-    await expect(members.getByText(claim.target_nickname)).toHaveCount(0);
+    await expect(targetCardName).toHaveCount(0);
     await expect(usersTab).toHaveText(countBefore ?? '');
   });
 });

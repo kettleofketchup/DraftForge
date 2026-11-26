@@ -14,7 +14,7 @@ def fence_existing_events(apps: StateApps, schema_editor: BaseDatabaseSchemaEdit
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("events", "0042_eventsignup_self_made"),
+        ("events", "0043_discord_post_channels"),
         ("org", "0026_leadership_review_dms"),
     ]
 
