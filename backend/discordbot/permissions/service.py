@@ -154,6 +154,12 @@ def run_checks(
                 or None
             )
         reason: ReasonCode | None = error
+        if (
+            check.destination_source == "posted"
+            and scope == "channel"
+            and not check.channel_id
+        ):
+            reason = "malformed_snapshot"
         if guild_id is None and scope in ("channel", "guild"):
             reason = "no_server_configured"
         destination = Destination(

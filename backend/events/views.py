@@ -47,7 +47,14 @@ from discordbot.models import (
     DiscordMessageLog,
     DMType,
 )
+from discordbot.permissions import service as permission_service
+from discordbot.permissions.actions import EVENT_ACTIONS, PUBLIC_PREVIEW_ACTIONS
+from discordbot.permissions.schemas import PermissionChecksRequest
 from discordbot.serializers_discord_event import DiscordEventDetailSerializer
+from discordbot.services.permissions import (
+    DiscordPermissionRefreshThrottle,
+    validation_error_details,
+)
 from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
@@ -59,6 +66,7 @@ from events.discord import (
     notify_signup_changed,
     profile_reminder_channel,
 )
+from events.discord.permissions import preview_event_checks, saved_event_checks
 from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
@@ -1669,6 +1677,50 @@ class EventViewSet(viewsets.ModelViewSet):
             **staff_result.log_fields(),
         )
         return Response(_event_payload(event.pk, request.user))
+
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="permission-checks",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def permission_checks(self, request: Request, pk: str | None = None) -> Response:
+        event = self.get_object()
+        if not has_event_staff_access(request.user, event):
+            return Response({"error": "Permission denied"}, status=403)
+        if request.method == "POST":
+            try:
+                body = PermissionChecksRequest.model_validate(request.data)
+            except PydanticValidationError as exc:
+                return Response(
+                    {
+                        "error": "Invalid permission check request",
+                        "detail": validation_error_details(exc),
+                    },
+                    status=400,
+                )
+            if any(
+                check.action not in EVENT_ACTIONS & PUBLIC_PREVIEW_ACTIONS
+                for check in body.checks
+            ):
+                return Response({"error": "Unsupported preview action"}, status=400)
+            checks = preview_event_checks(event, body)
+            refresh = body.refresh
+        else:
+            checks = saved_event_checks(event)
+            refresh = request.query_params.get("refresh", "").lower() == "true"
+        throttled = refresh and not DiscordPermissionRefreshThrottle().allow_request(
+            request, self
+        )
+        result = permission_service.run_checks(
+            event.organization.discord_server_id or None,
+            checks,
+            refresh=refresh and not throttled,
+        )
+        if throttled:
+            for check in result.checks:
+                check.refresh_state = "throttled"
+        return Response(result.model_dump(mode="json"))
 
     @action(detail=True, methods=["get"])
     def discord(self, request: Request, pk: str | None = None) -> Response:
