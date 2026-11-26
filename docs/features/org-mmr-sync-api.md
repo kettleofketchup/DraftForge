@@ -33,18 +33,18 @@ Each token is granted a fixed list of operations when it is created:
 |-----------|--------|-------------------|
 | `mmr:read` | `GET mmr-sync/` | MMR sync API |
 | `mmr:write` | `POST mmr-sync/` | MMR sync API |
-| `promotion:read` | the adaptor's recipient reads | Promotion |
-| `promotion:import` | the adaptor's contact imports | Promotion |
+| `promotion:import` | the adaptor's contact imports: records external contacts and awards and voids promotion points | Promotion |
 
 The create form has a switch per operation, defaulting to the MMR pair, and disables
 operations whose feature is locked. Through the API, `POST api-tokens/` takes an optional
 `"operations": [...]`; without it the token gets `["mmr:read", "mmr:write"]`. An empty or
 unknown list is `400`, and asking for an operation whose feature is locked is `403`.
-Tokens created before operations existed keep the MMR pair. Token rows list their
-operations, and **API access** is shown to org admins when any of these features is
-unlocked, so a promotion-only token can be issued while MMR sync API is off. A request
+These three are the only operations; any other name is unknown. Tokens created before operations
+existed keep the MMR pair. Token rows list their operations, and **API access** is shown
+to org admins when the MMR sync API or Promotion is unlocked, so a promotion-only token
+can be issued while MMR sync API is off. Contributions alone does not show it. A request
 for an operation the token lacks gets `403 operation_not_granted`. The promotion
-operations are described in [promotion contact sync](promotion-contact-sync.md).
+operation is described in [promotion contact sync](promotion-contact-sync.md).
 
 ## Limits and usage
 

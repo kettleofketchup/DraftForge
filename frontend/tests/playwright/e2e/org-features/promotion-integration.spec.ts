@@ -8,6 +8,7 @@ import type {
 import {
   expect,
   leaderboardByUser,
+  loginAdmin,
   loginOrgFeatures,
   orgFeaturesApi,
   postWithCsrf,
@@ -470,6 +471,29 @@ test.describe('Promotion external contact history @cicd', () => {
     await shoot(page, 'locked-feature');
   });
 
+  test('a site admin sees why tokens are locked when MMR sync and Promotion are off', async ({
+    page,
+    context,
+  }) => {
+    // The locked org has every feature off; only a site admin still sees the section.
+    await loginAdmin(context);
+    await page.setViewportSize(VIEWPORTS[0][1]);
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${data.orgs.locked.pk}?settings=api-access`,
+    );
+    const notice = page.getByTestId('api-access-locked');
+    await expect(notice).toHaveText(
+      'The MMR sync API and Promotion are both locked for this organization. Unlock one under Locked features before creating tokens.',
+    );
+    await expect(notice).not.toContainText(/contribution/i);
+    await shoot(
+      page,
+      'api-access-locked',
+      page.getByTestId('org-settings-api-access'),
+    );
+  });
+
   test('an org admin issues a promotion-scoped token from API access', async ({
     page,
     context,
@@ -481,8 +505,13 @@ test.describe('Promotion external contact history @cicd', () => {
       page,
       `/organizations/${pk}?settings=api-access`,
     );
-    await expect(page.getByTestId('org-settings-api-access')).toBeVisible();
+    const panel = page.getByTestId('org-settings-api-access');
+    await expect(panel).toBeVisible();
     await expect(page.getByTestId('api-access-locked')).toHaveCount(0);
+    await expect(panel).toContainText(
+      'The adaptor needs the promotion operations',
+    );
+    await shoot(page, 'api-access-header', panel);
 
     await page.getByTestId('api-token-create').click();
     const dialog = page.getByTestId('api-token-create-dialog');

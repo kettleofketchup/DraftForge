@@ -1811,11 +1811,8 @@ org), the operation grant (`403 operation_not_granted`), the operation's feature
 Requests and responses are strict JSON: bodies at most 65,536 bytes
 (`413 request_too_large`), `application/json` in UTF-8 (`415 unsupported_media_type`),
 no duplicate or unknown keys, at most 100 batch entries. IDs are canonical positive
-decimal strings and points are signed decimal strings; timestamps are UTC with a `Z`
-and at most 6 fractional digits. Unknown or repeated query parameters are `400`.
-Cursors are opaque, signed and bound to the org, the resource and a fingerprint of the
-listed identities; a tampered or foreign cursor is `400 invalid_cursor`, a changed
-listing is `409 mapping_changed` (start again from the first page).
+decimal strings; timestamps are UTC with a `Z` and at most 6 fractional digits; dates
+are `YYYY-MM-DD`.
 
 Errors use their own envelope, not `{"detail"}`:
 
@@ -1825,8 +1822,72 @@ Errors use their own envelope, not `{"detail"}`:
 
 | Method | Endpoint | Description | Operation |
 |--------|----------|-------------|-----------|
-| GET | `events/{event_id}/recipients/?limit=&cursor=` | People the adaptor may report contacts for: org members, recent tournament players, active members, recent guild joiners and anyone already contacted for the event. `{mapping_version, recipients: [{user_id, org_user_id, discord_id}], next_cursor}`, ordered by Discord ID, accounts without one last with `discord_id: null`; `limit` 1-100, default 100. Nobody is enrolled by the read. `403 binding_missing` / `binding_mismatch` without a valid binding, `503 subject_source_unavailable` when the guild member list cannot be read. | `promotion:read` |
-| POST | `contact-receipts/` | Import external contacts for one bound event: `{source: "contact_log", mapping_version, entries: [{source_contact_id, event_id, user_id, org_user_id, discord_id, recorded_at, contact_method, linkage: "occasion"}]}` (`contact_method` is `DISCORD_DM`, `DISCORD_GROUP_DM` or `OTHER`; `user_id` and `org_user_id` may be `null`). All or nothing: `200 {results: [{index, status}], applied, unchanged, quarantined, association_updated}` with `status` `applied`, `unchanged` or `quarantined`. `409 source_content_conflict` (same source contact ID, different facts), `409 mapping_changed`, `409 import_conflict_retry` (retry once). Never creates sends, awards, accounts or memberships. | `promotion:import` |
+| POST | `contact-receipts/` | Import a range of the bound guild's external contacts, store or update each one and settle its promotion point (below). | `promotion:import` |
+
+`promotion:import` records external contacts and awards and voids promotion points.
+There is no recipients read and no contribution-totals export.
+
+### POST contact-receipts/
+
+```json
+{
+  "source": "contact_log",
+  "guild_id": "555000000000000001",
+  "scan_started_at": "2026-11-25T10:00:00.000000Z",
+  "range": {"after": "0", "through": "1234"},
+  "skipped_ids": ["17", "1200"],
+  "entries": [{
+    "source_contact_id": "1201",
+    "target_discord_id": "300000000000000001",
+    "promoter_discord_id": "300000000000000002",
+    "recorded_at": "2026-11-24T18:30:00.000000Z",
+    "contact_date_ny": "2026-11-24",
+    "contact_method": "DISCORD_DM",
+    "contact_reason": "EVENT_INVITE",
+    "occasion_id": "88",
+    "event_date": null,
+    "forced": false
+  }]
+}
+```
+
+- `guild_id` must match the org's binding (`403 binding_missing` without one,
+  `403 binding_mismatch` for another guild).
+- `scan_started_at` and `recorded_at` may be at most 5 minutes in the future.
+- `range` is `null` (a probe: no entries and no skipped IDs) or `{after, through}` with
+  `after < through` (`after` may be `"0"`). It promises that every external row with
+  `after < id ≤ through` is either an entry or one of the 0 to 1000 `skipped_ids`. Every
+  ID lies inside the range and appears once. A live stored contact inside the range that
+  is in neither list is retracted.
+- `promoter_discord_id` is `null` when the adaptor could not resolve the promoter.
+- `contact_method` is `DISCORD_DM`, `DISCORD_GROUP_DM` or `OTHER`; `contact_reason` is
+  `EVENT_INVITE`, `FOLLOW_UP` or `GENERAL`.
+- Exactly one of `occasion_id` and `event_date` is set, and `forced: true` needs an
+  `occasion_id`.
+
+Response `200`:
+
+```json
+{
+  "results": [{"index": 0, "status": "applied", "point": "credited", "voided_local": true}],
+  "applied": 1, "unchanged": 0, "updated": 0, "reinstated": 0, "quarantined": 0,
+  "association_updated": 0, "retracted": 0,
+  "credited": 1, "uncredited": 0, "duplicate": 0, "echo": 0, "voided_local": 1, "restored_local": 0,
+  "max_source_contact_id": "1234"
+}
+```
+
+- `status` per entry: `applied` (new), `unchanged`, `updated` (facts, a Discord ID or
+  the bound event changed), `reinstated` (a retracted contact posted again) or
+  `quarantined`.
+- `point` per entry: `not_applicable`, `echo`, `credited`, `uncredited`, `duplicate` or
+  `retracted`. `voided_local` is true when this entry voided a local promotion point.
+- `retracted` and `restored_local` count contacts retracted and local points restored by
+  the request. `max_source_contact_id` is the highest external ID stored for the org,
+  retracted ones included, or `null`.
+- `400` rejects the whole batch. `409 import_conflict_retry` means a concurrent import
+  touched the same contacts; nothing was applied, so retry once.
+- Imports never create sends, accounts or memberships.
 
 Token management (`/api/organizations/{id}/api-tokens/`, session auth) accepts
 `operations` on create; see [MMR sync API](../features/org-mmr-sync-api.md#token-operations).
