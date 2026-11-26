@@ -5,7 +5,7 @@ from datetime import timezone as dt_tz
 
 from django.utils import timezone as tz
 
-from events.constants import SignupOpenMode
+from events.constants import SignupOpenMode, StaffReasonPolicy
 from events.models import Event, EventRepeater
 from events.services import sync_future_events
 from events.tests.test_discord_tasks import _DiscordTaskTestCase
@@ -135,3 +135,36 @@ class SyncFutureEventsLineRulesTest(_DiscordTaskTestCase):
         event.refresh_from_db()
         self.assertFalse(event.line_withdraw_forfeits)
         self.assertFalse(event.line_switch_restamps)
+
+    def test_staff_reason_policy_cascades_to_future_events_only(self) -> None:
+        repeater = EventRepeater.objects.create(
+            organization=self.event.organization,
+            name="Reason Repeater",
+            day_of_week=1,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date(),
+        )
+        future = Event.objects.create(
+            organization=self.event.organization,
+            event_repeater=repeater,
+            name="Reason Future",
+            scheduled_at=tz.now() + timedelta(days=6),
+            state="upcoming",
+        )
+        past = Event.objects.create(
+            organization=self.event.organization,
+            event_repeater=repeater,
+            name="Reason Past",
+            scheduled_at=tz.now() - timedelta(days=1),
+            state="completed",
+        )
+        repeater.staff_reason_policy = StaffReasonPolicy.PLACEMENTS
+        repeater.save(update_fields=["staff_reason_policy"])
+
+        sync_future_events(repeater)
+
+        future.refresh_from_db()
+        past.refresh_from_db()
+        self.assertEqual(future.staff_reason_policy, StaffReasonPolicy.PLACEMENTS)
+        self.assertEqual(past.staff_reason_policy, StaffReasonPolicy.OPTIONAL)

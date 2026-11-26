@@ -85,6 +85,12 @@ class SignupOpenMode(models.TextChoices):
     SCHEDULED = "scheduled", "Hours before start"
 
 
+class StaffReasonPolicy(models.TextChoices):
+    OPTIONAL = "optional", "Optional"
+    PLACEMENTS = "placements", "Required for placements"
+    ALL_STAFF_CHANGES = "all_staff_changes", "Required for every staff change"
+
+
 class SignupType(models.TextChoices):
     USER = "user", "User"
     TEAM = "team", "Team"

@@ -5,12 +5,17 @@ from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
 from events.capacity import count_seats, has_free_seat, with_signup_counts
-from events.constants import RepeatFrequency, SignupStatus
+from events.constants import RepeatFrequency, SignupStatus, StaffReasonPolicy
 from events.models import Event, EventRepeater, EventSignup, OrgEventDefaults
 from events.tests.base import EventTestCase
 
 LINE_FIELDS: tuple[str, ...] = ("line_withdraw_forfeits", "line_switch_restamps")
 OFF: dict[str, bool] = {name: False for name in LINE_FIELDS}
+
+REQUIRED_POLICIES: tuple[str, ...] = (
+    StaffReasonPolicy.PLACEMENTS,
+    StaffReasonPolicy.ALL_STAFF_CHANGES,
+)
 
 
 @patch("events.services.notify_create_discord_event", MagicMock())
@@ -80,3 +85,65 @@ class LineSettingsTests(EventTestCase):
         self.assertTrue(has_free_seat(event))
         annotated = with_signup_counts(Event.objects.filter(pk=event.pk)).get()
         self.assertEqual(annotated.signup_count, 0)
+
+
+@patch("events.services.notify_create_discord_event", MagicMock())
+@patch("events.services.notify_new_event", MagicMock())
+class StaffReasonPolicySettingsTests(EventTestCase):
+    def setUp(self) -> None:
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.DAILY,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date() + timedelta(days=30),
+            created_by=self.admin,
+        )
+        self.defaults = OrgEventDefaults.objects.create(organization=self.org)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def assert_round_trip(
+        self, obj: Event | EventRepeater | OrgEventDefaults, url: str
+    ) -> None:
+        for value in REQUIRED_POLICIES:
+            with self.subTest(value=value):
+                resp = self.client.patch(
+                    url, {"staff_reason_policy": value}, format="json"
+                )
+                self.assertEqual(resp.status_code, 200, resp.data)
+                self.assertEqual(resp.data["staff_reason_policy"], value)
+                obj.refresh_from_db()
+                self.assertEqual(obj.staff_reason_policy, value)
+
+    def test_defaults_optional(self) -> None:
+        for obj in (self.make_event(), self.repeater, self.defaults):
+            obj.refresh_from_db()
+            self.assertEqual(
+                obj.staff_reason_policy,
+                StaffReasonPolicy.OPTIONAL,
+                type(obj).__name__,
+            )
+
+    def test_patch_round_trip_event(self) -> None:
+        self.assert_round_trip(self.event, f"/api/events/{self.event.pk}/")
+
+    def test_patch_round_trip_repeater(self) -> None:
+        self.assert_round_trip(
+            self.repeater, f"/api/events/repeaters/{self.repeater.pk}/"
+        )
+
+    def test_patch_round_trip_org_defaults(self) -> None:
+        self.assert_round_trip(
+            self.defaults, f"/api/events/defaults/{self.defaults.pk}/"
+        )
+
+    def test_invalid_choice_rejected(self) -> None:
+        resp = self.client.patch(
+            f"/api/events/{self.event.pk}/",
+            {"staff_reason_policy": "sometimes"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("staff_reason_policy", resp.data)

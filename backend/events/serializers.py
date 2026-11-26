@@ -248,6 +248,7 @@ class EventRepeaterSerializer(
             "post_cull_fill_mode",
             "line_withdraw_forfeits",
             "line_switch_restamps",
+            "staff_reason_policy",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -691,6 +692,7 @@ class EventSerializer(
             "post_cull_fill_mode",
             "line_withdraw_forfeits",
             "line_switch_restamps",
+            "staff_reason_policy",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -1419,6 +1421,7 @@ class OrgEventDefaultsSerializer(
             "post_cull_fill_mode",
             "line_withdraw_forfeits",
             "line_switch_restamps",
+            "staff_reason_policy",
             # DiscordEventConfigMixin
             "discord_create_event",
             "discord_sync_signups",
