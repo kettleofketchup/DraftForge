@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 import requests
 
 from app.internal_client import transport
+from discordbot.delivery_types import ClaimResult
 from discordbot.schemas import (
     DiscordEventStateSchema,
     MessageLogSchema,
@@ -51,7 +52,7 @@ def create_message_log(**data: Any) -> requests.Response | None:
     return transport.post("/discord/message-log/", data)
 
 
-def claim_discord_message_log(
+def claim_discord_message_log_result(
     *,
     source: str,
     source_id: int,
@@ -59,14 +60,8 @@ def claim_discord_message_log(
     embed_data: dict,
     fired_by_user_id: int | None = None,
     tournament_log_id: int | None = None,
-) -> int | None:
-    """Acquire a pre-send lease for (source, source_id).
-
-    Returns the new DiscordMessageLog PK on success, or None if a row
-    already exists in pending or successful state for this (source, source_id).
-    Workers MUST call this BEFORE the Discord HTTP send so the partial
-    unique constraint can serialize concurrent claim attempts.
-    """
+) -> ClaimResult:
+    """Distinguish an acquired lease, contention, and unavailable claim state."""
     payload: dict[str, Any] = {
         "source": source,
         "source_id": source_id,
@@ -80,12 +75,38 @@ def claim_discord_message_log(
 
     resp = transport.post("/discord/message-log/claim/", payload)
     if resp is None:
-        return None  # network error — already logged
+        return ClaimResult("unavailable")
     if resp.status_code == 409:
-        return None  # lease already held by another worker
-    if not resp.ok:
-        return None
-    return resp.json().get("id")
+        return ClaimResult("held")
+    if resp.status_code != 201:
+        return ClaimResult("unavailable")
+    try:
+        data = resp.json()
+    except ValueError:
+        return ClaimResult("unavailable")
+    log_id = data.get("id") if isinstance(data, dict) else None
+    if type(log_id) is not int or log_id <= 0:
+        return ClaimResult("unavailable")
+    return ClaimResult("claimed", log_id)
+
+
+def claim_discord_message_log(
+    *,
+    source: str,
+    source_id: int,
+    channel_id: str,
+    embed_data: dict,
+    fired_by_user_id: int | None = None,
+    tournament_log_id: int | None = None,
+) -> int | None:
+    return claim_discord_message_log_result(
+        source=source,
+        source_id=source_id,
+        channel_id=channel_id,
+        embed_data=embed_data,
+        fired_by_user_id=fired_by_user_id,
+        tournament_log_id=tournament_log_id,
+    ).log_id
 
 
 def finalize_discord_message_log(

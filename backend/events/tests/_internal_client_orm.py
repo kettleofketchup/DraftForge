@@ -23,6 +23,12 @@ from __future__ import annotations
 from datetime import datetime
 from unittest.mock import patch
 
+from django.db import IntegrityError, transaction
+from django.utils import timezone
+
+from discordbot.delivery_types import ClaimResult
+from discordbot.models import DiscordMessageLog
+
 # ---- ORM-direct reads ----
 
 
@@ -208,18 +214,33 @@ def _create_message_log_orm(**data):
 
 def _claim_discord_message_log_orm(
     *,
-    source,
-    source_id,
-    channel_id,
-    embed_data,
-    fired_by_user_id=None,
-    tournament_log_id=None,
-):
-    """ORM-backed lease claim — mirrors the HTTP endpoint."""
-    from django.db import IntegrityError, transaction
-    from django.utils import timezone
+    source: str,
+    source_id: int,
+    channel_id: str,
+    embed_data: dict,
+    fired_by_user_id: int | None = None,
+    tournament_log_id: int | None = None,
+) -> int | None:
+    return _claim_discord_message_log_result_orm(
+        source=source,
+        source_id=source_id,
+        channel_id=channel_id,
+        embed_data=embed_data,
+        fired_by_user_id=fired_by_user_id,
+        tournament_log_id=tournament_log_id,
+    ).log_id
 
-    from discordbot.models import DiscordMessageLog
+
+def _claim_discord_message_log_result_orm(
+    *,
+    source: str,
+    source_id: int,
+    channel_id: str,
+    embed_data: dict,
+    fired_by_user_id: int | None = None,
+    tournament_log_id: int | None = None,
+) -> ClaimResult:
+    """ORM-backed lease claim — mirrors the HTTP endpoint."""
 
     create_kwargs = {
         "source": source,
@@ -236,9 +257,9 @@ def _claim_discord_message_log_orm(
     try:
         with transaction.atomic():
             row = DiscordMessageLog.objects.create(**create_kwargs)
-        return row.pk
+        return ClaimResult("claimed", row.pk)
     except IntegrityError:
-        return None
+        return ClaimResult("held")
 
 
 def _finalize_discord_message_log_orm(
@@ -448,6 +469,7 @@ _PATCH_MAP = {
     "search_message_logs": _search_message_logs_orm,
     "create_message_log": _create_message_log_orm,
     "claim_discord_message_log": _claim_discord_message_log_orm,
+    "claim_discord_message_log_result": _claim_discord_message_log_result_orm,
     "finalize_discord_message_log": _finalize_discord_message_log_orm,
     "create_event_log": _create_event_log_orm,
     "get_or_create_discord_event": _get_or_create_discord_event_orm,

@@ -31,6 +31,7 @@ from app.internal_client import transport
 from app.internal_client.discord import (
     check_message_log_exists,
     claim_discord_message_log,
+    claim_discord_message_log_result,
     clear_event_signup_state,
     create_activity_notification_invite,
     create_event_dm,
@@ -89,6 +90,7 @@ __all__ = [
     "batch_upsert_matches",
     "check_message_log_exists",
     "claim_discord_message_log",
+    "claim_discord_message_log_result",
     "create_activity_notification_invite",
     "clear_event_signup_state",
     "create_event_dm",

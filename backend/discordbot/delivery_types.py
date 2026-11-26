@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 
 class ChannelKind(StrEnum):
@@ -106,3 +107,34 @@ class DeliveryFailure:
 
     def log_fields(self) -> dict[str, int | str | None]:
         return dict(self.safe_json())
+
+
+class SendOutcome(StrEnum):
+    DELIVERED = "delivered"
+    ALREADY_SENT = "already_sent"
+    IN_FLIGHT = "in_flight"
+    FAILED = "failed"
+    UNAVAILABLE = "unavailable"
+    UNCERTAIN = "uncertain"
+
+
+@dataclass(frozen=True)
+class SendResult:
+    outcome: SendOutcome
+    receipt: DeliveryReceipt | None = None
+    message_log_id: int | None = None
+    failure: DeliveryFailure | None = None
+    finalized: bool = False
+    fallback_safe: bool = False
+    raw_response: dict | None = None
+
+    def to_legacy(self) -> dict | None:
+        if self.outcome != SendOutcome.DELIVERED or self.raw_response is None:
+            return None
+        return {**self.raw_response, "_message_log_id": self.message_log_id}
+
+
+@dataclass(frozen=True)
+class ClaimResult:
+    kind: Literal["claimed", "held", "unavailable"]
+    log_id: int | None = None
