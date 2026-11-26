@@ -75,9 +75,6 @@ def _user_guilds_failed(user_id: int, status_code: int | None) -> JsonResponse:
 
 
 def get_discord_members_api() -> JsonResponse:
-    """
-    API endpoint function that returns JsonResponse with discord members.
-    """
     try:
         members = get_discord_members_data()
         return JsonResponse({"members": members}, safe=True)
@@ -124,7 +121,6 @@ def get_discord_voice_channel_activity(request: Request) -> JsonResponse:
     voice_channels_map = {}  # To store {channel_id: channel_name}
 
     try:
-        # 1. Fetch all guild channels to identify voice channels and their names
         channels_url = f"{api_base_url}/guilds/{guild_id}/channels"
         response_channels = requests.get(
             channels_url, headers=headers, timeout=DISCORD_HTTP_TIMEOUT_S
@@ -149,7 +145,6 @@ def get_discord_voice_channel_activity(request: Request) -> JsonResponse:
         guild_data = response_guild.json()
         print("Voice Channels Map:")
         print(voice_channels_map)
-        # 3. Process voice_states to group members by channel
         # This temporary dictionary will hold {channel_id: [member_obj1, member_obj2]}
         members_in_channel_temp = {}
         print(f"guild_data: {guild_data.keys()}")
@@ -159,15 +154,12 @@ def get_discord_voice_channel_activity(request: Request) -> JsonResponse:
             # The 'member' field in voice_state is a Guild Member object
             member_object = voice_state.get("member")
             print(member_object)
-            # Ensure the user is in a voice channel we know and member data is present
             if channel_id and member_object and channel_id in voice_channels_map:
                 if channel_id not in members_in_channel_temp:
                     members_in_channel_temp[channel_id] = []
                 members_in_channel_temp[channel_id].append(member_object)
         print(f"members: {members_in_channel_temp}")
-        # 4. Format the final output list
         for channel_id, members_list in members_in_channel_temp.items():
-            # Only include channels that actually have members in them
             if members_list:
                 active_channels_data.append(
                     {
@@ -203,7 +195,6 @@ def get_organization_discord_members(request: Request, pk: int) -> JsonResponse:
     """
     org = get_object_or_404(Organization, pk=pk)
 
-    # Check user has staff access to this organization
     if not has_org_staff_access(request.user, org):
         return JsonResponse(
             {"error": "You do not have access to this organization"}, status=403
@@ -284,7 +275,6 @@ def search_discord_members(request: Request) -> JsonResponse:
             )
         cache.set(cache_key, members, timeout=DISCORD_MEMBERS_CACHE_TTL)
 
-    # Filter by query
     filtered = []
     for member in members:
         user = member.get("user", {})
@@ -298,7 +288,6 @@ def search_discord_members(request: Request) -> JsonResponse:
         if len(filtered) >= 20:
             break
 
-    # Cross-reference with site accounts
     discord_ids = [m["user"]["id"] for m in filtered]
     linked_users = dict(
         CustomUser.objects.filter(discordId__in=discord_ids).values_list(
@@ -346,7 +335,7 @@ def refresh_discord_members(request: Request) -> JsonResponse:
             {"error": "Organization has no Discord server configured"}, status=400
         )
 
-    # Rate limit: 5-minute cooldown per org
+    # Rate limit: 5-minute cooldown shared by organizations in the same guild
     cooldown_key = f"discord_refresh_cooldown_{org.discord_server_id}"
     if cache.get(cooldown_key):
         return JsonResponse(
