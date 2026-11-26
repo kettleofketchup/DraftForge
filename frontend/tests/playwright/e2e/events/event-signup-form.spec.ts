@@ -70,17 +70,19 @@ async function cancelRsvp(page: Page): Promise<void> {
   });
 }
 
+let playerUserId: number | undefined;
+
 async function playerSignupId(
   context: BrowserContext,
   eventId: number,
 ): Promise<number> {
-  const { users } = await getEventsSeedData(context);
+  playerUserId ??= (await getEventsSeedData(context)).users.player;
   const resp = await context.request.get(
     `${API_URL}/events/signups/?event=${eventId}`,
   );
   expect(resp.ok()).toBeTruthy();
   const signups: { id: number; user: number }[] = await resp.json();
-  const mine = signups.filter((s) => s.user === users.player);
+  const mine = signups.filter((s) => s.user === playerUserId);
   expect(mine).toHaveLength(1);
   return mine[0].id;
 }
