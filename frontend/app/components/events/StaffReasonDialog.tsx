@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { staffReasonFormSchema } from '~/components/api/overridesAPI';
 import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
 import { Form } from '~/components/ui/form';
 import { StaffReasonField, useStaffReasonForm } from './StaffReasonField';
@@ -18,6 +19,7 @@ export interface StaffReasonDialogProps {
   onConfirm: (reason: string) => Promise<boolean>;
   serverError?: string;
   initialReason?: string;
+  resetKey?: number;
 }
 
 export function StaffReasonDialog({
@@ -32,6 +34,7 @@ export function StaffReasonDialog({
   onConfirm,
   serverError,
   initialReason = '',
+  resetKey,
   contentTestId = 'staff-reason-dialog',
   confirmTestId = 'staff-reason-confirm',
   cancelTestId = 'staff-reason-cancel',
@@ -41,11 +44,15 @@ export function StaffReasonDialog({
   const inFlight = useRef<Promise<void> | null>(null);
   const ignoreClose = useRef(false);
   const [pending, setPending] = useState(false);
+  // formState.isValid is not recomputed by reset() when `required` flips.
+  const reasonValid = staffReasonFormSchema(required).safeParse({
+    reason: form.watch('reason'),
+  }).success;
 
   useEffect(() => {
     reset({ reason: open ? initialReason : '' });
     ignoreClose.current = false;
-  }, [open, initialReason, reset]);
+  }, [open, initialReason, resetKey, reset]);
 
   const handleConfirm = (fromDialog: boolean): Promise<void> => {
     if (inFlight.current) return inFlight.current;
@@ -85,11 +92,7 @@ export function StaffReasonDialog({
       confirmLabel={actionLabel}
       variant={destructive ? 'destructive' : 'default'}
       isLoading={submitting || pending}
-      confirmDisabled={
-        (!form.formState.isValid && (required || !!form.watch('reason'))) ||
-        submitting ||
-        pending
-      }
+      confirmDisabled={!reasonValid || submitting || pending}
       onConfirm={() => handleConfirm(true)}
       contentTestId={contentTestId}
       confirmTestId={confirmTestId}

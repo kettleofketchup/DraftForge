@@ -75,6 +75,14 @@ describe('StaffReasonDialog', () => {
     expect(screen.getByTestId('staff-reason-dialog')).toBeInTheDocument();
   });
 
+  it('disables an empty required prompt immediately after an optional prompt was valid', async () => {
+    const view = render(<Harness required={false} />);
+    await waitFor(() => expect(confirm()).toBeEnabled());
+    view.rerender(<Harness required resetKey={1} />);
+    expect(input()).toHaveValue('');
+    expect(confirm()).toBeDisabled();
+  });
+
   it('guards repeated Enter while a request is pending', async () => {
     let finish!: (value: boolean) => void;
     const onConfirm = vi.fn(

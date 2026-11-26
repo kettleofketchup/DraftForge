@@ -155,6 +155,123 @@ describe('useStaffAction', () => {
     });
   });
 
+  describe('dispatch', () => {
+    const held = () => {
+      const pending: {
+        resolve: (v?: unknown) => void;
+        reject: (e: unknown) => void;
+      }[] = [];
+      const fire = vi.fn(
+        () =>
+          new Promise((resolve, reject) => pending.push({ resolve, reject })),
+      );
+      return { fire, pending };
+    };
+
+    it('resolves before the request answers under optional policy', async () => {
+      const actions = setup();
+      const { fire } = held();
+      await act(async () => {
+        expect(await actions().dispatch('confirm', signup, fire)).toBe(true);
+      });
+      expect(fire).toHaveBeenCalledExactlyOnceWith(undefined);
+      expect(actions().isOpen).toBe(false);
+    });
+
+    it('closes a required prompt once the reason is valid, without waiting on the request', async () => {
+      const actions = setup('placements');
+      const { fire } = held();
+      let result!: Promise<boolean>;
+      act(() => {
+        result = actions().dispatch('demote', signup, fire);
+      });
+      expect(fire).not.toHaveBeenCalled();
+      await submit('moved');
+      await act(async () => {
+        expect(await result).toBe(true);
+      });
+      expect(fire).toHaveBeenCalledExactlyOnceWith('moved');
+      await waitFor(() => expect(actions().isOpen).toBe(false));
+    });
+
+    it('resolves false without firing when the required prompt is cancelled', async () => {
+      const actions = setup('placements');
+      const { fire } = held();
+      let result!: Promise<boolean>;
+      act(() => {
+        result = actions().dispatch('demote', signup, fire);
+      });
+      fireEvent.click(screen.getByTestId('staff-reason-cancel'));
+      await act(async () => {
+        expect(await result).toBe(false);
+      });
+      expect(fire).not.toHaveBeenCalled();
+    });
+
+    it('reopens a seeded required prompt on a late reason_required and retries', async () => {
+      const actions = setup();
+      const { fire, pending } = held();
+      await act(async () => {
+        await actions().dispatch('confirm', signup, fire, { reason: 'typed' });
+      });
+      expect(actions().isOpen).toBe(false);
+      await act(async () => pending[0].reject(reasonRequired));
+      await waitFor(() => expect(actions().isOpen).toBe(true));
+      expect(
+        screen.getByText('A reason is required for this change.'),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('staff-reason-input')).toHaveValue('typed');
+      expect(info).toHaveBeenCalledWith('Staff reason required by server', {
+        action: 'confirm',
+        signupId: 12,
+      });
+      await submit('retried');
+      await waitFor(() => expect(fire).toHaveBeenCalledTimes(2));
+      expect(fire).toHaveBeenLastCalledWith('retried');
+      await act(async () => pending[1].resolve());
+      await waitFor(() => expect(actions().isOpen).toBe(false));
+    });
+
+    it('toasts a late non-reason error', async () => {
+      const actions = setup();
+      const { fire, pending } = held();
+      await act(async () => {
+        await actions().dispatch('confirm', signup, fire, {
+          errorLabel: 'confirm player',
+        });
+      });
+      await act(async () => pending[0].reject(otherError));
+      expect(toastError).toHaveBeenCalledWith('Signup changed');
+      expect(actions().isOpen).toBe(false);
+    });
+
+    it('queues recovery prompts for several late reason_required answers', async () => {
+      const actions = setup();
+      const { fire, pending } = held();
+      await act(async () => {
+        await actions().dispatch('confirm', signup, fire);
+        await actions().dispatch('confirm', { ...signup, id: 13 }, fire);
+      });
+      await act(async () => {
+        pending[0].reject(reasonRequired);
+        pending[1].reject(reasonRequired);
+      });
+      await waitFor(() => expect(actions().isOpen).toBe(true));
+      await submit('first');
+      await waitFor(() => expect(fire).toHaveBeenCalledTimes(3));
+      await act(async () => pending[2].resolve());
+      await waitFor(() =>
+        expect(screen.getByTestId('staff-reason-input')).toHaveValue(''),
+      );
+      expect(actions().isOpen).toBe(true);
+      await submit('second');
+      await waitFor(() => expect(fire).toHaveBeenCalledTimes(4));
+      expect(fire.mock.calls.slice(2)).toEqual([['first'], ['second']]);
+      await act(async () => pending[3].resolve());
+      await waitFor(() => expect(actions().isOpen).toBe(false));
+    });
+  });
+
   it('collects without firing and resolves null on cancel', async () => {
     const actions = setup('placements');
     let collected!: Promise<string | null>;

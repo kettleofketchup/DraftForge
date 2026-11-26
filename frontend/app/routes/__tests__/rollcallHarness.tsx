@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
     ]),
   ),
   start: { mutateAsync: vi.fn(), isPending: false },
+  toastError: vi.fn(),
 }));
 vi.mock('~/hooks/useEvent', () => ({
   useEvent: () => ({ data: h.event, isLoading: false }),
@@ -30,6 +31,10 @@ vi.mock('~/hooks/useEvent', () => ({
   useEventSignupUsers: () => undefined,
   useSignupActionMutations: () => h.actions,
   useEventActionMutation: () => ({ startTournament: h.start }),
+}));
+vi.mock('sonner', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('sonner')>()),
+  toast: { error: h.toastError, success: vi.fn() },
 }));
 vi.mock('~/components/organization', () => ({
   useOrganization: () => ({ organization: null, refetch: vi.fn() }),

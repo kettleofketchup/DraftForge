@@ -12,10 +12,16 @@ import { h, renderRollCall, signup } from './rollcallHarness';
 
 afterEach(() => {
   cleanup();
+  h.actions.confirm.isPending = false;
   vi.clearAllMocks();
 });
 const key = (key: string, target: HTMLElement | Window = window) =>
   fireEvent.keyDown(target, { key });
+const focused = (id: number) =>
+  expect(screen.getByTestId(`rollcall-row-${id}`)).toHaveAttribute(
+    'data-focused',
+    'true',
+  );
 const input = () => screen.getByTestId('staff-reason-input');
 const type = (value: string) =>
   fireEvent.change(input(), { target: { value } });
@@ -157,55 +163,89 @@ it.each(['approved', 'confirmed'] as const)(
   },
 );
 
-it('does not advance the selected row until a required Restore succeeds', async () => {
+it('keeps the row on a cancelled Restore prompt and advances once the reason is valid', async () => {
   renderRollCall({
     event: { staff_reason_policy: 'placements' },
     signups: [signup(101, 'cancelled'), signup(102, 'cancelled')],
   });
+  h.actions.reinstate.mutateAsync.mockImplementation(
+    () => new Promise(() => {}),
+  );
   key('1');
-  expect(screen.getByTestId('rollcall-row-101')).toHaveAttribute(
-    'data-focused',
-    'true',
-  );
+  focused(101);
   fireEvent.click(screen.getByTestId('staff-reason-cancel'));
-  expect(screen.getByTestId('rollcall-row-101')).toHaveAttribute(
-    'data-focused',
-    'true',
-  );
+  focused(101);
+  expect(h.actions.reinstate.mutateAsync).not.toHaveBeenCalled();
   key('1');
   type('restore');
   await waitFor(() =>
     expect(screen.getByTestId('staff-reason-confirm')).toBeEnabled(),
   );
   fireEvent.click(screen.getByTestId('staff-reason-confirm'));
-  await waitFor(() =>
-    expect(screen.getByTestId('rollcall-row-102')).toHaveAttribute(
-      'data-focused',
-      'true',
-    ),
-  );
+  await waitFor(() => focused(102));
+  expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledExactlyOnceWith({
+    id: 101,
+    reason: 'restore',
+  });
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 });
 
-it('retains an inline reason and focus when the server refuses a change', async () => {
+it('closes and advances at once, then toasts when the server refuses a change', async () => {
   renderRollCall({ signups: [signup(101), signup(102)] });
-  h.actions.confirm.mutateAsync.mockRejectedValueOnce({
-    response: { data: { error: 'Cannot confirm this signup.' } },
-  });
+  let reject!: (error: unknown) => void;
+  h.actions.confirm.mutateAsync.mockImplementationOnce(
+    () => new Promise((_, r) => (reject = r)),
+  );
   key('1');
   type('retain');
   key('Enter', input());
-  await waitFor(() =>
-    expect(h.actions.confirm.mutateAsync).toHaveBeenCalledTimes(1),
+  await waitFor(() => focused(102));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(h.actions.confirm.mutateAsync).toHaveBeenCalledExactlyOnceWith({
+    id: 101,
+    reason: 'retain',
+  });
+  await act(async () =>
+    reject({ response: { data: { error: 'Cannot confirm this signup.' } } }),
   );
-  await waitFor(() =>
-    expect(screen.getByTestId('rollcall-confirm-dialog-confirm')).toBeEnabled(),
-  );
-  expect(input()).toHaveValue('retain');
-  expect(screen.getByTestId('rollcall-row-101')).toHaveAttribute(
-    'data-focused',
-    'true',
-  );
+  expect(h.toastError).toHaveBeenCalledWith('Cannot confirm this signup.');
+  expect(screen.queryByRole('alertdialog')).toBeNull();
 });
+
+it.each(['optional', 'all_staff_changes'] as const)(
+  '%s keeps confirming the next rows while earlier requests are in flight',
+  async (policy) => {
+    renderRollCall({
+      event: { staff_reason_policy: policy },
+      signups: [signup(101), signup(102)],
+    });
+    h.actions.confirm.isPending = true;
+    h.actions.confirm.mutateAsync.mockImplementation(
+      () => new Promise(() => {}),
+    );
+    const required = policy === 'all_staff_changes';
+    for (const id of [101, 102]) {
+      key('1');
+      if (required) type(`here ${id}`);
+      await waitFor(() =>
+        expect(
+          screen.getByTestId('rollcall-confirm-dialog-confirm'),
+        ).toBeEnabled(),
+      );
+      key('Enter', required ? input() : screen.getByRole('alertdialog'));
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      if (id === 101) focused(102);
+    }
+    expect(h.actions.confirm.mutateAsync.mock.calls).toEqual([
+      [{ id: 101, ...(required ? { reason: 'here 101' } : {}) }],
+      [{ id: 102, ...(required ? { reason: 'here 102' } : {}) }],
+    ]);
+    key('s');
+    expect(
+      await screen.findByTestId('rollcall-start-dialog-confirm'),
+    ).toBeInTheDocument();
+  },
+);
 
 it('waitlist approval recap requires and sends a placement reason', async () => {
   renderRollCall({
@@ -231,12 +271,6 @@ it('waitlist approval recap requires and sends a placement reason', async () => 
     }),
   );
 });
-
-const focused = (id: number) =>
-  expect(screen.getByTestId(`rollcall-row-${id}`)).toHaveAttribute(
-    'data-focused',
-    'true',
-  );
 
 it.each([
   {
@@ -298,7 +332,7 @@ it.each([
     next: 102,
   },
 ] as const)(
-  '$name advances within the original section after the optimistic move resolves',
+  '$name closes and advances within the original section before the server answers',
   async ({ action, rows, keys, submit, moved, acted, next }) => {
     const view = renderRollCall({ signups: [...rows] });
     let resolve!: (value: unknown) => void;
@@ -320,13 +354,18 @@ it.each([
     await waitFor(() =>
       expect(h.actions[action].mutateAsync).toHaveBeenCalledTimes(1),
     );
+    await waitFor(() => focused(next));
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
     act(() =>
       view.rerenderSignups(
         rows.map((s) => (s.id === acted ? signup(s.id, moved) : s)),
       ),
     );
-    focused(acted);
+    focused(next);
     await act(async () => resolve({}));
-    await waitFor(() => focused(next));
+    focused(next);
   },
 );

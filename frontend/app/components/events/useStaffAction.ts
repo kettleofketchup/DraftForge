@@ -19,6 +19,7 @@ type ActionOptions = {
 };
 type Signup = Pick<EventSignupType, 'id' | 'status' | 'user'>;
 type Prompt = {
+  key: number;
   action: StaffSignupAction;
   signupId?: number;
   title: string;
@@ -40,31 +41,81 @@ export function useStaffAction({
 }) {
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const active = useRef<Prompt | null>(null);
+  const queued = useRef<Prompt[]>([]);
+  const nextKey = useRef(0);
   const [submitting, setSubmitting] = useState(false);
   const inFlight = useRef(false);
 
   useEffect(
     () => () => {
-      active.current?.resolve(null);
+      for (const p of [active.current, ...queued.current]) p?.resolve(null);
       active.current = null;
+      queued.current = [];
     },
     [],
   );
 
+  const show = (next: Prompt | null) => {
+    active.current = next;
+    setPrompt(next);
+  };
+
   const finish = (reason: string | null) => {
     const current = active.current;
-    active.current = null;
-    setPrompt(null);
+    show(queued.current.shift() ?? null);
     current?.resolve(reason);
   };
 
-  const ask = (options: Omit<Prompt, 'resolve'>): Promise<string | null> => {
-    if (active.current) return Promise.resolve(null);
+  const ask = (
+    options: Omit<Prompt, 'resolve' | 'key'>,
+    { queue = false }: { queue?: boolean } = {},
+  ): Promise<string | null> => {
+    if (active.current && !queue) return Promise.resolve(null);
     return new Promise((resolve) => {
-      const next = { ...options, resolve };
-      active.current = next;
-      setPrompt(next);
+      const next = { ...options, key: nextKey.current++, resolve };
+      if (active.current) queued.current.push(next);
+      else show(next);
     });
+  };
+
+  const promptOptions = (
+    action: StaffSignupAction,
+    signup: Signup,
+    fire: Fire,
+    opts: ActionOptions,
+  ) => ({
+    action,
+    signupId: signup.id,
+    title: opts.title ?? 'Change signup',
+    actionLabel: opts.actionLabel ?? 'Confirm',
+    errorLabel: opts.errorLabel ?? action.replaceAll('_', ' '),
+    required:
+      staffReasonMode(policy, action, {
+        fromStatus: signup.status,
+        isSelf: signup.user === currentUserId,
+      }) === 'required',
+    initialReason: opts.reason ?? '',
+    fire,
+  });
+
+  const askAfterReasonRequired = (
+    options: ReturnType<typeof promptOptions>,
+    reason: string | undefined,
+    queue: boolean,
+  ) => {
+    log.info('Staff reason required by server', {
+      action: options.action,
+      signupId: options.signupId,
+    });
+    return ask(
+      {
+        ...options,
+        required: true,
+        initialReason: reason ?? '',
+        serverError: REQUIRED_MESSAGE,
+      },
+      { queue },
+    );
   };
 
   const run = async (
@@ -74,42 +125,46 @@ export function useStaffAction({
     opts: ActionOptions = {},
   ): Promise<boolean> => {
     if (active.current) return false;
-    const required =
-      staffReasonMode(policy, action, {
-        fromStatus: signup.status,
-        isSelf: signup.user === currentUserId,
-      }) === 'required';
-    const options = {
-      action,
-      signupId: signup.id,
-      title: opts.title ?? 'Change signup',
-      actionLabel: opts.actionLabel ?? 'Confirm',
-      errorLabel: opts.errorLabel ?? action.replaceAll('_', ' '),
-      required,
-      initialReason: opts.reason ?? '',
-      fire,
-    };
-    if (required && !opts.reason?.trim()) return (await ask(options)) !== null;
+    const options = promptOptions(action, signup, fire, opts);
+    if (options.required && !opts.reason?.trim())
+      return (await ask(options)) !== null;
     try {
       await fire(opts.reason);
       return true;
     } catch (error) {
-      if (isStaffReasonRequiredError(error)) {
-        log.info('Staff reason required by server', {
-          action,
-          signupId: signup.id,
-        });
+      if (isStaffReasonRequiredError(error))
         return (
-          (await ask({
-            ...options,
-            required: true,
-            serverError: REQUIRED_MESSAGE,
-          })) !== null
+          (await askAfterReasonRequired(options, opts.reason, false)) !== null
         );
-      }
       toast.error(extractApiError(error) ?? `Failed to ${options.errorLabel}`);
       return false;
     }
+  };
+
+  // Resolves once the request is sent, not when it settles: a late
+  // reason_required queues a recovery prompt, any other failure toasts.
+  const dispatch = async (
+    action: StaffSignupAction,
+    signup: Signup,
+    fire: Fire,
+    opts: ActionOptions = {},
+  ): Promise<boolean> => {
+    const options = promptOptions(action, signup, fire, opts);
+    let reason = opts.reason;
+    if (options.required && !reason?.trim()) {
+      const collected = await ask({ ...options, fire: undefined });
+      if (collected === null) return false;
+      reason = collected;
+    }
+    fire(reason).catch((error: unknown) => {
+      if (isStaffReasonRequiredError(error))
+        void askAfterReasonRequired(options, reason, true);
+      else
+        toast.error(
+          extractApiError(error) ?? `Failed to ${options.errorLabel}`,
+        );
+    });
+    return true;
   };
 
   const collect = (
@@ -129,6 +184,7 @@ export function useStaffAction({
       initialReason: '',
     });
 
+  const shownKey = prompt?.key;
   const dialogProps: StaffReasonDialogProps = {
     open: prompt !== null,
     title: prompt?.title ?? 'Change signup',
@@ -139,8 +195,11 @@ export function useStaffAction({
     submitting,
     initialReason: prompt?.initialReason,
     serverError: prompt?.serverError,
+    resetKey: shownKey,
     onOpenChange: (open) => {
-      if (!open && !inFlight.current) finish(null);
+      // A late close from a submitted prompt must not cancel the queued one.
+      if (!open && !inFlight.current && active.current?.key === shownKey)
+        finish(null);
     },
     onConfirm: async (reason) => {
       const current = active.current;
@@ -166,8 +225,7 @@ export function useStaffAction({
             ? REQUIRED_MESSAGE
             : (extractApiError(error) ?? `Failed to ${current.errorLabel}`),
         };
-        active.current = updated;
-        setPrompt(updated);
+        show(updated);
         return false;
       } finally {
         inFlight.current = false;
@@ -176,5 +234,5 @@ export function useStaffAction({
     },
   };
 
-  return { run, collect, dialogProps, isOpen: dialogProps.open };
+  return { run, dispatch, collect, dialogProps, isOpen: dialogProps.open };
 }

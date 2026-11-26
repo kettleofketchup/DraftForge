@@ -117,7 +117,7 @@ export default function RollCallPage() {
   const signupActions = useSignupActionMutations(id ?? 0);
   const currentUserId = useUserStore((state) => state.currentUser?.pk);
   const {
-    run,
+    dispatch,
     dialogProps,
     isOpen: staffActionIsOpen,
   } = useStaffAction({
@@ -198,7 +198,7 @@ export default function RollCallPage() {
     async (signup: EventSignupType) => {
       const next = nextFocusFrom(signup);
       if (
-        await run(
+        await dispatch(
           'reinstate',
           signup,
           (reason) =>
@@ -212,7 +212,7 @@ export default function RollCallPage() {
         setFocusedId(next);
       }
     },
-    [run, reinstate, nextFocusFrom],
+    [dispatch, reinstate, nextFocusFrom],
   );
 
   const minPlayers = event?.min_players;
@@ -525,7 +525,7 @@ export default function RollCallPage() {
           const target = approvalSignup;
           if (!target) return false;
           const next = nextFocusFrom(target);
-          const success = await run(
+          const success = await dispatch(
             'approve',
             target,
             (r) =>
@@ -550,7 +550,7 @@ export default function RollCallPage() {
       <StaffReasonDialog
         key={`confirm-${confirmSignup?.id}`}
         required={reasonMode('confirm', confirmSignup) === 'required'}
-        submitting={signupActions.confirm.isPending}
+        submitting={false}
         contentTestId="rollcall-confirm-dialog"
         open={!!confirmSignup}
         onOpenChange={(open) => {
@@ -589,7 +589,7 @@ export default function RollCallPage() {
           const target = confirmSignup;
           if (!target) return false;
           const next = nextFocusFrom(target);
-          const success = await run(
+          const success = await dispatch(
             'confirm',
             target,
             (r) =>
@@ -610,7 +610,7 @@ export default function RollCallPage() {
       <StaffReasonDialog
         key={`reject-${rejectSignup?.id}`}
         required={reasonMode('reject', rejectSignup) === 'required'}
-        submitting={signupActions.reject.isPending}
+        submitting={false}
         contentTestId="rollcall-reject-dialog"
         open={!!rejectSignup}
         onOpenChange={(open) => {
@@ -648,7 +648,7 @@ export default function RollCallPage() {
           const target = rejectSignup;
           if (!target) return false;
           const next = nextFocusFrom(target);
-          const success = await run(
+          const success = await dispatch(
             'reject',
             target,
             (r) =>
@@ -669,7 +669,7 @@ export default function RollCallPage() {
       <StaffReasonDialog
         key={`cancel-${cancelSignup?.id}`}
         required={reasonMode('cancel', cancelSignup) === 'required'}
-        submitting={signupActions.cancel.isPending}
+        submitting={false}
         contentTestId="rollcall-cancel-dialog"
         open={!!cancelSignup}
         onOpenChange={(open) => {
@@ -706,7 +706,7 @@ export default function RollCallPage() {
           const target = cancelSignup;
           if (!target) return false;
           const next = nextFocusFrom(target);
-          const success = await run(
+          const success = await dispatch(
             'cancel',
             target,
             (r) =>
