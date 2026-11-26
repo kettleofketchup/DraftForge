@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from app.models import CustomUser
 from draft.models import Draft, DraftEvent, DraftRound
-from tournament.models import Tournament
+from tournament.models import LIVE_TEAM_FIRST, Team, Tournament
 from tournament.serializers.draft import DraftRoundSerializerSlim
 from tournament.serializers.team import TeamSerializerForTournament, TeamSerializerSlim
 from tournament.serializers.users import serialize_user_with_mmr
@@ -114,6 +114,32 @@ class DraftRoundSerializer(serializers.ModelSerializer):
 
     def get_choice(self, draft_round: DraftRound) -> dict | None:
         return serialize_user_with_mmr(draft_round.choice, draft_round.draft.tournament)
+
+    @staticmethod
+    def _team_for_captain(
+        draft: Draft | None, captain: CustomUser | None
+    ) -> Team | None:
+        if draft is None or captain is None:
+            return None
+        return (
+            Team.objects.filter(tournament_id=draft.tournament_id, captain=captain)
+            .order_by(*LIVE_TEAM_FIRST)
+            .first()
+        )
+
+    def create(self, validated_data: dict) -> DraftRound:
+        if "captain" in validated_data:
+            validated_data["drafting_team"] = self._team_for_captain(
+                validated_data.get("draft"), validated_data["captain"]
+            )
+        return super().create(validated_data)
+
+    def update(self, instance: DraftRound, validated_data: dict) -> DraftRound:
+        if "captain" in validated_data:
+            validated_data["drafting_team"] = self._team_for_captain(
+                validated_data.get("draft", instance.draft), validated_data["captain"]
+            )
+        return super().update(instance, validated_data)
 
     class Meta:
         model = DraftRound
