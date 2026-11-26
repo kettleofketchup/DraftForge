@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
 import { Form } from '~/components/ui/form';
 import { StaffReasonField, useStaffReasonForm } from './StaffReasonField';
@@ -7,7 +7,10 @@ export interface StaffReasonDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  description?: string;
+  description?: ReactNode;
+  contentTestId?: string;
+  confirmTestId?: string;
+  cancelTestId?: string;
   actionLabel: string;
   required: boolean;
   destructive?: boolean;
@@ -29,6 +32,9 @@ export function StaffReasonDialog({
   onConfirm,
   serverError,
   initialReason = '',
+  contentTestId = 'staff-reason-dialog',
+  confirmTestId = 'staff-reason-confirm',
+  cancelTestId = 'staff-reason-cancel',
 }: StaffReasonDialogProps) {
   const form = useStaffReasonForm(required, initialReason, open);
   const { reset } = form;
@@ -79,11 +85,15 @@ export function StaffReasonDialog({
       confirmLabel={actionLabel}
       variant={destructive ? 'destructive' : 'default'}
       isLoading={submitting || pending}
-      confirmDisabled={!form.formState.isValid || submitting || pending}
+      confirmDisabled={
+        (!form.formState.isValid && (required || !!form.watch('reason'))) ||
+        submitting ||
+        pending
+      }
       onConfirm={() => handleConfirm(true)}
-      contentTestId="staff-reason-dialog"
-      confirmTestId="staff-reason-confirm"
-      cancelTestId="staff-reason-cancel"
+      contentTestId={contentTestId}
+      confirmTestId={confirmTestId}
+      cancelTestId={cancelTestId}
       bodyContent={
         <Form {...form}>
           <div className="flex flex-col gap-4">
