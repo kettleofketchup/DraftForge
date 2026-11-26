@@ -231,3 +231,102 @@ it('waitlist approval recap requires and sends a placement reason', async () => 
     }),
   );
 });
+
+const focused = (id: number) =>
+  expect(screen.getByTestId(`rollcall-row-${id}`)).toHaveAttribute(
+    'data-focused',
+    'true',
+  );
+
+it.each([
+  {
+    name: 'confirm',
+    action: 'confirm',
+    rows: [signup(100, 'confirmed'), signup(101), signup(102)],
+    keys: ['Home', 'j', '1'],
+    submit: 'rollcall-confirm-dialog-confirm',
+    moved: 'confirmed',
+    acted: 101,
+    next: 102,
+  },
+  {
+    name: 'reject',
+    action: 'reject',
+    rows: [signup(101), signup(102), signup(103, 'rejected')],
+    keys: ['Home', '2'],
+    submit: 'rollcall-reject-dialog-confirm',
+    moved: 'rejected',
+    acted: 101,
+    next: 102,
+  },
+  {
+    name: 'remove',
+    action: 'cancel',
+    rows: [signup(100, 'confirmed'), signup(101, 'confirmed'), signup(102)],
+    keys: ['Home', '2'],
+    submit: 'rollcall-cancel-dialog-confirm',
+    moved: 'cancelled',
+    acted: 100,
+    next: 101,
+  },
+  {
+    name: 'Restore',
+    action: 'reinstate',
+    rows: [
+      signup(101, 'cancelled'),
+      signup(102, 'cancelled'),
+      signup(103, 'approved'),
+    ],
+    keys: ['End', 'k', '1'],
+    submit: null,
+    moved: 'approved',
+    acted: 101,
+    next: 102,
+  },
+  {
+    name: 'approve',
+    action: 'approve',
+    rows: [
+      signup(101, 'waitlisted'),
+      signup(102, 'waitlisted'),
+      signup(103, 'approved'),
+    ],
+    keys: ['End', 'k', '1'],
+    submit: 'mmr-modal-approve',
+    moved: 'approved',
+    acted: 101,
+    next: 102,
+  },
+] as const)(
+  '$name advances within the original section after the optimistic move resolves',
+  async ({ action, rows, keys, submit, moved, acted, next }) => {
+    const view = renderRollCall({ signups: [...rows] });
+    let resolve!: (value: unknown) => void;
+    h.actions[action].mutateAsync.mockImplementationOnce(
+      () => new Promise((r) => (resolve = r)),
+    );
+    for (const k of keys) key(k);
+    if (submit) {
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(submit));
+      });
+      if (action === 'approve') {
+        await waitFor(() =>
+          expect(screen.getByTestId('mmr-confirm-approve')).toBeEnabled(),
+        );
+        fireEvent.click(screen.getByTestId('mmr-confirm-approve'));
+      }
+    }
+    await waitFor(() =>
+      expect(h.actions[action].mutateAsync).toHaveBeenCalledTimes(1),
+    );
+    act(() =>
+      view.rerenderSignups(
+        rows.map((s) => (s.id === acted ? signup(s.id, moved) : s)),
+      ),
+    );
+    focused(acted);
+    await act(async () => resolve({}));
+    await waitFor(() => focused(next));
+  },
+);

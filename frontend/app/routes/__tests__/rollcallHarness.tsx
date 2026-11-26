@@ -104,12 +104,11 @@ export function renderRollCall({
         .then(options?.onSuccess, options?.onError);
     });
   }
-  return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const page = () => (
+    <QueryClientProvider client={client}>
       <TooltipProvider>
         <MemoryRouter initialEntries={[`/events/${baseEvent.id}/rollcall`]}>
           <Routes>
@@ -117,6 +116,14 @@ export function renderRollCall({
           </Routes>
         </MemoryRouter>
       </TooltipProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = render(page());
+  return {
+    ...view,
+    rerenderSignups(nextSignups: EventSignupType[]) {
+      h.signups = nextSignups;
+      view.rerender(page());
+    },
+  };
 }

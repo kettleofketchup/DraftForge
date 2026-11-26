@@ -187,13 +187,16 @@ export default function RollCallPage() {
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
-  const advanceFrom = useCallback((signup: EventSignupType) => {
-    setFocusedId(rollCallFocusAfterAction(rowsRef.current, signup.id));
-  }, []);
+  const nextFocusFrom = useCallback(
+    (signup: EventSignupType) =>
+      rollCallFocusAfterAction(rowsRef.current, signup.id),
+    [],
+  );
 
   const { mutateAsync: reinstate } = signupActions.reinstate;
   const handleRestore = useCallback(
     async (signup: EventSignupType) => {
+      const next = nextFocusFrom(signup);
       if (
         await run(
           'reinstate',
@@ -206,10 +209,10 @@ export default function RollCallPage() {
           { errorLabel: `restore ${DisplayName(signup)}` },
         )
       ) {
-        advanceFrom(signup);
+        setFocusedId(next);
       }
     },
-    [run, reinstate, advanceFrom],
+    [run, reinstate, nextFocusFrom],
   );
 
   const minPlayers = event?.min_players;
@@ -521,6 +524,7 @@ export default function RollCallPage() {
         onApprove={async (signupId, mmr, reason) => {
           const target = approvalSignup;
           if (!target) return false;
+          const next = nextFocusFrom(target);
           const success = await run(
             'approve',
             target,
@@ -533,7 +537,7 @@ export default function RollCallPage() {
             { reason },
           );
           if (success) {
-            advanceFrom(target);
+            setFocusedId(next);
             setApprovalSignup(null);
           }
           return success;
@@ -584,6 +588,7 @@ export default function RollCallPage() {
         onConfirm={async (reason) => {
           const target = confirmSignup;
           if (!target) return false;
+          const next = nextFocusFrom(target);
           const success = await run(
             'confirm',
             target,
@@ -594,7 +599,7 @@ export default function RollCallPage() {
               }),
             { reason, errorLabel: `confirm ${DisplayName(target)}` },
           );
-          if (success) advanceFrom(target);
+          if (success) setFocusedId(next);
           return success;
         }}
         confirmTestId="rollcall-confirm-dialog-confirm"
@@ -642,6 +647,7 @@ export default function RollCallPage() {
         onConfirm={async (reason) => {
           const target = rejectSignup;
           if (!target) return false;
+          const next = nextFocusFrom(target);
           const success = await run(
             'reject',
             target,
@@ -652,7 +658,7 @@ export default function RollCallPage() {
               }),
             { reason, errorLabel: `remove ${DisplayName(target)}` },
           );
-          if (success) advanceFrom(target);
+          if (success) setFocusedId(next);
           return success;
         }}
         confirmTestId="rollcall-reject-dialog-confirm"
@@ -699,6 +705,7 @@ export default function RollCallPage() {
         onConfirm={async (reason) => {
           const target = cancelSignup;
           if (!target) return false;
+          const next = nextFocusFrom(target);
           const success = await run(
             'cancel',
             target,
@@ -709,7 +716,7 @@ export default function RollCallPage() {
               }),
             { reason, errorLabel: `remove ${DisplayName(target)}` },
           );
-          if (success) advanceFrom(target);
+          if (success) setFocusedId(next);
           return success;
         }}
         confirmTestId="rollcall-cancel-dialog-confirm"
