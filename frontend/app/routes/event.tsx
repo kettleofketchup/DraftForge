@@ -1211,6 +1211,7 @@ function SignupsTab({
                     <TooltipTrigger asChild>
                       <DestructiveButton
                         size="sm"
+                        data-testid={`waitlist-signup-${signup.id}`}
                         onClick={handleWaitlist}
                         loading={signupActions.demote.isPending}
                         depth={false}
