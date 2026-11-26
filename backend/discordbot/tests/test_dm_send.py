@@ -172,7 +172,22 @@ class SendDMTests(SimpleTestCase):
             send_dm(_req(skip_status=DMStatus.SENT))
         claim.assert_not_called()
 
-    @override_settings(TEST=True, TEST_DISCORD_USER_ID="222")
+    @override_settings(TEST=True, TEST_DISCORD_USER_ID="222", DISCORD_BOT_TOKEN="")
+    def test_test_mode_target_user_skips_without_bot_token(
+        self,
+        claim: MagicMock,
+        mark: MagicMock,
+        finalize: MagicMock,
+        request: MagicMock,
+        log: MagicMock,
+    ) -> None:
+        outcome = send_dm(_req())
+        self.assertEqual(self._claim(claim).initial_status, DMStatus.SKIPPED_TEST_MODE)
+        self.assertEqual(outcome.status, DMStatus.SKIPPED_TEST_MODE)
+        self.assertFalse(outcome.auth_rejected)
+        request.assert_not_called()
+
+    @override_settings(TEST=True, TEST_DISCORD_USER_ID="222", DISCORD_BOT_TOKEN="tok")
     def test_test_mode_target_user_sends(
         self,
         claim: MagicMock,
