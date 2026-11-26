@@ -87,6 +87,10 @@ class ContributionEntry(models.Model):
         blank=True,
         related_name="ledger_entries",
     )
+    # The external (event, Discord ID) key at the time a local point was
+    # voided. The receipt's target may later change; the reversal must keep
+    # the identity that displaced this send, including across merges.
+    external_point_discord_id = models.CharField(max_length=20, blank=True, default="")
     # Set only on promo_void/promo_restore rows. CASCADE keeps the net at
     # zero when the reversed entry itself is deleted (an undone send).
     reversal_of = models.ForeignKey(

@@ -51,6 +51,7 @@ from org.promotion.services import (
     record_promo_send,
     undo_promo_send,
 )
+from org.tests.test_integration_contacts import age_import
 from tournament.models import Tournament
 
 GUILD = "770000000000000002"
@@ -273,6 +274,74 @@ class SendFirstRaceTests(_RaceBase):
         self.assertEqual([w.error for w in workers], [None, None, None])
         self.assertEqual(sorted(w.result["applied"] for w in workers), [0, 0, 1])
         self.assertEqual(ExternalPromotionReceipt.objects.count(), 1)
+
+
+class OverlappingScanRaceTests(_RaceBase):
+    """A waiting older scan must use the newer committed observation."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.older = timezone.now() - timedelta(minutes=2)
+        self.newer = self.older + timedelta(minutes=1)
+        initial = self.payload()
+        initial["scan_started_at"] = format_timestamp(self.older)
+        import_contact_receipts(self.org, initial)
+        age_import(ExternalPromotionReceipt.objects.get().pk)
+
+    def _batch(self, *, deleted: bool, newer: bool) -> dict[str, Any]:
+        payload = self.payload(
+            [self.entry(promoter=self.promoter.discordId if newer else None)]
+        )
+        if deleted:
+            payload["entries"] = []
+        payload["scan_started_at"] = format_timestamp(
+            self.newer if newer else self.older
+        )
+        return payload
+
+    def _overlap(self, *, newer_deleted: bool, older_deleted: bool) -> None:
+        newer_payload = self._batch(deleted=newer_deleted, newer=True)
+        older_payload = self._batch(deleted=older_deleted, newer=False)
+        wrapper, inside, release = self.paused(contacts._apply_batch)
+        with patch.object(contacts, "_apply_batch", wrapper):
+            newer = _Worker(lambda: import_contact_receipts(self.org, newer_payload))
+            older = _Worker(lambda: import_contact_receipts(self.org, older_payload))
+            newer.start()
+            try:
+                self.assertTrue(inside.wait(WAIT), newer.error)
+                older.start()
+                self.assertFalse(older.finished.wait(BLOCKED_PROBE))
+            finally:
+                release.set()
+                newer.join(WAIT)
+                if older.ident is not None:
+                    older.join(WAIT)
+        self.assertTrue(newer.finished.is_set())
+        self.assertTrue(older.finished.is_set())
+        self.assertIsNone(newer.error)
+        self.assertIsNone(older.error)
+        receipt = ExternalPromotionReceipt.objects.get()
+        self.assertEqual(receipt.retracted_at is not None, newer_deleted)
+        self.assertEqual(receipt.holds_point, not newer_deleted)
+        self.assertEqual(older.result["updated"], 0)
+        self.assertEqual(older.result["retracted"], 0)
+        self.assertEqual(older.result["reinstated"], 0)
+        live = ContributionEntry.objects.filter(
+            external_contact=receipt, kind=ContributionKind.PROMO_MESSAGE, voided=False
+        )
+        self.assertEqual(live.count(), 0 if newer_deleted else 1)
+        if not newer_deleted:
+            self.assertEqual(live.get().org_user.user_id, self.promoter.pk)
+        self.assertEqual(receipt.source_observed_at, self.newer)
+
+    def test_waiting_older_update_preserves_newer_credit(self) -> None:
+        self._overlap(newer_deleted=False, older_deleted=False)
+
+    def test_waiting_older_deletion_preserves_newer_credit(self) -> None:
+        self._overlap(newer_deleted=False, older_deleted=True)
+
+    def test_waiting_older_reinstatement_preserves_newer_deletion(self) -> None:
+        self._overlap(newer_deleted=True, older_deleted=False)
 
 
 class UndoAndDuplicateRaceTests(_RaceBase):

@@ -217,6 +217,9 @@ class ExternalPromotionReceipt(models.Model):
     source_revision = models.PositiveIntegerField(default=0)
     source_updated_at = models.DateTimeField(null=True, blank=True)
     retracted_at = models.DateTimeField(null=True, blank=True)
+    # The newest source scan that observed this contact (present, edited or
+    # deleted). An older scan cannot replace that observation.
+    source_observed_at = models.DateTimeField(null=True, blank=True)
 
     # Mutable DraftForge association.
     user = models.ForeignKey(

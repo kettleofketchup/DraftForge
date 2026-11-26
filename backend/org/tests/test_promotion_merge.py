@@ -12,6 +12,7 @@ from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
+from org.integration import points
 from org.models import (
     ContributionEntry,
     Organization,
@@ -21,6 +22,7 @@ from org.models import (
 )
 from org.models_promotion_sync import ExternalPromotionReceipt
 from org.promotion.services import demote_colliding_earning_sends
+from org.tests.test_integration_contacts import age_import
 from org.tests.test_promotion_ledger import _LedgerBase
 from user.discord_accounts import merge_discord_accounts
 from user.models import ProfileClaimRequest
@@ -299,3 +301,71 @@ class ExternalHolderMergeTest(_LedgerBase):
         send.refresh_from_db()
         self.assertEqual(send.recipient_id, claimer.pk)
         self._assert_one_live_point(send)
+
+    def _merged_holder(self, *, duplicate: bool = False):
+        drop = self.non_member_player("release_drop")
+        keep = self.non_member_player("release_keep")
+        discord_id = drop.discordId
+        entries = [self.entry(8021, drop)]
+        if duplicate:
+            entries.append(self.entry(8022, drop))
+        self.imported(entries)
+        send = self.send(keep)
+        merge_discord_accounts(keep=keep, drop=drop)
+        self._assert_one_live_point(send)
+        age_import(self.receipt(8021).pk)
+        if duplicate:
+            age_import(self.receipt(8022).pk)
+        return keep, send, discord_id
+
+    def _assert_restored(self, send):
+        send.refresh_from_db()
+        self.assertTrue(send.earns_points)
+        entry = self.entry_for(send)
+        self.assertFalse(entry.voided)
+        self.assertEqual(len(self.reversals(entry, ContributionKind.PROMO_RESTORE)), 1)
+        self.assertFalse(points.external_point_held(self.event, send.recipient))
+
+    def test_retraction_restores_send_voided_during_merge(self):
+        keep, send, _ = self._merged_holder()
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["retracted"], 1)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+
+    def test_source_target_change_restores_merged_send(self):
+        keep, send, _ = self._merged_holder()
+        other = self.non_member_player("release_other")
+        body = self.imported([self.entry(8021, other)])
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+        self.assertTrue(points.external_point_held(self.event, other))
+
+    def test_duplicate_takes_over_then_releases_merged_point(self):
+        keep, send, _ = self._merged_holder(duplicate=True)
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(self.receipt(8022).holds_point)
+        # Changing the original source key must not lose the link between
+        # the replacement holder and the merged recipient's voided send.
+        other = self.non_member_player("replacement_other")
+        self.imported([self.entry(8021, other)])
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+
+    def test_remaining_holder_for_survivor_blocks_restoration(self):
+        keep, send, _ = self._merged_holder()
+        self.imported([self.entry(8022, keep)])
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        age_import(self.receipt(8022).pk)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)

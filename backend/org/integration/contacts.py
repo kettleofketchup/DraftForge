@@ -24,9 +24,10 @@ the same per-event lock a local record-send takes. Per entry it returns:
 Each entry also reports its ``point`` (``points.settle``) and whether it
 voided a local point. Stored, live receipts inside the range that were
 neither posted nor skipped are retracted, unless they were imported after
-this scan started (less a grace period), so an older scan never retracts a
-newer scan's row. Nothing here creates an account, a membership or a
-``PromoSend``.
+this scan started (less a grace period). Every receipt records the newest
+scan that observed it; a batch from an older scan neither updates,
+reinstates nor retracts it. Nothing here creates an account, a membership
+or a ``PromoSend``.
 
 The event comes only from DraftForge's own binding (occasion -> event of
 this org); date-linked contacts and unbound occasions have none.
@@ -330,7 +331,7 @@ def _event_for(entry: ImportEntry, events: dict[int, Event]) -> Event | None:
 def _read(
     org: Organization, batch: ImportBatch
 ) -> tuple[dict[int, ExternalPromotionReceipt], list[ExternalPromotionReceipt]]:
-    """Retained receipts by source id, and the retraction candidates: live
+    """Retained receipts by source id, and the deletion observations:
     receipts inside the range that were neither posted nor skipped."""
     stored = ExternalPromotionReceipt.objects.filter(
         organization=org, source=ReceiptSource.CONTACT_LOG
@@ -347,7 +348,6 @@ def _read(
             for r in stored.filter(
                 source_contact_id__gt=batch.range_after,
                 source_contact_id__lte=batch.range_through,
-                retracted_at__isnull=True,
             ).order_by("source_contact_id")
             if r.source_contact_id not in excluded
         ]
@@ -379,6 +379,7 @@ def _resolve(
 
 def _create(
     org: Organization,
+    batch: ImportBatch,
     entry: ImportEntry,
     event: Event | None,
     user: CustomUser | None,
@@ -390,6 +391,7 @@ def _create(
         source=ReceiptSource.CONTACT_LOG,
         source_contact_id=entry.source_contact_id,
         first_imported_at=now,
+        source_observed_at=batch.scan_started_at,
         recorded_at=entry.recorded_at,
         contact_date_ny=entry.contact_date_ny,
         contact_method=entry.contact_method,
@@ -453,8 +455,23 @@ class _Replay:
     changed: bool
 
 
+def _is_older(receipt: ExternalPromotionReceipt, scan_started_at: datetime) -> bool:
+    observed = receipt.source_observed_at
+    return observed is not None and scan_started_at < observed
+
+
+def _observe(receipt: ExternalPromotionReceipt, scan_started_at: datetime) -> None:
+    if (
+        receipt.source_observed_at is None
+        or scan_started_at > receipt.source_observed_at
+    ):
+        receipt.source_observed_at = scan_started_at
+        receipt.save(update_fields=["source_observed_at"])
+
+
 def _replay(
     receipt: ExternalPromotionReceipt,
+    batch: ImportBatch,
     entry: ImportEntry,
     event: Event | None,
     user: CustomUser | None,
@@ -463,6 +480,11 @@ def _replay(
     """Apply a posted entry to its stored receipt (replay rules, spec order:
     retraction, source hash, target, promoter, bound event)."""
     receipt.refresh_from_db()
+    if _is_older(receipt, batch.scan_started_at):
+        return _Replay(
+            "unchanged", points.PointOutcome(receipt.point_status), False, False
+        )
+    _observe(receipt, batch.scan_started_at)
     association_updated = False
     quarantined = False
     if receipt.discord_id == entry.target_discord_id:
@@ -513,11 +535,11 @@ def _apply_batch(
         user, org_user = _resolve(org, entry.target_discord_id)
         receipt = retained.get(entry.source_contact_id)
         if receipt is None:
-            receipt = _create(org, entry, event, user, org_user)
+            receipt = _create(org, batch, entry, event, user, org_user)
             status: Status = "applied"
             outcome = points.settle(receipt)
         else:
-            replay = _replay(receipt, entry, event, user, org_user)
+            replay = _replay(receipt, batch, entry, event, user, org_user)
             status, outcome = replay.status, replay.outcome
             counts["association_updated"] += replay.association_updated
             if status == "reinstated" and replay.changed:
@@ -538,7 +560,13 @@ def _apply_batch(
     threshold = batch.scan_started_at - RETRACT_GRACE
     for receipt in candidates:
         receipt.refresh_from_db()
-        if receipt.retracted_at is not None or receipt.first_imported_at >= threshold:
+        if (
+            _is_older(receipt, batch.scan_started_at)
+            or receipt.first_imported_at >= threshold
+        ):
+            continue
+        _observe(receipt, batch.scan_started_at)
+        if receipt.retracted_at is not None:
             continue
         counts["restored_local"] += points.retract(receipt)
         counts["retracted"] += 1

@@ -146,9 +146,15 @@ each posted contact with the one it holds:
 
 A live contact whose ID falls inside a posted range but is neither posted nor skipped
 was deleted externally: DraftForge **retracts** it (`retracted` in the answer). A
-retracted contact stays stored, never ticks and never holds a point. To keep an older
-snapshot from retracting a row a newer one imported, a contact first imported less than
-5 minutes before the batch's `scan_started_at` is left for the next run.
+retracted contact stays stored, never ticks and never holds a point. A contact first
+imported less than 5 minutes before the batch's `scan_started_at` is left for the next
+run.
+
+Each contact also retains the latest accepted `scan_started_at`, including unchanged
+observations, reinstatements and repeated deletion observations. A batch from an older
+scan cannot update, reinstate or retract newer state; its posted entries answer
+`unchanged` with the stored point status. The timestamp is the source snapshot's start,
+not the request's arrival time, so overlapping imports may finish out of order safely.
 
 ## Promotion points
 
@@ -193,7 +199,10 @@ When the holder of a point is edited onto another key or retracted, the next dup
 for that pair (lowest external ID) takes the point over, and the local void stays. Only
 when no imported contact is left to hold it is the local point restored, with the send
 earning again. A promoter change on a credited contact voids the old credit and credits
-the new promoter.
+the new promoter. A local void freezes the external point's Discord ID, so restoration
+also finds sends voided during an account merge, even if the receipt's target later
+changes. A replacement duplicate or any remaining holder for the merged recipient keeps
+the send's point voided; restoration never creates a second earning local point.
 
 A void carries the reversed entry's date, so all-time and monthly totals net to zero in
 the right month, and voided entries and reversal rows do not count as leaderboard
@@ -341,8 +350,8 @@ Turn the integration off; do not migrate back over retained data.
    voids and restores already written stay in the ledger.
 3. Receipts and outbox rows stay in the database as evidence.
 
-Migrations `org.0026_api_token_operations` and `org.0027_promotion_sync_receipts` are
-additive and reversible on a disposable database, but reversing `0027` drops every
+Migrations `org.0026_api_token_operations` through `org.0029_receipt_source_observed_at`
+are additive and reversible on a disposable database, but reversing `0027` drops every
 receipt and outbox row. Upgrading again restores the MMR pair on every token, so a
 rollback never widens a grant.
 

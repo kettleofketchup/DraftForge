@@ -14,10 +14,12 @@ deleted.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
 
 from django.test import override_settings
+from django.utils import timezone
 
 from app.models import CustomUser
 from events.models import Event
@@ -668,3 +670,111 @@ class EventLifecycleTests(_LedgerBase):
         self.assertEqual(receipt.association_state, AssociationState.QUARANTINED)
         self.assertTrue(receipt.holds_point)
         self.assertTrue(self.ticked(discord_id, None))
+
+
+class SnapshotOrderingTests(_LedgerBase):
+    """An older completed source scan cannot undo a later observation."""
+
+    def setUp(self):
+        super().setUp()
+        self.older = timezone.now() - timedelta(minutes=2)
+        self.newer = self.older + timedelta(minutes=1)
+        self.latest = self.newer + timedelta(seconds=30)
+        self.other = self.users["staff"]
+        OrgUser.objects.get_or_create(user=self.other, organization=self.org)
+
+    def _initial(self):
+        self.imported(
+            [self.entry(8021, self.recipient, promoter=self.member)],
+            scan_started_at=self.older,
+        )
+        age_import(self.receipt(8021).pk)
+
+    def _assert_current_credit(self, promoter):
+        receipt = self.receipt(8021)
+        self.assertIsNone(receipt.retracted_at)
+        self.assertTrue(receipt.holds_point)
+        self.assertEqual(receipt.promoter_discord_id, promoter.discordId)
+        live = [c for c in self.credits(receipt) if not c.voided]
+        self.assertEqual(len(live), 1)
+        self.assertEqual(live[0].org_user.user_id, promoter.pk)
+
+    def test_older_update_cannot_replace_newer_promoter(self):
+        self._initial()
+        self.imported(
+            [self.entry(8021, self.recipient, promoter=self.other)],
+            scan_started_at=self.newer,
+        )
+        body = self.imported(
+            [self.entry(8021, self.recipient, promoter=self.member)],
+            scan_started_at=self.older,
+        )
+        self.assertEqual(body["updated"], 0)
+        self._assert_current_credit(self.other)
+
+    def test_older_update_cannot_replace_newer_unchanged_observation(self):
+        self._initial()
+        self.imported(
+            [self.entry(8021, self.recipient, promoter=self.member)],
+            scan_started_at=self.newer,
+        )
+        body = self.imported(
+            [self.entry(8021, self.recipient, promoter=self.other)],
+            scan_started_at=self.older,
+        )
+        self.assertEqual(body["updated"], 0)
+        self._assert_current_credit(self.member)
+
+    def test_older_deletion_cannot_retract_newer_update(self):
+        self._initial()
+        self.imported(
+            [self.entry(8021, self.recipient, promoter=self.other)],
+            scan_started_at=self.newer,
+        )
+        body = self.imported([], after=8020, through=8021, scan_started_at=self.older)
+        self.assertEqual(body["retracted"], 0)
+        self._assert_current_credit(self.other)
+
+    def test_older_deletion_cannot_retract_newer_reinstatement(self):
+        self._initial()
+        self.imported([], after=8020, through=8021, scan_started_at=self.newer)
+        self.imported(
+            [self.entry(8021, self.recipient, promoter=self.member)],
+            scan_started_at=self.latest,
+        )
+        body = self.imported([], after=8020, through=8021, scan_started_at=self.newer)
+        self.assertEqual(body["retracted"], 0)
+        self._assert_current_credit(self.member)
+
+    def test_older_reinstatement_cannot_override_newer_deletion(self):
+        self._initial()
+        self.imported([], after=8020, through=8021, scan_started_at=self.newer)
+        body = self.imported(
+            [self.entry(8021, self.recipient, promoter=self.member)],
+            scan_started_at=self.older,
+        )
+        self.assertEqual(body["reinstated"], 0)
+        self.assertIsNotNone(self.receipt(8021).retracted_at)
+        self.assertFalse(self.receipt(8021).holds_point)
+        self.assertFalse(any(not c.voided for c in self.credits(self.receipt(8021))))
+
+    def test_repeated_deletion_advances_tombstone_observation(self):
+        self._initial()
+        self.imported([], after=8020, through=8021, scan_started_at=self.older)
+        self.imported([], after=8020, through=8021, scan_started_at=self.latest)
+        body = self.imported(
+            [self.entry(8021, self.recipient, promoter=self.member)],
+            scan_started_at=self.newer,
+        )
+        self.assertEqual(body["reinstated"], 0)
+        self.assertIsNotNone(self.receipt(8021).retracted_at)
+
+    def test_later_scan_can_reinstate_after_older_deletion(self):
+        self._initial()
+        self.imported([], after=8020, through=8021, scan_started_at=self.newer)
+        body = self.imported(
+            [self.entry(8021, self.recipient, promoter=self.member)],
+            scan_started_at=self.latest,
+        )
+        self.assertEqual(body["reinstated"], 1)
+        self._assert_current_credit(self.member)

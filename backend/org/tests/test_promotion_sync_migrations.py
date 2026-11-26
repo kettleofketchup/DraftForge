@@ -264,3 +264,81 @@ class RecipientDiscordIdBackfillTest(MigratorTestCase):
         self.assertEqual(
             got, {"linked": "123456789012345678", "unlinked": "", "deleted": ""}
         )
+
+
+class LedgerReviewUpgradeTest(MigratorTestCase):
+    migrate_from = RECEIPTS
+    migrate_to = ("org", "0029_receipt_source_observed_at")
+
+    def prepare(self) -> None:
+        apps = self.old_state.apps
+        self.seed = _seed_pre_feature(apps)
+        Receipt = apps.get_model("org", "ExternalPromotionReceipt")
+        Entry = apps.get_model("org", "ContributionEntry")
+        receipt = Receipt.objects.create(
+            organization_id=self.seed["org"],
+            source="contact_log",
+            source_contact_id=8001,
+            event_id=self.seed["event"],
+            discord_id="13",
+            recorded_at=AT,
+            contact_date_ny=AT.date(),
+            contact_method="DISCORD_DM",
+            contact_reason="EVENT_INVITE",
+            occasion_id=88,
+            source_hash="a" * 64,
+        )
+        local = Entry.objects.get(pk=self.seed["entries"][0])
+        local.voided = True
+        local.save(update_fields=["voided"])
+        void = Entry.objects.create(
+            organization_id=self.seed["org"],
+            org_user_id=local.org_user_id,
+            kind="promo_void",
+            points=-local.points,
+            event_id=self.seed["event"],
+            occurred_at=AT,
+            reversal_of=local,
+            external_contact=receipt,
+        )
+        credit = Entry.objects.create(
+            organization_id=self.seed["org"],
+            org_user_id=local.org_user_id,
+            kind="promo_message",
+            points=local.points,
+            event_id=self.seed["event"],
+            occurred_at=AT,
+            external_contact=receipt,
+            voided=True,
+        )
+        external_void = Entry.objects.create(
+            organization_id=self.seed["org"],
+            org_user_id=local.org_user_id,
+            kind="promo_void",
+            points=-credit.points,
+            event_id=self.seed["event"],
+            occurred_at=AT,
+            reversal_of=credit,
+            external_contact=receipt,
+        )
+        self.local_void_pk = void.pk
+        self.external_void_pk = external_void.pk
+        self.receipt_pk = receipt.pk
+        self.before = list(
+            Entry.objects.order_by("pk").values_list("pk", "points", "voided")
+        )
+
+    def test_backfill_only_local_void_key_and_preserve_ledger(self) -> None:
+        Entry = self.new_state.apps.get_model("org", "ContributionEntry")
+        Receipt = self.new_state.apps.get_model("org", "ExternalPromotionReceipt")
+        self.assertEqual(
+            Entry.objects.get(pk=self.local_void_pk).external_point_discord_id, "13"
+        )
+        self.assertEqual(
+            Entry.objects.get(pk=self.external_void_pk).external_point_discord_id, ""
+        )
+        self.assertIsNone(Receipt.objects.get(pk=self.receipt_pk).source_observed_at)
+        self.assertEqual(
+            list(Entry.objects.order_by("pk").values_list("pk", "points", "voided")),
+            self.before,
+        )

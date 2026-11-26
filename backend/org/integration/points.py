@@ -242,6 +242,13 @@ def _reverse(
         occurred_at=entry.occurred_at,
         reversal_of=entry,
         external_contact=receipt,
+        # Freeze the external key that displaced a local send; the receipt's
+        # target can change later.
+        external_point_discord_id=(
+            receipt.discord_id
+            if kind == ContributionKind.PROMO_VOID and entry.promo_send_id is not None
+            else ""
+        ),
         reason=reason,
     )
     entry.voided = kind == ContributionKind.PROMO_VOID
@@ -472,12 +479,33 @@ def resettle_key(
 def _restore_local(
     event_id: int, discord_id: str, receipt: ExternalPromotionReceipt
 ) -> int:
+    # A merge can put a send under a different Discord ID than the
+    # external key that voided it. Follow the reversal's frozen key, not
+    # the receipt's current target (supersede may already have changed it).
+    voided_sends = ContributionEntry.objects.filter(
+        kind=ContributionKind.PROMO_VOID.value,
+        event_id=event_id,
+        organization_id=receipt.organization_id,
+        external_point_discord_id=discord_id,
+        reversal_of__voided=True,
+    ).values("reversal_of__promo_send_id")
+    candidates = PromoSend.objects.filter(event_id=event_id).filter(
+        Q(pk__in=_key_sends(event_id, discord_id).values("pk")) | Q(pk__in=voided_sends)
+    )
     restored = 0
-    for send in (
-        _key_sends(event_id, discord_id).select_related("sender").order_by("pk")
-    ):
+    for send in candidates.select_related("sender").order_by("pk"):
         entry = _locked_entry(promo_send=send)
         if entry is None or not entry.voided:
+            continue
+        # Another external key may still hold the merged recipient's
+        # point. A second earning local send must not be credited either.
+        if external_point_held_for(event_id, send.recipient_id) or (
+            PromoSend.objects.filter(
+                event_id=event_id, recipient_id=send.recipient_id, earns_points=True
+            )
+            .exclude(pk=send.pk)
+            .exists()
+        ):
             continue
         void = entry.reversals.filter(kind=ContributionKind.PROMO_VOID.value).last()
         restore = _reverse(
@@ -499,18 +527,8 @@ def _restore_local(
                 "source_contact_id": receipt.source_contact_id,
             },
         )
-        other_earning = (
-            PromoSend.objects.filter(
-                event_id=send.event_id,
-                recipient_id=send.recipient_id,
-                earns_points=True,
-            )
-            .exclude(pk=send.pk)
-            .exists()
-        )
-        if not other_earning:
-            send.earns_points = True
-            send.save(update_fields=["earns_points"])
+        send.earns_points = True
+        send.save(update_fields=["earns_points"])
         log.info(
             "promo_point_restored",
             system="org",
@@ -531,10 +549,10 @@ def external_point_held(event: Event, recipient: CustomUser) -> bool:
 
     True when a receipt in any association state holds the point for the
     recipient's current Discord ID or a send-time Discord ID of their sends
-    for the event, or when one of those sends has its entry voided by a
-    receipt that still holds the point (a merge can bring that send to an
-    account with another Discord ID). This is the one predicate behind
-    "may send", "will earn" and the tick.
+    for the event, or for the external key frozen on a void of one of their
+    entries. A merge can bring that send to an account with another Discord
+    ID, and a duplicate may replace the original holder. This is the one
+    predicate behind "may send", "will earn" and the tick.
     """
     return external_point_held_for(event.pk, recipient.pk)
 
@@ -552,17 +570,22 @@ def external_point_held_for(event_id: int, recipient_id: int) -> bool:
         .exclude(discordId="")
         .values("discordId")
     )
-    voiders = ContributionEntry.objects.filter(
-        kind=ContributionKind.PROMO_VOID.value,
-        reversal_of__voided=True,
-        reversal_of__promo_send__event_id=event_id,
-        reversal_of__promo_send__recipient_id=recipient_id,
-        external_contact__isnull=False,
-    ).values("external_contact_id")
+    voided_keys = (
+        ContributionEntry.objects.filter(
+            kind=ContributionKind.PROMO_VOID.value,
+            reversal_of__voided=True,
+            reversal_of__promo_send__event_id=event_id,
+            reversal_of__promo_send__recipient_id=recipient_id,
+        )
+        .exclude(external_point_discord_id="")
+        .values("external_point_discord_id")
+    )
     return (
         ExternalPromotionReceipt.objects.filter(event_id=event_id, holds_point=True)
         .filter(
-            Q(discord_id__in=snapshots) | Q(discord_id__in=current) | Q(pk__in=voiders)
+            Q(discord_id__in=snapshots)
+            | Q(discord_id__in=current)
+            | Q(discord_id__in=voided_keys)
         )
         .exists()
     )
