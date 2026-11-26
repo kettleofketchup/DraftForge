@@ -3,6 +3,7 @@ import math
 import re
 import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any, Callable, Literal, Protocol
@@ -27,6 +28,14 @@ from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 _ID = re.compile(r"^[0-9]{17,20}$")
+_READ_WORKERS = ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="discord-permissions"
+)
+_READ_SLOTS = threading.BoundedSemaphore(4)
+
+
+def _release_read_slot(future: Future[Any]) -> None:
+    _READ_SLOTS.release()
 
 
 class SnapshotSource(Protocol):
@@ -44,15 +53,18 @@ class RestSource:
             timeout=timeout,
             allow_redirects=False,
         )
-        data: Any = None
-        if response.status_code == 200:
-            data = response.json()
-        elif response.status_code == 429:
-            try:
+        try:
+            data: Any = None
+            if response.status_code == 200:
                 data = response.json()
-            except ValueError:
-                data = None
-        return response.status_code, data, dict(response.headers)
+            elif response.status_code == 429:
+                try:
+                    data = response.json()
+                except ValueError:
+                    data = None
+            return response.status_code, data, dict(response.headers)
+        finally:
+            response.close()
 
 
 class FixtureSource:
@@ -220,6 +232,28 @@ class SnapshotReader:
         self._guard: threading.Lock = threading.Lock()
         self._locks: dict[str, threading.Lock] = {}
 
+    def _get(self, path: str) -> tuple[int, Any, dict[str, str]]:
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0 or not _READ_SLOTS.acquire(timeout=remaining):
+            raise requests.Timeout()
+        try:
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:
+                raise requests.Timeout()
+            future = _READ_WORKERS.submit(
+                self.source.get, path, min(self.read_timeout_s, remaining)
+            )
+        except BaseException:
+            _READ_SLOTS.release()
+            raise
+        future.add_done_callback(_release_read_slot)
+        try:
+            return future.result(timeout=max(0, self.deadline - time.monotonic()))
+        except TimeoutError as exc:
+            # Running reads retain their slot; late results never reach the cache.
+            future.cancel()
+            raise requests.Timeout() from exc
+
     def _refresh_allowed(self, guild_id: str, refresh: bool) -> bool:
         with self._guard:
             if guild_id not in self._refresh:
@@ -265,12 +299,7 @@ class SnapshotReader:
                     elif refresh and not bypass:
                         reason = "network_error"
                     else:
-                        remaining = self.deadline - time.monotonic()
-                        if remaining <= 0:
-                            raise requests.Timeout()
-                        status, data, headers = self.source.get(
-                            path, min(self.read_timeout_s, remaining)
-                        )
+                        status, data, headers = self._get(path)
                         if time.monotonic() >= self.deadline:
                             raise requests.Timeout()
                         if status == 200:
@@ -301,10 +330,10 @@ class SnapshotReader:
                             }.get(status, "network_error")
                 except _ForeignResource as exc:
                     reason, foreign = exc.reason, True
-                except (requests.Timeout, requests.ConnectionError):
-                    reason = "network_error"
                 except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
                     reason = "malformed_snapshot"
+                except requests.RequestException:
+                    reason = "network_error"
                 observed = timezone.now()
                 entry = _Read(
                     value,
@@ -314,7 +343,11 @@ class SnapshotReader:
                     ),
                     retry,
                 )
-                if not foreign and not (refresh and not bypass):
+                if (
+                    not foreign
+                    and not (refresh and not bypass)
+                    and time.monotonic() < self.deadline
+                ):
                     cache.set(key, entry, timeout=10 if reason else 60)
                 if reason:
                     log.debug(

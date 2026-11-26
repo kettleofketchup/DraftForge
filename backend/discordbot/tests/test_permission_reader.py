@@ -1,3 +1,6 @@
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import replace
 from datetime import timedelta
@@ -172,6 +175,10 @@ class ReaderTests(SimpleTestCase):
         for exc, reason in [
             (requests.Timeout(), "network_error"),
             (ValueError(), "malformed_snapshot"),
+            (
+                requests.exceptions.JSONDecodeError("invalid JSON", "", 0),
+                "malformed_snapshot",
+            ),
         ]:
             with self.subTest(reason=reason):
                 cache.clear()
@@ -521,6 +528,189 @@ class ReaderTests(SimpleTestCase):
         self.assertEqual(results[0].checked_at, old)
         self.assertEqual(results[0].expires_at, old + timedelta(seconds=60))
         self.assertGreater(results[1].checked_at, old)
+
+    def test_interrupted_guild_body_is_unknown(self) -> None:
+        original = self.source.get
+
+        def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+            if path == f"/guilds/{G}":
+                raise requests.exceptions.ChunkedEncodingError("interrupted")
+            return original(path, timeout)
+
+        with patch.object(self.source, "get", side_effect=get):
+            result = self.run_checks([check()]).checks[0]
+        self.assertEqual((result.status, result.reason), ("unknown", "network_error"))
+
+    def test_interrupted_channel_body_keeps_sibling_verified(self) -> None:
+        original = self.source.get
+
+        def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+            if path == f"/channels/{T}":
+                raise requests.exceptions.ChunkedEncodingError("interrupted")
+            return original(path, timeout)
+
+        with patch.object(self.source, "get", side_effect=get):
+            results = self.run_checks([check(channel=T), check(key="sibling")]).checks
+        self.assertEqual(
+            (results[0].status, results[0].reason), ("unknown", "network_error")
+        )
+        self.assertEqual(results[1].status, "verified")
+
+    def test_channel_rate_limit_preserves_retry_after(self) -> None:
+        self.data[f"/channels/{T}"] = {
+            "status": 429,
+            "headers": {"Retry-After": "7"},
+        }
+        results = self.run_checks([check(channel=T), check(key="sibling")]).checks
+        self.assertEqual(
+            (results[0].reason, results[0].retry_after_seconds), ("rate_limited", 7)
+        )
+        self.assertEqual(results[1].status, "verified")
+        self.assertIsNone(results[1].retry_after_seconds)
+
+    def test_wall_clock_budget_bounds_every_upstream_read(self) -> None:
+        cases = [
+            (f"/guilds/{G}", check()),
+            (f"/channels/{T}", check(channel=T)),
+            (f"/channels/{E}", check(A.START_MENTION, T, reference_present=True)),
+            (
+                f"/channels/{T}/messages/{M}",
+                check(A.SIGNUP_EDIT, T, reference_present=True, message_id=M),
+            ),
+            (
+                f"/guilds/{G}/scheduled-events/{E}",
+                check(
+                    A.SCHEDULED_EVENT_UPDATE,
+                    None,
+                    reference_present=True,
+                    scheduled_event_id=E,
+                ),
+            ),
+        ]
+        for index, (delayed_path, requested) in enumerate(cases):
+            with self.subTest(path=delayed_path):
+                cache.clear()
+                self.data[f"/channels/{T}"]["parent_id"] = E
+                self.data[f"/channels/{E}"] = {
+                    "id": E,
+                    "guild_id": G,
+                    "type": 0,
+                    "name": "parent",
+                    "permission_overwrites": [],
+                }
+                release = threading.Event()
+                finished = threading.Event()
+                original = self.source.get
+
+                def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+                    if path == delayed_path:
+                        try:
+                            release.wait(timeout=2)
+                            return original(path, timeout)
+                        finally:
+                            finished.set()
+                    return original(path, timeout)
+
+                reader = SnapshotReader(self.source, budget_s=0.15)
+                reader.token_fp = f"deadline-{index}"
+                try:
+                    with (
+                        patch.object(self.source, "get", side_effect=get),
+                        patch(
+                            "discordbot.permissions.service.SnapshotReader",
+                            return_value=reader,
+                        ),
+                    ):
+                        started = time.monotonic()
+                        result = self.run_checks([requested]).checks[0]
+                        elapsed = time.monotonic() - started
+                    self.assertLess(elapsed, 0.75)
+                    self.assertEqual(
+                        (result.status, result.reason), ("unknown", "network_error")
+                    )
+                finally:
+                    release.set()
+                    self.assertTrue(finished.wait(timeout=3))
+
+    def test_timed_out_reads_keep_worker_count_bounded(self) -> None:
+        release = threading.Event()
+        started = [threading.Event() for _ in range(4)]
+        finished = [threading.Event() for _ in range(4)]
+        guard = threading.Lock()
+        calls = 0
+
+        def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+            nonlocal calls
+            with guard:
+                index = calls
+                calls += 1
+            started[index].set()
+            try:
+                release.wait(timeout=3)
+                return 200, {"id": B}, {}
+            finally:
+                finished[index].set()
+
+        executor = ThreadPoolExecutor(max_workers=4)
+        try:
+            with patch.object(self.source, "get", side_effect=get):
+                readers = [SnapshotReader(self.source, budget_s=0.3) for _ in range(4)]
+                futures = [
+                    executor.submit(reader.guild_bundle, G, False) for reader in readers
+                ]
+                self.assertTrue(all(event.wait(timeout=1) for event in started))
+                self.assertEqual(
+                    [future.result(timeout=1).error for future in futures],
+                    ["network_error"] * 4,
+                )
+                cache.clear()
+                result = SnapshotReader(self.source, budget_s=0.1).guild_bundle(
+                    G, False
+                )
+                self.assertEqual(result.error, "network_error")
+                self.assertEqual(calls, 4)
+        finally:
+            release.set()
+            executor.shutdown(wait=True, cancel_futures=True)
+            self.assertTrue(all(event.wait(timeout=1) for event in finished))
+        self.assertIsNone(cache.get(f"discord_perm:v1:test-fixture-v1:{G}:bot"))
+        self.assertIsNone(SnapshotReader(self.source).guild_bundle(G, False).error)
+
+    def test_late_source_completion_cannot_replace_newer_refresh(self) -> None:
+        release = threading.Event()
+        finished = threading.Event()
+        original = self.source.get
+
+        def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+            try:
+                release.wait(timeout=3)
+                return original(path, timeout)
+            finally:
+                finished.set()
+
+        reader = SnapshotReader(self.source, budget_s=0.1)
+        try:
+            with patch.object(self.source, "get", side_effect=get):
+                self.assertEqual(reader.guild_bundle(G, False).error, "network_error")
+            key = f"discord_perm:v1:test-fixture-v1:{G}:bot"
+            self.assertIsNone(cache.get(key))
+            self.assertIsNone(
+                SnapshotReader(FixtureSource(self.data)).guild_bundle(G, True).error
+            )
+            refreshed = cache.get(key)
+        finally:
+            release.set()
+            self.assertTrue(finished.wait(timeout=1))
+        self.assertEqual(cache.get(key), refreshed)
+        self.assertIsNone(refreshed.error)
+
+    def test_rest_source_closes_response_after_invalid_json(self) -> None:
+        with patch("requests.get") as get:
+            get.return_value.status_code = 200
+            get.return_value.json.side_effect = ValueError("invalid JSON")
+            with self.assertRaises(ValueError):
+                RestSource().get("/users/@me", 1)
+            get.return_value.close.assert_called_once_with()
 
     def test_unconfigured_server(self) -> None:
         result = run_checks(None, [check()], refresh=False).checks[0]

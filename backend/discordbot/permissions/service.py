@@ -95,8 +95,11 @@ def run_checks(
         creator_is_bot = None
         dependencies: set[str] = set()
         if reader and guild_id and not bundle.error and scope in ("guild", "channel"):
+            if check.channel_id:
+                dependencies.update(
+                    reader.channel_dependencies.get(check.channel_id, set())
+                )
             if channel:
-                dependencies.update(reader.channel_dependencies.get(channel.id, set()))
                 if channel.type in (10, 11, 12) and channel.parent_id:
                     parent, parent_error = reader.channel(
                         guild_id, channel.parent_id, refresh
