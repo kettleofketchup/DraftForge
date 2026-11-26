@@ -42,6 +42,7 @@ on:
       - 'backend/tests/helpers/steam_match.py'
       - 'backend/tests/test_auth.py'
       - 'backend/tournament/choices.py'
+      - 'backend/tournament/services/bracket_placement.py'
       - 'backend/user/steam_accounts.py'
       - 'scripts/hash-test-db-sources.sh'
   workflow_dispatch:

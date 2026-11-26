@@ -264,7 +264,7 @@ All fixtures are synthetic; no test contacts the external contact log, the adapt
   event to synthetic occasion 7001 at runtime and stores four receipts: external only, local and
   external, Discord-only, and a non-member. A plain reset removes the binding and the org's
   receipts and outbox rows.
-- `frontend/tests/playwright/e2e/19-org-features/18-promotion-integration.spec.ts` covers
+- `frontend/tests/playwright/e2e/org-features/promotion-integration.spec.ts` covers
   the ticks, a contact imported while the tab is open, the send banner, and issuing a
   promotion token. With `PROMOTION_SCREENSHOT_DIR` set it saves each state at desktop and
   mobile size; the paused, needs-review and applied banners are simulated by rewriting

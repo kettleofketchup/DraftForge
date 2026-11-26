@@ -3,7 +3,7 @@ Auth-matrix test data population.
 
 Creates an isolated organization, league, three bracket tournaments, and
 five role-scoped test users for the role-context matrix in
-``frontend/tests/playwright/e2e/17-auth/``. Keeping this distinct from
+``frontend/tests/playwright/e2e/auth/``. Keeping this distinct from
 DTX/Test data means other suites can mutate DTX admins/staff without
 flapping the matrix, and vice versa.
 
