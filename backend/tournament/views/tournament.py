@@ -25,6 +25,7 @@ from org.membership import viewer_member_organization_ids
 from org.models import Organization, OrgUserGameMmr
 from telemetry.logging import get_logger
 from tournament import buckets
+from tournament.broadcast import tournament_changed_on_commit
 from tournament.buckets import (
     tournament_bucket_cutoff,
     upcoming_q,
@@ -186,6 +187,7 @@ class TournamentView(viewsets.ModelViewSet):
             serializer.save()
             if opts is not None:
                 apply_draft_options(serializer.instance, opts, actor=self.request.user)
+            tournament_changed_on_commit(serializer.instance.pk, "settings")
 
     def get_permissions(self) -> list[BasePermission]:
         if self.action == "discord_logs":
