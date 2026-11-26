@@ -1,0 +1,1 @@
+- Make the shuffle draft tie-hold timeout regression test independent of host scheduling and cover the hold and timeout boundaries deterministically.
