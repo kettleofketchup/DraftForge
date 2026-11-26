@@ -363,7 +363,6 @@ export function DiscordLogSection({
         log={selectedLog}
         open={!!selectedLog}
         onOpenChange={(open) => !open && setSelectedLog(null)}
-        repeaterName={discordState.event_repeater_name}
       />
     </div>
   );
