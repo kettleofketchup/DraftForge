@@ -26,6 +26,7 @@ from org.mmr import (
 from org.models import Organization, OrgLog, OrgUser
 from org.permissions import has_org_staff_access
 from telemetry.logging import get_logger
+from tournament.broadcast import tournament_changed_on_commit
 from tournament.models import Team, Tournament
 from tournament.permissions import can_edit_tournament
 from user.display_names import user_display_name
@@ -124,7 +125,6 @@ def _resolve_user_for_csv_row(
     if steam_err:
         return None, False, steam_err, None
 
-    # Clean discord_id (strip whitespace, treat empty as None)
     discord_id = str(discord_id_str).strip() if discord_id_str else None
     if discord_id == "" or discord_id == "None":
         discord_id = None
@@ -657,7 +657,6 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
         if resync_snapshots and user.pk not in snapshotted:
             new_snapshots.add(user.pk)
 
-        # Handle team assignment
         team_name = (row.get("team_name") or "").strip()
         team_captain = bool(row.get("team_captain"))
         if team_name:
@@ -706,5 +705,6 @@ def import_csv_tournament(request: Request, tournament_id: int) -> Response:
 
     # Invalidate tournament cache so refreshed data reflects MMR changes
     invalidate_obj(tournament)
+    tournament_changed_on_commit(tournament.pk, "members")
 
     return Response({"summary": summary, "results": results})

@@ -102,6 +102,62 @@ describe('useBracketQuery store seeding', () => {
   });
 });
 
+describe('useBracketQuery with unsaved edits', () => {
+  beforeEach(() => {
+    loadBracket.mockReset();
+    useBracketStore.setState({ matches: [], isDirty: false });
+    loadBracket.mockResolvedValue({ tournamentId: 7, matches: [apiMatch()] });
+  });
+
+  const mountDirty = async () => {
+    const { result } = renderHook(() => useBracketQuery(7), { wrapper });
+    await waitFor(() =>
+      expect(useBracketStore.getState().matches).toHaveLength(1),
+    );
+    const edited = useBracketStore
+      .getState()
+      .matches.map((m) => ({ ...m, status: 'completed' as const }));
+    act(() => {
+      useBracketStore.setState({ matches: edited, isDirty: true });
+    });
+    return { result, edited };
+  };
+
+  it('keeps the edits and flags a server change', async () => {
+    const { result, edited } = await mountDirty();
+    expect(result.current.serverChanged).toBe(false);
+
+    await refetchWith(result, apiMatch({ dire_team: { pk: 3, name: 'Ash' } }));
+
+    await waitFor(() => expect(result.current.serverChanged).toBe(true));
+    expect(useBracketStore.getState().matches).toBe(edited);
+    expect(useBracketStore.getState().isDirty).toBe(true);
+  });
+
+  it('does not flag a refetch that changed nothing on the server', async () => {
+    const { result } = await mountDirty();
+
+    await refetchWith(result, apiMatch());
+
+    expect(result.current.serverChanged).toBe(false);
+  });
+
+  it('loads the server bracket once the edits are discarded', async () => {
+    const { result } = await mountDirty();
+    await refetchWith(result, apiMatch({ dire_team: { pk: 3, name: 'Ash' } }));
+    await waitFor(() => expect(result.current.serverChanged).toBe(true));
+
+    act(() => {
+      useBracketStore.setState({ isDirty: false });
+    });
+
+    await waitFor(() =>
+      expect(useBracketStore.getState().matches[0].direTeam?.name).toBe('Ash'),
+    );
+    expect(result.current.serverChanged).toBe(false);
+  });
+});
+
 describe('useSaveBracket', () => {
   beforeEach(() => {
     vi.clearAllMocks();

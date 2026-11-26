@@ -13,7 +13,15 @@ export type SectionFieldMeta = Record<
 >;
 
 export const PROFILE_REMINDER_DESCRIPTION: string =
-  'Posts a reminder in the announcement channel asking signed-up members to complete the profile details this event requires (such as Friend ID) before the event. Needs an announcement channel.';
+  'Posts a reminder in its channel (the announcement channel when none is picked) asking signed-up members to complete the profile details this event requires (such as Friend ID) before the event.';
+
+export const ATTENDANCE_REMINDER_DESCRIPTION: string =
+  "Posts a reminder in its channel (the announcement channel when none is picked) before the event. It doesn't track replies; use the ready check to require confirmation.";
+
+export const SIGNUP_REMINDER_LABEL: string = 'Signup reminder DM';
+
+export const NEW_EVENTS_DESCRIPTION: string =
+  'Post each new series event in its channel (the announcement channel when none is picked) when it is created';
 
 /**
  * Every event-form field, under the section that renders it by default, with the
@@ -321,9 +329,10 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       description: 'Extra information appended to the Discord event details',
     },
     discord_signup_reminder: {
-      label: 'Send signup reminder',
+      label: SIGNUP_REMINDER_LABEL,
       description:
         "DM series subscribers who haven't signed up yet, before the event starts",
+      keywords: ['dm', 'direct message', 'subscribers'],
     },
     discord_signup_reminder_hours: {
       label: 'Signup reminder: hours before event',
@@ -333,13 +342,24 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
       description: PROFILE_REMINDER_DESCRIPTION,
     },
     discord_profile_reminder_hours: { label: 'Profile reminder: when to send' },
+    discord_profile_reminder_channel_id: {
+      label: 'Profile reminder channel',
+      description:
+        'Channel for the profile reminder. Leave blank to use the announcement channel.',
+      keywords: ['channel', 'post'],
+    },
     discord_confirm_attendance: {
       label: 'Post attendance reminder in Discord',
-      description:
-        "Posts a reminder in the announcement channel before the event. It doesn't track replies; use the ready check to require confirmation.",
+      description: ATTENDANCE_REMINDER_DESCRIPTION,
     },
     discord_confirm_attendance_hours: {
       label: 'Attendance reminder: when to send',
+    },
+    discord_confirm_attendance_channel_id: {
+      label: 'Attendance reminder channel',
+      description:
+        'Channel for the attendance reminder. Leave blank to use the announcement channel.',
+      keywords: ['channel', 'post'],
     },
     discord_post_signups: {
       label: 'Post event signup embed',
@@ -375,7 +395,7 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     discord_announcement_channel_id: {
       label: 'Announcement channel',
       description:
-        'Shared by the pre-day announcement, attendance reminder, profile reminder and series new-event posts.',
+        'Channel for the pre-day announcement, and for reminders and new-event posts that have no channel of their own.',
     },
     discord_announcement_hours: {
       label: 'Hours before event',
@@ -388,9 +408,14 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
     },
     discord_notify_new_events: {
       label: 'Post new events',
-      description:
-        'Post each new series event in the announcement channel when it is created',
+      description: NEW_EVENTS_DESCRIPTION,
       keywords: ['new event', 'channel', 'notify'],
+    },
+    discord_new_event_channel_id: {
+      label: 'New event channel',
+      description:
+        'Channel for series new-event posts. Leave blank to use the announcement channel.',
+      keywords: ['channel', 'post', 'new event'],
     },
   },
 };

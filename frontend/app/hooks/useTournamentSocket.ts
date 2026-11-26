@@ -20,6 +20,8 @@ type TournamentSocketMessage = {
   type: string;
   game_id?: number | null;
   state?: string | null;
+  kind?: string | null;
+  team_id?: number | null;
   event?: { event_type?: string } | null;
   draft_state?: { pk?: number } | null;
 };
@@ -85,6 +87,17 @@ export function handleTournamentMessage(
 
   if (msg.type === 'bracket_update') {
     queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
+  }
+
+  // Teams, members, placements or settings changed. Bracket cards show team
+  // names and rosters, so team changes refetch the bracket too.
+  if (msg.type === 'tournament_update') {
+    if (msg.team_id) {
+      queryClient.invalidateQueries({ queryKey: ['team', msg.team_id] });
+    }
+    if (msg.kind === 'team') {
+      queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
+    }
   }
 
   if (appliedByDraftSocket(msg)) return;

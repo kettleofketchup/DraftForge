@@ -1,4 +1,5 @@
 import { TriangleAlert } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useWatch, type Control, type FieldValues } from 'react-hook-form';
 import type { z } from 'zod';
 import { IntegerInput } from '~/components/patterns/IntegerInput';
@@ -20,10 +21,23 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
-import { announcementChannelUsers } from './announcementChannelUsers';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
-import { PROFILE_REMINDER_DESCRIPTION } from './form/settingsFields';
+import { fallbackChannelUsers } from './fallbackChannelUsers';
+import {
+  ATTENDANCE_REMINDER_DESCRIPTION,
+  EVENT_SECTION_FIELDS,
+  NEW_EVENTS_DESCRIPTION,
+  PROFILE_REMINDER_DESCRIPTION,
+  SIGNUP_REMINDER_LABEL,
+} from './form/settingsFields';
+import { PostChannelField } from './PostChannelField';
+import {
+  NO_CHANNEL_WARNING,
+  SIGNUP_NO_CHANNEL_WARNING,
+  postChannelState,
+  type ChannelPost,
+} from './postChannelState';
 import type { discordConfigSchema } from './schemas';
 import {
   START_MENTION_PREREQUISITE_NOTE,
@@ -36,7 +50,7 @@ import {
  *  on createEventInputSchema + editRepeaterSchema directly (not in the shared
  *  sub-schema) because non-repeater forms don't expose it, but the JSX still
  *  references it under the `isRepeater` guard. */
-type DiscordFields = z.input<typeof discordConfigSchema> & {
+export type DiscordFields = z.input<typeof discordConfigSchema> & {
   discord_notify_new_events?: boolean;
 };
 type DiscordFieldName = Extract<keyof DiscordFields, string>;
@@ -163,6 +177,68 @@ function HoursSelect({
   );
 }
 
+function Subsection({
+  testId,
+  title,
+  children,
+}: {
+  testId: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section data-testid={testId} className="space-y-3">
+      <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+function AnnouncementChannelField({
+  control,
+  organizationId,
+  lead,
+  users,
+}: {
+  control: Control<DiscordFields>;
+  organizationId: number;
+  lead: string;
+  users: string[];
+}) {
+  return (
+    <FormField
+      control={control}
+      name="discord_announcement_channel_id"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Announcement channel</FormLabel>
+          <FormControl>
+            <DiscordChannelPicker
+              organizationId={organizationId}
+              value={field.value}
+              onChange={field.onChange}
+              data-testid="discord-announcement-channel-select"
+            />
+          </FormControl>
+          <FormDescription>
+            {lead}
+            <span className="block">{`Used by: ${users.join(', ')}`}</span>
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+const discordLabel = (field: string): string =>
+  EVENT_SECTION_FIELDS.discord[field].label;
+
+const signupReminderMeta = EVENT_SECTION_FIELDS.discord.discord_signup_reminder;
+
+const SUBSCRIBE_NOTE =
+  "Members subscribe on the series page, or with Notify Me on the event's signup post in Discord.";
+
 interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
   control: Control<T>;
   isRepeater: boolean;
@@ -171,6 +247,9 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
    *  `isRepeater`; a one-off event inherits the series' setting instead of
    *  exposing its own toggle. */
   showNotifyNewEvents?: boolean;
+  /** Shows the signup-reminder DM. Defaults to `isRepeater`; org defaults
+   *  pass it to edit the value new series inherit. */
+  showSignupReminder?: boolean;
 }
 
 export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
@@ -178,6 +257,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
   isRepeater,
   organizationId,
   showNotifyNewEvents = isRepeater,
+  showSignupReminder = isRepeater,
 }: DiscordConfigSectionProps<T>) {
   // T extends DiscordFields by the generic constraint, so narrowing to
   // Control<DiscordFields> is sound: we touch only the discord-config slice.
@@ -194,6 +274,9 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
     announcementChannelId,
     startMention,
     notifyNewEvents,
+    attendanceChannelId,
+    profileChannelId,
+    newEventChannelId,
   ] = useWatch({
     control,
     name: [
@@ -207,17 +290,34 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
       'discord_announcement_channel_id',
       'discord_start_mention',
       'discord_notify_new_events',
+      'discord_confirm_attendance_channel_id',
+      'discord_profile_reminder_channel_id',
+      'discord_new_event_channel_id',
     ],
   });
 
-  const channelUsers = announcementChannelUsers({
+  const channelUsers = fallbackChannelUsers({
     announcement,
+    postSignups,
+    signupChannelId: postSignupsChannelId,
     confirmAttendance,
+    attendanceChannelId,
     profileReminder,
+    profileChannelId,
     notifyNewEvents,
+    newEventChannelId,
     showNotifyNewEvents,
   });
-  const usesAnnouncementChannel = channelUsers.length > 0;
+  const showFallbackBlock = !announcement && channelUsers.length > 0;
+  const blankState = (post: ChannelPost) =>
+    postChannelState(post, {
+      announcement,
+      announcementChannelId,
+      signupChannelId: '',
+      attendanceChannelId: '',
+      profileChannelId: '',
+      newEventChannelId: '',
+    });
   const prerequisite = startMentionPrerequisite({
     postSignups,
     signupChannelId: postSignupsChannelId,
@@ -227,373 +327,419 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
   const prerequisiteMessage = startMentionPrerequisiteMessage(prerequisite);
 
   return (
-    <div className="space-y-3">
-      {/* Create Discord event */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <CheckboxField
-          control={control}
-          name="discord_create_event"
-          label="Create Discord scheduled event"
-          description="Automatically creates a scheduled event in your Discord server"
-        />
-        {createEvent && (
-          <div className="space-y-3 ml-7">
-            <CheckboxField
-              control={control}
-              name="discord_sync_signups"
-              label="Synchronize signups"
-              description="Keep website and Discord event signups in sync"
-            />
-            <CheckboxField
-              control={control}
-              name="discord_mark_interested"
-              label="Mark signups as interested"
-              description="Players who sign up will be marked as interested on the Discord event"
-            />
-            <FormField
-              control={control}
-              name="discord_event_title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Event title</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Leave blank to use event name"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Custom title for the Discord event. If blank, the event name
-                    is used.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="discord_event_description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Event description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Discord event description"
-                      rows={2}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Shown as the main description of the Discord scheduled event
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="discord_event_info"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Additional info</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Extra details, rules, links..."
-                      rows={2}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Extra information appended to the Discord event details
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Signup reminder — repeater-only (single events have no subscriber list) */}
-      {isRepeater && (
+    <div className="space-y-4">
+      <Subsection testId="discord-subsection-server-event" title="Server event">
         <div className="rounded-md border border-border p-3 space-y-3">
           <CheckboxField
             control={control}
-            name="discord_signup_reminder"
-            label="Send signup reminder"
-            description="DM series subscribers who haven't signed up yet, before the event starts"
+            name="discord_create_event"
+            label="Create Discord scheduled event"
+            description="Automatically creates a scheduled event in your Discord server"
           />
-          {signupReminder && (
-            <HoursSelect
-              control={control}
-              name="discord_signup_reminder_hours"
-              label="Hours before event"
-            />
-          )}
-        </div>
-      )}
-
-      {/* Profile reminder */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <CheckboxField
-          control={control}
-          name="discord_profile_reminder"
-          label="Profile update reminder"
-          description={PROFILE_REMINDER_DESCRIPTION}
-        />
-        {profileReminder && (
-          <HoursSelect
-            control={control}
-            name="discord_profile_reminder_hours"
-          />
-        )}
-      </div>
-
-      {/* Attendance reminder */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <CheckboxField
-          control={control}
-          name="discord_confirm_attendance"
-          label="Post attendance reminder in Discord"
-          description="Posts a reminder in the announcement channel before the event. It doesn't track replies; use the ready check to require confirmation."
-        />
-        {confirmAttendance && (
-          <HoursSelect
-            control={control}
-            name="discord_confirm_attendance_hours"
-          />
-        )}
-      </div>
-
-      {/* Start mention */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <CheckboxField
-          control={control}
-          name="discord_start_mention"
-          label="Mention signed-up members before start"
-          description="Reply to the signup post with an @mention of every signed-up member shortly before the event starts"
-        />
-        {startMention && (
-          <>
-            <div className="ml-7 space-y-2">
-              <p
-                data-testid="discord-start-mention-prerequisite-note"
-                className="text-sm text-muted-foreground"
-              >
-                {START_MENTION_PREREQUISITE_NOTE}
-              </p>
-              {prerequisite.kind === 'missing' && (
-                <Alert
-                  data-testid="discord-start-mention-prerequisite-warning"
-                  className="border-warning/30 bg-warning/10 text-warning [&>svg]:text-warning"
-                >
-                  <TriangleAlert />
-                  <AlertDescription>{prerequisiteMessage}</AlertDescription>
-                </Alert>
-              )}
-              {prerequisite.kind === 'announcement_fallback' && (
-                <p
-                  data-testid="discord-start-mention-prerequisite-fallback"
-                  className="text-sm text-muted-foreground"
-                >
-                  {prerequisiteMessage}
-                </p>
-              )}
-            </div>
-            <HoursSelect
-              control={control}
-              name="discord_start_mention_minutes"
-              options={START_MENTION_MINUTES_OPTIONS}
-            />
-            <div className="ml-7">
+          {createEvent && (
+            <div className="space-y-3 ml-7">
+              <CheckboxField
+                control={control}
+                name="discord_sync_signups"
+                label="Synchronize signups"
+                description="Keep website and Discord event signups in sync"
+              />
+              <CheckboxField
+                control={control}
+                name="discord_mark_interested"
+                label="Mark signups as interested"
+                description="Players who sign up will be marked as interested on the Discord event"
+              />
               <FormField
                 control={control}
-                name="discord_start_mention_scope"
+                name="discord_event_title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Who to mention</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger
-                          className="w-full"
-                          data-testid="discord-discord_start_mention_scope-select"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {START_MENTION_SCOPE_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Event title</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Leave blank to use event name"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Custom title for the Discord event. If blank, the event
+                      name is used.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={control}
+                name="discord_event_description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Event description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Discord event description"
+                        rows={2}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Shown as the main description of the Discord scheduled
+                      event
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={control}
+                name="discord_event_info"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Additional info</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Extra details, rules, links..."
+                        rows={2}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Extra information appended to the Discord event details
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      </Subsection>
 
-      {/* Post event signup embed */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <CheckboxField
-          control={control}
-          name="discord_post_signups"
-          label="Post event signup embed"
-          description="Post an embed to a channel where users can react to sign up"
-        />
-        {postSignups && (
-          <div className="ml-7 space-y-3">
-            <FormField
-              control={control}
-              name="discord_post_signups_channel_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Signup channel</FormLabel>
-                  <FormControl>
-                    <DiscordChannelPicker
-                      organizationId={organizationId}
-                      value={field.value}
-                      onChange={field.onChange}
-                      data-testid="discord-signup-channel-select"
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Channel where the signup embed will be posted
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="discord_signup_role_ids"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Mention roles in signup post</FormLabel>
-                  <FormControl>
-                    <DiscordRolePicker
-                      organizationId={organizationId}
-                      value={field.value || []}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Discord role IDs to @mention in the signup post
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Pre-day announcement */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <CheckboxField
-          control={control}
-          name="discord_announcement"
-          label="Pre-day announcement"
-          description="Post an announcement in a channel before the event"
-        />
-        {announcement && (
-          <div className="ml-7 space-y-3">
-            <FormField
-              control={control}
-              name="discord_announcement_hours"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Hours before event</FormLabel>
-                  <FormControl>
-                    <IntegerInput
-                      min={1}
-                      name={field.name}
-                      ref={field.ref}
-                      onBlur={field.onBlur}
-                      value={field.value}
-                      onValueChange={(v) => v != null && field.onChange(v)}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    How many hours before the event to post the announcement
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="discord_announcement_role_ids"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Mention roles in announcement</FormLabel>
-                  <FormControl>
-                    <DiscordRolePicker
-                      organizationId={organizationId}
-                      value={field.value || []}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Discord role IDs to @mention when announcement is posted
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* New-event channel post — repeater only */}
-      {showNotifyNewEvents && (
-        <div className="rounded-md border border-border p-3">
+      <Subsection
+        testId="discord-subsection-channel-posts"
+        title="Channel posts"
+      >
+        {/* Post event signup embed */}
+        <div className="rounded-md border border-border p-3 space-y-3">
           <CheckboxField
             control={control}
-            name="discord_notify_new_events"
-            label="Post new events"
-            description="Post each new series event in the announcement channel when it is created"
+            name="discord_post_signups"
+            label="Post event signup embed"
+            description="Post an embed to a channel where users can react to sign up"
           />
+          {postSignups && (
+            <div className="ml-7 space-y-3">
+              <PostChannelField
+                control={control}
+                name="discord_post_signups_channel_id"
+                label="Signup channel"
+                description="Channel where the signup embed will be posted"
+                organizationId={organizationId}
+                blankState={blankState('signup')}
+                noChannelWarning={SIGNUP_NO_CHANNEL_WARNING}
+                data-testid="discord-signup-channel-select"
+              />
+              <FormField
+                control={control}
+                name="discord_signup_role_ids"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mention roles in signup post</FormLabel>
+                    <FormControl>
+                      <DiscordRolePicker
+                        organizationId={organizationId}
+                        value={field.value || []}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Discord role IDs to @mention in the signup post
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
         </div>
-      )}
 
-      {usesAnnouncementChannel && (
-        <div
-          className="rounded-md border border-border p-3"
-          data-testid="discord-announcement-channel-block"
-        >
-          <FormField
+        {/* Start mention */}
+        <div className="rounded-md border border-border p-3 space-y-3">
+          <CheckboxField
             control={control}
-            name="discord_announcement_channel_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Announcement channel</FormLabel>
-                <FormControl>
-                  <DiscordChannelPicker
-                    organizationId={organizationId}
-                    value={field.value}
-                    onChange={field.onChange}
-                    data-testid="discord-announcement-channel-select"
-                  />
-                </FormControl>
-                <FormDescription>
-                  Shared by the pre-day announcement, attendance reminder,
-                  profile reminder and series new-event posts.
-                  <span className="block">
-                    {`Used by: ${channelUsers.join(', ')}`}
-                  </span>
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
+            name="discord_start_mention"
+            label="Mention signed-up members before start"
+            description="Reply to the signup post with an @mention of every signed-up member shortly before the event starts"
           />
+          {startMention && (
+            <>
+              <div className="ml-7 space-y-2">
+                <p
+                  data-testid="discord-start-mention-prerequisite-note"
+                  className="text-sm text-muted-foreground"
+                >
+                  {START_MENTION_PREREQUISITE_NOTE}
+                </p>
+                {prerequisite.kind === 'missing' && (
+                  <Alert
+                    data-testid="discord-start-mention-prerequisite-warning"
+                    className="border-warning/30 bg-warning/10 text-warning [&>svg]:text-warning"
+                  >
+                    <TriangleAlert />
+                    <AlertDescription>{prerequisiteMessage}</AlertDescription>
+                  </Alert>
+                )}
+                {prerequisite.kind === 'announcement_fallback' && (
+                  <p
+                    data-testid="discord-start-mention-prerequisite-fallback"
+                    className="text-sm text-muted-foreground"
+                  >
+                    {prerequisiteMessage}
+                  </p>
+                )}
+              </div>
+              <HoursSelect
+                control={control}
+                name="discord_start_mention_minutes"
+                options={START_MENTION_MINUTES_OPTIONS}
+              />
+              <div className="ml-7">
+                <FormField
+                  control={control}
+                  name="discord_start_mention_scope"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Who to mention</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger
+                            className="w-full"
+                            data-testid="discord-discord_start_mention_scope-select"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {START_MENTION_SCOPE_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </>
+          )}
         </div>
-      )}
+
+        {/* Pre-day announcement */}
+        <div className="rounded-md border border-border p-3 space-y-3">
+          <CheckboxField
+            control={control}
+            name="discord_announcement"
+            label="Pre-day announcement"
+            description="Post an announcement in a channel before the event"
+          />
+          {announcement && (
+            <div className="ml-7 space-y-3">
+              <AnnouncementChannelField
+                control={control}
+                organizationId={organizationId}
+                lead="Channel for the pre-day announcement. Posts with no channel of their own use it too."
+                users={channelUsers}
+              />
+              <FormField
+                control={control}
+                name="discord_announcement_hours"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Hours before event</FormLabel>
+                    <FormControl>
+                      <IntegerInput
+                        min={1}
+                        name={field.name}
+                        ref={field.ref}
+                        onBlur={field.onBlur}
+                        value={field.value}
+                        onValueChange={(v) => v != null && field.onChange(v)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      How many hours before the event to post the announcement
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={control}
+                name="discord_announcement_role_ids"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mention roles in announcement</FormLabel>
+                    <FormControl>
+                      <DiscordRolePicker
+                        organizationId={organizationId}
+                        value={field.value || []}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Discord role IDs to @mention when announcement is posted
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Attendance reminder */}
+        <div className="rounded-md border border-border p-3 space-y-3">
+          <CheckboxField
+            control={control}
+            name="discord_confirm_attendance"
+            label="Post attendance reminder in Discord"
+            description={ATTENDANCE_REMINDER_DESCRIPTION}
+          />
+          {confirmAttendance && (
+            <>
+              <HoursSelect
+                control={control}
+                name="discord_confirm_attendance_hours"
+              />
+              <div className="ml-7">
+                <PostChannelField
+                  control={control}
+                  name="discord_confirm_attendance_channel_id"
+                  label={discordLabel('discord_confirm_attendance_channel_id')}
+                  organizationId={organizationId}
+                  blankState={blankState('attendance')}
+                  noChannelWarning={NO_CHANNEL_WARNING}
+                  data-testid="discord-confirm-attendance-channel-select"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Profile reminder */}
+        <div className="rounded-md border border-border p-3 space-y-3">
+          <CheckboxField
+            control={control}
+            name="discord_profile_reminder"
+            label="Profile update reminder"
+            description={PROFILE_REMINDER_DESCRIPTION}
+          />
+          {profileReminder && (
+            <>
+              <HoursSelect
+                control={control}
+                name="discord_profile_reminder_hours"
+              />
+              <div className="ml-7">
+                <PostChannelField
+                  control={control}
+                  name="discord_profile_reminder_channel_id"
+                  label={discordLabel('discord_profile_reminder_channel_id')}
+                  organizationId={organizationId}
+                  blankState={blankState('profile')}
+                  noChannelWarning={NO_CHANNEL_WARNING}
+                  data-testid="discord-profile-reminder-channel-select"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* New-event channel post — repeater only */}
+        {showNotifyNewEvents && (
+          <div className="rounded-md border border-border p-3 space-y-3">
+            <CheckboxField
+              control={control}
+              name="discord_notify_new_events"
+              label="Post new events"
+              description={NEW_EVENTS_DESCRIPTION}
+            />
+            {notifyNewEvents && (
+              <div className="ml-7">
+                <PostChannelField
+                  control={control}
+                  name="discord_new_event_channel_id"
+                  label={discordLabel('discord_new_event_channel_id')}
+                  organizationId={organizationId}
+                  blankState={blankState('newEvent')}
+                  noChannelWarning={NO_CHANNEL_WARNING}
+                  data-testid="discord-new-event-channel-select"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {showFallbackBlock && (
+          <div
+            className="rounded-md border border-border p-3"
+            data-testid="discord-announcement-channel-block"
+          >
+            <AnnouncementChannelField
+              control={control}
+              organizationId={organizationId}
+              lead="Used by posts with no channel of their own."
+              users={channelUsers}
+            />
+          </div>
+        )}
+      </Subsection>
+
+      <Subsection
+        testId="discord-subsection-direct-messages"
+        title="Direct messages"
+      >
+        {showSignupReminder ? (
+          <div className="rounded-md border border-border p-3 space-y-3">
+            <CheckboxField
+              control={control}
+              name="discord_signup_reminder"
+              label={
+                isRepeater
+                  ? SIGNUP_REMINDER_LABEL
+                  : `${SIGNUP_REMINDER_LABEL} (default for new series)`
+              }
+              description={signupReminderMeta.description ?? ''}
+            />
+            <p
+              className="ml-7 text-sm text-muted-foreground"
+              data-testid="discord-signup-reminder-subscribe-note"
+            >
+              {SUBSCRIBE_NOTE}
+            </p>
+            {signupReminder && (
+              <HoursSelect
+                control={control}
+                name="discord_signup_reminder_hours"
+                label="Hours before event"
+              />
+            )}
+          </div>
+        ) : (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="discord-direct-messages-series-only"
+          >
+            Direct messages are set on recurring series.
+          </p>
+        )}
+      </Subsection>
     </div>
   );
 }
