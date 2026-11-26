@@ -42,9 +42,9 @@ const FALLBACK_MESSAGES: Record<SignupReason, string> = {
 
 const MISSING_PREFIXES: Record<SignupReason, string> = {
   signup_disabled:
-    'Start mention won\'t send: signup posts are off. Turn on "Post event signup embed" below and pick a channel',
+    'Start mention won\'t send: signup posts are off. Turn on "Post event signup embed" and pick a channel',
   signup_no_channel:
-    "Start mention won't send: no signup channel is selected. Pick a signup channel below",
+    "Start mention won't send: no signup channel is selected. Pick a signup channel",
 };
 
 export function startMentionPrerequisiteMessage(

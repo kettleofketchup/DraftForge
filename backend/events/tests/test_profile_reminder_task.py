@@ -7,6 +7,9 @@ from discordbot.models import DiscordMessageLog
 from events.tasks import send_profile_reminder
 from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
 
+OWN_CHANNEL = "333333333333333333"
+ANNOUNCEMENT_CHANNEL = "1482767177063858216"
+
 
 class SendProfileReminderTaskTest(_DiscordTaskTestCase):
     @patch("discordbot.utils._rate_limited_request")
@@ -38,6 +41,54 @@ class SendProfileReminderTaskTest(_DiscordTaskTestCase):
         embed = mock_req.call_args.kwargs["json"]["embeds"][0]
         self.assertIn("Dota 2 Friend ID", embed["description"])
         self.assertIn("Verified MMR", embed["description"])
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_sends_to_own_channel_when_set(self, mock_req: MagicMock) -> None:
+        mock_req.return_value = _ok_response({"id": "prof_msg_x_2"})
+        self.event.discord_profile_reminder = True
+        self.event.discord_profile_reminder_channel_id = OWN_CHANNEL
+        self.event.discord_announcement_channel_id = ANNOUNCEMENT_CHANNEL
+        self.event.save()
+
+        send_profile_reminder(self.event.pk)
+
+        log = DiscordMessageLog.objects.get(
+            source="profile_reminder", source_id=self.event.pk, success=True
+        )
+        self.assertEqual(log.channel_id, OWN_CHANNEL)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_blank_own_channel_uses_announcement(self, mock_req: MagicMock) -> None:
+        mock_req.return_value = _ok_response({"id": "prof_msg_x_3"})
+        self.event.discord_profile_reminder = True
+        self.event.discord_profile_reminder_channel_id = ""
+        self.event.discord_announcement_channel_id = ANNOUNCEMENT_CHANNEL
+        self.event.save()
+
+        send_profile_reminder(self.event.pk)
+
+        log = DiscordMessageLog.objects.get(
+            source="profile_reminder", source_id=self.event.pk, success=True
+        )
+        self.assertEqual(log.channel_id, ANNOUNCEMENT_CHANNEL)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_own_channel_without_announcement_channel_sends(
+        self, mock_req: MagicMock
+    ) -> None:
+        mock_req.return_value = _ok_response({"id": "prof_msg_x_4"})
+        self.event.discord_profile_reminder = True
+        self.event.discord_profile_reminder_channel_id = OWN_CHANNEL
+        self.event.discord_announcement_channel_id = ""
+        self.event.save()
+
+        send_profile_reminder(self.event.pk)
+
+        mock_req.assert_called_once()
+        log = DiscordMessageLog.objects.get(
+            source="profile_reminder", source_id=self.event.pk, success=True
+        )
+        self.assertEqual(log.channel_id, OWN_CHANNEL)
 
     @patch("discordbot.utils._rate_limited_request")
     def test_skips_when_no_announcement_channel(self, mock_req):

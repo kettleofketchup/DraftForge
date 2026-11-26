@@ -6,10 +6,16 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
+import { useForm } from 'react-hook-form';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getDiscordChannels, type DiscordChannel } from '~/components/api/api';
+import { Form } from '~/components/ui/form';
 import { DiscordChannelPicker } from '../DiscordChannelPicker';
+import type { DiscordFields } from '../DiscordConfigSection';
+import { PostChannelField } from '../PostChannelField';
+import { NO_CHANNEL_WARNING } from '../postChannelState';
+import { DISCORD_CONFIG_DEFAULTS } from '../schemas';
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/components/api/api')>()),
@@ -167,5 +173,171 @@ describe('DiscordChannelPicker kind', () => {
     const listbox = openSelect();
     expect(listbox).toHaveTextContent('Lobby Voice');
     expect(screen.queryByText('general')).not.toBeInTheDocument();
+  });
+});
+
+const WITH_ANNOUNCEMENTS: DiscordChannel[] = [
+  { id: '1', name: 'general', type: 0, type_label: 'text' },
+  { id: '222', name: 'announcements', type: 0, type_label: 'text' },
+];
+
+describe('DiscordChannelPicker clearable', () => {
+  it('shows the clear label with the fallback channel name', async () => {
+    mockedGetChannels.mockResolvedValue(WITH_ANNOUNCEMENTS);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        clearable={{
+          label: 'Use announcement channel',
+          fallbackChannelId: '222',
+        }}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('picker')).toHaveTextContent(
+        'Use announcement channel (#announcements)',
+      ),
+    );
+  });
+
+  it('shows the bare clear label when the fallback is not in the list', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        clearable={{
+          label: 'Use announcement channel',
+          fallbackChannelId: '999',
+        }}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.getByTestId('picker')).toHaveTextContent(
+      /^Use announcement channel$/,
+    );
+  });
+
+  it('clear button calls onChange with empty string', async () => {
+    mockedGetChannels.mockResolvedValue(WITH_ANNOUNCEMENTS);
+    const onChange = vi.fn();
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value="1"
+        onChange={onChange}
+        clearable={{ label: 'No channel selected' }}
+        data-testid="picker"
+      />,
+    );
+    const clear = screen.getByTestId('picker-clear');
+    expect(clear).toHaveAccessibleName('Clear channel');
+    fireEvent.click(clear);
+    expect(onChange).toHaveBeenCalledWith('');
+  });
+
+  it('no clear button when value is empty', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        clearable={{ label: 'No channel selected' }}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.queryByTestId('picker-clear')).not.toBeInTheDocument();
+    expect(screen.getByTestId('picker')).toHaveTextContent(
+      'No channel selected',
+    );
+  });
+
+  it('no clear button when not clearable', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value="1"
+        onChange={vi.fn()}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.queryByTestId('picker-clear')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Clear channel' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps "Select channel" without clearable', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(
+      <DiscordChannelPicker
+        organizationId={7}
+        value=""
+        onChange={vi.fn()}
+        data-testid="picker"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId('picker')).toBeEnabled());
+    expect(screen.getByTestId('picker')).toHaveTextContent('Select channel');
+  });
+});
+
+function LabelledPickers() {
+  const form = useForm<DiscordFields>({
+    defaultValues: DISCORD_CONFIG_DEFAULTS,
+  });
+  const fallback = { kind: 'fallback', channelId: '1' } as const;
+  return (
+    <Form {...form}>
+      <PostChannelField
+        control={form.control}
+        name="discord_confirm_attendance_channel_id"
+        label="Attendance reminder channel"
+        description="Where the attendance reminder posts"
+        organizationId={7}
+        blankState={fallback}
+        noChannelWarning={NO_CHANNEL_WARNING}
+        data-testid="attendance"
+      />
+      <PostChannelField
+        control={form.control}
+        name="discord_profile_reminder_channel_id"
+        label="Profile reminder channel"
+        organizationId={7}
+        blankState={fallback}
+        noChannelWarning={NO_CHANNEL_WARNING}
+        data-testid="profile"
+      />
+    </Form>
+  );
+}
+
+describe('DiscordChannelPicker form labelling', () => {
+  it('names each combobox by its FormLabel and links the description', async () => {
+    mockedGetChannels.mockResolvedValue(TEXT);
+    render(<LabelledPickers />);
+    await waitFor(() => expect(screen.getByTestId('attendance')).toBeEnabled());
+
+    const attendance = screen.getByRole('combobox', {
+      name: 'Attendance reminder channel',
+    });
+    const profile = screen.getByRole('combobox', {
+      name: 'Profile reminder channel',
+    });
+    expect(attendance).toBe(screen.getByTestId('attendance'));
+    expect(profile).toBe(screen.getByTestId('profile'));
+    expect(attendance).toHaveAccessibleDescription(
+      'Where the attendance reminder posts',
+    );
+    expect(attendance).toHaveAttribute('aria-invalid', 'false');
   });
 });
