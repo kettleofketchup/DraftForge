@@ -150,6 +150,33 @@ The **Signup Line** settings decide whether a returning or switching signup keep
 
 With both on, which is the default, the order is the same as before these settings existed. Signup rows on the event page and the roll call page show **in line since**: the time the signup took its current place.
 
+#### Staff reasons
+
+The **Staff reasons** setting (`staff_reason_policy`) decides when staff must say why they changed someone's signup. It sits next to the Signup Line settings, and a series passes it on to its future events like the other event settings. Past events keep the setting they had.
+
+| Choice | Value | A reason is required for |
+|---|---|---|
+| **Optional** (default) | `optional` | nothing; staff can still give one |
+| **Required for placements** | `placements` | placements only |
+| **Required for every staff change** | `all_staff_changes` | every staff change to a signup |
+
+Placements are the changes that decide who gets a seat: adding a member, approving a waitlisted signup, demoting to the waitlist and reinstating. Approving a pending signup, rejecting, confirming, unconfirming and removing are not placements.
+
+No reason is ever needed for:
+
+- a member changing their own signup, staff included;
+- system changes such as waitlist promotions, series cascades and scheduled tasks;
+- Discord buttons and commands, which are all member actions on the member's own signup. No staff Discord action exists. One added later would be refused under a strict policy until it collects a reason;
+- event-level transitions: starting roll call, reopening signups, starting the tournament, cancelling, restarting and closing;
+- ready check open, escalate and close. These apply the ready check rules to everyone at once, so no single member's change needs justifying. To remove one member with a reason, use Remove;
+- voice presence and ready check resolve, which already require their own reason.
+
+A reason that is given is saved with the change under every choice. Staff see it in the signup's **History**. Reasons are not shown to members, are not sent in live updates or Discord posts, and are not written to logs.
+
+Under **Optional** the one-click buttons stay one-click. The actions that already open a dialog (the MMR approval recap, Remove, and the roll call confirm, reject and remove dialogs) get an optional reason field. When the choice requires a reason, a one-click action opens a short reason dialog first, and the dialog-based actions mark their field as required.
+
+**API:** each staff signup action (`admin-signup`, `approve`, `demote`, `reinstate`, `reject`, `confirm`, `unconfirm`, `cancel_signup` and `ready-check/confirm`) accepts an optional `reason` in the body, at most 500 characters after trimming. When the event's choice requires one and none is sent, the endpoint returns 400 `{"error": "reason_required"}`. Status errors come first: a request on a signup in the wrong state gets the usual status error, not `reason_required`. `ready-check/recheck` writes no history, so it ignores `reason`.
+
 #### Web vs Discord parity
 
 Both signup paths funnel through `apply_signup_input` and write the same per-org `PlayerDotaProfile` row, so the two surfaces are interchangeable for Dota events. The table below shows where each field is captured and which model it lands on.

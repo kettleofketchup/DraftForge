@@ -59,6 +59,12 @@ The dedicated roll call page (`/rollcall/:eventId`) shows:
 - **Awaiting Confirmation section** — approved players (with Confirm + Reject buttons)
 - **Other section** — any remaining signups
 
+The confirm, reject and remove dialogs have a reason field. It is optional unless the event's [Staff reasons](../events.md#staff-reasons) choice requires one for that action. The approval recap has the same field; approving a waitlisted signup counts as a placement, confirming or rejecting does not. Reasons appear in the signup's staff-only History.
+
+Keyboard flow stays quick: select an approved row and press **1**, type the required reason, then **Enter** to confirm. Under Optional, **1**, **Enter** still confirms with no typing. **2** opens Reject or Remove for the selected row. The list's shortcuts pause while a reason dialog is open. Submitting closes the roll call dialog and advances selection immediately; a later request failure shows an error, and a newly required reason opens a reason prompt with the submitted text preserved. On other screens the dialogs wait for success before closing.
+
+Starting roll call, and opening, escalating or closing the ready check, need no staff reason: they run the event's bulk rules rather than deciding on one member. Voice-presence overrides and held-check resolves still require their own reason.
+
 ### 4. Start Tournament
 
 When enough players are confirmed (meets `min_players` threshold), the "Start Tournament" button enables. A confirmation dialog shows:

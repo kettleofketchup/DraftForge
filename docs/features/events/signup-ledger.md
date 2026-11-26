@@ -186,8 +186,8 @@ The tab has two filters, **member** and **action**. **Clear filters** resets bot
 !!! note "Signups without history"
     Signups created by test data population or fixtures have no entries, and signups from before the ledger start at their `backfilled` entry ("Starting record"). A member with no entries shows "No changes recorded for this member".
 
-!!! info "Reasons and overridden rules"
-    Staff cannot give a reason for most changes yet, so `reason` is usually empty, and nothing fills `rules_overridden` yet. The page shows both as soon as later work records them.
+!!! info "Reasons"
+    Staff signup actions on the website fill `reason` with the text staff give. The event's [Staff reasons](../events.md#staff-reasons) setting decides when a reason is required. Members acting on their own signup and system changes are exempt, as are one-click staff actions when the setting does not require a reason.
 
 ## For developers
 
@@ -195,6 +195,8 @@ The tab has two filters, **member** and **action**. **Clear filters** resets bot
 - Build the actor with `SignupActor.for_request_on(request, subject, event)` on the website (pass `staff_only=True` on staff-only endpoints), `SignupActor.discord(user)` in Discord flows (it picks up the bound interaction id), or `SignupActor.system()` where no person acts.
 - A new signup mutation must record exactly one entry with `record_signup_change`, inside its own `transaction.atomic` block, after its guards. Take `before = snapshot(signup)` from a row read with `.nocache()` inside the transaction.
 - A mutation that frees a seat passes its entry to `_promote_from_waitlist(event, cause=entry)`.
+- A staff signup mutation calls `require_staff_reason(...)` from `events/ledger.py` after its state checks and before any write, and records the returned trimmed reason. It raises `StaffReasonRequired` (400 `{"error": "reason_required"}`) when the event's policy needs a reason and none was given.
+- `PLACEMENT_ACTIONS` in `events/ledger.py` lists the ledger actions that count as placements: `staff_added`, `demoted`, `reinstated`, plus `voided_withdrawal`, `transferred_out`, `transferred_in` and `swapped` for future staff actions. `is_placement(action, from_status=...)` also counts `approved` from `waitlisted`. This is the extension point for later placement work; the frontend copy in `components/events/staffReasonPolicy.ts` must match.
 
 ### History API
 
@@ -248,4 +250,4 @@ Use `docker exec` rather than `just dev::run`, which starts a container on the d
 
 ## Coming later
 
-A member's own view of their signup records, and the reasons staff give for their changes, will build on this ledger. This page will describe them when they land.
+A member's own view of their signup records will build on this ledger. This page will describe them when they land.
