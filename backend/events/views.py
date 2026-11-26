@@ -325,6 +325,7 @@ def _confirm_response(
     via: ReadyCheckConfirmVia,
     actor: SignupActor,
     not_in_check_message: str,
+    reason: str = "",
 ) -> Response:
     host: CustomUser | None = event.host
     with transaction.atomic():
@@ -335,7 +336,7 @@ def _confirm_response(
                 "no_ready_check", NO_READY_CHECK_MESSAGE, host=host, with_host=True
             )
         result = (
-            confirm_ready(event, user, via=via, actor=actor)
+            confirm_ready(event, user, via=via, actor=actor, reason=reason)
             if user is not None
             else ConfirmResult.NOT_IN_CHECK
         )
@@ -1550,6 +1551,7 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self._ready_check_operator_event(request)
         body = ReadyCheckConfirmInputSerializer(data=request.data)
         body.is_valid(raise_exception=True)
+        reason = parse_staff_reason(request.data)
         member = (
             CustomUser.objects.nocache()
             .filter(pk=body.validated_data["user_id"])
@@ -1561,6 +1563,7 @@ class EventViewSet(viewsets.ModelViewSet):
             via=ReadyCheckConfirmVia.STAFF,
             actor=SignupActor.from_request(request, role=ActorRole.STAFF),
             not_in_check_message=MEMBER_NOT_IN_CHECK_MESSAGE,
+            reason=reason,
         )
 
     @action(
@@ -1831,12 +1834,14 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         try:
             confirmed = staff_confirm_signup(
                 signup,
                 actor=SignupActor.for_request_on(
                     request, signup.user, signup.event, staff_only=True
                 ),
+                reason=reason,
             )
             return Response(
                 EventSignupSerializer(confirmed, context={"request": request}).data

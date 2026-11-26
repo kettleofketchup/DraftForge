@@ -950,6 +950,7 @@ def confirm_signup(
     *,
     actor: SignupActor,
     reason: str = "",
+    fallback_reason: str = "",
     rules_overridden: Sequence[str] = (),
     correlation_id: str = "",
 ) -> EventSignup:
@@ -957,6 +958,9 @@ def confirm_signup(
     _reread_signup(signup)
     if signup.status != SignupStatus.APPROVED:
         raise ValueError("Only approved signups can be confirmed.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.CONFIRMED, reason=reason
+    )
     before = snapshot(signup)
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
@@ -967,7 +971,7 @@ def confirm_signup(
         actor=actor,
         action=SignupAction.CONFIRMED,
         before=before,
-        reason=reason,
+        reason=reason or fallback_reason,
         rules_overridden=rules_overridden,
         correlation_id=correlation_id,
     )
