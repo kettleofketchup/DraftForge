@@ -130,6 +130,7 @@ const event: EventType = {
   allow_user_signups: true,
   line_withdraw_forfeits: true,
   line_switch_restamps: true,
+  staff_reason_policy: 'optional',
   auto_approve: true,
   auto_confirm: false,
   require_mmr_verified: false,

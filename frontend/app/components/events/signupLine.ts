@@ -10,5 +10,7 @@ export function signupLineFrom(
       SIGNUP_LINE_DEFAULTS.line_withdraw_forfeits,
     line_switch_restamps:
       source?.line_switch_restamps ?? SIGNUP_LINE_DEFAULTS.line_switch_restamps,
+    staff_reason_policy:
+      source?.staff_reason_policy ?? SIGNUP_LINE_DEFAULTS.staff_reason_policy,
   };
 }

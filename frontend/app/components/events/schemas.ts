@@ -64,6 +64,18 @@ export const LOW_COMPLETION_ACTION_LABELS: Record<LowCompletionAction, string> =
     drop_anyway: 'Drop unconfirmed anyway',
   };
 
+export const STAFF_REASON_POLICIES = [
+  'optional',
+  'placements',
+  'all_staff_changes',
+] as const;
+export type StaffReasonPolicy = (typeof STAFF_REASON_POLICIES)[number];
+export const STAFF_REASON_POLICY_LABELS: Record<StaffReasonPolicy, string> = {
+  optional: 'Optional',
+  placements: 'Required for placements',
+  all_staff_changes: 'Required for every staff change',
+};
+
 export const POST_CULL_FILL_MODES = [
   'none',
   'line_order',
@@ -217,6 +229,7 @@ export const eventSchema = z
     post_cull_fill_mode: z.enum(POST_CULL_FILL_MODES).optional(),
     line_withdraw_forfeits: z.boolean().optional(),
     line_switch_restamps: z.boolean().optional(),
+    staff_reason_policy: z.enum(STAFF_REASON_POLICIES).optional(),
     event_voice_channel_id: z.string().optional(),
     voice_presence_confirms: z.boolean().optional(),
     is_off_schedule: z.boolean().optional(),
@@ -337,6 +350,7 @@ export const eventResponseSchema = z.object({
   post_cull_fill_mode: z.enum(POST_CULL_FILL_MODES),
   line_withdraw_forfeits: z.boolean().optional(),
   line_switch_restamps: z.boolean().optional(),
+  staff_reason_policy: z.enum(STAFF_REASON_POLICIES).optional(),
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
   discord_event_title: z.string(),
@@ -726,6 +740,7 @@ export const SIGNUP_RULES_DEFAULTS = {
 export const signupLineSchema = z.object({
   line_withdraw_forfeits: z.boolean(),
   line_switch_restamps: z.boolean(),
+  staff_reason_policy: z.enum(STAFF_REASON_POLICIES),
 });
 
 export type SignupLineFields = z.infer<typeof signupLineSchema>;
@@ -733,6 +748,7 @@ export type SignupLineFields = z.infer<typeof signupLineSchema>;
 export const SIGNUP_LINE_DEFAULTS = {
   line_withdraw_forfeits: true,
   line_switch_restamps: true,
+  staff_reason_policy: 'optional',
 } as const;
 
 export const discordConfigSchema = z

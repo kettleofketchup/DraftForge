@@ -17,6 +17,8 @@ import {
   SIGNUP_LINE_DEFAULTS,
   SIGNUP_OPEN_DEFAULTS,
   signupLineSchema,
+  STAFF_REASON_POLICIES,
+  STAFF_REASON_POLICY_LABELS,
   utcToLocalInput,
 } from '~/components/events/schemas';
 import { signupLineFrom } from '~/components/events/signupLine';
@@ -59,6 +61,7 @@ const baseDiscordConfig = {
   allow_user_signups: true,
   line_withdraw_forfeits: true,
   line_switch_restamps: true,
+  staff_reason_policy: 'optional',
 };
 
 describe('discord_subscriber_dm tolerance', () => {
@@ -259,6 +262,7 @@ const DISCORD_KEYS = [
   'allow_user_signups',
   'line_withdraw_forfeits',
   'line_switch_restamps',
+  'staff_reason_policy',
 ];
 const SIGNUP_OPEN_KEYS = ['signup_open_mode', 'signups_open_hours_before'];
 const LOBBY_KEYS = [
@@ -471,6 +475,7 @@ describe('signup line rules', () => {
     expect(SIGNUP_LINE_DEFAULTS).toEqual({
       line_withdraw_forfeits: true,
       line_switch_restamps: true,
+      staff_reason_policy: 'optional',
     });
     expect(DISCORD_CONFIG_DEFAULTS).toMatchObject(SIGNUP_LINE_DEFAULTS);
   });
@@ -480,6 +485,7 @@ describe('signup line rules', () => {
       signupLineSchema.safeParse({
         line_withdraw_forfeits: 'yes',
         line_switch_restamps: true,
+        staff_reason_policy: 'optional',
       }).success,
     ).toBe(false);
     expect(
@@ -515,7 +521,54 @@ describe('signup line rules', () => {
       signupLineFrom({
         line_withdraw_forfeits: false,
         line_switch_restamps: true,
+        staff_reason_policy: 'placements',
       }),
-    ).toEqual({ line_withdraw_forfeits: false, line_switch_restamps: true });
+    ).toEqual({
+      line_withdraw_forfeits: false,
+      line_switch_restamps: true,
+      staff_reason_policy: 'placements',
+    });
+  });
+
+  it('signupLineFrom defaults a missing staff reason policy to optional', () => {
+    expect(
+      signupLineFrom({
+        line_withdraw_forfeits: false,
+        line_switch_restamps: false,
+      }).staff_reason_policy,
+    ).toBe('optional');
+  });
+
+  it('rejects an unknown staff reason policy', () => {
+    expect(
+      signupLineSchema.safeParse({
+        ...SIGNUP_LINE_DEFAULTS,
+        staff_reason_policy: 'sometimes',
+      }).success,
+    ).toBe(false);
+    expect(
+      eventResponseSchema.shape.staff_reason_policy.safeParse('sometimes')
+        .success,
+    ).toBe(false);
+  });
+
+  it('tolerates event payloads without the staff reason policy', () => {
+    expect(eventSchema.shape.staff_reason_policy.parse(undefined)).toBe(
+      undefined,
+    );
+    expect(
+      eventResponseSchema.shape.staff_reason_policy.parse('all_staff_changes'),
+    ).toBe('all_staff_changes');
+  });
+
+  it('labels every staff reason policy', () => {
+    expect(STAFF_REASON_POLICY_LABELS).toEqual({
+      optional: 'Optional',
+      placements: 'Required for placements',
+      all_staff_changes: 'Required for every staff change',
+    });
+    expect(Object.keys(STAFF_REASON_POLICY_LABELS)).toEqual([
+      ...STAFF_REASON_POLICIES,
+    ]);
   });
 });

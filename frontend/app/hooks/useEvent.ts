@@ -519,7 +519,7 @@ export function useSignupActionMutations(eventId: number) {
   return {
     approve: useMutation(
       options('approve', ({ id, mmr }: { id: number; mmr?: number }) =>
-        approveSignupAPI(id, mmr),
+        approveSignupAPI(id, { mmr }),
       ),
     ),
     reject: useMutation(options('reject', (id: number) => rejectSignupAPI(id))),
