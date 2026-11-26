@@ -6,6 +6,7 @@ from structlog.testing import capture_logs
 
 from discordbot.delivery_types import DeliveryFailure, FailureCategory, FailurePhase
 from discordbot.http_evidence import (
+    decode_response_json,
     discord_error_code,
     failure_from_exception,
     failure_from_response,
@@ -70,6 +71,18 @@ class HttpEvidenceTest(SimpleTestCase):
         failure = failure_from_exception(requests.Timeout(), FailurePhase.CREATE)
         self.assertEqual(failure.category, FailureCategory.TRANSPORT)
         self.assertIsNone(failure.status)
+
+    def test_json_decode_error_retains_original_response(self) -> None:
+        response = _resp(201, b"<html>private</html>")
+        with self.assertRaises(requests.exceptions.JSONDecodeError) as caught:
+            decode_response_json(response)
+        self.assertIs(caught.exception.response, response)
+        self.assertEqual(
+            failure_from_exception(caught.exception, FailurePhase.CREATE),
+            DeliveryFailure(
+                FailurePhase.CREATE, FailureCategory.MALFORMED_RESPONSE, 201
+            ),
+        )
 
     def test_auth_error_keeps_response(self) -> None:
         failure = failure_from_exception(

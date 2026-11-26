@@ -22,7 +22,7 @@ from .embeds import (
     results_posted_embed,
     tournament_created_embed,
 )
-from .http_evidence import failure_from_exception, response_json
+from .http_evidence import decode_response_json, failure_from_exception, response_json
 from .services.discord_members import DISCORD_HTTP_TIMEOUT_S
 
 if TYPE_CHECKING:
@@ -289,7 +289,7 @@ def sync_send_embed(
             "POST", url, json=payload, headers=_get_headers()
         )
         response.raise_for_status()
-        response_data = response.json()
+        response_data = decode_response_json(response)
         _log_discord_message(
             channel_id=channel_id,
             embed_data=embed,
@@ -459,7 +459,7 @@ def sync_send_embed_with_components_no_log(
 
     response = _rate_limited_request("POST", url, json=payload, headers=_get_headers())
     response.raise_for_status()
-    response_data = response.json()
+    response_data = decode_response_json(response)
     return response_data, response.status_code
 
 
@@ -695,7 +695,7 @@ def sync_send_v2_message(
             "POST", url, json=payload, headers=_get_headers()
         )
         response.raise_for_status()
-        response_data = response.json()
+        response_data = decode_response_json(response)
 
         if forum_thread_name and response_data.get("message"):
             msg_id = response_data["message"].get("id")

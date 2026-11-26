@@ -7,6 +7,14 @@ import requests
 from .delivery_types import DeliveryFailure, FailureCategory, FailurePhase
 
 
+def decode_response_json(response: requests.Response) -> Any:
+    try:
+        return response.json()
+    except requests.exceptions.JSONDecodeError as exc:
+        exc.response = response
+        raise
+
+
 def response_json(response: requests.Response | None) -> Any:
     if response is None:
         return None
@@ -42,4 +50,9 @@ def failure_from_response(
 
 
 def failure_from_exception(exc: BaseException, phase: FailurePhase) -> DeliveryFailure:
-    return failure_from_response(getattr(exc, "response", None), phase)
+    response = getattr(exc, "response", None)
+    if isinstance(exc, requests.exceptions.JSONDecodeError) and response is not None:
+        return DeliveryFailure(
+            phase, FailureCategory.MALFORMED_RESPONSE, response.status_code
+        )
+    return failure_from_response(response, phase)

@@ -20,6 +20,7 @@ class SendFailureEvidenceTest(SimpleTestCase):
         kind: str,
         status: int = 403,
         body: bytes = b'{"code":50013,"message":"Missing Access"}',
+        category: str = "http_error",
     ) -> None:
         response = requests.Response()
         response.status_code = status
@@ -54,13 +55,19 @@ class SendFailureEvidenceTest(SimpleTestCase):
         kwargs = recorded.call_args.kwargs
         self.assertFalse(kwargs["success"])
         self.assertEqual(kwargs["status_code"], status)
-        expected = {"phase": "create", "category": "http_error", "status": status}
+        expected = {"phase": "create", "category": category, "status": status}
         if status == 403:
             expected["code"] = 50013
         self.assertEqual(kwargs["response_data"], expected)
         self.assertNotIn("Missing Access", str(kwargs))
         self.assertNotIn("Missing Access", str(logs))
         self.assertNotIn("<html>", str(logs))
+        self.assertNotIn("private", str(kwargs))
+        self.assertNotIn("private", str(logs))
+        errors = [entry for entry in logs if entry["log_level"] == "error"]
+        self.assertEqual(len(errors), 1)
+        for key, value in expected.items():
+            self.assertEqual(errors[0][key], value)
 
     def test_lease_send_403_finalizes_with_status_and_safe_code(self) -> None:
         self._assert_send_failure("lease")
@@ -74,10 +81,29 @@ class SendFailureEvidenceTest(SimpleTestCase):
     def test_plain_embed_403_keeps_status(self) -> None:
         self._assert_send_failure("plain")
 
-    def test_invalid_json_2xx_is_not_parsed_before_status(self) -> None:
+    def test_invalid_json_500_checks_status_before_parsing(self) -> None:
         for kind in ("lease", "post", "v2", "plain"):
             with self.subTest(kind=kind):
                 self._assert_send_failure(kind, 500, b"<html>private</html>")
+
+    def _assert_malformed_success(self, kind: str) -> None:
+        for status in (200, 201):
+            with self.subTest(status=status):
+                self._assert_send_failure(
+                    kind, status, b"<html>private</html>", "malformed_response"
+                )
+
+    def test_lease_invalid_json_2xx_keeps_status(self) -> None:
+        self._assert_malformed_success("lease")
+
+    def test_post_log_invalid_json_2xx_keeps_status(self) -> None:
+        self._assert_malformed_success("post")
+
+    def test_v2_invalid_json_2xx_keeps_status(self) -> None:
+        self._assert_malformed_success("v2")
+
+    def test_plain_invalid_json_2xx_keeps_status(self) -> None:
+        self._assert_malformed_success("plain")
 
 
 class SyncEditMessageMessageDeletedTest(TestCase):
