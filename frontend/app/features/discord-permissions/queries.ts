@@ -66,6 +66,7 @@ function usePermissionQuery({
     queryFn: ({ signal }) => request(false, signal),
     enabled: enabled && !pending,
     refetchOnWindowFocus: true,
+    notifyOnChangeProps: ['data', 'error', 'isFetching'],
     refetchInterval: 60_000,
     staleTime: 0,
     retry: false,

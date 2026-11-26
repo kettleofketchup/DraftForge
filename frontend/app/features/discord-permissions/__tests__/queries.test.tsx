@@ -151,13 +151,17 @@ it('rechecks a whole batch once with refresh and an AbortSignal', async () => {
     expect.any(AbortSignal),
   );
 });
-it('a manual failure clears green and a later ordinary response recovers', async () => {
+it('a manual failure clears green and a later identical ordinary response recovers without waiting for unrelated renders', async () => {
+  vi.useFakeTimers();
   const { wrapper } = setup();
   const { result } = renderHook(
     () => usePermissionPreview({ scope, descriptors, enabled: true }),
     { wrapper },
   );
-  await waitFor(() => expect(result.current.state).toBe('ready'));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  expect(result.current.state).toBe('ready');
   const error = new Error('refresh unavailable');
   vi.mocked(postOrgPermissionChecks).mockRejectedValueOnce(error);
   await act(async () => {
@@ -168,7 +172,10 @@ it('a manual failure clears green and a later ordinary response recovers', async
   await act(async () => {
     await result.current.refetch();
   });
-  await waitFor(() => expect(result.current.state).toBe('ready'));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  expect(result.current.state).toBe('ready');
   expect(result.current.results.size).toBe(1);
 });
 it('does not request a missing org or viewer', async () => {
