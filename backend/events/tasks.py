@@ -63,6 +63,7 @@ from events.discord.embeds import (
     build_announcement_v2,
     build_subscriber_dm_embed,
 )
+from events.discord.signup_destination import resolve_signup_channel_type
 from events.scheduling.fire import fire_due_reminders
 from events.signup_post_lock import (
     acquire_lock,
@@ -249,6 +250,7 @@ def _update_signup_msg(
         update_data["message_id"] = post_result["message"]["id"]
         update_data["channel_type"] = "forum"
     else:
+        update_data["thread_id"] = None
         update_data["message_id"] = post_result.get("id")
         update_data["channel_type"] = "text"
 
@@ -593,8 +595,14 @@ def _send_event_announcement_impl(event_id: int) -> str:
     signup_post_result = None
     signup_message_link = None
 
-    if signup_available:
-        # Signups channel configured — post there (forum thread or regular)
+    channel_type = (
+        resolve_signup_channel_type(
+            event.discord_post_signups_channel_id, guild_id or ""
+        )
+        if signup_available
+        else None
+    )
+    if channel_type is not None:
         # DiscordMessageLog is written by sync_send_embed_with_components via HTTP
         signup_post_result = sync_send_embed_with_components(
             channel_id=event.discord_post_signups_channel_id,
@@ -602,7 +610,7 @@ def _send_event_announcement_impl(event_id: int) -> str:
             components=components,
             source="event_announcement",
             source_id=event.pk,
-            forum_thread_name=thread_name,
+            forum_thread_name=thread_name if channel_type == 15 else None,
             content=signup_content,
             allowed_mentions=signup_mentions,
         )
