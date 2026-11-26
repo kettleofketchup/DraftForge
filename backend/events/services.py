@@ -20,6 +20,7 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    EVENT_STATE_TRANSITIONS,
     REGISTERED_SIGNUP_STATUSES,
     ActorRole,
     Commitment,
@@ -1424,10 +1425,20 @@ def ensure_tournament_with_signups(
 
 
 @transaction.atomic
-def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
-    cancel_ready_check(
-        event, actor=_staff_or_system_actor(actor), reason="event_cancelled"
-    )
+def cancel_event(event: Event, *, actor: CustomUser | None, reason: str = "") -> Event:
+    event = lock_event(event)
+    if EventState.CANCELLED not in EVENT_STATE_TRANSITIONS.get(event.state, ()):
+        event.transition_state(EventState.CANCELLED)
+    signup_actor = _staff_or_system_actor(actor)
+    signups = [
+        (signup, snapshot(signup))
+        for signup in EventSignup.objects.nocache()
+        .filter(event=event)
+        .exclude(status__in=REMOVED_SIGNUP_STATUSES)
+        .select_related("user__base_profile")
+        .order_by("pk")
+    ]
+    cancel_ready_check(event, actor=signup_actor, reason="event_cancelled")
     if event.tournament:
         tournament = event.tournament
         event.tournament = None
@@ -1436,6 +1447,16 @@ def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
     event.transition_state(EventState.CANCELLED)
     event.refresh_from_db(from_queryset=Event.objects.nocache().all())
     standing.on_event_closed(event, cancelled=True, source="cancel", actor=actor)
+    for signup, before in signups:
+        _reread_signup(signup)
+        _record_leaf(
+            signup,
+            event=event,
+            actor=signup_actor,
+            action=SignupAction.EVENT_CANCELLED,
+            before=before,
+            reason=reason,
+        )
     try:
         discord_event = event.discord_event
     except DiscordEvent.DoesNotExist:
