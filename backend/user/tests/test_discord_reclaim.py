@@ -13,12 +13,13 @@ from django.test import TestCase
 from django.utils import timezone as tz
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, Joke
+from app.models import CustomUser
 from common.game import GameType
 from discordbot.models import DiscordEvent, DiscordEventDM, DMType
 from events.constants import EventState, SignupAction, SignupStatus
 from events.ledger import ActorRole, SignupMeans
 from events.models import Event, EventSignup, SignupLedgerEntry
+from joke.models import Joke
 from league.models import League, LeagueUser
 from org.contributions.kinds import ContributionKind
 from org.models import (

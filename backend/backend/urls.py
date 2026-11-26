@@ -33,7 +33,6 @@ from app.views.internal import (
     update_tournament_log,
 )
 from app.views.ssr import EventSSRView
-from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
@@ -199,8 +198,7 @@ urlpatterns = [
     ),
     path("api/avatars/refresh/", refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
-    path("api/jokes/tangoes/", get_tangoes, name="get-tangoes"),
-    path("api/jokes/tangoes/buy/", buy_tango, name="buy-tango"),
+    path("api/jokes/", include("joke.urls")),
     path("api/steam/", include("steam.urls")),
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),

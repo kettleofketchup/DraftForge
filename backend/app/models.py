@@ -15,8 +15,6 @@ from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile, DotaUserProfile, PositionsModel
 
-User = settings.AUTH_USER_MODEL
-
 log = get_logger(__name__)
 
 
@@ -565,19 +563,3 @@ class CustomUser(AbstractUser):
             models.Index(fields=["guildNickname"]),
             models.Index(fields=["discordUsername"]),
         ]
-
-
-class Joke(models.Model):
-    """Tracks joke-related data per user (tangoes purchased, etc.)."""
-
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="joke")
-    tangoes_purchased = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Joke"
-        verbose_name_plural = "Jokes"
-
-    def __str__(self) -> str:
-        return f"{self.user.username} - {self.tangoes_purchased} tangoes"

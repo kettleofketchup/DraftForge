@@ -162,6 +162,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "django_jinja",
     "corsheaders",
+    "joke.apps.JokeConfig",
     "bracket.apps.BracketConfig",
     "user.apps.UserConfig",
     "cacheops",

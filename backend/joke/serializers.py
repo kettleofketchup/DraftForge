@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from app.models import Joke
+from joke.models import Joke
 
 
 class JokeSerializer(serializers.ModelSerializer):

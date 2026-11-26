@@ -3,30 +3,27 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from telemetry.logging import get_logger
-
-from .models import Joke
-from .serializers import JokeSerializer
-
-log = get_logger(__name__)
+from joke.models import Joke
+from joke.serializers import JokeSerializer
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_tangoes(request):
+def get_tangoes(request: Request) -> Response:
     """Get current user's tango count."""
-    joke, created = Joke.objects.get_or_create(user=request.user)
+    joke, _ = Joke.objects.get_or_create(user=request.user)
     serializer = JokeSerializer(joke)
     return Response(serializer.data)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def buy_tango(request):
+def buy_tango(request: Request) -> Response:
     """Increment user's tango count by 1."""
-    joke, created = Joke.objects.get_or_create(user=request.user)
+    joke, _ = Joke.objects.get_or_create(user=request.user)
     joke.tangoes_purchased += 1
     joke.save()
 

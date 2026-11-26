@@ -16,7 +16,7 @@ slot_file := env("DF_SLOT_FILE", root / "docker/.env.slot")
 
 # makemigrations takes an explicit app list (it does not read INSTALLED_APPS):
 # add new Django apps here.
-apps := "steam app bracket discordbot events org user lobby opsnotices league draft tournament"
+apps := "steam app bracket discordbot events org user lobby opsnotices league draft tournament joke"
 
 mod migrate 'migrate.just'
 mod populate 'populate.just'

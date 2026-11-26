@@ -1092,6 +1092,27 @@ USER = MovedSlice(
     cached_labels=frozenset(),
 )
 
+JOKE = MovedSlice(
+    name="joke",
+    source_app="app",
+    new_app="joke",
+    moved=frozenset(
+        {
+            ("app.models", "Joke"),
+            ("app.serializers", "JokeSerializer"),
+            ("app.views_joke", "get_tangoes"),
+            ("app.views_joke", "buy_tango"),
+            ("app.tests.test_joke", "JokeAPITest"),
+        }
+    ),
+    retired_modules=frozenset(
+        {"app.views_joke", "app.serializers", "app.tests.test_joke"}
+    ),
+    model_labels=frozenset({"joke"}),
+    move_migration=("app", "0118_move_joke_to_joke"),
+    cached_labels=frozenset(),
+)
+
 MOVED_SLICES: tuple[MovedSlice, ...] = (
     HERO_DRAFT,
     TEAM_DRAFT,
@@ -1099,7 +1120,11 @@ MOVED_SLICES: tuple[MovedSlice, ...] = (
     LEAGUE,
     TOURNAMENT,
     USER,
+    JOKE,
 )
+
+# Installed for the web only: nothing worker-reachable imports them.
+WEB_ONLY_APPS: frozenset[str] = frozenset({"joke"})
 
 # Slices cut before the rule that a retired module's defs go into `moved`;
 # their modules were renamed or split on the way out.
@@ -1151,6 +1176,7 @@ RETIRED_MODULE_HOMES: dict[str, str | None] = {
     "app.internal_client.tournaments": "tournament.internal_client",
     "app.views.admin_team": "tournament.views.members",
     "app.tests.test_tournament_migration": "tournament.tests.test_tournament_fields",
+    "app.views_joke": "joke.views",
 }
 
 # target app -> production file (relative to backend/) -> what it may import from that app
@@ -1193,6 +1219,7 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             "home_stats cross-domain aggregate",
         ),
     },
+    "joke": {},
 }
 
 # (file relative to backend/, name) -> why a source-app module may define a moved name
@@ -1983,10 +2010,15 @@ class AppBoundaryTests(SimpleTestCase):
         self.assertEqual(find_unlisted_retired_defs(MOVED_SLICES, self.base), [])
 
     def test_new_apps_registered(self) -> None:
-        labels = {entry.split(".")[0] for entry in MODEL_APPS}
+        model_labels = {entry.split(".")[0] for entry in MODEL_APPS}
+        installed_labels = {entry.split(".")[0] for entry in settings.INSTALLED_APPS}
         for s in MOVED_SLICES:
             with self.subTest(slice=s.name):
-                self.assertIn(s.new_app, labels)
+                if s.new_app in WEB_ONLY_APPS:
+                    self.assertIn(s.new_app, installed_labels)
+                    self.assertNotIn(s.new_app, model_labels)
+                else:
+                    self.assertIn(s.new_app, model_labels)
 
     def test_no_cacheops_key_for_moved_models(self) -> None:
         keys = {key.casefold() for key in settings.CACHEOPS}
