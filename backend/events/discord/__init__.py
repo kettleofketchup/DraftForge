@@ -9,6 +9,12 @@ continue to ``from events.discord import build_announcement_embed`` etc.
 """
 
 from events.discord._shared import _get_org_user
+from events.discord.channels import (
+    attendance_reminder_channel,
+    new_event_channel,
+    profile_reminder_channel,
+    reminder_channel,
+)
 from events.discord.components import build_announcement_components
 from events.discord.dispatch import (
     notify_create_discord_event,
@@ -52,6 +58,11 @@ from events.discord.handlers import (
 from events.discord.reactions import handle_reaction_cancel, handle_reaction_signup
 
 __all__ = [
+    # channels
+    "attendance_reminder_channel",
+    "profile_reminder_channel",
+    "new_event_channel",
+    "reminder_channel",
     # embeds
     "COLOR_ANNOUNCEMENT",
     "COLOR_SIGNUP",

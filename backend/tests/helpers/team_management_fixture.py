@@ -7,6 +7,7 @@ Not covered by the test-db hash: the tournament is built on demand through
 from datetime import date
 
 from app.models import CustomUser
+from draft.models import Draft, TeamDraftState
 from league.models import League
 from tests.populate.constants import DTX_STEAM_LEAGUE_ID
 from tournament.models import Team, Tournament
@@ -35,7 +36,8 @@ def populate_team_management_tournament(
     force: bool = False, name: str = TEAM_MANAGEMENT_TOURNAMENT_NAME
 ) -> Tournament:
     """TM Alpha (captain + deputy), TM Bravo (one stand-in), TM Ghost (ghost
-    captain), TM Delta (eliminated, placement 4)."""
+    captain), TM Delta (eliminated, placement 4). The captain takeover copy
+    also gets a completed snake draft."""
     league = League.objects.select_related("organization").get(
         steam_league_id=DTX_STEAM_LEAGUE_ID
     )
@@ -98,12 +100,37 @@ def populate_team_management_tournament(
     )
     delta_team.members.set(delta)
 
+    if name == CAPTAIN_TAKEOVER_TOURNAMENT_NAME:
+        _complete_team_draft(tournament)
+
     return Tournament.objects.get(pk=tournament.pk)
+
+
+def _complete_team_draft(tournament: Tournament) -> None:
+    draft, _ = Draft.objects.get_or_create(
+        tournament=tournament, defaults={"draft_style": "snake"}
+    )
+    draft.build_rounds()
+    pool: dict[int, list[CustomUser]] = {}
+    for draft_round in (
+        draft.draft_rounds.nocache()
+        .select_related("drafting_team")
+        .order_by("pick_number")
+    ):
+        team = draft_round.drafting_team
+        if team.pk not in pool:
+            pool[team.pk] = list(
+                team.members.exclude(pk=team.captain_id).order_by("username")
+            )
+        draft_round.choice = pool[team.pk].pop(0)
+        draft_round.save()
+    draft.state = TeamDraftState.COMPLETED
+    draft.save(update_fields=["state"])
 
 
 def populate_captain_takeover_tournament(force: bool = False) -> Tournament:
     """The team management fixture under its own name, so the captain takeover
-    spec never resets the tournament 06-team-management is using."""
+    spec never resets the tournament team-management is using."""
     return populate_team_management_tournament(
         force=force, name=CAPTAIN_TAKEOVER_TOURNAMENT_NAME
     )

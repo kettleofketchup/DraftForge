@@ -588,12 +588,14 @@ class Draft(models.Model):
         phase = 1
 
         def create_draft_round(
-            draft: "Draft", captain: CustomUser, pick_num: int, phase_num: int
+            draft: "Draft", team: Team, pick_num: int, phase_num: int
         ) -> bool:
+            captain = team.captain
             try:
                 draft_round = DraftRound.objects.create(
                     draft=draft,
                     captain=captain,
+                    drafting_team=team,
                     pick_number=pick_num,
                     pick_phase=phase_num,
                 )
@@ -602,6 +604,7 @@ class Draft(models.Model):
                     system="tournament",
                     subsystem="draft",
                     draft_round_id=draft_round.pk,
+                    team_id=team.pk,
                     username=captain.username,
                     pick_phase=phase_num,
                     pick_number=pick_num,
@@ -612,6 +615,7 @@ class Draft(models.Model):
                     "draft_round_integrity_error",
                     system="tournament",
                     subsystem="draft",
+                    team_id=team.pk,
                     username=captain.username,
                     pick_phase=phase_num,
                     pick_number=pick_num,
@@ -635,7 +639,7 @@ class Draft(models.Model):
             # Create draft rounds for this phase
             for team in pick_order:
                 if pick_number <= total_picks:
-                    create_draft_round(self, team.captain, pick_number, phase)
+                    create_draft_round(self, team, pick_number, phase)
                     pick_number += 1
 
             # Increment phase after all teams have picked
@@ -760,6 +764,7 @@ class Draft(models.Model):
         draft_round = DraftRound.objects.create(
             draft=self,
             captain=next_team.captain,
+            drafting_team=next_team,
             pick_number=pick_number,
             pick_phase=phase,
             was_tie=bool(tie_resolution),
@@ -783,6 +788,13 @@ class DraftRound(models.Model):
         User,
         related_name="draft_rounds_captained",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+    )
+    drafting_team = models.ForeignKey(
+        Team,
+        related_name="drafted_rounds",
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
     )
@@ -845,6 +857,14 @@ class DraftRound(models.Model):
 
         tournament = self.draft.tournament
         prefetched = getattr(tournament, "_prefetched_objects_cache", {}).get("teams")
+        if self.drafting_team_id is not None:
+            if prefetched is not None:
+                for t in prefetched:
+                    if t.pk == self.drafting_team_id:
+                        return t
+            stored = Team.objects.filter(pk=self.drafting_team_id).first()
+            if stored is not None:
+                return stored
         if prefetched is not None:
             matches = [t for t in prefetched if t.captain_id == self.captain_id]
             if len(matches) <= 1:
@@ -857,6 +877,10 @@ class DraftRound(models.Model):
             .order_by(*ORIGINAL_CAPTAINCY_FIRST)
             .first()
         )
+
+    def assign_team(self, team: Team | None) -> None:
+        self.captain = team.captain if team else None
+        self.drafting_team = team
 
     def pick_player(self, user: CustomUser) -> None:
         if self.choice:

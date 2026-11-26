@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AxiosError } from 'axios';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   advanceWinner as advanceWinnerAPI,
@@ -12,41 +11,22 @@ import type {
   BracketResponseDTO,
 } from '~/components/bracket/schemas';
 import type { BracketMatch } from '~/components/bracket/types';
+import { parseBracketError } from '~/lib/bracketError';
 import { getLogger } from '~/lib/logger';
 import { mapApiMatchToMatch, useBracketStore } from '~/store/bracketStore';
 
 const log = getLogger('bracket:save');
 
 /**
- * Pulls a user-facing message out of a save_bracket / advance_winner
- * error response. Backend returns { error, code, details? } on 4xx.
- */
-function parseBracketError(error: unknown): {
-  message: string;
-  code?: string;
-  details?: unknown;
-} {
-  if (error instanceof AxiosError) {
-    const data = error.response?.data as
-      | { error?: string; detail?: string; code?: string; details?: unknown }
-      | undefined;
-    const message =
-      data?.error || data?.detail || error.message || 'Bracket request failed';
-    return { message, code: data?.code, details: data?.details };
-  }
-  if (error instanceof Error) {
-    return { message: error.message };
-  }
-  return { message: 'Bracket request failed' };
-}
-
-/**
  * Fetches bracket data via TanStack Query and seeds the Zustand bracketStore.
  * Polling pauses automatically when the bracket has unsaved edits (isDirty).
+ * While dirty, server data never replaces the edits; `serverChanged` says the
+ * server bracket moved on since it was loaded.
  */
 export function useBracketQuery(tournamentId: number | null) {
   const isDirty = useBracketStore((state) => state.isDirty);
   const previousDataRef = useRef<string | null>(null);
+  const [serverChanged, setServerChanged] = useState(false);
 
   const query = useQuery({
     queryKey: ['bracket', tournamentId],
@@ -56,14 +36,27 @@ export function useBracketQuery(tournamentId: number | null) {
     refetchInterval: isDirty ? false : 5_000,
   });
 
-  // Seed Zustand store from query data
   useEffect(() => {
-    if (!query.data || isDirty) return;
+    if (!query.data) return;
 
     // NOTE: BracketResponse.matches is typed as BracketMatch[] but at runtime
     // is actually BracketMatchDTO[] (snake_case) due to Zod schema parsing.
     // This cast is a workaround for a pre-existing type mismatch in bracketAPI.tsx.
     const apiMatches = query.data.matches as unknown as BracketMatchDTO[];
+
+    if (isDirty) {
+      const serverKey = apiMatches.length
+        ? JSON.stringify(
+            apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches)),
+          )
+        : null;
+      const localKey = JSON.stringify(useBracketStore.getState().matches);
+      setServerChanged(
+        serverKey !== previousDataRef.current && serverKey !== localKey,
+      );
+      return;
+    }
+    setServerChanged(false);
 
     // Handle empty bracket — use getState() to avoid subscribing to matches
     if (apiMatches.length === 0) {
@@ -81,7 +74,6 @@ export function useBracketQuery(tournamentId: number | null) {
       return;
     }
 
-    // Map API matches to frontend format
     const mappedMatches = apiMatches.map((m) =>
       mapApiMatchToMatch(m, apiMatches),
     );
@@ -102,7 +94,7 @@ export function useBracketQuery(tournamentId: number | null) {
     });
   }, [query.data, isDirty]);
 
-  return query;
+  return { ...query, serverChanged };
 }
 
 interface MatchResultVars {
@@ -171,7 +163,6 @@ export function useSaveBracket(tournamentId: number) {
         isDirty: false,
         isVirtual: false,
       });
-      // Invalidate to ensure cache is fresh
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
       log.info('bracket_saved', {
         tournamentId,

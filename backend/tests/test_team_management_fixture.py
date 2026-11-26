@@ -2,6 +2,7 @@ from django.test import TestCase, override_settings
 from django.urls import resolve, reverse
 from rest_framework.test import APIClient, APIRequestFactory
 
+from draft.models import Draft, DraftRound, TeamDraftState
 from league.models import League
 from tests.helpers.team_management_fixture import (
     CAPTAIN_TAKEOVER_TOURNAMENT_NAME,
@@ -10,6 +11,7 @@ from tests.helpers.team_management_fixture import (
     TEAM_MANAGEMENT_SEARCH_TARGET,
     TEAM_MANAGEMENT_TOURNAMENT_NAME,
     TEAM_MANAGEMENT_USER_PREFIX,
+    populate_captain_takeover_tournament,
     populate_team_management_tournament,
 )
 from tests.populate.constants import DTX_STEAM_LEAGUE_ID
@@ -110,6 +112,45 @@ class TeamManagementFixtureTests(TestCase):
         self.assertEqual(problems["TM Alpha"], [])
         self.assertEqual(problems["TM Bravo"], [])
         self.assertEqual(problems["TM Delta"], [])
+
+    def test_captain_takeover_has_completed_team_draft(self) -> None:
+        populate_captain_takeover_tournament(force=True)
+        tournament = populate_captain_takeover_tournament(force=True)
+        draft = Draft.objects.nocache().get(tournament=tournament)
+        self.assertEqual(draft.draft_style, "snake")
+        self.assertEqual(draft.state, TeamDraftState.COMPLETED)
+        rounds = list(
+            DraftRound.objects.nocache()
+            .filter(draft=draft)
+            .select_related("drafting_team")
+            .order_by("pick_number")
+        )
+        self.assertEqual(len(rounds), 16)
+        bravo = self.team(tournament, "TM Bravo")
+        bravo_rounds = [r for r in rounds if r.drafting_team_id == bravo.pk]
+        self.assertEqual(len(bravo_rounds), 4)
+        self.assertTrue(
+            all(
+                r.captain.username == f"{TEAM_MANAGEMENT_USER_PREFIX}bravo_1"
+                for r in bravo_rounds
+            )
+        )
+        choices = []
+        for r in rounds:
+            self.assertIsNotNone(r.choice_id)
+            self.assertIsNotNone(r.drafting_team_id)
+            self.assertNotEqual(r.choice_id, r.drafting_team.captain_id)
+            self.assertTrue(r.drafting_team.members.filter(pk=r.choice_id).exists())
+            choices.append(r.choice_id)
+        self.assertEqual(len(choices), len(set(choices)))
+
+    def test_team_management_has_no_draft(self) -> None:
+        self.build()
+        self.assertFalse(
+            Draft.objects.nocache()
+            .filter(tournament__name=TEAM_MANAGEMENT_TOURNAMENT_NAME)
+            .exists()
+        )
 
     def test_missing_dtx_league_raises(self) -> None:
         League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).delete()

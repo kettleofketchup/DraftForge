@@ -302,6 +302,10 @@ urlpatterns = [
         include("org.promotion.urls"),
     ),
     path(
+        "api/organizations/<int:org_id>/integration/",
+        include("org.integration.urls"),
+    ),
+    path(
         "api/organizations/<int:org_id>/mmr-requests/",
         include(mmr_org_urlpatterns),
     ),

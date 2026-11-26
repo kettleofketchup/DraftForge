@@ -12,6 +12,52 @@ export const ApiUserRefSchema = z.object({
 });
 export type ApiUserRef = z.infer<typeof ApiUserRefSchema>;
 
+// Hand-written from backend/org/api_tokens/operations.py (Operation).
+export const TOKEN_OPERATION_VALUES = [
+  'mmr:read',
+  'mmr:write',
+  'promotion:import',
+] as const;
+export type TokenOperation = (typeof TOKEN_OPERATION_VALUES)[number];
+
+/** The org feature each operation needs, as in operations._ENTITLEMENTS. */
+export type TokenFeature = 'mmr_sync' | 'promotion';
+
+export interface TokenOperationInfo {
+  value: TokenOperation;
+  label: string;
+  /** Shown under the label in the create dialog when the label alone is not enough. */
+  description?: string;
+  feature: TokenFeature;
+}
+
+export const TOKEN_OPERATIONS: readonly TokenOperationInfo[] = [
+  { value: 'mmr:read', label: 'Read member MMRs', feature: 'mmr_sync' },
+  { value: 'mmr:write', label: 'Update member MMRs', feature: 'mmr_sync' },
+  {
+    value: 'promotion:import',
+    label: 'Import external contact history and promotion points',
+    description:
+      'Records external contacts and awards and voids promotion points.',
+    feature: 'promotion',
+  },
+];
+
+export const TOKEN_FEATURE_LABELS: Record<TokenFeature, string> = {
+  mmr_sync: 'MMR sync API',
+  promotion: 'Promotion',
+};
+
+/** What the backend grants a token issued without operations, and every token that predates grants. */
+export const DEFAULT_TOKEN_OPERATIONS: readonly TokenOperation[] = [
+  'mmr:read',
+  'mmr:write',
+];
+
+export function operationLabel(value: string): string {
+  return TOKEN_OPERATIONS.find((op) => op.value === value)?.label ?? value;
+}
+
 export const ApiTokenSchema = z.object({
   id: z.number(),
   name: z.string(),
@@ -21,6 +67,11 @@ export const ApiTokenSchema = z.object({
   last_used_at: z.string().nullable(),
   revoked_at: z.string().nullable(),
   revoked_by: ApiUserRefSchema.nullable(),
+  // Strings, not the enum, so a grant added on the backend still lists.
+  operations: z
+    .array(z.string())
+    .optional()
+    .transform((ops) => ops ?? [...DEFAULT_TOKEN_OPERATIONS]),
 });
 export type ApiToken = z.infer<typeof ApiTokenSchema>;
 
@@ -67,8 +118,16 @@ export const CreateTokenFormSchema = z.object({
     .trim()
     .min(1, 'Name is required')
     .max(TOKEN_NAME_MAX_LENGTH, `At most ${TOKEN_NAME_MAX_LENGTH} characters`),
+  operations: z
+    .array(z.enum(TOKEN_OPERATION_VALUES))
+    .min(1, 'Pick at least one operation'),
 });
 export type CreateTokenForm = z.infer<typeof CreateTokenFormSchema>;
+
+export interface CreateApiTokenInput {
+  name: string;
+  operations: readonly string[];
+}
 
 export const ApiLimitsFormSchema = z.object({
   per_minute: z

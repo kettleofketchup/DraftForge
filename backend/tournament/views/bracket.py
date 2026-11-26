@@ -13,6 +13,7 @@ from draft.models import HeroDraft
 from events.overrides import REASON_MAX_LENGTH
 from lobby.models import GameLobby
 from telemetry.logging import get_logger
+from tournament.broadcast import bracket_changed_on_commit, tournament_changed_on_commit
 from tournament.models import Game, Team, Tournament
 from tournament.models.team_log import TeamLogAction, TeamLogVia
 from tournament.permissions import IsTournamentStaff
@@ -24,6 +25,8 @@ from tournament.serializers.game import (
 from tournament.serializers.users import TEAM_USER_INDEX, build_team_user_index
 from tournament.services.bracket_placement import (
     apply_bracket_placements,
+    decides_tournament_winner,
+    max_single_elimination_winners_round,
     placement_for_game,
     tournament_bracket_placements,
 )
@@ -175,13 +178,11 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
     matches = serializer.validated_data["matches"]
     placements_before = tournament_bracket_placements(tournament.pk)
 
-    # Build lookup of existing games by (bracket_type, round, position)
     existing_games = {
         (g.bracket_type, g.round, g.position): g
         for g in Game.objects.filter(tournament=tournament)
     }
 
-    # Track which existing games are still in the new bracket
     seen_keys = set()
 
     # Pass 1: Create or update games (without FK relationships)
@@ -210,7 +211,6 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
             game.swiss_record_losses = match.get("swissRecordLosses", 0)
             updated_count += 1
         else:
-            # Create new game
             game = Game(
                 tournament=tournament,
                 round=match.get("round", 1),
@@ -225,7 +225,6 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
             )
             created_count += 1
 
-        # Set teams if provided
         radiant_team = match.get("radiantTeam")
         game.radiant_team_id = (
             radiant_team["pk"] if radiant_team and radiant_team.get("pk") else None
@@ -256,7 +255,6 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
         game.save()
         id_to_game[match["id"]] = game
 
-    # Delete games that are no longer in the bracket
     deleted_count = 0
     for key, game in existing_games.items():
         if key not in seen_keys:
@@ -325,14 +323,13 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
         placements_changed=placements_changed,
     )
 
-    # Return saved games
     saved_games = Game.objects.filter(tournament=tournament).select_related(
         "radiant_team", "dire_team", "winning_team", "next_game", "loser_next_game"
     )
     result_serializer = BracketGameSerializer(saved_games, many=True)
 
-    # Invalidate caches after saving bracket
     invalidate_after_commit(*saved_games, tournament)
+    bracket_changed_on_commit(tournament.pk)
 
     return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
 
@@ -353,7 +350,9 @@ def _unset_winner(game: Game) -> Response:
             losing_team = game.radiant_team
 
     teams_to_reset = [losing_team]
-    if game.bracket_type == "grand_finals":
+    if decides_tournament_winner(
+        game, max_single_elimination_winners_round(game.tournament_id)
+    ):
         teams_to_reset.append(winning_team)
     reopening = [t for t in teams_to_reset if t is not None and t.placement is not None]
     for team in reopening:
@@ -426,6 +425,7 @@ def _unset_winner(game: Game) -> Response:
         *(t for t, _ in to_clear),
         *([game.tournament] if game.tournament else []),
     )
+    bracket_changed_on_commit(game.tournament_id, game.pk)
     return Response(BracketGameSerializer(game).data)
 
 
@@ -456,7 +456,7 @@ def advance_winner(request: Request, game_id: int) -> Response:
     if winner is None:
         return _unset_winner(game)
 
-    winner_slot = winner  # 'radiant' or 'dire'
+    winner_slot = winner
     if winner_slot not in ["radiant", "dire"]:
         log.warning(
             "bracket_advance_invalid_winner",
@@ -477,7 +477,6 @@ def advance_winner(request: Request, game_id: int) -> Response:
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Validate team exists in the slot
     if winner_slot == "radiant":
         if not game.radiant_team:
             log.warning(
@@ -520,7 +519,6 @@ def advance_winner(request: Request, game_id: int) -> Response:
     game.status = "completed"
     game.save()
 
-    # Advance winner to next game if exists
     winner_advanced_to = None
     if game.next_game and game.next_game_slot:
         next_game = game.next_game
@@ -539,7 +537,6 @@ def advance_winner(request: Request, game_id: int) -> Response:
             next_game_id=game.next_game_id,
         )
 
-    # Handle loser path
     loser_advanced_to = None
     if losing_team:
         if (
@@ -547,7 +544,6 @@ def advance_winner(request: Request, game_id: int) -> Response:
             and game.loser_next_game
             and game.loser_next_game_slot
         ):
-            # Advance loser to losers bracket
             loser_game = game.loser_next_game
             if game.loser_next_game_slot == "radiant":
                 loser_game.radiant_team = losing_team
@@ -589,13 +585,13 @@ def advance_winner(request: Request, game_id: int) -> Response:
         elimination_type=game.elimination_type,
     )
 
-    # Invalidate caches after advancing winner
     objs_to_invalidate = [game, winning_team]
     if losing_team:
         objs_to_invalidate.append(losing_team)
     if game.tournament:
         objs_to_invalidate.append(game.tournament)
     invalidate_after_commit(*objs_to_invalidate)
+    bracket_changed_on_commit(game.tournament_id, game.pk)
 
     return Response(BracketGameSerializer(game).data)
 
@@ -628,7 +624,6 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
 
     placement = request.data.get("placement")
 
-    # Validate placement
     if placement is not None:
         if not isinstance(placement, int) or placement < 1:
             log.warning(
@@ -703,9 +698,9 @@ def set_team_placement(request: Request, tournament_id: int, team_id: int) -> Re
         manual=True,
     )
 
-    # Invalidate caches after setting placement
     invalidate_obj(team)
     if tournament:
         invalidate_obj(tournament)
+    tournament_changed_on_commit(tournament.pk, "placement", team_id=team.pk)
 
     return Response({"team_id": team.pk, "placement": team.placement})

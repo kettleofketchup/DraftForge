@@ -472,12 +472,20 @@ system rows or deleted users.
 ### Placement and roster conflicts
 
 A team with a `placement` is out of the tournament, and its players are free to join
-other teams. Three requests reopen a placed team by clearing its placement:
+other teams. These requests can reopen a placed team by clearing its placement:
 
 - `PATCH /api/bracket/tournaments/{tid}/teams/{id}/placement/` with
   `{"placement": null}` (tournament staff; a positive integer sets the placement);
 - `POST /api/bracket/games/{id}/advance-winner/` with `{"winner": null}`, which clears
-  the loser's placement, and on grand finals both teams';
+  the loser's placement, and on a grand final or a single-elimination final both
+  finalists';
+- `POST /api/bracket/games/{id}/advance-winner/` with the other team as `winner`, which
+  reopens the team that lost before;
+- `POST /api/bracket/tournaments/{tid}/save/` (the bracket toolbar's Save), when the saved
+  bracket clears or removes a result;
+- `DELETE /api/steam/games/{id}/unlink-match/` and
+  `POST /api/steam/suggestions/{id}/confirm/`, when unlinking or confirming a Steam match
+  changes or clears the game's winner;
 - `PATCH /api/teams/{id}/` with `placement: null`.
 
 Each refuses with `409` while a member or stand-in of a reopened team is also on another
@@ -492,6 +500,12 @@ team that would be live, and changes nothing:
 ```
 
 Move the player off the live team first, then clear the placement.
+
+Automatic Steam linking never reopens such a team. `POST /api/steam/auto-assign/` skips
+the game and lists it in `skipped_roster_conflicts` (`game_id`, `match_id`, `team_id`,
+`user_ids`); `POST /api/steam/auto-link/` skips it and counts it in
+`skipped_roster_conflict_count`. Both leave the game unchanged and log
+`game_link_skipped_roster_conflict`.
 
 ## Games
 
@@ -830,10 +844,10 @@ promoter, org staff, admin, owner or site admin.
 | PATCH | `templates/{template_pk}/` | Edit a template; returns it with `warnings` | Org staff |
 | DELETE | `templates/{template_pk}/` | Delete a template. `204`. | Org staff |
 | GET | `events/` | Promotable events (`upcoming`, `signups_open`): `[{id, name, scheduled_at, ends_at, state, signups_open_at, game_type}]` | Promoter |
-| GET | `events/{event_id}/candidates/?source=&n=&days=&hide_signed_up=&hide_messaged=&q=&min_mmr=&max_mmr=` | Candidates for `source` `recent` (last `n` past tournaments, default 3, clamped 1-10), `active` or `discord` (last `days`, default 30, clamped 1-90). `min_mmr`/`max_mmr` (0-20000, inclusive, min ≤ max) filter on the org's MMR for the event's game and drop players without one. All filters run before the 200-row cap on `discord`. `{source, n, days, game_type, min_mmr, max_mmr, rows}`; each row has the player, `mmr` (null when unset), tournaments played or activity time, `signed_up`, `earning_send_exists` and `last_messaged` (with `can_undo`). Never creates accounts. | Promoter |
+| GET | `events/{event_id}/candidates/?source=&n=&days=&hide_signed_up=&hide_messaged=&q=&min_mmr=&max_mmr=` | Candidates for `source` `recent` (last `n` past tournaments, default 3, clamped 1-10), `active` or `discord` (last `days`, default 30, clamped 1-90). `min_mmr`/`max_mmr` (0-20000, inclusive, min ≤ max) filter on the org's MMR for the event's game and drop players without one. All filters run before the 200-row cap on `discord`. `{source, n, days, game_type, min_mmr, max_mmr, rows}`; each row has the player, `mmr` (null when unset), tournaments played or activity time, `signed_up`, `earning_send_exists` and `last_messaged` (with `can_undo`). Each row also has `contact_recorded` (a local send or an external contact exists) and `external_contact` (`{source: "contact_log", recorded_at, delivery_verified: false, can_undo: false}` or `null`); `last_messaged` stays local-only. The response adds `contact_sync: {configured, last_receipt_imported_at, warning}`, where `warning` is `history_may_be_incomplete` when the org is bound; `hide_messaged` also hides players with an external contact. See [promotion contact sync](../features/promotion-contact-sync.md). Never creates accounts. | Promoter |
 | POST | `events/{event_id}/render/` | Body `{"template_id", "recipient_id"}`. Returns `{text, warnings, will_earn}`. | Promoter |
-| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at}`; `points_awarded` is `null` while Contributions is locked. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. | Promoter |
-| DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `204`. | Its sender while still a promoter, or org staff |
+| POST | `events/{event_id}/sends/` | Mark sent. Body `{"template_id"?: int \| null, "recipient_id", "text": max 4000}`. `201` with `{id, earns_points, points_awarded, sent_at, writeback}`; `points_awarded` is `null` while Contributions is locked. `writeback` is the send's outbox summary for the external contact log `{state, reason, delivery_id}`; only `state: "applied"` means the external contact log stored it. `400` if the event is not promotable or the recipient is outside the pool (checked at N=10), unlinked from Discord or the sender. `409 {"code": "contact_already_recorded"}` if an external contact for this recipient and event is recorded. Every send, earning or not, gets its own outbox receipt. | Promoter |
+| DELETE | `sends/{send_pk}/` | Undo a send and its ledger entry. `200` with `{writeback}`: undo cannot unsend the DM, so its outbox receipt stays and can still be dispatched. | Its sender while still a promoter, or org staff |
 
 ### Conduct
 
@@ -1783,6 +1797,105 @@ Abandon a hero draft. Can be called by a captain in the draft or an admin.
 
 - `403`: User not authorized to abandon this draft
 - `400`: Draft already completed or abandoned
+
+## Integration API
+
+Machine-to-machine endpoints for the adaptor. Guide:
+[promotion contact sync](../features/promotion-contact-sync.md). All under
+`/api/organizations/{id}/integration/v1/`. Only `Authorization: Bearer dfk_…` app tokens
+are accepted (no session). Each request checks the token, its org (`404` for another
+org), the operation grant (`403 operation_not_granted`), the operation's feature
+(`403 feature_locked`), that the token's owner is still an org admin
+(`403 not_permitted`), and the rate budget (`429` with `Retry-After`).
+
+Requests and responses are strict JSON: bodies at most 65,536 bytes
+(`413 request_too_large`), `application/json` in UTF-8 (`415 unsupported_media_type`),
+no duplicate or unknown keys, at most 100 batch entries. IDs are canonical positive
+decimal strings; timestamps are UTC with a `Z` and at most 6 fractional digits; dates
+are `YYYY-MM-DD`.
+
+Errors use their own envelope, not `{"detail"}`:
+
+```json
+{"error": {"code": "binding_missing", "message": "No promotion sync binding is configured for this resource.", "request_id": "<same as X-Request-ID>"}}
+```
+
+| Method | Endpoint | Description | Operation |
+|--------|----------|-------------|-----------|
+| POST | `contact-receipts/` | Import a range of the bound guild's external contacts, store or update each one and settle its promotion point (below). | `promotion:import` |
+
+`promotion:import` records external contacts and awards and voids promotion points.
+There is no recipients read and no contribution-totals export.
+
+### POST contact-receipts/
+
+```json
+{
+  "source": "contact_log",
+  "guild_id": "555000000000000001",
+  "scan_started_at": "2026-11-25T10:00:00.000000Z",
+  "range": {"after": "0", "through": "1234"},
+  "skipped_ids": ["17", "1200"],
+  "entries": [{
+    "source_contact_id": "1201",
+    "target_discord_id": "300000000000000001",
+    "promoter_discord_id": "300000000000000002",
+    "recorded_at": "2026-11-24T18:30:00.000000Z",
+    "contact_date_ny": "2026-11-24",
+    "contact_method": "DISCORD_DM",
+    "contact_reason": "EVENT_INVITE",
+    "occasion_id": "88",
+    "event_date": null,
+    "forced": false
+  }]
+}
+```
+
+- `guild_id` must match the org's binding (`403 binding_missing` without one,
+  `403 binding_mismatch` for another guild).
+- `scan_started_at` and `recorded_at` may be at most 5 minutes in the future.
+- `range` is `null` (a probe: no entries and no skipped IDs) or `{after, through}` with
+  `after < through` (`after` may be `"0"`). It promises that every external row with
+  `after < id ≤ through` is either an entry or one of the 0 to 1000 `skipped_ids`. Every
+  ID lies inside the range and appears once. A live stored contact inside the range that
+  is in neither list is retracted, subject to the first-import grace period. Each stored
+  contact retains its newest accepted `scan_started_at` (including unchanged and deleted
+  observations); an older scan cannot update, reinstate or retract newer state. Newer
+  committed ranges also block older scans from creating contacts the newer scan saw as
+  absent; skipped IDs do not count as observed. A stale posted entry answers `unchanged`
+  with its currently stored point status, or `not_applicable` when none is stored.
+- `promoter_discord_id` is `null` when the adaptor could not resolve the promoter.
+- `contact_method` is `DISCORD_DM`, `DISCORD_GROUP_DM` or `OTHER`; `contact_reason` is
+  `EVENT_INVITE`, `FOLLOW_UP` or `GENERAL`.
+- Exactly one of `occasion_id` and `event_date` is set, and `forced: true` needs an
+  `occasion_id`.
+
+Response `200`:
+
+```json
+{
+  "results": [{"index": 0, "status": "applied", "point": "credited", "voided_local": true}],
+  "applied": 1, "unchanged": 0, "updated": 0, "reinstated": 0, "quarantined": 0,
+  "association_updated": 0, "retracted": 0,
+  "credited": 1, "uncredited": 0, "duplicate": 0, "echo": 0, "voided_local": 1, "restored_local": 0,
+  "max_source_contact_id": "1234"
+}
+```
+
+- `status` per entry: `applied` (new), `unchanged`, `updated` (facts, a Discord ID or
+  the bound event changed), `reinstated` (a retracted contact posted again) or
+  `quarantined`.
+- `point` per entry: `not_applicable`, `echo`, `credited`, `uncredited`, `duplicate` or
+  `retracted`. `voided_local` is true when this entry voided a local promotion point.
+- `retracted` and `restored_local` count contacts retracted and local points restored by
+  the request. `max_source_contact_id` is the highest external ID stored for the org,
+  retracted ones included, or `null`.
+- `400` rejects the whole batch. `409 import_conflict_retry` means a concurrent import
+  touched the same contacts; nothing was applied, so retry once.
+- Imports never create sends, accounts or memberships.
+
+Token management (`/api/organizations/{id}/api-tokens/`, session auth) accepts
+`operations` on create; see [MMR sync API](../features/org-mmr-sync-api.md#token-operations).
 
 ## Response Format
 

@@ -310,6 +310,8 @@ class CandidatesTest(_PoolFixture):
                 "last_active_at",
                 "discord_joined_at",
                 "last_messaged",
+                "contact_recorded",
+                "external_contact",
                 "earning_send_exists",
                 "signed_up",
             },

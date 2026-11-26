@@ -224,6 +224,31 @@ def test_test_run_leaves_django_test_processes_alone_in_ci(run: Runner) -> None:
     assert not any("DJANGO_TEST_PROCESSES" in a for a in call.argv)
 
 
+def _backend_all_execs(run: Runner) -> list[list[str]]:
+    assert run("test::backend::all").returncode == 0
+    return [c.argv for c in run.calls() if "exec" in c.argv]
+
+
+def test_backend_all_caps_django_test_processes(run: Runner) -> None:
+    execs = _backend_all_execs(run)
+    assert execs
+    for argv in execs:
+        at = argv.index("backend")
+        assert argv[at - 2 : at] == ["-e", "DJANGO_TEST_PROCESSES=6"]
+
+
+def test_backend_all_respects_django_test_processes(run: Runner) -> None:
+    run.env["DJANGO_TEST_PROCESSES"] = "2"
+    assert all("DJANGO_TEST_PROCESSES=2" in a for a in _backend_all_execs(run))
+
+
+def test_backend_all_leaves_django_test_processes_alone_in_ci(run: Runner) -> None:
+    run.env["CI"] = "true"
+    execs = _backend_all_execs(run)
+    assert execs
+    assert not any("DJANGO_TEST_PROCESSES" in a for argv in execs for a in argv)
+
+
 def test_test_run_other_service(run: Runner) -> None:
     assert run("test::run", "ls", "frontend").returncode == 0
     [call] = run.calls()
@@ -842,13 +867,78 @@ def test_each_local_playwright_run_gets_its_own_results_dir(
     results = tmp_path / "test-results"
     dirs = []
     for _ in range(2):
-        assert run("test::pw::spec", "01-navigation").returncode == 0
+        assert run("test::pw::spec", "navigation").returncode == 0
         npx = run.calls()[-1]
         assert npx.tool == "npx"
         dirs.append(Path(npx.run_dir))
     assert dirs[0] != dirs[1]
     assert all(d.parent == results / "runs" and d.is_dir() for d in dirs)
     assert (results / "latest").resolve() == dirs[1]
+
+
+def _spec_files(run: Runner, pattern: str) -> list[str]:
+    result = run("test::pw::spec", pattern, "--headed")
+    assert result.returncode == 0, result.stderr
+    npx = run.calls()[-1]
+    assert npx.tool == "npx"
+    assert npx.argv[:2] == ["playwright", "test"]
+    assert npx.argv[-2:] == ["--no-deps", "--headed"]
+    return npx.argv[2:-2]
+
+
+def _file(rel: str) -> str:
+    return "/\\/e2e\\/" + rel.replace("/", "\\/") + "\\.spec\\.ts$/"
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "navigation",
+        "navigation.spec.ts",
+        "e2e/navigation.spec.ts",
+        "tests/playwright/e2e/navigation.spec.ts",
+        "frontend/tests/playwright/e2e/navigation.spec.ts",
+    ],
+)
+def test_pw_spec_runs_exactly_the_named_file(run: Runner, pattern: str) -> None:
+    assert _spec_files(run, pattern) == [_file("navigation")]
+
+
+def test_pw_spec_takes_a_path_under_e2e(run: Runner) -> None:
+    assert _spec_files(run, "events/roll-call") == [_file("events/roll-call")]
+
+
+def test_pw_spec_runs_a_whole_directory(run: Runner) -> None:
+    files = _spec_files(run, "dota-lobby")
+    assert len(files) > 1
+    assert all(f.startswith("/\\/e2e\\/dota-lobby\\/") for f in files)
+    assert _spec_files(run, "dota-lobby/") == files
+
+
+def test_pw_spec_exact_name_beats_partial_matches(run: Runner) -> None:
+    files = _spec_files(run, "tournament")
+    assert _file("mobile/tournament") in files
+    assert _file("tournament/page") in files
+    assert not any("tournaments" in f for f in files)
+
+
+def test_pw_spec_runs_every_file_with_that_name(run: Runner) -> None:
+    assert _spec_files(run, "page") == [
+        _file("tournament/page"),
+        _file("tournaments/page"),
+    ]
+
+
+def test_pw_spec_falls_back_to_a_partial_name(run: Runner) -> None:
+    files = _spec_files(run, "roll-ca")
+    assert _file("events/roll-call") in files
+
+
+def test_pw_spec_fails_when_nothing_matches(run: Runner) -> None:
+    result = run("test::pw::spec", "no-such-spec-anywhere")
+    assert result.returncode != 0
+    assert "no spec under frontend/tests/playwright/e2e matches" in result.stderr
+    assert not run.calls()
 
 
 def test_playwright_in_ci_keeps_the_flat_results_dir(run: Runner) -> None:
@@ -858,14 +948,14 @@ def test_playwright_in_ci_keeps_the_flat_results_dir(run: Runner) -> None:
 
 def test_playwright_keeps_a_callers_run_dir(run: Runner, tmp_path: Path) -> None:
     mine = str(tmp_path / "mine")
-    assert run("test::pw::spec", "x", DF_PW_RUN_DIR=mine).returncode == 0
+    assert run("test::pw::spec", "navigation", DF_PW_RUN_DIR=mine).returncode == 0
     assert run.calls()[-1].run_dir == mine
     assert not (tmp_path / "test-results").exists()
 
 
 def test_playwright_runner_image_gets_the_run_dir(run: Runner, tmp_path: Path) -> None:
     _docker_stub(tmp_path)
-    assert run("test::pw::spec", "x", DF_PW_CONTAINER="1").returncode == 0
+    assert run("test::pw::spec", "navigation", DF_PW_CONTAINER="1").returncode == 0
     docker = run.calls()[-1]
     assert docker.tool == "docker" and docker.run_dir
     i = docker.argv.index("DF_PW_RUN_DIR")

@@ -118,6 +118,9 @@ class EventTaskSchema(BaseModel):
     discord_confirm_attendance_hours: int = 2
     discord_profile_reminder: bool = False
     discord_profile_reminder_hours: int = 24
+    discord_confirm_attendance_channel_id: str = ""
+    discord_profile_reminder_channel_id: str = ""
+    discord_new_event_channel_id: str = ""
     discord_mark_interested: bool = False
     discord_post_signups: bool = False
     discord_post_signups_channel_id: str = ""

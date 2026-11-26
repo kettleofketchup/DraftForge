@@ -234,7 +234,7 @@ just test::pw::install   # Install Playwright browsers
 just test::pw::headless  # Run all tests headless
 just test::pw::ui        # Open Playwright UI mode
 just test::pw::debug     # Debug mode with inspector
-just test::pw::spec <pattern>  # Run tests matching pattern
+just test::pw::spec <name>     # Run spec files by name, path or directory
 ```
 
 Run `just --list --list-submodules` for all available commands.
@@ -278,7 +278,7 @@ just test::run 'python manage.py test app.tests -v 2'
 just test::run 'python manage.py test draft.tests.test_team_shuffle -v 2'
 ```
 
-Local test runs share a CPU/memory cap (`df-tests.slice`, 16 cores / 40G; `just test::limits`); `test::run` defaults `--parallel auto` to 6 workers. See docs "Resource limits".
+Local test runs share a CPU/memory cap (`df-tests.slice`, 16 cores / 40G; `just test::limits`); `test::run` and `test::backend::all` default `--parallel auto` to 6 workers. See docs "Resource limits".
 
 **Backend (Local - via pytest)**:
 ```bash
@@ -294,7 +294,7 @@ just test::pw::headless
 just test::pw::ui
 
 # Run specific test file
-just test::pw::spec 01-navigation
+just test::pw::spec navigation
 ```
 
 ### Playwright Performance
@@ -319,7 +319,7 @@ Each shard runs approximately 1/4 of the test suite.
 ```bash
 just test::pw::spec navigation    # Navigation tests only
 just test::pw::spec tournament    # Tournament tests only
-just test::pw::spec league        # League tests only
+just test::pw::spec leagues       # League tests only
 just test::pw::spec herodraft     # HeroDraft tests only
 ```
 

@@ -6,7 +6,7 @@ import { DisplayName } from '~/components/user/avatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { useMemberBreakdown } from './queries';
-import { KIND_LABELS, type MonthPoints } from './schemas';
+import { KIND_LABELS, signedPoints, type MonthPoints } from './schemas';
 import { formatOrgDate, monthLabel, shortMonthLabel } from './timezone';
 
 export interface MemberBreakdownProps {
@@ -178,7 +178,7 @@ export function MemberBreakdown({
                     )}
                   </div>
                   <div className="shrink-0 font-semibold tabular-nums">
-                    +{entry.points}
+                    {signedPoints(entry.points)}
                   </div>
                 </li>
               ))}
