@@ -207,7 +207,6 @@ def verify_discord_messages(request, event_pk):
             ]
         return data
 
-    # Check signup message
     try:
         sm = discord_event.signup_message
         if sm and sm.has_posted and sm.message_id:
@@ -217,7 +216,6 @@ def verify_discord_messages(request, event_pk):
     except Exception as e:
         result["signup_message_error"] = str(e)
 
-    # Check announcement
     try:
         ann = discord_event.announcement
         if ann and ann.has_posted and ann.message_id:

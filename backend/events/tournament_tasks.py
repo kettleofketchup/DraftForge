@@ -126,7 +126,6 @@ def send_tournament_draft_links(
     if failed_users:
         message += f". Failed: {', '.join(failed_users[:10])}"
 
-    # Flip the in-flight row to its terminal state with the actual count.
     if tournament_log_id:
         update_tournament_log(
             tournament_log_id,
