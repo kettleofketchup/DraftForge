@@ -462,8 +462,7 @@ class SendSignupUpdateEditsMessageTest(_DiscordTaskTestCase):
 class SendSignupUpdateOrphanedMessageRecoveryTest(_DiscordTaskTestCase):
     """When Discord reports the target message no longer exists (404 + 10008),
     send_signup_update must clear the dedup state so the next sync recreates
-    the post. Prior to this fix the bot would silently retry edits forever on
-    a ghost message and never re-post.
+    the post instead of retrying edits on a deleted message.
     """
 
     @patch("discordbot.utils._rate_limited_request")
@@ -530,10 +529,8 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
 
     The production code only writes a ``signup_reminder`` ``DiscordMessageLog``
     when ``send_subscriber_notifications`` actually attempts (or sends) a DM.
-    That requires a repeater + a subscriber with a Discord ID. Older versions
-    of these tests skipped the repeater entirely, so they could never produce
-    the log they were asserting on. We add a repeater + subscriber and route
-    ``send_dm`` through the real ledger with Discord stubbed.
+    A repeater and subscriber with a Discord ID are required to produce the log.
+    ``send_dm`` runs through the real ledger with Discord stubbed.
     """
 
     def setUp(self) -> None:

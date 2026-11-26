@@ -55,7 +55,7 @@ _beat_schedule = {
     },
     "sweep-stale-discord-leases": {
         "task": "discordbot.tasks.sweep_stale_discord_leases",
-        "schedule": 60.0,  # 60s cadence: keeps worker-crash recovery <1.5 min
+        "schedule": 60.0,  # Reap pending leases after the 5-minute threshold.
     },
     "refresh-discord-avatars": {
         "task": "user.tasks.avatar_refresh.refresh_discord_avatars",
@@ -80,9 +80,6 @@ _beat_schedule = {
     },
 }
 
-# Event-related tasks that write frequently to the DB.
-# Disabled in test environment to prevent SQLite lock contention
-# with Playwright E2E tests (celery worker is a separate process).
 _event_tasks = {
     "generate-upcoming-events-hourly": {
         "task": "events.tasks.generate_upcoming_events",
@@ -106,8 +103,7 @@ _event_tasks = {
     },
 }
 
-# Event tasks now write via internal HTTP API (no direct DB access),
-# so they're safe to run alongside tests. Re-enable in all environments.
+# Internal HTTP writes let event tasks run alongside tests without direct DB access.
 _beat_schedule.update(_event_tasks)
 
 app.conf.beat_schedule = _beat_schedule
