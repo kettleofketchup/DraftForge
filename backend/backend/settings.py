@@ -36,7 +36,6 @@ from config.redis_host import is_docker, resolve_redis_host
 from config.signup_post import SignupPostConfig
 from telemetry.config import init_telemetry
 
-# Show cacheops Redis connection warning only once (not on every import)
 warnings.filterwarnings("once", message=r".*cacheops cache is unreachable.*")
 
 log = logging.getLogger(__name__)
@@ -135,7 +134,6 @@ logging.basicConfig(
     format="%(levelname)s:%(name)s:%(message)s",
 )
 
-# Quiet down noisy loggers unless explicitly debugging
 if _log_level != "DEBUG":
     logging.getLogger("app.models").setLevel(logging.INFO)
     logging.getLogger("tournament.functions").setLevel(logging.INFO)
@@ -172,7 +170,6 @@ INSTALLED_APPS = [
 if importlib.util.find_spec("django_linear_migrations") is not None:
     INSTALLED_APPS.append("django_linear_migrations")
 
-# Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

@@ -47,7 +47,7 @@ MAX_USAGE_DAYS = 90
 
 class CreateTokenSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=64, trim_whitespace=True)
-    # Omitted means the MMR pair, as before grants existed.
+    # Omitted operations default to the MMR pair.
     operations = serializers.JSONField(required=False)
 
     def validate_operations(self, value: Any) -> list[str]:
