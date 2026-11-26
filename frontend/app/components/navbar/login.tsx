@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useClickAway } from '@uidotdev/usehooks';
 import { LogOutIcon, UserPenIcon } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -26,6 +27,7 @@ import { Button } from '~/components/ui/button';
 import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { DiscordIcon } from '~/components/ui/icons';
 import { Skeleton } from '~/components/ui/skeleton';
+import { invalidatePermissionChecks } from '~/features/discord-permissions/lifecycle';
 import { getLogger } from '~/lib/logger';
 import type { SessionHint } from '~/lib/sessionHint';
 const log = getLogger('login');
@@ -60,6 +62,7 @@ const getCachedUser = (): UserType | null => {
 };
 
 export const ProfileButton: React.FC = () => {
+  const queryClient = useQueryClient();
   const { t } = useTranslation('navbar');
   const currentUser = useUserStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -86,6 +89,7 @@ export const ProfileButton: React.FC = () => {
     } catch (err) {
       log.warn('logout_failed', { err });
     } finally {
+      await invalidatePermissionChecks(queryClient, {}, 'remove');
       clearUser();
     }
   };
