@@ -191,6 +191,21 @@ class PermissionChecksResponse(Response):
     checks: list[PermissionCheckResult]
 
 
+@dataclass(frozen=True)
+class ResolvedCheckInput:
+    key: str
+    action: ActionKind
+    destination_source: Literal[
+        "configured", "fallback", "posted", "prospective", "guild", "recipient"
+    ]
+    channel_id: str | None
+    role_ids: tuple[str, ...] = ()
+    include_rsvp: bool = False
+    reference_present: bool | None = None
+    message_id: str | None = None
+    scheduled_event_id: str | None = None
+
+
 class PermissionChecksApi(BaseModel):
     request: PermissionChecksRequest
     response: PermissionChecksResponse
