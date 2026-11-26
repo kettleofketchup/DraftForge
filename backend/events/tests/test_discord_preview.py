@@ -897,3 +897,66 @@ class PreviewModuleBoundaryTest(_PreviewTestCase):
                 any(m == banned or m.startswith(f"{banned}.") for m in imported),
                 banned,
             )
+
+
+OWN_CHANNELS: dict[PreviewKind, str] = {
+    "attendance_reminder": "discord_confirm_attendance_channel_id",
+    "profile_reminder": "discord_profile_reminder_channel_id",
+    "new_event_post": "discord_new_event_channel_id",
+}
+
+
+class PerPostChannelParityTests(_PreviewTestCase):
+    def tasks(self) -> dict[PreviewKind, Callable[[], object]]:
+        return {
+            "attendance_reminder": lambda: send_attendance_reminder(self.ev.pk),
+            "profile_reminder": lambda: send_profile_reminder(self.ev.pk),
+            "new_event_post": lambda: _send_new_event_notification_impl(self.ev.pk),
+        }
+
+    def assert_destination_matches_task(self, kind: PreviewKind, channel: str) -> None:
+        response = self.preview(kind)
+        sent = self.run_task(self.tasks()[kind])
+        self.assertEqual(response.destination.channel_id, channel)
+        self.assertEqual(len(sent.message_urls), 1)
+        self.assertTrue(sent.message_urls[0].endswith(f"/{channel}/messages"))
+        self.assertNotIn("no_channel", response.gate.reasons)
+
+    def test_own_channel_matches_task(self) -> None:
+        for i, (kind, attr) in enumerate(OWN_CHANNELS.items()):
+            own = f"10000000000000777{i}"
+            with self.subTest(kind=kind):
+                Event.objects.filter(pk=self.ev.pk).update(**{attr: own})
+                self.assert_destination_matches_task(kind, own)
+
+    def test_blank_own_channel_falls_back_to_announcement_channel(self) -> None:
+        for kind in OWN_CHANNELS:
+            with self.subTest(kind=kind):
+                self.assert_destination_matches_task(kind, ANNOUNCE_CHANNEL)
+
+    def test_own_channel_without_announcement_channel_still_sends(self) -> None:
+        for i, (kind, attr) in enumerate(OWN_CHANNELS.items()):
+            own = f"10000000000000888{i}"
+            with self.subTest(kind=kind):
+                Event.objects.filter(pk=self.ev.pk).update(
+                    discord_announcement_channel_id="", **{attr: own}
+                )
+                self.assert_destination_matches_task(kind, own)
+
+    def test_both_blank_is_no_channel_and_task_skips(self) -> None:
+        Event.objects.filter(pk=self.ev.pk).update(discord_announcement_channel_id="")
+        for kind in OWN_CHANNELS:
+            with self.subTest(kind=kind):
+                response = self.preview(kind)
+                sent = self.run_task(self.tasks()[kind])
+                self.assertIn("no_channel", response.gate.reasons)
+                self.assertIsNone(response.destination.channel_id)
+                self.assertEqual(sent.messages, [])
+
+    def test_unsaved_channel_values_drive_destination(self) -> None:
+        for i, (kind, attr) in enumerate(OWN_CHANNELS.items()):
+            own = f"10000000000000999{i}"
+            with self.subTest(kind=kind):
+                response = self.preview(kind, {attr: own})
+                self.assertEqual(response.destination.channel_id, own)
+                self.assertEqual(Event.objects.get(pk=self.ev.pk).__dict__[attr], "")

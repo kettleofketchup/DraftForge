@@ -23,6 +23,9 @@ const SHARED_FIELDS = [
   'discord_post_signups_channel_id',
   'discord_announcement',
   'discord_announcement_channel_id',
+  'discord_confirm_attendance_channel_id',
+  'discord_profile_reminder_channel_id',
+  'discord_new_event_channel_id',
   'discord_announcement_hours',
   'discord_announcement_role_ids',
   'discord_signup_role_ids',
@@ -56,6 +59,9 @@ const BLANK_ALLOWED = new Set<string>([
   'discord_event_info',
   'discord_post_signups_channel_id',
   'discord_announcement_channel_id',
+  'discord_confirm_attendance_channel_id',
+  'discord_profile_reminder_channel_id',
+  'discord_new_event_channel_id',
   'event_voice_channel_id',
 ]);
 

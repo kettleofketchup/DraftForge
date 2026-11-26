@@ -27,6 +27,21 @@ const base = {
 };
 
 describe('toPreviewValues', () => {
+  it.each(['event', 'repeater'] as const)(
+    'preserves unsaved per-post channels and cleared fallback values in %s forms',
+    (mode) => {
+      const channels = {
+        discord_confirm_attendance_channel_id: '123',
+        discord_profile_reminder_channel_id: '456',
+        discord_new_event_channel_id: '789',
+      };
+      expect(toPreviewValues(channels, mode)).toMatchObject(channels);
+      const cleared = Object.fromEntries(
+        Object.keys(channels).map((key) => [key, '']),
+      );
+      expect(toPreviewValues(cleared, mode)).toMatchObject(cleared);
+    },
+  );
   it('converts the local start and end to UTC like the modals', () => {
     const out = toPreviewValues(
       {

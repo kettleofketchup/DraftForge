@@ -26,6 +26,11 @@ from discordbot.payloads import (
 from discordbot.schemas import DiscordEventStateSchema
 from events.capacity import with_signup_counts
 from events.constants import EventState, RepeatFrequency, SignupOpenMode
+from events.discord.channels import (
+    attendance_reminder_channel,
+    new_event_channel,
+    profile_reminder_channel,
+)
 from events.discord.embeds import (
     build_announcement_notice,
     build_announcement_v2,
@@ -307,6 +312,7 @@ def _channel_reminder(
     builder: Callable[..., dict[str, Any]],
     gate_fn: Callable[..., GateResult],
     source: str,
+    channel_fn: Callable[[Event], str],
 ) -> Callable[[_Source], _Built]:
     def build(src: _Source) -> _Built:
         result = builder(src.event, signups=src.signups)
@@ -322,7 +328,9 @@ def _channel_reminder(
         )
         return _Built(
             gate=gate,
-            destination=_announcement_channel(src.event),
+            destination=Destination(
+                type="channel", channel_id=channel_fn(src.event) or None
+            ),
             messages=[message],
         )
 
@@ -392,7 +400,9 @@ def _new_event_post(src: _Source) -> _Built:
     ).reasons
     return _Built(
         gate=GateResult(would_send=not reasons, reasons=reasons),
-        destination=_announcement_channel(event),
+        destination=Destination(
+            type="channel", channel_id=new_event_channel(event) or None
+        ),
         messages=[message],
     )
 
@@ -473,12 +483,16 @@ KIND_BUILDERS: dict[PreviewKind, Callable[[_Source], _Built]] = {
     "scheduled_event_sync": _scheduled_event_sync,
     "signup_reminder": _signup_reminder,
     "profile_reminder": _channel_reminder(
-        build_profile_reminder_embed, profile_reminder_gate, "profile_reminder"
+        build_profile_reminder_embed,
+        profile_reminder_gate,
+        "profile_reminder",
+        profile_reminder_channel,
     ),
     "attendance_reminder": _channel_reminder(
         build_attendance_reminder_embed,
         attendance_reminder_gate,
         "attendance_reminder",
+        attendance_reminder_channel,
     ),
     "start_mention": _start_mention,
     "signup_post": _signup_post,

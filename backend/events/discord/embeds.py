@@ -524,6 +524,7 @@ def build_signup_update_embed(event: "EmbedEvent") -> dict[str, Any]:
 
 
 def build_new_event_embed(event: "EmbedEvent") -> dict[str, Any]:
+    """Posted to the new-event channel (announcement channel when blank)."""
     desc = f"A new event has been created for **{event.organization.name}**!"
     if url := _event_url(event):
         desc += f"\n\n[Sign Up]({url})"

@@ -8,8 +8,11 @@ import {
   readyCheckConfigSchema,
 } from '../../schemas';
 import {
+  ATTENDANCE_REMINDER_DESCRIPTION,
   EVENT_SECTION_FIELDS,
+  NEW_EVENTS_DESCRIPTION,
   PROFILE_REMINDER_DESCRIPTION,
+  SIGNUP_REMINDER_LABEL,
 } from '../settingsFields';
 import { EVENT_TAB_META } from '../tabs';
 
@@ -65,6 +68,59 @@ describe('EVENT_SECTION_FIELDS', () => {
   });
 });
 
+describe('per-post channel fields', () => {
+  const discord = EVENT_SECTION_FIELDS.discord;
+  it('lists the per-post channel fields under Discord', () => {
+    expect(discord.discord_confirm_attendance_channel_id?.label).toBe(
+      'Attendance reminder channel',
+    );
+    expect(discord.discord_profile_reminder_channel_id?.label).toBe(
+      'Profile reminder channel',
+    );
+    expect(discord.discord_new_event_channel_id?.label).toBe(
+      'New event channel',
+    );
+    for (const key of [
+      'discord_confirm_attendance_channel_id',
+      'discord_profile_reminder_channel_id',
+      'discord_new_event_channel_id',
+    ]) {
+      expect(discord[key]?.keywords).toEqual(
+        expect.arrayContaining(['channel', 'post']),
+      );
+      expect(discord[key]?.description).toMatch(/announcement channel/i);
+      expect(discord[key]?.description).toMatch(/blank/i);
+    }
+  });
+
+  it('describes channel posts by their own channel', () => {
+    expect(discord.discord_confirm_attendance?.description).toBe(
+      ATTENDANCE_REMINDER_DESCRIPTION,
+    );
+    expect(discord.discord_notify_new_events?.description).toBe(
+      NEW_EVENTS_DESCRIPTION,
+    );
+    expect(discord.discord_profile_reminder?.description).toBe(
+      PROFILE_REMINDER_DESCRIPTION,
+    );
+    for (const text of [
+      ATTENDANCE_REMINDER_DESCRIPTION,
+      NEW_EVENTS_DESCRIPTION,
+      PROFILE_REMINDER_DESCRIPTION,
+    ]) {
+      expect(text).toMatch(/in its channel/);
+      expect(text).toMatch(/when none is picked/);
+      expect(text).not.toMatch(/in the announcement channel/);
+    }
+  });
+
+  it('describes the announcement channel as the fallback', () => {
+    expect(discord.discord_announcement_channel_id?.description).toBe(
+      'Channel for the pre-day announcement, and for reminders and new-event posts that have no channel of their own.',
+    );
+  });
+});
+
 describe('discord_profile_reminder copy', () => {
   const entry = EVENT_SECTION_FIELDS.discord.discord_profile_reminder;
   it('uses the shared description', () => {
@@ -86,5 +142,20 @@ describe('discord_signup_reminder metadata', () => {
       "DM series subscribers who haven't signed up yet, before the event starts",
     );
     expect(meta.description).not.toMatch(/\bDM users\b/i);
+  });
+
+  it('signup reminder label matches the rendered toggle', () => {
+    expect(SIGNUP_REMINDER_LABEL).toBe('Signup reminder DM');
+    expect(meta.label).toBe(SIGNUP_REMINDER_LABEL);
+    expect(meta.keywords).toEqual(
+      expect.arrayContaining(['dm', 'direct message', 'subscribers']),
+    );
+  });
+
+  it('stays listed under the Discord section exactly once', () => {
+    const sections = Object.entries(EVENT_SECTION_FIELDS)
+      .filter(([, fields]) => 'discord_signup_reminder' in fields)
+      .map(([section]) => section);
+    expect(sections).toEqual(['discord']);
   });
 });

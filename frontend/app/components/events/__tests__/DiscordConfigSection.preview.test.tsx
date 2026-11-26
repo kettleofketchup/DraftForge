@@ -96,6 +96,41 @@ describe('DiscordConfigSection preview buttons', () => {
     );
   });
 
+  it('puts each preview in its settings group', () => {
+    render(
+      <Harness
+        isRepeater
+        initial={{ discord_create_event: true }}
+        previewContext={{ type: 'repeater', repeaterId: 3 }}
+      />,
+    );
+    const idsIn = (group: string) =>
+      Array.from(
+        screen
+          .getByTestId(`discord-subsection-${group}`)
+          .querySelectorAll('[data-testid^="discord-preview-"]'),
+      )
+        .map((el) => el.getAttribute('data-testid'))
+        .sort();
+    expect(idsIn('server-event')).toEqual([
+      'discord-preview-scheduled_event',
+      'discord-preview-scheduled_event_sync',
+    ]);
+    expect(idsIn('channel-posts')).toEqual(
+      [
+        'discord-preview-announcement_notice',
+        'discord-preview-attendance_reminder',
+        'discord-preview-new_event_post',
+        'discord-preview-profile_reminder',
+        'discord-preview-signup_post',
+        'discord-preview-start_mention',
+      ].sort(),
+    );
+    expect(idsIn('direct-messages')).toEqual([
+      'discord-preview-signup_reminder',
+    ]);
+  });
+
   it('hides the series-only previews for a single event', () => {
     render(
       <Harness
@@ -127,8 +162,13 @@ describe('DiscordConfigSection preview buttons', () => {
     expect(
       interested?.querySelector('[data-testid^="discord-preview-"]'),
     ).toBeNull();
-    const block = screen.getByTestId('discord-announcement-channel-block');
-    expect(block.querySelector('[data-testid^="discord-preview-"]')).toBeNull();
+    for (const picker of screen.getAllByTestId('channel-picker')) {
+      expect(
+        picker
+          .closest('[data-field]')
+          ?.querySelector('[data-testid^="discord-preview-"]'),
+      ).toBeNull();
+    }
   });
 
   it('shows a static note for org defaults and makes no request', async () => {

@@ -27,6 +27,9 @@ The **New Event Defaults** sections hold the values the create-event form pre-fi
 to open from a separate **Organization Event Defaults** dialog on the Events tab, which
 is gone.
 
+The **Discord** defaults use the same Server event, Channel posts and Direct messages groups as
+the event form, including a channel for each post and the signup reminder DM default for new series.
+
 Editing any field shows one save bar at the bottom with **Discard** and **Save changes**. Save
 changes writes every changed section, shows a "Settings saved" toast and leaves the modal open.
 Closing the modal with unsaved edits asks "Discard unsaved changes?". A section with a

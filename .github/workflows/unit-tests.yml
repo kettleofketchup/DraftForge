@@ -128,3 +128,6 @@ jobs:
 
       - name: Run slot guards
         run: just test::slots-unit
+
+      - name: Run affected-tests selector tests
+        run: just test::affected-unit

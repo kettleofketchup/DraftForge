@@ -10,6 +10,11 @@ from datetime import date
 from typing import TYPE_CHECKING, Literal
 
 from events.constants import EventState
+from events.discord.channels import (
+    attendance_reminder_channel,
+    new_event_channel,
+    profile_reminder_channel,
+)
 from events.discord.preview_codes import GateCode
 from events.utils import starts_in_future
 
@@ -155,8 +160,9 @@ def announcement_notice_gate(
     return _result(reasons)
 
 
-def _announcement_channel_reminder_gate(
+def _channel_reminder_gate(
     event: "EmbedEvent",
+    channel: str,
     toggle: bool,
     states: frozenset[str],
     already_fired: bool,
@@ -165,7 +171,7 @@ def _announcement_channel_reminder_gate(
     reasons: list[GateCode] = []
     if not toggle and not manual:
         reasons.append("toggle_off")
-    if not event.discord_announcement_channel_id:
+    if not channel:
         reasons.append("no_channel")
     reasons += _state_reason(event, states)
     reasons += _fired(already_fired)
@@ -179,8 +185,9 @@ def attendance_reminder_gate(
     already_fired: bool = False,
     manual: bool = False,
 ) -> GateResult:
-    return _announcement_channel_reminder_gate(
+    return _channel_reminder_gate(
         event,
+        attendance_reminder_channel(event),
         event.discord_confirm_attendance,
         OPEN_OR_ROLL_CALL,
         already_fired,
@@ -195,8 +202,9 @@ def profile_reminder_gate(
     already_fired: bool = False,
     manual: bool = False,
 ) -> GateResult:
-    return _announcement_channel_reminder_gate(
+    return _channel_reminder_gate(
         event,
+        profile_reminder_channel(event),
         event.discord_profile_reminder,
         SIGNUPS_OPEN_ONLY,
         already_fired,
@@ -233,7 +241,7 @@ def new_event_post_gate(
     manual: bool = False,
 ) -> GateResult:
     reasons: list[GateCode] = []
-    if not event.discord_announcement_channel_id:
+    if not new_event_channel(event):
         reasons.append("no_channel")
     reasons += _fired(already_fired)
     return _result(reasons)

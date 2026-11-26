@@ -17,6 +17,8 @@ Open the Discord tab in any of these forms:
 
 The Preview button works whether the toggle is on or off, so you can check a message before turning it on. With the toggle off, the dialog's first line says nothing will be sent.
 
+The settings are grouped into **Server event**, **Channel posts** and **Direct messages**. Each channel post has its own picker (except the start mention, which replies to the signup post). Attendance reminders, profile reminders and new-event posts use the announcement channel when their own picker is blank. Previews follow unsaved channel changes too.
+
 ## What each preview shows
 
 | Toggle | Preview | Where it goes |
@@ -24,12 +26,12 @@ The Preview button works whether the toggle is on or off, so you can check a mes
 | Create Discord scheduled event | The scheduled event card: name, description, start and end time, location | The server's Events tab |
 | Synchronize signups | The scheduled event card as Discord will hold it after the sync: the name and times it was created with, and the description with the signup counts. Syncing changes only the description, so edits to the title or time do not reach an existing scheduled event | The server's Events tab |
 | Send signup reminder (series only) | The DM sent to subscribers | A direct message to each series subscriber who has not signed up |
-| Profile update reminder | The reminder asking signed-up members to complete their profile | The announcement channel |
-| Post attendance reminder in Discord | The attendance reminder | The announcement channel |
+| Profile update reminder | The reminder asking signed-up members to complete their profile | The profile reminder channel, falling back to the announcement channel |
+| Post attendance reminder in Discord | The attendance reminder | The attendance reminder channel, falling back to the announcement channel |
 | Mention signed-up members before start | The reply that mentions everyone signed up, split into several messages when the list is long | A reply to the signup post |
 | Post event signup embed | The signup post, with its buttons | A new thread in the signup channel (or the channel itself), falling back to the announcement channel |
 | Pre-day announcement | The announcement, or the signup post if that is what this configuration posts instead. Before the signup post exists, the "Sign up here!" link points to the signup channel in place of the post | The announcement channel |
-| Post new events (series only) | The post announcing a newly created event | The announcement channel |
+| Post new events (series only) | The post announcing a newly created event | The new-event channel, falling back to the announcement channel |
 
 *Mark signups as interested* has no preview because it sends no message, and the announcement channel picker is a setting rather than a message.
 
@@ -40,7 +42,7 @@ Role and channel mentions show their names when DraftForge can read them from yo
 Above the message the dialog says whether the message would be sent, and if not, why. Common reasons:
 
 - **Off**: the toggle is off.
-- **No channel selected**: the announcement or signup channel is empty.
+- **No channel selected**: the post has no channel, including its announcement-channel fallback.
 - **No Discord server linked**: the organization has no Discord server.
 - **Not sent yet: this posts when signups open**: the signup post and pre-day announcement are only posted when signups open. The preview shows them as they will look at that moment, not as they would look now.
 - **Not sent now: only while signups are open or during roll call**: the start mention.

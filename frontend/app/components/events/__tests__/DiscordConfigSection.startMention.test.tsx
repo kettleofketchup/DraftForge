@@ -14,9 +14,30 @@ import {
 } from '../startMentionPrerequisite';
 
 vi.mock('../DiscordChannelPicker', () => ({
-  DiscordChannelPicker: (props: { 'data-testid'?: string }) => (
-    <div data-testid={props['data-testid']} />
-  ),
+  DiscordChannelPicker: (p: {
+    value?: string;
+    onChange: (value: string) => void;
+    clearable?: { label: string; fallbackChannelId?: string };
+    'data-testid'?: string;
+  }) => {
+    const testId = p['data-testid'] ?? 'channel-picker';
+    return (
+      <div
+        data-testid={testId}
+        data-value={p.value ?? ''}
+        data-clear-label={p.clearable?.label ?? ''}
+        data-fallback={p.clearable?.fallbackChannelId ?? ''}
+      >
+        {p.clearable && p.value ? (
+          <button
+            type="button"
+            data-testid={`${testId}-clear`}
+            onClick={() => p.onChange('')}
+          />
+        ) : null}
+      </div>
+    );
+  },
 }));
 
 vi.mock('../DiscordRolePicker', () => ({
