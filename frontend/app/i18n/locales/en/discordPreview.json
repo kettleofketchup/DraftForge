@@ -84,9 +84,10 @@
     "next_event_already_open_not_updated": "The next event already has signups open, so it is not changed.",
     "notice_falls_back_if_signup_post_fails": "If the signup post fails, the signup post is posted here instead of this announcement.",
     "shown_as_posted_when_signups_open": "Shown as it will be posted when signups open.",
-    "signup_link_points_to_post": "The signup link opens the signup post.",
+    "signup_link_points_to_post": "The \"Sign up here!\" link opens the signup post, which is created just before this notice.",
     "signup_post_in_signup_channel": "The signup post goes to the signup channel.",
     "sync_overwrites_description": "Syncing signups replaces the Discord event description with this text.",
+    "sync_keeps_created_name_and_time": "Syncing signups changes only the description. Discord keeps the name and times the scheduled event was created with, shown here.",
     "unsaved_links": "Not saved yet: the event link opens the events list until you save."
   },
   "scheduled_event": {

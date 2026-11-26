@@ -325,6 +325,7 @@ export const DiscordPreviewResponseSchema = z.object({
       'signup_link_points_to_post',
       'unsaved_links',
       'sync_overwrites_description',
+      'sync_keeps_created_name_and_time',
       'dm_per_subscriber',
       'shown_as_posted_when_signups_open',
       'fallback_replaces_notice',

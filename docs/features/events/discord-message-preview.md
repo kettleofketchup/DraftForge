@@ -22,13 +22,13 @@ The Preview button works whether the toggle is on or off, so you can check a mes
 | Toggle | Preview | Where it goes |
 |--------|---------|---------------|
 | Create Discord scheduled event | The scheduled event card: name, description, start and end time, location | The server's Events tab |
-| Synchronize signups | The scheduled event card with the signup counts the sync adds to the description | The server's Events tab |
+| Synchronize signups | The scheduled event card as Discord will hold it after the sync: the name and times it was created with, and the description with the signup counts. Syncing changes only the description, so edits to the title or time do not reach an existing scheduled event | The server's Events tab |
 | Send signup reminder (series only) | The DM sent to subscribers | A direct message to each series subscriber who has not signed up |
 | Profile update reminder | The reminder asking signed-up members to complete their profile | The announcement channel |
 | Post attendance reminder in Discord | The attendance reminder | The announcement channel |
 | Mention signed-up members before start | The reply that mentions everyone signed up, split into several messages when the list is long | A reply to the signup post |
 | Post event signup embed | The signup post, with its buttons | A new thread in the signup channel (or the channel itself), falling back to the announcement channel |
-| Pre-day announcement | The announcement, or the signup post if that is what this configuration posts instead | The announcement channel |
+| Pre-day announcement | The announcement, or the signup post if that is what this configuration posts instead. Before the signup post exists, the "Sign up here!" link points to the signup channel in place of the post | The announcement channel |
 | Post new events (series only) | The post announcing a newly created event | The announcement channel |
 
 *Mark signups as interested* has no preview because it sends no message, and the announcement channel picker is a setting rather than a message.

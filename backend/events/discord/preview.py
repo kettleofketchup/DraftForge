@@ -78,6 +78,7 @@ from events.discord.preview_values import (
 )
 from events.discord.state import (
     latest_message_log_discord_id,
+    latest_message_log_embed_data,
     load_discord_event_state,
     load_signups_for_embed,
     message_log_exists,
@@ -122,6 +123,13 @@ class PreviewInputError(Exception):
     """The form values cannot be turned into a message."""
 
 
+PENDING_MESSAGE_ID = "0"
+SCHEDULED_EVENT_KEPT_FIELDS: tuple[str, ...] = (
+    "name",
+    "scheduled_start_time",
+    "scheduled_end_time",
+    "entity_metadata",
+)
 OPEN_STATES: tuple[EventState, ...] = (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL)
 WEEKDAY_FREQUENCIES: tuple[str, ...] = (
     RepeatFrequency.WEEKLY,
@@ -206,6 +214,14 @@ def _signup_permalink(event: Event, state: DiscordEventStateSchema) -> str | Non
     return f"https://discord.com/channels/{guild_id}/{channel_id}/{state.signup_message_id}"
 
 
+def _pending_signup_permalink(event: Event) -> str | None:
+    guild_id = event.organization.discord_server_id
+    if not guild_id:
+        return None
+    channel_id = event.discord_post_signups_channel_id
+    return f"https://discord.com/channels/{guild_id}/{channel_id}/{PENDING_MESSAGE_ID}"
+
+
 def _signup_post(src: _Source) -> _Built:
     event = src.event
     result = build_announcement_v2(_in_send_state(event), signups=src.signups)
@@ -257,6 +273,9 @@ def _announcement_notice(src: _Source) -> _Built:
         fired = _fired("event_announcement", event)
     else:
         link = _signup_permalink(event, src.discord_state)
+        pending = link is None and branch == "signup_post_and_notice"
+        if pending:
+            link = _pending_signup_permalink(event)
         notice = build_announcement_notice(send_event, link)
         message, _ = _message(
             build_channel_message_payload(
@@ -270,7 +289,7 @@ def _announcement_notice(src: _Source) -> _Built:
                 "signup_post_in_signup_channel",
                 "notice_falls_back_if_signup_post_fails",
             ]
-        if link is None:
+        if pending and link is not None:
             notes.append("signup_link_points_to_post")
         fired = _fired("event_notice", event)
     gate = announcement_notice_gate(
@@ -423,6 +442,20 @@ def _scheduled_event_sync(src: _Source) -> _Built:
         if event.pk is not None
         else None
     )
+    current = build_scheduled_event_payload(event)
+    created = (
+        latest_message_log_embed_data("create_discord_event", event.pk)
+        if created_id
+        else None
+    )
+    notes: list[NoteCode] = ["sync_overwrites_description"]
+    base = current
+    if created and all(key in created for key in SCHEDULED_EVENT_KEPT_FIELDS):
+        base = created
+        if any(
+            created.get(key) != current.get(key) for key in SCHEDULED_EVENT_KEPT_FIELDS
+        ):
+            notes.append("sync_keeps_created_name_and_time")
     return _Built(
         gate=scheduled_event_sync_gate(
             event,
@@ -430,10 +463,8 @@ def _scheduled_event_sync(src: _Source) -> _Built:
             discord_state=src.discord_state,
         ),
         destination=Destination(type="scheduled_event", channel_id=None),
-        scheduled_event=ScheduledEventPreview.model_validate(
-            {**build_scheduled_event_payload(event), **sync}
-        ),
-        notes=["sync_overwrites_description"],
+        scheduled_event=ScheduledEventPreview.model_validate({**base, **sync}),
+        notes=notes,
     )
 
 

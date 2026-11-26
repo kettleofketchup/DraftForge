@@ -1,6 +1,7 @@
 """Discord previews equal what the tasks send, and never send or write."""
 
 import ast
+import json
 import subprocess
 import sys
 from collections.abc import Callable, Iterator
@@ -379,24 +380,65 @@ class PreviewParityTest(_PreviewTestCase):
         )
         self.assertTrue(response.gate.would_send, response.gate.reasons)
 
-    def test_parity_scheduled_event_sync(self) -> None:
+    def _create_scheduled_event(self) -> dict[str, Any]:
+        created = self.run_task(
+            lambda: _create_discord_scheduled_event_impl(self.ev.pk)
+        ).scheduled_create[0]
+        DiscordMessageLog.objects.filter(source="create_discord_event").delete()
         DiscordMessageLog.objects.create(
             source="create_discord_event",
             source_id=self.ev.pk,
             channel_id=GUILD,
-            embed_data={},
+            embed_data=created,
             discord_message_id="777",
             success=True,
         )
+        return created
+
+    def _held_by_discord(
+        self, created: dict[str, Any], patched: dict[str, Any]
+    ) -> dict[str, Any]:
+        held = {**created, **patched}
+        return {
+            key: held[key]
+            for key in (
+                "name",
+                "description",
+                "scheduled_start_time",
+                "scheduled_end_time",
+                "entity_metadata",
+            )
+        }
+
+    def test_parity_scheduled_event_sync(self) -> None:
+        created = self._create_scheduled_event()
         response = self.preview("scheduled_event_sync")
         sent = self.run_task(lambda: _sync_discord_event_signups_impl(self.ev.pk))
 
         self.assertEqual(
-            response.scheduled_event.description,
-            sent.scheduled_patch[0]["description"],
+            response.scheduled_event.model_dump(),
+            self._held_by_discord(created, sent.scheduled_patch[0]),
         )
         self.assertTrue(response.gate.would_send, response.gate.reasons)
-        self.assertIn("sync_overwrites_description", response.notes)
+        self.assertEqual(response.notes, ["sync_overwrites_description"])
+
+    def test_scheduled_event_sync_keeps_created_name_and_time(self) -> None:
+        created = self._create_scheduled_event()
+        Event.objects.filter(pk=self.ev.pk).update(
+            discord_event_title="Renamed", scheduled_at=START + timedelta(hours=2)
+        )
+        response = self.preview(
+            "scheduled_event_sync", {"discord_event_title": "Renamed again"}
+        )
+        sent = self.run_task(lambda: _sync_discord_event_signups_impl(self.ev.pk))
+
+        self.assertEqual(set(sent.scheduled_patch[0]), {"description"})
+        self.assertEqual(
+            response.scheduled_event.model_dump(),
+            self._held_by_discord(created, sent.scheduled_patch[0]),
+        )
+        self.assertEqual(response.scheduled_event.name, "Weekly Inhouse")
+        self.assertIn("sync_keeps_created_name_and_time", response.notes)
 
 
 class PreviewBranchTest(_PreviewTestCase):
@@ -440,6 +482,27 @@ class PreviewBranchTest(_PreviewTestCase):
         self.assertIn("fallback_drops_role_mentions", notice.notes)
         self.assertEqual(signup.destination.type, "channel")
         self.assertEqual(signup.destination.channel_id, ANNOUNCE_CHANNEL)
+
+    def test_announcement_notice_before_signup_post_matches_send(self) -> None:
+        response = self.preview("announcement_notice")
+        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+
+        self.assertEqual(len(sent.messages), 2)
+        sent_link = f"https://discord.com/channels/{GUILD}/{SIGNUP_CHANNEL}/m1"
+        preview_link = f"https://discord.com/channels/{GUILD}/{SIGNUP_CHANNEL}/0"
+        self.assertIn(sent_link, sent.messages[1]["embeds"][0]["description"])
+        self.assertEqual(
+            _dump(response.messages[0]),
+            json.loads(json.dumps(sent.messages[1]).replace(sent_link, preview_link)),
+        )
+        self.assertIn("Sign up here!", response.messages[0].embeds[0].description)
+
+    def test_announcement_notice_without_server_has_no_signup_link(self) -> None:
+        self.org.discord_server_id = ""
+        self.org.save()
+        response = self.preview("announcement_notice")
+        self.assertNotIn("Sign up here!", response.messages[0].embeds[0].description)
+        self.assertNotIn("signup_link_points_to_post", response.notes)
 
     def test_announcement_notice_both_branch_notes(self) -> None:
         response = self.preview("announcement_notice")

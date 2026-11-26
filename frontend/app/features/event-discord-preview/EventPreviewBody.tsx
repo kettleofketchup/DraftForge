@@ -44,6 +44,8 @@ function noteText(t: T): Record<NoteCode, () => string> {
     signup_link_points_to_post: () => t('note.signup_link_points_to_post'),
     unsaved_links: () => t('note.unsaved_links'),
     sync_overwrites_description: () => t('note.sync_overwrites_description'),
+    sync_keeps_created_name_and_time: () =>
+      t('note.sync_keeps_created_name_and_time'),
     dm_per_subscriber: () => t('note.dm_per_subscriber'),
     shown_as_posted_when_signups_open: () =>
       t('note.shown_as_posted_when_signups_open'),

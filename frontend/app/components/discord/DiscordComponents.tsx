@@ -31,10 +31,10 @@ const BUTTON_BASE =
 
 const BUTTON_STYLE: Record<1 | 2 | 3 | 4 | 5, string> = {
   1: 'bg-discord text-foreground',
-  2: 'bg-base-700 text-foreground',
+  2: 'bg-base-200 text-foreground',
   3: 'bg-success text-success-foreground',
   4: 'bg-destructive text-foreground',
-  5: 'bg-base-700 text-foreground',
+  5: 'bg-base-200 text-foreground',
 };
 
 function preventDefault(e: MouseEvent) {

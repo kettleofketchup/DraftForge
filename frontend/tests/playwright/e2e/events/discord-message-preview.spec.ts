@@ -27,6 +27,15 @@ async function openPreview(page: Page, kind: string) {
   await expect(dialog.getByTestId('discord-preview-loading')).toHaveCount(0, {
     timeout: 15000,
   });
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await expect(dialog.getByTestId('discord-preview-gate')).toBeVisible();
+  await expect(
+    dialog
+      .getByTestId('discord-message-preview')
+      .or(dialog.getByTestId('discord-scheduled-event'))
+      .or(dialog.getByTestId('discord-preview-start-mention-header'))
+      .first(),
+  ).toBeVisible();
   return dialog;
 }
 

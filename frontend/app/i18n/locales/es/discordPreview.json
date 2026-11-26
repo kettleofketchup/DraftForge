@@ -84,9 +84,10 @@
     "next_event_already_open_not_updated": "El próximo evento ya tiene inscripciones abiertas, así que no cambia.",
     "notice_falls_back_if_signup_post_fails": "Si falla la publicación de inscripción, se publica aquí en lugar de este anuncio.",
     "shown_as_posted_when_signups_open": "Se muestra como se publicará al abrir las inscripciones.",
-    "signup_link_points_to_post": "El enlace de inscripción abre la publicación de inscripción.",
+    "signup_link_points_to_post": "El enlace \"Sign up here!\" abre la publicación de inscripción, que se crea justo antes de este aviso.",
     "signup_post_in_signup_channel": "La publicación de inscripción va al canal de inscripción.",
     "sync_overwrites_description": "Sincronizar inscripciones reemplaza la descripción del evento de Discord con este texto.",
+    "sync_keeps_created_name_and_time": "Sincronizar inscripciones solo cambia la descripción. Discord conserva el nombre y los horarios con los que se creó el evento programado, que se muestran aquí.",
     "unsaved_links": "Sin guardar: el enlace del evento abre la lista de eventos hasta que guardes."
   },
   "scheduled_event": {

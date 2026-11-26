@@ -199,10 +199,47 @@ describe('DiscordMessagePreview: components', () => {
       screen.getByText(label).closest('[data-style]');
     expect(style('Primary')).toHaveAttribute('data-style', '1');
     expect(style('Primary')?.className).toContain('bg-discord');
-    expect(style('Secondary')?.className).toContain('bg-base-700');
+    expect(style('Secondary')?.className).toContain('bg-base-200');
+    expect(style('Link')?.className).toContain('bg-base-200');
     expect(style('Success')?.className).toContain('bg-success');
     expect(style('Danger')?.className).toContain('bg-destructive');
     expect(screen.queryByText('Premium')).toBeNull();
+  });
+
+  it('fills grey and link buttons lighter than the message and container surfaces', () => {
+    renderMessages([
+      {
+        flags: 1 << 15,
+        components: [
+          {
+            type: 17,
+            components: [
+              {
+                type: 1,
+                components: [
+                  { type: 2, style: 2, label: 'Secondary', custom_id: 's' },
+                  { type: 2, style: 5, label: 'Link', url: 'https://x.test' },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const baseStep = (className: string | undefined) =>
+      Number(className?.match(/\bbg-base-(\d+)\b/)?.[1]);
+    const surfaces = [
+      baseStep(screen.getByTestId('discord-container').className),
+      baseStep(screen.getByTestId('discord-message-preview').className),
+    ];
+    for (const label of ['Secondary', 'Link']) {
+      const fill = baseStep(
+        screen.getByText(label).closest('[data-style]')?.className,
+      );
+      for (const surface of surfaces) {
+        expect(surface - fill).toBeGreaterThanOrEqual(400);
+      }
+    }
   });
 
   it('renders the link button as a non-interactive external anchor', () => {

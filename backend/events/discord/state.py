@@ -1,6 +1,7 @@
 """In-process reads of the signup list and Discord state the internal API serves."""
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from django.db.models import Q, QuerySet
 
@@ -101,3 +102,17 @@ def latest_message_log_discord_id(source: str, source_id: int | str) -> str | No
         .values_list("discord_message_id", flat=True)
         .first()
     )
+
+
+def latest_message_log_embed_data(
+    source: str, source_id: int | str
+) -> dict[str, Any] | None:
+    data = (
+        DiscordMessageLog.objects.filter(
+            source=source, source_id=source_id, success=True
+        )
+        .order_by("-created_at")
+        .values_list("embed_data", flat=True)
+        .first()
+    )
+    return data if isinstance(data, dict) else None
