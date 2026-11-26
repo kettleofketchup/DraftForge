@@ -17,6 +17,8 @@ from discordbot.dm_ledger import DMClaim, DMFinal
 from discordbot.internal_leadership_views import LeadershipReviewClickThrottle
 from discordbot.models import DiscordDM, DMKind, DMStatus, DMSubject
 from discordbot.schemas import ClickResult, PlannedMessage, ReviewDMPlanResponse
+from org.feature_keys import FeatureKey
+from org.features import set_org_feature
 from org.leadership import lifecycle, review_dm
 from org.leadership.constants import VoidKind
 from org.leadership.kinds import LeadershipKind
@@ -107,6 +109,24 @@ class ReviewDMPlanTest(LeadershipTestCase):
                 self.assertTrue(
                     all(len(m.trait_ids) <= MAX_TRAITS_PER_MESSAGE for m in mine)
                 )
+
+    def test_original_job_cannot_send_after_reclose(self) -> None:
+        self.enable()
+        self.run_snapshot()
+        original_ids = self.snap_ids()
+        lifecycle.void_event(self.event, now=tz.now())
+        late = self.make_user("late_review_dm")
+        self.admit(late)
+        self.team_a.members.add(late)
+        self.run_snapshot()
+        self.assertIn(self.ou(late), self.snapshot(self.cap_a).teammates.all())
+        self.assertEqual(review_dm.plan(self.event.pk, original_ids, now=tz.now()), [])
+
+    def test_plan_rejects_disabled_leadership(self) -> None:
+        self.enable()
+        self.run_snapshot()
+        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
+        self.assertEqual(self.plan(), [])
 
     def test_payload_component_budget(self) -> None:
         self.enable()
@@ -358,6 +378,21 @@ class ReviewClickTest(LeadershipTestCase):
         self.rater = self.mates_a[0]
         self._next_message = 900000000000000000
         self.msg, self.row_id = self.send(self.rater)
+
+    def test_click_rejects_disabled_leadership(self) -> None:
+        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
+        for trait in self.traits:
+            self.assertIsNotNone(self.click(trait, 4).ephemeral)
+        self.assertFalse(CaptainReview.objects.exists())
+        self.assertFalse(CaptainReviewDraft.objects.exists())
+
+    def test_click_still_works_when_review_sends_disabled(self) -> None:
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org, defaults={"review_dms_enabled": False}
+        )
+        for trait in self.traits:
+            self.assertIsNone(self.click(trait, 4).ephemeral)
+        self.assertEqual(CaptainReview.objects.count(), 1)
 
     def active_traits(self) -> list[CaptainTrait]:
         return sorted(

@@ -223,9 +223,20 @@ def snapshot_event(event: Event, *, now: datetime) -> SnapshotResult:
     created = _write_snapshots(
         locked, planned, closes=now + timedelta(hours=settings.review_window_hours)
     )
-    if settings.review_dms_enabled and created:
-        org_id, event_id, ids = locked.organization_id, locked.pk, sorted(created)
-        transaction.on_commit(lambda: _enqueue_review_dms(org_id, event_id, ids))
+    if locked.leadership_review_dm_dispatch is None:
+        pools = {plan.captain.pk: plan.teammates for plan in planned}
+        dispatch = {
+            str(snapshot_id): pools[captain_id]
+            for snapshot_id, captain_id in EventCaptain.objects.nocache()
+            .filter(pk__in=created)
+            .values_list("pk", "captain_id")
+        }
+        Event.objects.filter(pk=locked.pk).update(
+            leadership_review_dm_dispatch=dispatch
+        )
+        if settings.review_dms_enabled and created:
+            org_id, event_id, ids = locked.organization_id, locked.pk, sorted(created)
+            transaction.on_commit(lambda: _enqueue_review_dms(org_id, event_id, ids))
     points = ledger.points_table(locked.organization, RATED_KINDS)
     counts = ledger.sync_event_kinds(
         locked,
@@ -262,6 +273,7 @@ def void_event(event: Event, *, now: datetime) -> VoidResult:
     ids = _snapshot_ids(event)
     if not ids:
         return VoidResult(reviews_voided=0, revoked=0)
+    Event.objects.filter(pk=event.pk).update(leadership_review_dm_dispatch={})
     EventCaptain.objects.nocache().filter(pk__in=ids, voided_at__isnull=True).update(
         voided_at=now, updated_at=now
     )

@@ -191,9 +191,26 @@ def _apply_initial_status(row: DiscordDM, req: DMClaim, now: datetime) -> None:
         row.finished_at = now
 
 
-def _grant_existing(row: DiscordDM, req: DMClaim, now: datetime) -> bool:
+_CLAIM_METADATA: tuple[str, ...] = (
+    "kind",
+    "discord_user_id",
+    "recipient_id",
+    "organization_id",
+    "subject_type",
+    "subject_id",
+    "tournament_log_id",
+    "context",
+    "has_components",
+)
+
+
+def _grant_existing(
+    row: DiscordDM, req: DMClaim, candidate: DiscordDM, now: datetime
+) -> bool:
     if row.status == DMStatus.PENDING and row.claim_token == req.claim_token:
-        return True
+        return all(
+            getattr(row, name) == getattr(candidate, name) for name in _CLAIM_METADATA
+        )
     stale = (
         row.status == DMStatus.PENDING
         and row.send_started_at is None
@@ -201,6 +218,8 @@ def _grant_existing(row: DiscordDM, req: DMClaim, now: datetime) -> bool:
     )
     if not (stale or (row.status == DMStatus.FAILED and row.retryable)):
         return False
+    for name in _CLAIM_METADATA:
+        setattr(row, name, getattr(candidate, name))
     row.status = DMStatus.PENDING
     row.attempts += 1
     row.claim_token = req.claim_token
@@ -253,7 +272,7 @@ def claim(req: DMClaim, *, now: datetime) -> ClaimResult:
             )
             if existing is None:
                 raise
-            granted = _grant_existing(existing, req, now)
+            granted = _grant_existing(existing, req, row, now)
             log.info(
                 "dm_claim_existing",
                 system="discord",

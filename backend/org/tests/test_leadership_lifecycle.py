@@ -27,7 +27,7 @@ from tournament.models import Team
 from tournament.models.team_log import TeamLogVia
 from tournament.services.team_management import replace_captain
 
-SNAPSHOT_QUERIES = 18
+SNAPSHOT_QUERIES = 20
 
 
 def pool(snap: EventCaptain) -> set[int]:
@@ -493,6 +493,32 @@ class ReviewDMEnqueueTest(LeadershipTestCase):
         task.delay.reset_mock()
         self.reopen()
         self.team_b.members.add(self.make_user("ld_late"))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_reclose_with_replacement_captain_does_not_enqueue(
+        self, task: MagicMock
+    ) -> None:
+        self.enable()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.reset_mock()
+        self.reopen()
+        self.team_a.captain = self.mates_a[1]
+        self.team_a.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_first_close_with_leadership_disabled_cannot_send_on_reclose(
+        self, task: MagicMock
+    ) -> None:
+        self.enable()
+        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
+        self.close()
+        self.reopen()
+        self.unlock_leadership()
         with self.captureOnCommitCallbacks(execute=True):
             self.close()
         task.delay.assert_not_called()

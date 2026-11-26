@@ -117,6 +117,36 @@ class SendLeadershipReviewDMsTaskTest(SimpleTestCase):
         retry.assert_called_once()
         send.assert_not_called()
 
+    def test_ledger_unavailable_retries_partial_batch(
+        self, plan: MagicMock, send: MagicMock
+    ) -> None:
+        plan.return_value = [_planned(), _planned(part=2, trait_ids=[5])]
+        send.side_effect = [
+            _outcome(DMStatus.SENT),
+            DMOutcome(
+                status="ledger_unavailable",
+                ledger_id=None,
+                message_id=None,
+                channel_id=None,
+                error_code=None,
+            ),
+        ]
+        with (
+            patch.object(
+                send_leadership_review_dms, "retry", side_effect=Retry()
+            ) as retry,
+            self.assertRaises(Retry),
+        ):
+            send_leadership_review_dms.run(9, [7])
+        retry.assert_called_once()
+        keys = [call.args[0].idempotency_key for call in send.call_args_list]
+        send.side_effect = [_outcome(DMStatus.SENT), _outcome(DMStatus.SENT)]
+        send.reset_mock()
+        send_leadership_review_dms.run(9, [7])
+        self.assertEqual(
+            keys, [call.args[0].idempotency_key for call in send.call_args_list]
+        )
+
     def test_task_options(self, plan: MagicMock, send: MagicMock) -> None:
         self.assertTrue(send_leadership_review_dms.acks_late)
         self.assertEqual(

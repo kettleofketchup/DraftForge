@@ -12,6 +12,8 @@ from django.utils import timezone
 from discordbot import dm_ledger
 from discordbot.models import DMStatus
 from discordbot.schemas import ClickResult, PlannedMessage
+from org.feature_keys import FeatureKey
+from org.features import org_has_feature
 from org.leadership.errors import ReviewRefused
 from org.leadership.review_dm_render import (
     MAX_TRAITS_PER_MESSAGE,
@@ -85,6 +87,9 @@ def plan(
     if not snaps:
         return []
     org_id = snaps[0].organization_id
+    if not org_has_feature(org_id, FeatureKey.LEADERSHIP):
+        return []
+    dispatch = snaps[0].event.leadership_review_dm_dispatch or {}
     skip = None if get_leadership_settings(org_id).review_dms_enabled else "disabled"
     active = sorted(
         (t for t in materialize_traits(org_id) if t.active),
@@ -97,7 +102,11 @@ def plan(
     for snap in snaps:
         captain_name = user_display_name(snap.captain.user)
         mates = sorted(
-            (m for m in snap.teammates.all() if m.pk != snap.captain_id),
+            (
+                m
+                for m in snap.teammates.all()
+                if m.pk != snap.captain_id and m.pk in dispatch.get(str(snap.pk), [])
+            ),
             key=lambda m: m.pk,
         )
         for mate in mates:
@@ -274,6 +283,12 @@ def apply_click(
         )
         if ec is None:
             return _result("out_of_date", ledger_id=row.pk, ephemeral=OUT_OF_DATE)
+        if not org_has_feature(ec.organization_id, FeatureKey.LEADERSHIP):
+            return _result(
+                "leadership_disabled",
+                ledger_id=row.pk,
+                ephemeral="Leadership is disabled for this organization.",
+            )
         rater = (
             OrgUser.objects.nocache()
             .filter(organization_id=ec.organization_id, user__discordId=discord_user_id)

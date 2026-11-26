@@ -507,6 +507,9 @@ class Event(
     description = models.TextField(blank=True, default="")
     scheduled_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)
+    leadership_review_dm_dispatch = models.JSONField(
+        null=True, default=None, editable=False
+    )
     signups_open_at = models.DateTimeField(null=True, blank=True)
     state = models.CharField(
         max_length=20, choices=EventState.choices, default=EventState.UPCOMING

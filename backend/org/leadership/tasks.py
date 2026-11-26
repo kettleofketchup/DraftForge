@@ -68,4 +68,6 @@ def send_leadership_review_dms(
         snapshots=len(snapshot_ids),
         **counts,
     )
+    if counts["ledger_unavailable"]:
+        raise self.retry()
     return dict(counts)

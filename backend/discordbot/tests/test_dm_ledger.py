@@ -69,7 +69,7 @@ class DMLedgerTestCase(TestCase):
     def claim(self, req: DMClaim, now: datetime | None = None) -> ClaimResult:
         return dm_ledger.claim(req, now=now or self.now)
 
-    def fail(
+    def fail_delivery(
         self,
         result: ClaimResult,
         token: str,
@@ -125,7 +125,7 @@ class ClaimTests(DMLedgerTestCase):
 
     def test_retryable_failed_reclaimed_attempts_incremented(self) -> None:
         first = self.claim(_req())
-        self.fail(first, "tok-a", "pre_send")
+        self.fail_delivery(first, "tok-a", "pre_send")
         later = self.now + timedelta(seconds=5)
         second = self.claim(_req(token="tok-b"), now=later)
         self.assertTrue(second.granted)
@@ -144,9 +144,39 @@ class ClaimTests(DMLedgerTestCase):
         self.assertIsNone(row.finished_at)
         self.assertIsNone(row.send_started_at)
 
+    def test_reclaim_refreshes_recipient_and_component_context(self) -> None:
+        user = CustomUser.objects.create(username="relinked", discordId="1001")
+        first_req = _leadership_req(
+            snapshot_id=7, discord_user_id="1001", part=1, trait_ids=[1, 2]
+        )
+        first = self.claim(first_req)
+        self.fail_delivery(first, "tok-1", "pre_send")
+        user.discordId = "2002"
+        user.save(update_fields=["discordId"])
+        second_req = _leadership_req(
+            snapshot_id=7, discord_user_id="2002", part=1, trait_ids=[3, 4]
+        )
+        second = self.claim(second_req)
+        self.assertTrue(second.granted)
+        row = DiscordDM.objects.get(pk=second.id)
+        self.assertEqual(row.discord_user_id, "2002")
+        self.assertEqual(row.recipient_id, user.pk)
+        self.assertEqual(row.context["trait_ids"], [3, 4])
+        dm_ledger.finalize(
+            row.pk,
+            DMFinal(status=DMStatus.SENT, discord_message_id="9001"),
+            claim_token="tok-1",
+            now=self.now,
+        )
+        dm_ledger.record_click(
+            discord_message_id="9001", discord_user_id="2002", now=self.now
+        )
+        row.refresh_from_db()
+        self.assertEqual(row.click_count, 1)
+
     def test_permanent_failed_not_reclaimable(self) -> None:
         first = self.claim(_req())
-        row = self.fail(first, "tok-a", "permanent", error_code=50007)
+        row = self.fail_delivery(first, "tok-a", "permanent", error_code=50007)
         self.assertFalse(row.retryable)
         self.assertEqual(row.error_code, 50007)
         second = self.claim(_req(token="tok-b"))
@@ -156,7 +186,7 @@ class ClaimTests(DMLedgerTestCase):
 
     def test_permanent_code_never_retryable(self) -> None:
         first = self.claim(_req())
-        row = self.fail(first, "tok-a", "pre_send", error_code=10013)
+        row = self.fail_delivery(first, "tok-a", "pre_send", error_code=10013)
         self.assertFalse(row.retryable)
 
     def test_same_token_pending_regrant_same_id(self) -> None:
