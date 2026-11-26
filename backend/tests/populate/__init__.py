@@ -48,6 +48,7 @@ from tests.populate.constants import (
 )
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
+from tests.populate.discord_permissions import populate_discord_permissions_data
 from tests.populate.dota_lobby import populate_dota_lobby_data
 from tests.populate.events import populate_events_data
 from tests.populate.game_org_mmr import populate_game_org_mmr_data
@@ -127,6 +128,8 @@ def populate_all(force: bool = False) -> None:
         # counters every step above relies on.
         ("Game Org MMR Data", populate_game_org_mmr_data),
         ("Signup History Data", populate_signup_history_data),
+        # Explicit pks (org/league 70, users 9100-9102), after Signup History.
+        ("Discord Permission Badges Data", populate_discord_permissions_data),
         # Its tournament (explicit pk 950) brings auto-pk teams, games and
         # matches, so it goes after every pk-sensitive step.
         ("Activity Bracket Data", populate_activity_bracket_data),
@@ -187,6 +190,7 @@ __all__ = [
     "populate_mmr_requests_data",
     "populate_mmr_sync_data",
     "populate_signup_history_data",
+    "populate_discord_permissions_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_league_stats_data",
