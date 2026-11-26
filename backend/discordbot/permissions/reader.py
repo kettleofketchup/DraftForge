@@ -7,6 +7,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any, Callable, Literal, Protocol
+from uuid import uuid4
 
 import requests
 from django.conf import settings
@@ -229,6 +230,7 @@ class SnapshotReader:
         self.reads: dict[str, _Read] = {}
         self.channel_dependencies: dict[str, set[str]] = {}
         self._refresh: dict[str, bool] = {}
+        self._refresh_token: str = uuid4().hex
         self._guard: threading.Lock = threading.Lock()
         self._locks: dict[str, threading.Lock] = {}
 
@@ -258,9 +260,17 @@ class SnapshotReader:
         with self._guard:
             if guild_id not in self._refresh:
                 self._refresh[guild_id] = refresh and cache.add(
-                    f"discord_perm_refresh:{self.token_fp}:{guild_id}", True, timeout=10
+                    f"discord_perm_refresh:{self.token_fp}:{guild_id}",
+                    self._refresh_token,
+                    timeout=10,
                 )
-                if refresh and not self._refresh[guild_id]:
+                if self._refresh[guild_id]:
+                    cache.set(
+                        f"discord_perm_generation:{self.token_fp}:{guild_id}",
+                        self._refresh_token,
+                        timeout=60,
+                    )
+                elif refresh:
                     self.refresh_state = "coalesced"
             return self._refresh[guild_id]
 
@@ -346,7 +356,17 @@ class SnapshotReader:
                 if (
                     not foreign
                     and not (refresh and not bypass)
-                    and time.monotonic() < self.deadline
+                    and (
+                        not bypass
+                        or cache.get(
+                            f"discord_perm_generation:{self.token_fp}:{guild_id}"
+                        )
+                        == self._refresh_token
+                    )
+                    and (
+                        time.monotonic() < self.deadline
+                        or (bypass and reason is not None)
+                    )
                 ):
                     cache.set(key, entry, timeout=10 if reason else 60)
                 if reason:

@@ -243,6 +243,80 @@ class ReaderTests(SimpleTestCase):
         )
         self.assertEqual(self.run_checks([check()]).checks[0].reason, "network_error")
 
+    def test_exhausted_refresh_supersedes_cached_success(self) -> None:
+        cases = [
+            ("/users/@me", check()),
+            (f"/guilds/{G}", check()),
+            (f"/guilds/{G}/channels", check()),
+            (
+                f"/channels/{T}/thread-members/{B}",
+                check(A.START_MENTION, T, reference_present=True),
+            ),
+            (
+                f"/channels/{T}/messages/{M}",
+                check(A.SIGNUP_EDIT, T, reference_present=True, message_id=M),
+            ),
+            (
+                f"/guilds/{G}/scheduled-events/{E}",
+                check(
+                    A.SCHEDULED_EVENT_UPDATE,
+                    None,
+                    reference_present=True,
+                    scheduled_event_id=E,
+                ),
+            ),
+        ]
+        for delayed_path, requested in cases:
+            with self.subTest(path=delayed_path):
+                cache.clear()
+                self.assertEqual(
+                    self.run_checks([requested]).checks[0].status, "verified"
+                )
+                release = threading.Event()
+                finished = threading.Event()
+                original = self.source.get
+
+                def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+                    if path == delayed_path:
+                        try:
+                            release.wait(timeout=3)
+                            return original(path, timeout)
+                        finally:
+                            finished.set()
+                    return original(path, timeout)
+
+                reader = SnapshotReader(self.source, budget_s=0.15)
+                try:
+                    with (
+                        patch.object(self.source, "get", side_effect=get),
+                        patch(
+                            "discordbot.permissions.service.SnapshotReader",
+                            return_value=reader,
+                        ),
+                    ):
+                        failed = self.run_checks([requested], True).checks[0]
+                    self.assertEqual(
+                        (failed.status, failed.reason), ("unknown", "network_error")
+                    )
+                    for refresh in (False, True):
+                        result = self.run_checks([requested], refresh).checks[0]
+                        self.assertEqual(result.status, "unknown")
+                        self.assertIn(
+                            result.reason, ("network_error", "resource_unavailable")
+                        )
+                        if refresh:
+                            self.assertEqual(result.refresh_state, "coalesced")
+                finally:
+                    release.set()
+                    self.assertTrue(finished.wait(timeout=3))
+                self.assertEqual(
+                    self.run_checks([requested]).checks[0].status, "unknown"
+                )
+                cache.delete(f"discord_perm_refresh:test-fixture-v1:{G}")
+                self.assertEqual(
+                    self.run_checks([requested], True).checks[0].status, "verified"
+                )
+
     def test_coalesced_refresh_reports_original_checked_at(self) -> None:
         first = self.run_checks([check()], True).checks[0]
         calls = len(self.source.calls)
@@ -696,6 +770,64 @@ class ReaderTests(SimpleTestCase):
             self.assertIsNone(cache.get(key))
             self.assertIsNone(
                 SnapshotReader(FixtureSource(self.data)).guild_bundle(G, True).error
+            )
+            refreshed = cache.get(key)
+        finally:
+            release.set()
+            self.assertTrue(finished.wait(timeout=1))
+        self.assertEqual(cache.get(key), refreshed)
+        self.assertIsNone(refreshed.error)
+
+    def test_expired_refresh_owner_cannot_replace_newer_observation(self) -> None:
+        clock = [0.0]
+        newer: list[Any] = []
+        original = self.source.get
+        key = f"discord_perm:v1:test-fixture-v1:{G}:bot"
+
+        def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+            cache.delete(f"discord_perm_refresh:test-fixture-v1:{G}")
+            self.assertIsNone(
+                SnapshotReader(FixtureSource(self.data)).guild_bundle(G, True).error
+            )
+            newer.append(cache.get(key))
+            clock[0] = 16.0
+            return original(path, timeout)
+
+        with (
+            patch(
+                "discordbot.permissions.reader.time.monotonic",
+                side_effect=lambda: clock[0],
+            ),
+            patch.object(self.source, "get", side_effect=get),
+        ):
+            reader = SnapshotReader(self.source, budget_s=15)
+            self.assertEqual(reader.guild_bundle(G, True).error, "network_error")
+        self.assertEqual(len(newer), 1)
+        self.assertEqual(cache.get(key), newer[0])
+        self.assertIsNone(cache.get(key).error)
+
+    def test_late_refresh_completion_cannot_replace_newer_observation(self) -> None:
+        self.assertEqual(self.run_checks([check()]).checks[0].status, "verified")
+        release = threading.Event()
+        finished = threading.Event()
+        original = self.source.get
+
+        def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+            try:
+                release.wait(timeout=3)
+                return original(path, timeout)
+            finally:
+                finished.set()
+
+        reader = SnapshotReader(self.source, budget_s=0.1)
+        key = f"discord_perm:v1:test-fixture-v1:{G}:bot"
+        try:
+            with patch.object(self.source, "get", side_effect=get):
+                self.assertEqual(reader.guild_bundle(G, True).error, "network_error")
+            self.assertEqual(cache.get(key).error, "network_error")
+            cache.delete(f"discord_perm_refresh:test-fixture-v1:{G}")
+            self.assertEqual(
+                self.run_checks([check()], True).checks[0].status, "verified"
             )
             refreshed = cache.get(key)
         finally:
