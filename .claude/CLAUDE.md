@@ -278,7 +278,7 @@ just test::run 'python manage.py test app.tests -v 2'
 just test::run 'python manage.py test draft.tests.test_team_shuffle -v 2'
 ```
 
-Local test runs share a CPU/memory cap (`df-tests.slice`, 16 cores / 40G; `just test::limits`); `test::run` defaults `--parallel auto` to 6 workers. See docs "Resource limits".
+Local test runs share a CPU/memory cap (`df-tests.slice`, 16 cores / 40G; `just test::limits`); `test::run` and `test::backend::all` default `--parallel auto` to 6 workers. See docs "Resource limits".
 
 **Backend (Local - via pytest)**:
 ```bash

@@ -83,19 +83,19 @@ describe('startMentionPrerequisiteMessage', () => {
     ],
     [
       { kind: 'missing', reason: 'signup_disabled', announcementOn: false },
-      'Start mention won\'t send: signup posts are off. Turn on "Post event signup embed" below and pick a channel, or turn on the pre-day announcement with a channel.',
+      'Start mention won\'t send: signup posts are off. Turn on "Post event signup embed" and pick a channel, or turn on the pre-day announcement with a channel.',
     ],
     [
       { kind: 'missing', reason: 'signup_disabled', announcementOn: true },
-      'Start mention won\'t send: signup posts are off. Turn on "Post event signup embed" below and pick a channel, or pick an announcement channel.',
+      'Start mention won\'t send: signup posts are off. Turn on "Post event signup embed" and pick a channel, or pick an announcement channel.',
     ],
     [
       { kind: 'missing', reason: 'signup_no_channel', announcementOn: false },
-      "Start mention won't send: no signup channel is selected. Pick a signup channel below, or turn on the pre-day announcement with a channel.",
+      "Start mention won't send: no signup channel is selected. Pick a signup channel, or turn on the pre-day announcement with a channel.",
     ],
     [
       { kind: 'missing', reason: 'signup_no_channel', announcementOn: true },
-      "Start mention won't send: no signup channel is selected. Pick a signup channel below, or pick an announcement channel.",
+      "Start mention won't send: no signup channel is selected. Pick a signup channel, or pick an announcement channel.",
     ],
   ])('%o', (prerequisite, expected) => {
     expect(startMentionPrerequisiteMessage(prerequisite)).toBe(expected);

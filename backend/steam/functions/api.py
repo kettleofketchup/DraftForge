@@ -40,6 +40,7 @@ from steam.serializers import (
 from steam.services.match_suggestions import get_match_suggestions_for_game
 from steam.utils.steam_api_caller import SteamAPI
 from telemetry.logging import get_logger
+from tournament.broadcast import bracket_changed_on_commit
 from tournament.models import Game, Tournament
 from tournament.permissions import can_manage_game
 from tournament.services.bracket_placement import (
@@ -91,7 +92,6 @@ def relink_users(request: Request) -> Response:
     match_ids = serializer.validated_data.get("match_ids", [])
 
     if match_ids:
-        # Relink specific matches
         linked_count = 0
         for match_id in match_ids:
             stats = PlayerMatchStats.objects.filter(
@@ -102,7 +102,6 @@ def relink_users(request: Request) -> Response:
                     linked_count += 1
         result = {"linked_count": linked_count}
     else:
-        # Relink all
         linked_count = relink_all_users()
         result = {"linked_count": linked_count}
 
@@ -302,14 +301,12 @@ def link_game_match(request: Request, game_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check permission
     if not can_manage_game(request.user, game):
         return Response(
             {"error": "You do not have permission to link matches for this game"},
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    # Verify match exists
     if not Match.objects.filter(match_id=match_id).exists():
         return Response(
             {"error": "Match not found"},
@@ -319,10 +316,10 @@ def link_game_match(request: Request, game_id: int) -> Response:
     game.gameid = match_id
     game.save()
 
-    # Invalidate cache for game and tournament
     invalidate_obj(game)
     if game.tournament:
         invalidate_obj(game.tournament)
+    bracket_changed_on_commit(game.tournament_id, game.pk)
 
     return Response({"status": "linked", "match_id": match_id})
 
@@ -343,7 +340,6 @@ def unlink_game_match(request: Request, game_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check permission
     if not can_manage_game(request.user, game):
         return Response(
             {"error": "You do not have permission to unlink matches for this game"},
@@ -358,6 +354,7 @@ def unlink_game_match(request: Request, game_id: int) -> Response:
         game.save(update_fields=["gameid", "winning_team", "status"])
         apply_bracket_placements(game.tournament_id, placements_before)
         invalidate_after_commit(game, *([game.tournament] if game.tournament else []))
+        bracket_changed_on_commit(game.tournament_id, game.pk)
 
     return Response({"status": "unlinked"})
 
@@ -388,7 +385,6 @@ def auto_assign_matches(request: Request) -> Response:
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check permission
     try:
         tournament = Tournament.objects.select_related("league").get(pk=tournament_id)
     except Tournament.DoesNotExist:

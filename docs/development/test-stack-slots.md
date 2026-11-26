@@ -251,7 +251,7 @@ all run inside it; `scripts/test-limits.sh` applies the limits.
 | `DF_TEST_CPUS` | `16` | Cores the slice may use in total |
 | `DF_TEST_MEM` | `40G` | Memory cap; going over OOM-kills inside the slice, not the desktop |
 | `DF_TEST_LIMITS` | `1` | `0` disables the slice |
-| `DJANGO_TEST_PROCESSES` | `6` | Workers for `--parallel auto` under `just test::run` |
+| `DJANGO_TEST_PROCESSES` | `6` | Workers for `--parallel auto` under `just test::run` and `just test::backend::all` |
 | `VITEST_MAX_WORKERS` | `4` | Vitest workers when `CI` is unset |
 
 `just test::limits` prints the cap and current usage. CI sets none of these. Redis

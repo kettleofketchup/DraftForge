@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   advanceWinner as advanceWinnerAPI,
@@ -68,10 +68,13 @@ async function settleResultWrite(
 /**
  * Fetches bracket data via TanStack Query and seeds the Zustand bracketStore.
  * Polling pauses automatically when the bracket has unsaved edits (isDirty).
+ * While dirty, server data never replaces the edits; `serverChanged` says the
+ * server bracket moved on since it was loaded.
  */
 export function useBracketQuery(tournamentId: number | null) {
   const isDirty = useBracketStore((state) => state.isDirty);
   const previousDataRef = useRef<string | null>(null);
+  const [serverChanged, setServerChanged] = useState(false);
 
   const query = useQuery({
     queryKey: ['bracket', tournamentId],
@@ -81,18 +84,31 @@ export function useBracketQuery(tournamentId: number | null) {
     refetchInterval: isDirty ? false : 5_000,
   });
 
-  // Seed Zustand store from query data
   useEffect(() => {
-    if (!query.data || isDirty) return;
-    useBracketStore.setState({
-      baseVersion: query.data.version ?? null,
-      hasStructuralEdits: false,
-    });
+    if (!query.data) return;
 
     // NOTE: BracketResponse.matches is typed as BracketMatch[] but at runtime
     // is actually BracketMatchDTO[] (snake_case) due to Zod schema parsing.
     // This cast is a workaround for a pre-existing type mismatch in bracketAPI.tsx.
     const apiMatches = query.data.matches as unknown as BracketMatchDTO[];
+
+    if (isDirty) {
+      const serverKey = apiMatches.length
+        ? JSON.stringify(
+            apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches)),
+          )
+        : null;
+      const localKey = JSON.stringify(useBracketStore.getState().matches);
+      setServerChanged(
+        serverKey !== previousDataRef.current && serverKey !== localKey,
+      );
+      return;
+    }
+    setServerChanged(false);
+    useBracketStore.setState({
+      baseVersion: query.data.version ?? null,
+      hasStructuralEdits: false,
+    });
 
     // Handle empty bracket — use getState() to avoid subscribing to matches
     if (apiMatches.length === 0) {
@@ -110,7 +126,6 @@ export function useBracketQuery(tournamentId: number | null) {
       return;
     }
 
-    // Map API matches to frontend format
     const mappedMatches = apiMatches.map((m) =>
       mapApiMatchToMatch(m, apiMatches),
     );
@@ -131,7 +146,7 @@ export function useBracketQuery(tournamentId: number | null) {
     });
   }, [query.data, isDirty]);
 
-  return query;
+  return { ...query, serverChanged };
 }
 
 interface MatchResultVars {
@@ -203,7 +218,6 @@ export function useSaveBracket(tournamentId: number) {
       const saved = storeFromResponse(data);
       const savedMatches = saved.matches;
       useBracketStore.setState({ ...saved, isVirtual: false });
-      // Invalidate to ensure cache is fresh
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
       log.info('bracket_saved', {
         tournamentId,

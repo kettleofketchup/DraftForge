@@ -208,12 +208,35 @@ without the Docker stack. The frontend typecheck runs in its own `Typecheck (fro
 job in the same workflow.
 
 `just test::backend::all` runs each group in turn in this worktree's test stack, with the
-same `--parallel auto`, and prints a pass/fail and wall-time line per group.
+same `--parallel auto` (6 workers locally, `DJANGO_TEST_PROCESSES`), and prints a pass/fail and wall-time line per group.
 
 `just py::test` (or `just test::backend::pytest`) runs the same modules with pytest on
 the host (`backend/pytest.ini`, `backend/conftest.py`): same temp-file test DB and `DOTA_LOBBY_*` defaults as
 `BackendDiscoverRunner`, with `docker/.env.test` loaded. Like the container it needs
 Redis, on `localhost:6379`. `just test::run 'python -m pytest'` runs it in the container.
+
+### Affected tests only
+
+While iterating, `just test::affected` runs only the tests the branch's changes can
+reach, compared with `origin/main` (committed, uncommitted and untracked files).
+`--plan` prints the selection and the reason for any widening without running it;
+`--base <ref>` changes the comparison point.
+
+| Change | What runs |
+|--------|-----------|
+| A backend module | Test modules that import it, directly or through other modules |
+| Code reached by `urls.py`/`routing.py`, or a module Django loads by name (`apps`, `signals`, `receivers`, `handlers`, `tasks`, `admin`, `consumers`, management commands) | The owning app's whole test package, plus tests that call the command by name |
+| A migration | The app's tests and every `test*migration*` module |
+| `models`, `apps`, `signals`, `tasks` | Also `app.tests.test_celery_settings` |
+| Any backend `.py` | Also `tests.test_app_boundaries` |
+| `backend/backend/`, `conftest.py`, `pytest.ini`, `pyproject.toml`, `poetry.lock`, `docker/.env.test`, the test compose file | The full backend suite (`test::backend::all`) |
+| A frontend source or unit test | `vitest related` on the changed files |
+| Vitest/Vite/TypeScript config or `package.json` | The full Vitest suite |
+| `scripts/`, `just/` | The slot guard and selector unit tests |
+
+The selection is an iteration aid, not a gate: tests that reach code only through
+strings or runtime wiring can still be missed, so `just test::backend::all`, the full
+Vitest suite and CI stay the merge check.
 
 Write backend tests as Django/unittest `TestCase` or `SimpleTestCase` classes.
 The Django runner doesn't collect bare pytest `def test_*` functions, so CI
