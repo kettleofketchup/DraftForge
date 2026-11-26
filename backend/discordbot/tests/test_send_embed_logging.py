@@ -1,7 +1,83 @@
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+import requests
+from django.test import SimpleTestCase, TestCase
 from requests.exceptions import HTTPError
+from structlog.testing import capture_logs
+
+from discordbot.utils import (
+    MessageDeletedError,
+    sync_edit_message,
+    sync_send_embed,
+    sync_send_embed_with_components,
+    sync_send_v2_message,
+)
+
+
+class SendFailureEvidenceTest(SimpleTestCase):
+    def _assert_send_failure(
+        self,
+        kind: str,
+        status: int = 403,
+        body: bytes = b'{"code":50013,"message":"Missing Access"}',
+    ) -> None:
+        response = requests.Response()
+        response.status_code = status
+        response._content = body
+        with (
+            patch("discordbot.utils.requests.request", return_value=response),
+            patch("discordbot.utils._acquire_rate_limit_token"),
+            patch("app.internal_client.claim_discord_message_log", return_value=1),
+            patch("app.internal_client.finalize_discord_message_log") as finalize,
+            patch(
+                "app.internal_client.create_message_log",
+                return_value=MagicMock(ok=True, json=lambda: {"id": 1}),
+            ) as create,
+            capture_logs() as logs,
+        ):
+            if kind == "plain":
+                result = sync_send_embed(
+                    "100000000000000001", "Synthetic Event", "Synthetic", 0
+                )
+            elif kind == "v2":
+                result = sync_send_v2_message("100000000000000001", {"components": []})
+            else:
+                result = sync_send_embed_with_components(
+                    "100000000000000001",
+                    {},
+                    source="synthetic",
+                    source_id=1 if kind == "lease" else None,
+                )
+        self.assertIsNone(result)
+        recorded = finalize if kind == "lease" else create
+        recorded.assert_called_once()
+        kwargs = recorded.call_args.kwargs
+        self.assertFalse(kwargs["success"])
+        self.assertEqual(kwargs["status_code"], status)
+        expected = {"phase": "create", "category": "http_error", "status": status}
+        if status == 403:
+            expected["code"] = 50013
+        self.assertEqual(kwargs["response_data"], expected)
+        self.assertNotIn("Missing Access", str(kwargs))
+        self.assertNotIn("Missing Access", str(logs))
+        self.assertNotIn("<html>", str(logs))
+
+    def test_lease_send_403_finalizes_with_status_and_safe_code(self) -> None:
+        self._assert_send_failure("lease")
+
+    def test_post_log_send_403_keeps_status(self) -> None:
+        self._assert_send_failure("post")
+
+    def test_v2_send_403_keeps_status(self) -> None:
+        self._assert_send_failure("v2")
+
+    def test_plain_embed_403_keeps_status(self) -> None:
+        self._assert_send_failure("plain")
+
+    def test_invalid_json_2xx_is_not_parsed_before_status(self) -> None:
+        for kind in ("lease", "post", "v2", "plain"):
+            with self.subTest(kind=kind):
+                self._assert_send_failure(kind, 500, b"<html>private</html>")
 
 
 class SyncEditMessageMessageDeletedTest(TestCase):
@@ -14,9 +90,9 @@ class SyncEditMessageMessageDeletedTest(TestCase):
     """
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_404_unknown_message_raises_message_deleted_error(self, mock_request):
-        from discordbot.utils import MessageDeletedError, sync_edit_message
-
+    def test_404_unknown_message_raises_message_deleted_error(
+        self, mock_request: MagicMock
+    ) -> None:
         resp = MagicMock(status_code=404)
         resp.json.return_value = {"message": "Unknown Message", "code": 10008}
         # Make raise_for_status actually raise so the test fails loud if we
@@ -35,10 +111,10 @@ class SyncEditMessageMessageDeletedTest(TestCase):
         self.assertEqual(ctx.exception.message_id, "222")
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_404_with_different_code_does_not_raise_message_deleted(self, mock_request):
+    def test_404_with_different_code_does_not_raise_message_deleted(
+        self, mock_request: MagicMock
+    ) -> None:
         """Discord 404 without code 10008 (e.g. Unknown Channel) is not our case."""
-        from discordbot.utils import MessageDeletedError, sync_edit_message
-
         resp = MagicMock(status_code=404)
         resp.json.return_value = {"message": "Unknown Channel", "code": 10003}
         resp.raise_for_status.side_effect = HTTPError("404")
@@ -52,9 +128,7 @@ class SyncEditMessageMessageDeletedTest(TestCase):
         self.assertIsNone(result)
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_403_does_not_raise_message_deleted(self, mock_request):
-        from discordbot.utils import MessageDeletedError, sync_edit_message
-
+    def test_403_does_not_raise_message_deleted(self, mock_request: MagicMock) -> None:
         resp = MagicMock(status_code=403)
         resp.json.return_value = {"message": "Missing Permissions", "code": 50013}
         resp.raise_for_status.side_effect = HTTPError("403")
@@ -69,9 +143,7 @@ class SyncEditMessageMessageDeletedTest(TestCase):
 
 class SyncEditMessageTest(TestCase):
     @patch("discordbot.utils._rate_limited_request")
-    def test_edit_message_sends_patch(self, mock_request):
-        from discordbot.utils import sync_edit_message
-
+    def test_edit_message_sends_patch(self, mock_request: MagicMock) -> None:
         mock_request.return_value = MagicMock(
             status_code=200,
             json=MagicMock(return_value={"id": "111222333"}),
@@ -89,9 +161,7 @@ class SyncEditMessageTest(TestCase):
         self.assertIsNotNone(result)
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_edit_message_with_components(self, mock_request):
-        from discordbot.utils import sync_edit_message
-
+    def test_edit_message_with_components(self, mock_request: MagicMock) -> None:
         mock_request.return_value = MagicMock(status_code=200)
         mock_request.return_value.json.return_value = {"id": "111222333"}
         mock_request.return_value.raise_for_status = MagicMock()
@@ -122,10 +192,8 @@ class SyncSendEmbedLoggingTest(TestCase):
     @patch("app.internal_client.create_message_log")
     @patch("discordbot.utils._rate_limited_request")
     def test_send_embed_logs_via_internal_api_on_success(
-        self, mock_request, mock_create_log
-    ):
-        from discordbot.utils import sync_send_embed
-
+        self, mock_request: MagicMock, mock_create_log: MagicMock
+    ) -> None:
         mock_request.return_value = MagicMock(
             status_code=200,
             json=MagicMock(return_value={"id": "111222333"}),
@@ -154,10 +222,8 @@ class SyncSendEmbedLoggingTest(TestCase):
     @patch("app.internal_client.create_message_log")
     @patch("discordbot.utils._rate_limited_request")
     def test_send_embed_logs_via_internal_api_on_failure(
-        self, mock_request, mock_create_log
-    ):
-        from discordbot.utils import sync_send_embed
-
+        self, mock_request: MagicMock, mock_create_log: MagicMock
+    ) -> None:
         mock_response = MagicMock(status_code=403)
         mock_response.json.return_value = {"message": "Missing Access"}
         mock_response.raise_for_status.side_effect = HTTPError(response=mock_response)
@@ -183,10 +249,8 @@ class SyncSendEmbedLoggingTest(TestCase):
     @patch("app.internal_client.create_message_log")
     @patch("discordbot.utils._rate_limited_request")
     def test_send_embed_without_source_uses_unknown(
-        self, mock_request, mock_create_log
-    ):
-        from discordbot.utils import sync_send_embed
-
+        self, mock_request: MagicMock, mock_create_log: MagicMock
+    ) -> None:
         mock_request.return_value = MagicMock(
             status_code=200,
             json=MagicMock(return_value={"id": "444555666"}),
