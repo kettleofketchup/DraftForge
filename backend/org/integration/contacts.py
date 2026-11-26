@@ -48,7 +48,7 @@ from django.utils import timezone
 from app.models import CustomUser
 from config.promotion_sync import OrgPromotionBinding
 from events.models import Event
-from org.integration import points
+from org.integration import observations, points
 from org.integration.bindings import get_org_binding
 from org.integration.errors import IntegrationError, invalid
 from org.integration.event_lock import with_event_mutations
@@ -530,13 +530,22 @@ def _apply_batch(
     """Write the validated batch. Runs inside the org and event locks."""
     results: list[dict[str, Any]] = []
     counts: Counter[str] = Counter()
+    newer = observations.newer_ranges(org.pk, batch)
     for index, entry in enumerate(batch.entries):
         event = _event_for(entry, events)
         user, org_user = _resolve(org, entry.target_discord_id)
         receipt = retained.get(entry.source_contact_id)
-        if receipt is None:
+        status: Status
+        if observations.covered(entry.source_contact_id, newer):
+            status = "unchanged"
+            outcome = points.PointOutcome(
+                receipt.point_status
+                if receipt is not None
+                else PointStatus.NOT_APPLICABLE
+            )
+        elif receipt is None:
             receipt = _create(org, batch, entry, event, user, org_user)
-            status: Status = "applied"
+            status = "applied"
             outcome = points.settle(receipt)
         else:
             replay = _replay(receipt, batch, entry, event, user, org_user)
@@ -562,6 +571,7 @@ def _apply_batch(
         receipt.refresh_from_db()
         if (
             _is_older(receipt, batch.scan_started_at)
+            or observations.covered(receipt.source_contact_id, newer)
             or receipt.first_imported_at >= threshold
         ):
             continue
@@ -570,6 +580,7 @@ def _apply_batch(
             continue
         counts["restored_local"] += points.retract(receipt)
         counts["retracted"] += 1
+    observations.record_ranges(org.pk, batch)
     highest = ExternalPromotionReceipt.objects.filter(
         organization=org, source=ReceiptSource.CONTACT_LOG
     ).aggregate(highest=Max("source_contact_id"))["highest"]

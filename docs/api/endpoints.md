@@ -1860,8 +1860,10 @@ There is no recipients read and no contribution-totals export.
   ID lies inside the range and appears once. A live stored contact inside the range that
   is in neither list is retracted, subject to the first-import grace period. Each stored
   contact retains its newest accepted `scan_started_at` (including unchanged and deleted
-  observations); an older scan cannot update, reinstate or retract newer state. A stale
-  posted entry answers `unchanged` with its currently stored point status.
+  observations); an older scan cannot update, reinstate or retract newer state. Newer
+  committed ranges also block older scans from creating contacts the newer scan saw as
+  absent; skipped IDs do not count as observed. A stale posted entry answers `unchanged`
+  with its currently stored point status, or `not_applicable` when none is stored.
 - `promoter_discord_id` is `null` when the adaptor could not resolve the promoter.
 - `contact_method` is `DISCORD_DM`, `DISCORD_GROUP_DM` or `OTHER`; `contact_reason` is
   `EVENT_INVITE`, `FOLLOW_UP` or `GENERAL`.

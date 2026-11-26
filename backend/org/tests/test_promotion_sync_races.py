@@ -276,6 +276,71 @@ class SendFirstRaceTests(_RaceBase):
         self.assertEqual(ExternalPromotionReceipt.objects.count(), 1)
 
 
+class FirstImportObservationTests(_RaceBase):
+    def _observed_batch(self, source_id, *, newer, after=0, skipped=()):
+        body = self.payload([self.entry(source_id, promoter=self.promoter.discordId)])
+        body["range"]["after"] = str(after)
+        body["scan_started_at"] = format_timestamp(
+            timezone.now() - timedelta(minutes=10 if newer else 20)
+        )
+        body["skipped_ids"] = [str(i) for i in skipped]
+        return body
+
+    def test_newer_range_deletion_blocks_previously_unseen_older_entry(self):
+        newer = self._observed_batch(9002, newer=True)
+        older = self._observed_batch(9001, newer=False)
+        import_contact_receipts(self.org, newer)
+        result = import_contact_receipts(self.org, older)
+        self.assertEqual(result["applied"], 0)
+        self.assertEqual(result["credited"], 0)
+        self.assertFalse(
+            ExternalPromotionReceipt.objects.filter(source_contact_id=9001).exists()
+        )
+        self.assertEqual(ContributionEntry.objects.filter(voided=False).count(), 1)
+
+    def test_newer_partial_range_does_not_block_older_entry_outside_coverage(self):
+        import_contact_receipts(
+            self.org, self._observed_batch(9002, newer=True, after=9001)
+        )
+        result = import_contact_receipts(
+            self.org, self._observed_batch(9001, newer=False)
+        )
+        self.assertEqual(result["applied"], 1)
+
+    def test_newer_skipped_id_does_not_block_older_first_import(self):
+        import_contact_receipts(
+            self.org, self._observed_batch(9002, newer=True, skipped=(9001,))
+        )
+        result = import_contact_receipts(
+            self.org, self._observed_batch(9001, newer=False)
+        )
+        self.assertEqual(result["applied"], 1)
+
+    def test_observation_spans_keep_newest_time_without_growing(self):
+        from org.models_promotion_sync import PromotionImportObservation
+
+        newer = self._observed_batch(9002, newer=True, after=9001)
+        for _ in range(3):
+            import_contact_receipts(self.org, newer)
+        import_contact_receipts(self.org, self._observed_batch(9001, newer=False))
+        spans = list(
+            PromotionImportObservation.objects.order_by("after").values_list(
+                "after", "through"
+            )
+        )
+        self.assertEqual(spans, [(0, 9001), (9001, 9002)])
+
+    def test_empty_newer_range_blocks_older_first_import(self):
+        newer = self._observed_batch(9001, newer=True)
+        newer["entries"] = []
+        import_contact_receipts(self.org, newer)
+        result = import_contact_receipts(
+            self.org, self._observed_batch(9001, newer=False)
+        )
+        self.assertEqual(result["applied"], 0)
+        self.assertFalse(ExternalPromotionReceipt.objects.exists())
+
+
 class OverlappingScanRaceTests(_RaceBase):
     """A waiting older scan must use the newer committed observation."""
 

@@ -358,6 +358,39 @@ class ExternalHolderMergeTest(_LedgerBase):
         self.assertEqual(body["restored_local"], 1)
         self._assert_restored(send)
 
+    def test_drop_send_restored_when_survivor_holder_released_last(self):
+        drop = self.non_member_player("original_recipient")
+        keep = self.non_member_player("surviving_recipient")
+        send = self.send(drop)
+        self.imported([self.entry(8021, drop), self.entry(8022, keep)])
+        merge_discord_accounts(keep=keep, drop=drop)
+        for source_id in (8021, 8022):
+            age_import(self.receipt(source_id).pk)
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(self.entry_for(send).voided)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 0)
+        self._assert_restored(send)
+
+    def test_second_merge_holder_blocks_restore_of_already_voided_send(self):
+        keep, send, _ = self._merged_holder()
+        second = self.non_member_player("second_holder")
+        self.imported([self.entry(8022, second)])
+        merge_discord_accounts(keep=keep, drop=second)
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        self.assertTrue(self.receipt(8022).holds_point)
+        age_import(self.receipt(8022).pk)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+
     def test_remaining_holder_for_survivor_blocks_restoration(self):
         keep, send, _ = self._merged_holder()
         self.imported([self.entry(8022, keep)])

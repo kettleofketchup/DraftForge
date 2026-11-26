@@ -96,6 +96,48 @@ class _OutboxQuerySet(_GuardedQuerySet):
         )
 
 
+class PromotionImportObservation(models.Model):
+    """Newest committed source observation over a disjoint (after, through] span.
+
+    Skipped source IDs are holes, not deletion observations. Import code keeps
+    adjacent spans with the same timestamp coalesced under the org lock.
+    """
+
+    organization = models.ForeignKey("org.Organization", on_delete=models.CASCADE)
+    source = models.CharField(max_length=32, default="contact_log")
+    after = models.BigIntegerField()
+    through = models.BigIntegerField()
+    observed_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(through__gt=models.F("after")),
+                name="promotion_observation_nonempty",
+            ),
+        ]
+
+
+class PromotionSendExternalKey(models.Model):
+    """A held Discord key merged into a send's recipient, even after a void.
+
+    These identity links do not award or reverse points. They follow their
+    send across later merges and disappear with it on undo or deletion.
+    """
+
+    send = models.ForeignKey(
+        "org.PromoSend", on_delete=models.CASCADE, related_name="external_point_keys"
+    )
+    discord_id = models.CharField(max_length=20)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["send", "discord_id"], name="promotion_send_external_key_unique"
+            ),
+        ]
+
+
 class ReceiptSource(models.TextChoices):
     CONTACT_LOG = "contact_log", "Contact log"
 

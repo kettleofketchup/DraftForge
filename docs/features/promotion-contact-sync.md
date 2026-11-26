@@ -155,6 +155,14 @@ observations, reinstatements and repeated deletion observations. A batch from an
 scan cannot update, reinstate or retract newer state; its posted entries answer
 `unchanged` with the stored point status. The timestamp is the source snapshot's start,
 not the request's arrival time, so overlapping imports may finish out of order safely.
+DraftForge also retains the newest scan time for each committed source-ID range, except
+skipped IDs. If a newer scan covered a source ID that is not stored, an older scan cannot
+create that contact or give it a point.
+
+An account merge records which externally held Discord IDs now belong to each moved
+send, including sends already voided by a previous merge. Releasing any of those IDs
+reconsiders the send, but its point is restored only after no held ID remains for the
+recipient and no other local send for that recipient earns the point.
 
 ## Promotion points
 
@@ -350,7 +358,7 @@ Turn the integration off; do not migrate back over retained data.
    voids and restores already written stay in the ledger.
 3. Receipts and outbox rows stay in the database as evidence.
 
-Migrations `org.0026_api_token_operations` through `org.0029_receipt_source_observed_at`
+Migrations `org.0026_api_token_operations` through `org.0030_promotion_observations_and_keys`
 are additive and reversible on a disposable database, but reversing `0027` drops every
 receipt and outbox row. Upgrading again restores the MMR pair on every token, so a
 rollback never widens a grant.

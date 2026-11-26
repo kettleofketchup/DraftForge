@@ -2,8 +2,9 @@
   external contact log holds for the bound guild's players, of any reason, occasion or
   date, once per external contact ID. Edits and deletions made in the external log are
   applied as updates and retractions on the next import, with an org log entry for each
-  update. Contacts retain their latest source-scan timestamp, so an overlapping older
-  import cannot overwrite, reinstate or retract newer state. An imported invitation for a
+  update. Contacts and committed source-ID ranges retain their latest source-scan
+  timestamp, so an overlapping older import cannot overwrite, reinstate, retract or newly
+  create newer state. An imported invitation for a
   bound event shows as a read-only "Contact recorded externally" tick in the Promotion tab,
   marked "Delivery not verified", with no
   undo. Message and Mark as sent are disabled for those players, Hide messaged hides
@@ -18,8 +19,9 @@
   point moves to the next imported contact or the local point comes back as a
   "Promotion point restored" entry. Voids and restores are never deleted, net to zero in
   the month of the entry they reverse, and are recorded in the org log. Restoration also
-  finds sends voided during an account merge, follows replacement duplicate holders, and
-  waits until no external holder remains for the merged recipient.
+  finds sends voided during an account merge, including sends originally made to the
+  dropped account and holders added by a later merge, follows replacement duplicate
+  holders, and waits until no external holder remains for the merged recipient.
 - Every DM marked as sent, including repeat sends that earn nothing and sends later
   undone, gets its own retained receipt for the external contact log. The new
   `python manage.py dispatch_promotion_contacts` command sends due receipts to the

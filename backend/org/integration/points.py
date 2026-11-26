@@ -45,6 +45,7 @@ from org.models_promotion_sync import (
     PointReason,
     PointStatus,
     PromotionContactOutbox,
+    PromotionSendExternalKey,
 )
 from org.standing import ledger
 from telemetry.logging import get_logger
@@ -489,8 +490,13 @@ def _restore_local(
         external_point_discord_id=discord_id,
         reversal_of__voided=True,
     ).values("reversal_of__promo_send_id")
+    linked_sends = PromotionSendExternalKey.objects.filter(
+        discord_id=discord_id, send__event_id=event_id
+    ).values("send_id")
     candidates = PromoSend.objects.filter(event_id=event_id).filter(
-        Q(pk__in=_key_sends(event_id, discord_id).values("pk")) | Q(pk__in=voided_sends)
+        Q(pk__in=_key_sends(event_id, discord_id).values("pk"))
+        | Q(pk__in=voided_sends)
+        | Q(pk__in=linked_sends)
     )
     restored = 0
     for send in candidates.select_related("sender").order_by("pk"):
@@ -580,12 +586,16 @@ def external_point_held_for(event_id: int, recipient_id: int) -> bool:
         .exclude(external_point_discord_id="")
         .values("external_point_discord_id")
     )
+    linked_keys = PromotionSendExternalKey.objects.filter(
+        send__event_id=event_id, send__recipient_id=recipient_id
+    ).values("discord_id")
     return (
         ExternalPromotionReceipt.objects.filter(event_id=event_id, holds_point=True)
         .filter(
             Q(discord_id__in=snapshots)
             | Q(discord_id__in=current)
             | Q(discord_id__in=voided_keys)
+            | Q(discord_id__in=linked_keys)
         )
         .exists()
     )
@@ -597,9 +607,10 @@ def settle_after_merge(keep: CustomUser, discord_ids: set[str]) -> int:
     Runs inside the merge transaction once the sends have moved to
     ``keep``. ``discord_ids`` are both accounts' Discord IDs, read before
     the merge. For every event where a receipt with one of them holds the
-    point and ``keep`` has an earning send, the send stops earning and its
-    entry is voided as ``void_local`` does, under the event locks in
-    ascending order. Returns the number of entries voided.
+    point, every ``keep`` send for that event records the held Discord IDs,
+    even when an earlier merge already voided it. Earning sends then stop
+    earning and their entries are voided as ``void_local`` does, under the
+    event locks in ascending order. Returns the number of entries voided.
     """
     ids = {d for d in discord_ids if d}
     if not ids:
@@ -611,26 +622,40 @@ def settle_after_merge(keep: CustomUser, discord_ids: set[str]) -> int:
     )
     if not held:
         return 0
-    earning = set(
-        PromoSend.objects.filter(
-            recipient=keep, earns_points=True, event_id__in=held
-        ).values_list("event_id", flat=True)
+    touched = set(
+        PromoSend.objects.filter(recipient=keep, event_id__in=held).values_list(
+            "event_id", flat=True
+        )
     )
-    if not earning:
+    if not touched:
         return 0
 
     def locked() -> int:
         voided = 0
-        for event_id in sorted(earning):
-            holder = (
+        for event_id in sorted(touched):
+            holders = list(
                 ExternalPromotionReceipt.objects.filter(
                     event_id=event_id, discord_id__in=ids, holds_point=True
-                )
-                .order_by("source_contact_id")
-                .first()
+                ).order_by("source_contact_id")
             )
-            if holder is None:
+            if not holders:
                 continue
+            holder = holders[0]
+            # Identity survives even when a previous merge already voided
+            # the send. This is not another ledger reversal.
+            send_ids = list(
+                PromoSend.objects.filter(event_id=event_id, recipient=keep).values_list(
+                    "pk", flat=True
+                )
+            )
+            PromotionSendExternalKey.objects.bulk_create(
+                [
+                    PromotionSendExternalKey(send_id=send_id, discord_id=key)
+                    for send_id in send_ids
+                    for key in {r.discord_id for r in holders}
+                ],
+                ignore_conflicts=True,
+            )
             sends = (
                 PromoSend.objects.filter(
                     event_id=event_id, recipient=keep, earns_points=True
@@ -654,14 +679,14 @@ def settle_after_merge(keep: CustomUser, discord_ids: set[str]) -> int:
                 voided += 1
         return voided
 
-    voided = with_event_mutations(sorted(earning), locked)
+    voided = with_event_mutations(sorted(touched), locked)
     if voided:
         log.info(
             "promo_points_settled_after_merge",
             system="org",
             subsystem="integration",
             keep_user_id=keep.pk,
-            events=len(earning),
+            events=len(touched),
             voided=voided,
         )
     return voided
