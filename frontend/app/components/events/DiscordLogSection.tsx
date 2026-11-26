@@ -191,11 +191,13 @@ export function DiscordLogSection({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <MessageStatusCard
               title="Signup Post"
+              testId="discord-message-status-signup"
               message={discordState.signup_message}
               guildId={discordState.guild_id}
             />
             <MessageStatusCard
               title="Announcement"
+              testId="discord-message-status-announcement"
               message={discordState.announcement}
               guildId={discordState.guild_id}
             />
@@ -468,10 +470,12 @@ export function DiscordLogSection({
 
 function MessageStatusCard({
   title,
+  testId,
   message,
   guildId,
 }: {
   title: string;
+  testId: string;
   message: DiscordEventState['signup_message'];
   guildId: string;
 }) {
@@ -485,7 +489,11 @@ function MessageStatusCard({
       <h4 className="text-foreground font-semibold text-sm">{title}</h4>
       {message?.has_posted ? (
         <div className="mt-2 space-y-1">
-          <Badge variant="outline" className="text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="text-muted-foreground"
+            data-testid={testId}
+          >
             Posted
           </Badge>
           <p className="text-muted-foreground text-xs">
@@ -503,7 +511,7 @@ function MessageStatusCard({
           )}
         </div>
       ) : (
-        <Badge variant="outline" className="mt-2">
+        <Badge variant="outline" className="mt-2" data-testid={testId}>
           Not posted
         </Badge>
       )}

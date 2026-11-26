@@ -102,6 +102,7 @@ def _create_event(
         organization=org,
         tournament_league=league,
         name=name,
+        tournament_name=f"{name} Tournament",
         description="Event whose Discord permission badges the E2E tests read.",
         scheduled_at=start,
         ends_at=start + timedelta(hours=3),
