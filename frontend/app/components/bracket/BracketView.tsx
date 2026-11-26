@@ -32,7 +32,7 @@ import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { BracketEdge } from './edges/BracketEdge';
-import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
+import type { MatchNodeType } from './hooks/useElkLayout';
 import { MatchStatsModal } from './modals/MatchStatsModal';
 import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -163,7 +163,6 @@ function BracketFlowInner({
     serverChanged,
   } = useBracketQuery(tournamentId);
 
-  const { getLayoutedElements } = useElkLayout();
   const { setViewport, getViewport, fitView } = useReactFlow();
 
   // Expose fitView for Playwright testing
@@ -426,16 +425,6 @@ function BracketFlowInner({
         }),
       );
 
-      const allMatchNodes = [
-        ...layoutedWinners,
-        ...offsetLosers,
-        ...grandFinalsNodes,
-      ];
-      const minX = Math.min(...allMatchNodes.map((n) => n.position.x), 0);
-      const maxX = Math.max(
-        ...allMatchNodes.map((n) => n.position.x + NODE_WIDTH),
-        0,
-      );
       const dividerWidth = 5000; // Very wide to span entire viewport
 
       // Create divider node between winners and losers (behind other nodes)
@@ -482,7 +471,7 @@ function BracketFlowInner({
     };
 
     layoutBracket();
-  }, [matches, getLayoutedElements, setNodes, setEdges]);
+  }, [matches, setNodes, setEdges]);
 
   // Left-align viewport after layout is complete
   useEffect(() => {
