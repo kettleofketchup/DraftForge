@@ -224,6 +224,31 @@ def test_test_run_leaves_django_test_processes_alone_in_ci(run: Runner) -> None:
     assert not any("DJANGO_TEST_PROCESSES" in a for a in call.argv)
 
 
+def _backend_all_execs(run: Runner) -> list[list[str]]:
+    assert run("test::backend::all").returncode == 0
+    return [c.argv for c in run.calls() if "exec" in c.argv]
+
+
+def test_backend_all_caps_django_test_processes(run: Runner) -> None:
+    execs = _backend_all_execs(run)
+    assert execs
+    for argv in execs:
+        at = argv.index("backend")
+        assert argv[at - 2 : at] == ["-e", "DJANGO_TEST_PROCESSES=6"]
+
+
+def test_backend_all_respects_django_test_processes(run: Runner) -> None:
+    run.env["DJANGO_TEST_PROCESSES"] = "2"
+    assert all("DJANGO_TEST_PROCESSES=2" in a for a in _backend_all_execs(run))
+
+
+def test_backend_all_leaves_django_test_processes_alone_in_ci(run: Runner) -> None:
+    run.env["CI"] = "true"
+    execs = _backend_all_execs(run)
+    assert execs
+    assert not any("DJANGO_TEST_PROCESSES" in a for argv in execs for a in argv)
+
+
 def test_test_run_other_service(run: Runner) -> None:
     assert run("test::run", "ls", "frontend").returncode == 0
     [call] = run.calls()
