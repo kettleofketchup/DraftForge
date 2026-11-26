@@ -35,6 +35,10 @@ from org.models_promotion import (
     PromoSend,  # noqa: F401
     PromoTemplate,  # noqa: F401
 )
+from org.models_promotion_sync import (
+    ExternalPromotionReceipt,  # noqa: F401
+    PromotionContactOutbox,  # noqa: F401
+)
 from org.models_settings import OrgSettings  # noqa: F401
 
 
@@ -191,6 +195,9 @@ class OrgLog(models.Model):
         ("create_api_token", "Create API Token"),
         ("revoke_api_token", "Revoke API Token"),
         ("set_api_limits", "Set API Limits"),
+        ("void_promo_point", "Void Promotion Point"),
+        ("restore_promo_point", "Restore Promotion Point"),
+        ("update_external_contact", "Update External Contact"),
     ]
 
     organization = models.ForeignKey(

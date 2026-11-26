@@ -8,10 +8,18 @@ from django.utils import timezone
 from app.models import CustomUser
 from events.models import Event
 from league.models import League
-from org.contributions.kinds import EVENT_STAFF_KINDS, ContributionKind
+from org.contributions.kinds import (
+    DEFAULT_POINTS,
+    EVENT_STAFF_KINDS,
+    RATED_KINDS,
+    REVERSAL_KINDS,
+    ContributionKind,
+)
+from org.contributions.queries import own_totals
 from org.models import ContributionEntry, ContributionPointValue, Organization, OrgUser
 from org.standing import ledger
 from org.standing.kinds import (
+    KINDS,
     ONCE_PER_EVENT_KINDS,
     LedgerKind,
     build_kinds,
@@ -33,8 +41,34 @@ class LedgerKindsTest(SimpleTestCase):
     def test_contribution_kinds(self) -> None:
         self.assertEqual(
             kinds_for("contribution"),
-            {"promo_message", "event_host", "event_helper", "manual"},
+            {
+                "promo_message",
+                "event_host",
+                "event_helper",
+                "manual",
+                "promo_void",
+                "promo_restore",
+            },
         )
+
+    def test_reversal_kinds_are_unrated_without_defaults(self) -> None:
+        self.assertEqual(REVERSAL_KINDS, {"promo_void", "promo_restore"})
+        self.assertEqual(ContributionKind.PROMO_VOID.label, "Promotion point voided")
+        self.assertEqual(
+            ContributionKind.PROMO_RESTORE.label, "Promotion point restored"
+        )
+        for kind in REVERSAL_KINDS:
+            with self.subTest(kind=kind):
+                self.assertNotIn(kind, RATED_KINDS)
+                self.assertNotIn(kind, DEFAULT_POINTS)
+                self.assertEqual(
+                    KINDS[kind],
+                    LedgerKind(
+                        track="contribution",
+                        default_points=None,
+                        once_per_event=False,
+                    ),
+                )
 
     def test_once_per_event_matches_staff_kinds(self) -> None:
         self.assertEqual(
@@ -148,6 +182,55 @@ class LedgerTest(TestCase):
             [(members[r["org_user"]], r["total"], r["entries"]) for r in rows],
             [("lg_carol", 7, 1), ("lg_alice", 5, 1), ("lg_bob", 5, 1)],
         )
+
+    def _voided_credit_and_live_entry(self) -> OrgUser:
+        credit = self._award(
+            self.alice, 2, kind=ContributionKind.PROMO_MESSAGE, event=self.event
+        )
+        ContributionEntry.objects.create(
+            organization=self.org,
+            org_user=credit.org_user,
+            kind=ContributionKind.PROMO_VOID,
+            points=-2,
+            event=self.event,
+            reversal_of=credit,
+            occurred_at=credit.occurred_at,
+        )
+        ContributionEntry.objects.filter(pk=credit.pk).update(voided=True)
+        self._award(self.alice, 3)
+        return credit.org_user
+
+    def test_entries_count_excludes_reversals(self) -> None:
+        self._voided_credit_and_live_entry()
+        rows = list(
+            ledger.sum_by_member(
+                self.org.pk,
+                track="contribution",
+                period=parse_period(self.org, None),
+                sort="entries",
+            )
+        )
+        self.assertEqual([(r["total"], r["entries"]) for r in rows], [(3, 1)])
+
+    def test_own_totals_entries_exclude_reversals(self) -> None:
+        org_user = self._voided_credit_and_live_entry()
+        self.assertEqual(own_totals(org_user, parse_period(self.org, None)), (3, 1))
+
+    def test_own_totals_with_only_a_voided_point_is_none(self) -> None:
+        credit = self._award(
+            self.bob, 2, kind=ContributionKind.PROMO_MESSAGE, event=self.event
+        )
+        ContributionEntry.objects.create(
+            organization=self.org,
+            org_user=credit.org_user,
+            kind=ContributionKind.PROMO_VOID,
+            points=-2,
+            event=self.event,
+            reversal_of=credit,
+            occurred_at=credit.occurred_at,
+        )
+        ContributionEntry.objects.filter(pk=credit.pk).update(voided=True)
+        self.assertIsNone(own_totals(credit.org_user, parse_period(self.org, None)))
 
     def test_total_respects_period(self) -> None:
         self._award(self.alice, 10, OCT_10)

@@ -9,7 +9,8 @@ Routes under /api/tests/ (tests/urls.py):
   events, templates, switches and roles; returns the same body as data/.
   An optional JSON body {"release_gate": true} turns the leadership staff
   release gate on with the closed snapshots left pending;
-  {"captain_feedback_private": true} hides captain feedback from captains.
+  {"captain_feedback_private": true} hides captain feedback from captains;
+  {"external_contacts": true} seeds audiences and imported external contacts.
 """
 
 from django.contrib.auth import login
@@ -96,10 +97,17 @@ def reset_org_features(request: Request) -> Response:
             {"detail": "captain_feedback_private must be true or false."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    external_contacts = request.data.get("external_contacts", False)
+    if not isinstance(external_contacts, bool):
+        return Response(
+            {"detail": "external_contacts must be true or false."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     return Response(
         reset_org_features_data(
             release_gate=release_gate,
             audiences=audiences,
             captain_feedback_private=captain_feedback_private,
+            external_contacts=external_contacts,
         )
     )

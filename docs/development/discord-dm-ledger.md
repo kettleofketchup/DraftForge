@@ -185,6 +185,18 @@ Promotion DMs (`org/promotion`) are sent by a person from their own Discord acco
 The platform renders the text and records a `PromoSend`, but never sends the DM, so
 there is no ledger row.
 
+Promotion records answer different questions from `DiscordDM`:
+
+- `DiscordDM` is the bot's delivery outcome for a platform-sent DM.
+- `PromoSend` is a promoter's manual record that they sent outreach.
+- `ExternalPromotionReceipt` is a contact imported from the bound external contact
+  log.
+- `PromotionContactOutbox` tracks writing a local `PromoSend` back to that log.
+- `ContributionEntry` holds promotion points.
+
+None of these promotion records captures a personal Discord account's messages or
+proves that a manual DM was delivered.
+
 ## Logging
 
 Ledger and send code logs with `system="discord", subsystem="dm"` and the fields

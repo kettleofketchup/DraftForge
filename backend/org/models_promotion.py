@@ -1,6 +1,10 @@
+from typing import Any
+
 from django.core.validators import MaxLengthValidator
 from django.db import models
 from django.utils import timezone
+
+from org.models_promotion_sync import ImmutableFieldError
 
 
 class PromoTemplate(models.Model):
@@ -65,6 +69,10 @@ class PromoSend(models.Model):
         related_name="sends",
     )
     text = models.TextField(max_length=4000, validators=[MaxLengthValidator(4000)])
+    # The recipient's Discord ID when the DM was recorded. The recipient FK
+    # and its Discord link can change later; an imported contact voids this
+    # send's point by this snapshot. Written once, at creation.
+    recipient_discord_id = models.CharField(max_length=20, blank=True, default="")
     earns_points = models.BooleanField(default=False)
     sent_at = models.DateTimeField(default=timezone.now)
 
@@ -77,6 +85,23 @@ class PromoSend(models.Model):
             ),
         ]
         indexes = [models.Index(fields=["event", "recipient"])]
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if not self._state.adding:
+            update_fields = kwargs.get("update_fields")
+            if update_fields is None or "recipient_discord_id" in update_fields:
+                stored = (
+                    type(self)
+                    .objects.nocache()
+                    .filter(pk=self.pk)
+                    .values_list("recipient_discord_id", flat=True)
+                    .first()
+                )
+                if stored is not None and stored != self.recipient_discord_id:
+                    raise ImmutableFieldError(
+                        type(self).__name__, ["recipient_discord_id"]
+                    )
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"promo event {self.event_id} -> user {self.recipient_id}"

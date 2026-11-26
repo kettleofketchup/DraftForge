@@ -54,6 +54,19 @@ export interface OrgFeaturesTestData {
     string,
     { pk: number | null; discord_id: string; mmr: number | null }
   >;
+  /** Synthetic imported contacts (resetOrgFeatures({ externalContacts: true })). */
+  external_contacts?: Record<
+    'external' | 'local_and_external' | 'discord_only' | 'non_member',
+    {
+      pk: number | null;
+      discord_id: string;
+      source_contact_id: string;
+      /** The promoter the contact names, or null when it names nobody. */
+      promoter_discord_id: string | null;
+    }
+  >;
+  /** The Discord guild the external contact log is bound to. */
+  external_guild_id?: string;
   conduct: {
     ranked_org_user_pks: number[];
     new_member_org_user_pk: number;
@@ -92,6 +105,8 @@ export interface ResetOrgFeaturesOptions {
   audiences?: boolean;
   /** Hide review-derived feedback from captains (captain_feedback_visible off). */
   captainFeedbackPrivate?: boolean;
+  /** Seed the audiences plus synthetic imported contacts on a bound event. */
+  externalContacts?: boolean;
 }
 
 /** Rebuild ledger, promo sends, point values, events, templates, switches and roles. */
@@ -105,6 +120,7 @@ export async function resetOrgFeatures(
         release_gate: options.releaseGate ?? false,
         audiences: options.audiences ?? false,
         captain_feedback_private: options.captainFeedbackPrivate ?? false,
+        external_contacts: options.externalContacts ?? false,
       },
     }),
     'org-features reset',

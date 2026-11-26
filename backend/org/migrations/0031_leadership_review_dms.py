@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('org', '0025_mmrchangerequest'),
+        ('org', '0030_promotion_observations_and_keys'),
     ]
 
     operations = [

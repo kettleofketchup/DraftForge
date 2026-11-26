@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from org.api_tokens.operations import default_operations
+
 DEFAULT_PER_MINUTE = 60
 DEFAULT_PER_DAY = 5000
 
@@ -19,6 +21,10 @@ class OrgApiToken(models.Model):
     name = models.CharField(max_length=64)
     prefix = models.CharField(max_length=16, unique=True)
     secret_hash = models.CharField(max_length=64)
+    operations = models.JSONField(
+        default=default_operations,
+        help_text="Granted operations, sorted (see org.api_tokens.operations)",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
@@ -40,6 +46,9 @@ class OrgApiToken(models.Model):
     @property
     def is_active(self) -> bool:
         return self.revoked_at is None
+
+    def grants(self, operation: str) -> bool:
+        return isinstance(self.operations, list) and str(operation) in self.operations
 
 
 class OrgApiTokenUsage(models.Model):

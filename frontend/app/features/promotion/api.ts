@@ -6,6 +6,7 @@ import {
   PromoEventSchema,
   PromoSendResultSchema,
   PromoTemplateSchema,
+  PromoUndoResultSchema,
   RenderResponseSchema,
   type CandidateFilters,
   type CandidateRow,
@@ -15,6 +16,7 @@ import {
   type PromoSendResult,
   type PromoTemplate,
   type PromoTemplateForm,
+  type PromoUndoResult,
   type RenderRequest,
   type RenderResponse,
 } from './schemas';
@@ -122,6 +124,7 @@ export async function sendPromo(
 export async function undoPromoSend(
   orgId: number,
   sendId: number,
-): Promise<void> {
-  await api.delete(`${base(orgId)}/sends/${sendId}/`);
+): Promise<PromoUndoResult> {
+  const response = await api.delete(`${base(orgId)}/sends/${sendId}/`);
+  return PromoUndoResultSchema.parse(response.data);
 }

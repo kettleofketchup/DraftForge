@@ -12,6 +12,7 @@ from events.constants import EventState
 from events.models import Event
 from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
+from org.integration import points
 from org.models import (
     ContributionEntry,
     Organization,
@@ -19,7 +20,10 @@ from org.models import (
     PromoSend,
     PromoTemplate,
 )
+from org.models_promotion_sync import ExternalPromotionReceipt
 from org.promotion.services import demote_colliding_earning_sends
+from org.tests.test_integration_contacts import age_import
+from org.tests.test_promotion_ledger import _LedgerBase
 from user.discord_accounts import merge_discord_accounts
 from user.models import ProfileClaimRequest
 
@@ -235,3 +239,166 @@ class SyncProdUsersPromotionTest(_PromoMergeFixture):
 
         self.assertFalse(PromoSend.objects.exists())
         self.assertFalse(CustomUser.objects.exists())
+
+
+class ExternalHolderMergeTest(_LedgerBase):
+    """A merge that brings an external point holder and an earning local send
+    for the same event together leaves one live point: the external one."""
+
+    def _assert_one_live_point(self, send: PromoSend) -> None:
+        send.refresh_from_db()
+        self.assertFalse(send.earns_points)
+        entry = self.entry_for(send)
+        self.assertTrue(entry.voided)
+        [void] = self.reversals(entry, ContributionKind.PROMO_VOID)
+        self.assertEqual(void.points, -entry.points)
+        self.assertTrue(
+            ExternalPromotionReceipt.objects.filter(
+                source_contact_id=8021, holds_point=True
+            ).exists()
+        )
+        live = (
+            ContributionEntry.objects.nocache()
+            .filter(organization=self.org, event=self.event)
+            .aggregate(total=Sum("points"))["total"]
+        )
+        self.assertEqual(live, 0)
+
+    def test_merge_drop_holder_keep_earning_send_one_live_point(self) -> None:
+        drop = self.non_member_player("ext_drop")
+        keep = self.non_member_player("ext_keep")
+        self.imported([self.entry(8021, drop)])
+        send = self.send(keep)
+        self.assertTrue(send.earns_points)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self._assert_one_live_point(send)
+
+    def test_claim_request_holder_and_earning_send_one_live_point(self) -> None:
+        claimer = self.non_member_player("ext_claimer")
+        OrgUser.objects.create(user=claimer, organization=self.org)
+        target = CustomUser.objects.create_user(username="ext_target", password="x")
+        OrgUser.objects.create(user=target, organization=self.org)
+        self.imported([self.entry(8021, claimer)])
+        send = self.raw_send(target)
+        self.assertEqual(send.recipient_discord_id, "")
+        claim = ProfileClaimRequest.objects.create(
+            claimer=claimer,
+            target_user=target,
+            organization=self.org,
+            status=ProfileClaimRequest.Status.PENDING,
+        )
+        admin = CustomUser.objects.create_superuser(
+            username="ext_claim_admin", password="x"
+        )
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.post(f"/api/claim-requests/{claim.pk}/approve/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        send.refresh_from_db()
+        self.assertEqual(send.recipient_id, claimer.pk)
+        self._assert_one_live_point(send)
+
+    def _merged_holder(self, *, duplicate: bool = False):
+        drop = self.non_member_player("release_drop")
+        keep = self.non_member_player("release_keep")
+        discord_id = drop.discordId
+        entries = [self.entry(8021, drop)]
+        if duplicate:
+            entries.append(self.entry(8022, drop))
+        self.imported(entries)
+        send = self.send(keep)
+        merge_discord_accounts(keep=keep, drop=drop)
+        self._assert_one_live_point(send)
+        age_import(self.receipt(8021).pk)
+        if duplicate:
+            age_import(self.receipt(8022).pk)
+        return keep, send, discord_id
+
+    def _assert_restored(self, send):
+        send.refresh_from_db()
+        self.assertTrue(send.earns_points)
+        entry = self.entry_for(send)
+        self.assertFalse(entry.voided)
+        self.assertEqual(len(self.reversals(entry, ContributionKind.PROMO_RESTORE)), 1)
+        self.assertFalse(points.external_point_held(self.event, send.recipient))
+
+    def test_retraction_restores_send_voided_during_merge(self):
+        keep, send, _ = self._merged_holder()
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["retracted"], 1)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+
+    def test_source_target_change_restores_merged_send(self):
+        keep, send, _ = self._merged_holder()
+        other = self.non_member_player("release_other")
+        body = self.imported([self.entry(8021, other)])
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+        self.assertTrue(points.external_point_held(self.event, other))
+
+    def test_duplicate_takes_over_then_releases_merged_point(self):
+        keep, send, _ = self._merged_holder(duplicate=True)
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(self.receipt(8022).holds_point)
+        # Changing the original source key must not lose the link between
+        # the replacement holder and the merged recipient's voided send.
+        other = self.non_member_player("replacement_other")
+        self.imported([self.entry(8021, other)])
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+
+    def test_drop_send_restored_when_survivor_holder_released_last(self):
+        drop = self.non_member_player("original_recipient")
+        keep = self.non_member_player("surviving_recipient")
+        send = self.send(drop)
+        self.imported([self.entry(8021, drop), self.entry(8022, keep)])
+        merge_discord_accounts(keep=keep, drop=drop)
+        for source_id in (8021, 8022):
+            age_import(self.receipt(source_id).pk)
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(self.entry_for(send).voided)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 0)
+        self._assert_restored(send)
+
+    def test_second_merge_holder_blocks_restore_of_already_voided_send(self):
+        keep, send, _ = self._merged_holder()
+        second = self.non_member_player("second_holder")
+        self.imported([self.entry(8022, second)])
+        merge_discord_accounts(keep=keep, drop=second)
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        self.assertTrue(self.receipt(8022).holds_point)
+        age_import(self.receipt(8022).pk)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)
+
+    def test_remaining_holder_for_survivor_blocks_restoration(self):
+        keep, send, _ = self._merged_holder()
+        self.imported([self.entry(8022, keep)])
+        body = self.imported([], after=8020, through=8021)
+        self.assertEqual(body["restored_local"], 0)
+        self.assertTrue(self.entry_for(send).voided)
+        self.assertTrue(points.external_point_held(self.event, keep))
+        age_import(self.receipt(8022).pk)
+        body = self.imported([], after=8021, through=8022)
+        self.assertEqual(body["restored_local"], 1)
+        self._assert_restored(send)

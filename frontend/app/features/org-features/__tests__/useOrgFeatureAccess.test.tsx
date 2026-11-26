@@ -83,6 +83,8 @@ const allFalseFlags = {
   canManageConduct: false,
   mmrSyncEnabled: false,
   canUseMmrSync: false,
+  promotionEnabled: false,
+  canUseApiTokens: false,
   standingTracks: [],
 };
 
@@ -164,6 +166,8 @@ describe('useOrgFeatureAccess', () => {
       canManageConduct: true,
       mmrSyncEnabled: false,
       canUseMmrSync: false,
+      promotionEnabled: true,
+      canUseApiTokens: false,
       standingTracks: allTrue.standing_tracks,
     });
   });
@@ -250,6 +254,78 @@ describe('useOrgFeatureAccess mmr sync', () => {
     const { result } = renderHook(() => useOrgFeatureAccess(mmrOrg([])));
     expect(result.current.mmrSyncEnabled).toBe(false);
     expect(result.current.canUseMmrSync).toBe(true);
+  });
+});
+
+describe('useOrgFeatureAccess API tokens', () => {
+  function tokenOrg(features: string[], extra: Partial<OrganizationType> = {}) {
+    return {
+      ...org(5),
+      features,
+      admin_ids: [],
+      staff_ids: [],
+      ...extra,
+    } as OrganizationType;
+  }
+
+  function setUser(isStaff = false) {
+    useUserStore.setState({
+      currentUser: { pk: 5, username: 'u5', is_staff: isStaff } as UserType,
+    });
+  }
+
+  it.each([['promotion'], ['mmr_sync']])(
+    'lets org admins manage tokens when %s is unlocked',
+    (feature) => {
+      setUser();
+      const { result } = renderHook(() =>
+        useOrgFeatureAccess(tokenOrg([feature], { admin_ids: [5] })),
+      );
+      expect(result.current.canUseApiTokens).toBe(true);
+    },
+  );
+
+  it('does not let the contributions feature alone unlock tokens', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(tokenOrg(['contributions'], { admin_ids: [5] })),
+    );
+    expect(result.current.canUseApiTokens).toBe(false);
+  });
+
+  it('reports which token features are unlocked', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(
+        tokenOrg(['promotion', 'contributions'], { admin_ids: [5] }),
+      ),
+    );
+    expect(result.current.promotionEnabled).toBe(true);
+    expect(result.current).not.toHaveProperty('contributionsEnabled');
+    expect(result.current.mmrSyncEnabled).toBe(false);
+    expect(result.current.canUseMmrSync).toBe(false);
+  });
+
+  it('hides tokens from org admins while no token feature is unlocked', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(tokenOrg(['conduct'], { admin_ids: [5] })),
+    );
+    expect(result.current.canUseApiTokens).toBe(false);
+  });
+
+  it('hides tokens from org staff who are not admins', () => {
+    setUser();
+    const { result } = renderHook(() =>
+      useOrgFeatureAccess(tokenOrg(['promotion'], { staff_ids: [5] })),
+    );
+    expect(result.current.canUseApiTokens).toBe(false);
+  });
+
+  it('shows tokens to a site admin even while locked', () => {
+    setUser(true);
+    const { result } = renderHook(() => useOrgFeatureAccess(tokenOrg([])));
+    expect(result.current.canUseApiTokens).toBe(true);
   });
 });
 
