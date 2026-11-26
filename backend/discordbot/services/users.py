@@ -29,27 +29,49 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
+USER_GUILDS_CACHE_TTL_S: int = 5
+
+
+def _user_guilds_cache_key(user_id: int, discord_uid: str) -> str:
+    return f"discord_user_guilds:{user_id}:{discord_uid}"
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_user_guilds(request: Request) -> JsonResponse:
-    access_token = request.user.social_auth.get(provider="discord").extra_data[
-        "access_token"
-    ]
+    social = request.user.social_auth.filter(provider="discord").first()
+    access_token = social.extra_data.get("access_token") if social is not None else None
+    if not access_token:
+        return JsonResponse({"error": "Discord account not linked"}, status=400)
     url = "https://discord.com/api/users/@me/guilds"
     headers = {"Authorization": f"Bearer {access_token}"}
-    cache_key = "discord_guilds"
+    cache_key = _user_guilds_cache_key(request.user.pk, social.uid)
     cached_guilds = cache.get(cache_key)
-    if cached_guilds:
+    if cached_guilds is not None:
         return JsonResponse({"guilds": cached_guilds}, safe=True)
 
     try:
         response = requests.get(url, headers=headers, timeout=DISCORD_HTTP_TIMEOUT_S)
         response.raise_for_status()
         guilds = response.json()
-        cache.set(cache_key, guilds, timeout=5)
-        return JsonResponse({"guilds": guilds}, safe=True)
     except requests.exceptions.RequestException as e:
-        return JsonResponse({"error": str(e)}, status=500)
+        status_code = e.response.status_code if e.response is not None else None
+        return _user_guilds_failed(request.user.pk, status_code)
+    if not isinstance(guilds, list):
+        return _user_guilds_failed(request.user.pk, response.status_code)
+    cache.set(cache_key, guilds, timeout=USER_GUILDS_CACHE_TTL_S)
+    return JsonResponse({"guilds": guilds}, safe=True)
+
+
+def _user_guilds_failed(user_id: int, status_code: int | None) -> JsonResponse:
+    log.warning(
+        "discord_user_guilds_failed",
+        system="discord",
+        subsystem="oauth_guilds",
+        user_id=user_id,
+        status_code=status_code,
+    )
+    return JsonResponse({"error": "Failed to fetch Discord guilds"}, status=502)
 
 
 def get_discord_members_api() -> JsonResponse:
