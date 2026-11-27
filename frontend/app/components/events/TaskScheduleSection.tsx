@@ -288,6 +288,8 @@ export function TaskScheduleSection({
       </table>
 
       <ConfirmDialog
+        confirmTestId="task-fire-confirm"
+        cancelTestId="task-fire-cancel"
         open={!!confirmTask}
         onOpenChange={(open) => !open && setConfirmTask(null)}
         title={

@@ -64,6 +64,7 @@ from tests.populate.organizations import (
     populate_organizations_and_leagues,
 )
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
+from tests.populate.signup_delivery import populate_signup_delivery
 from tests.populate.signup_history import populate_signup_history_data
 from tests.populate.steam import populate_steam_matches
 from tests.populate.tournament_discovery import populate_tournament_discovery
@@ -134,6 +135,7 @@ def populate_all(force: bool = False) -> None:
         ("MMR Requests Data", populate_mmr_requests_data),
         # Explicit pks (orgs 55-56, users 8100-8104), after Game Org MMR.
         ("MMR Sync API Data", populate_mmr_sync_data),
+        ("Signup Delivery Data", populate_signup_delivery),
     ]
 
     console = Console()
@@ -187,6 +189,7 @@ __all__ = [
     "populate_mmr_requests_data",
     "populate_mmr_sync_data",
     "populate_signup_history_data",
+    "populate_signup_delivery",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_league_stats_data",
