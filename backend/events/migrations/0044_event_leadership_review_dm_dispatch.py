@@ -15,7 +15,7 @@ def fence_existing_events(apps: StateApps, schema_editor: BaseDatabaseSchemaEdit
 class Migration(migrations.Migration):
     dependencies = [
         ("events", "0043_discord_post_channels"),
-        ("org", "0031_leadership_review_dms"),
+        ("org", "0032_leadership_review_dms"),
     ]
 
     operations = [

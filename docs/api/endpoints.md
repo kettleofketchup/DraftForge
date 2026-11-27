@@ -509,6 +509,19 @@ the game and lists it in `skipped_roster_conflicts` (`game_id`, `match_id`, `tea
 `skipped_roster_conflict_count`. Both leave the game unchanged and log
 `game_link_skipped_roster_conflict`.
 
+### Saving a bracket
+
+`POST /api/bracket/tournaments/{tid}/save/` refuses with `400` and changes nothing when a
+match's `radiantTeam` or `direTeam` is not a team of that tournament:
+
+```json
+{
+  "code": "team_not_in_tournament",
+  "error": "Bracket references teams that are not in this tournament",
+  "team_ids": [87]
+}
+```
+
 ### Stale bracket saves
 
 `GET /api/bracket/tournaments/{tid}/` returns a `version` alongside `matches`. It covers

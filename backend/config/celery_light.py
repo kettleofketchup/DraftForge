@@ -67,6 +67,10 @@ _beat_schedule = {
         "task": "user.tasks.avatar_refresh.refresh_avatars_batched",
         "schedule": crontab(hour=4, minute=15),
     },
+    "purge-mmr-screenshots-nightly": {
+        "task": "org.tasks.purge_expired_mmr_screenshots",
+        "schedule": crontab(hour=3, minute=30),
+    },
     "sync-active-org-discord-names": {
         "task": "user.tasks.discord_name_sync.sync_active_org_discord_names",
         "schedule": 1800.0,

@@ -33,6 +33,7 @@ import { useUserStore } from '~/store/userStore';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { BracketEdge } from './edges/BracketEdge';
 import type { MatchNodeType } from './hooks/useElkLayout';
+import { bracketMatchSelectionState } from './matchSelectionNavigation';
 import { MatchStatsModal } from './modals/MatchStatsModal';
 import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -130,6 +131,8 @@ function createStructuralEdges(matches: BracketMatch[]): Edge[] {
     }));
 }
 
+const NO_MATCHES: BracketMatch[] = [];
+
 function BracketFlowInner({
   tournamentId,
   embedded = false,
@@ -154,8 +157,13 @@ function BracketFlowInner({
   );
 
   // Use individual selectors to prevent unnecessary re-renders
-  const matches = useBracketStore((state) => state.matches);
-  const isDirty = useBracketStore((state) => state.isDirty);
+  const isOwnBracket = useBracketStore(
+    (state) =>
+      state.tournamentId === null || state.tournamentId === tournamentId,
+  );
+  const storeMatches = useBracketStore((state) => state.matches);
+  const matches = isOwnBracket ? storeMatches : NO_MATCHES;
+  const isDirty = useBracketStore((state) => state.isDirty) && isOwnBracket;
   const {
     isLoading,
     data: bracketData,
@@ -522,7 +530,10 @@ function BracketFlowInner({
       const queryString = params ? `?${params}` : '';
       navigate(
         `/tournament/${tournamentId}/bracket/match/${urlId}${queryString}`,
-        { replace: true },
+        {
+          replace: true,
+          state: bracketMatchSelectionState(tournamentId, String(urlId)),
+        },
       );
     },
     [navigate, tournamentId, matches, searchParams, embedded, onMatchOpen],
