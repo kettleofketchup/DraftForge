@@ -41,7 +41,7 @@ These are effective permissions after the bot's roles, channel overwrites and im
 |---|---|
 | `signup_create` | Forum parent: **View Channel**, **Send Messages**, **Embed Links**. Does not require Create Public Threads. The current nested forum sender does not support text/announcement channels. A forum requiring an unsupplied tag remains blocked. |
 | `signup_fallback` | Text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. Separate from the primary signup post. |
-| `announcement` | Text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. |
+| `announcement` | Text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. Announcement role pings apply only when a primary signup post is configured, since only then is the notice linking to it sent. Without one, the announcement badge checks the role-free signup message the announcement channel receives instead. |
 | `attendance_reminder` | Own or fallback text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. |
 | `profile_reminder` | Own or fallback text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. |
 | `new_event_notice` | Series own or fallback text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. |

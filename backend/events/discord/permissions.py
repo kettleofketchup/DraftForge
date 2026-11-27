@@ -65,11 +65,15 @@ def saved_event_checks(event: Event) -> list[ResolvedCheckInput]:
                 source="fallback",
             )
     if event.discord_announcement:
+        notice = bool(
+            event.discord_post_signups and event.discord_post_signups_channel_id
+        )
         add(
             "announcement",
-            A.ANNOUNCEMENT,
+            A.ANNOUNCEMENT if notice else A.SIGNUP_FALLBACK,
             event.discord_announcement_channel_id,
-            role_ids=tuple(event.discord_announcement_role_ids),
+            source="configured" if notice or not fallback else "fallback",
+            role_ids=tuple(event.discord_announcement_role_ids) if notice else (),
         )
     for enabled, key, action, own, channel in (
         (

@@ -83,11 +83,13 @@ export function settingsDescriptors(
   if (signup || !fallback)
     add('signup_post', 'signup_create', signup, values.discord_signup_role_ids);
   if (fallback) add('signup_fallback', 'signup_fallback', fallback, [], true);
+  const notice = !!(values.discord_post_signups && signup);
   add(
     'announcement',
-    'announcement',
+    notice ? 'announcement' : 'signup_fallback',
     announcement,
-    values.discord_announcement_role_ids,
+    notice ? values.discord_announcement_role_ids : [],
+    !notice && !!announcement,
   );
   add(
     'attendance_reminder',

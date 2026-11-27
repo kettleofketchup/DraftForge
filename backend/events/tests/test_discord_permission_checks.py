@@ -124,6 +124,64 @@ class EventPermissionTests(EventTestCase):
         self.assertEqual(results["signup_post"]["status"], "unknown")
         self.assertEqual(results["signup_fallback"]["status"], "verified")
 
+    def test_announcement_roles_apply_only_when_notice_is_sent(self) -> None:
+        deleted, unmentionable = "900000000000000099", "900000000000000098"
+        data = scenario()
+        roles = data[f"/guilds/{G}"]["roles"]
+        roles[0]["permissions"] = str((1 << 10) | (1 << 11) | (1 << 14))
+        roles.append(
+            {
+                "id": unmentionable,
+                "permissions": "0",
+                "mentionable": False,
+                "managed": False,
+            }
+        )
+        cache.set(f"discord_perm_fixture:{G}", data)
+        self.event.discord_announcement_role_ids = [unmentionable, deleted]
+        for post_signups, signup_channel, notice in (
+            (False, "", False),
+            (True, "", False),
+            (True, E, True),
+        ):
+            with self.subTest(post_signups=post_signups, channel=signup_channel):
+                self.event.discord_post_signups = post_signups
+                self.event.discord_post_signups_channel_id = signup_channel
+                self.event.save()
+                result = self.results()["announcement"]
+                self.assertEqual(
+                    result["action"], "announcement" if notice else "signup_fallback"
+                )
+                blockers = [b["code"] for b in result["blockers"]]
+                if notice:
+                    self.assertNotEqual(result["status"], "verified")
+                    self.assertIn("role_missing", blockers)
+                    self.assertIn("role_not_mentionable", blockers)
+                    self.assertIn("MENTION_EVERYONE", result["missing"])
+                else:
+                    self.assertEqual(result["status"], "verified")
+                    self.assertEqual(blockers, [])
+                    self.assertEqual(result["destination"]["source"], "fallback")
+                    self.assertNotIn("MENTION_EVERYONE", result["required_all"])
+                    response = self.client.post(
+                        self.url,
+                        {
+                            "checks": [
+                                {
+                                    "key": "announcement",
+                                    "action": "signup_fallback",
+                                    "channel_id": C,
+                                    "role_ids": [],
+                                }
+                            ]
+                        },
+                        format="json",
+                    )
+                    self.assertEqual(response.status_code, 200)
+                    preview = response.json()["checks"][0]
+                    self.assertEqual(preview["status"], "verified")
+                    self.assertEqual(preview["destination"], result["destination"])
+
     def test_historical_thread_vs_changed_configuration(self) -> None:
         signup = DiscordEventMsgSignup.objects.create(
             event=self.event,

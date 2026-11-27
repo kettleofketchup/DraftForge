@@ -102,8 +102,45 @@ describe('settingsDescriptors', () => {
       fallback: true,
     });
     expect(byKey.signup_fallback.fallback).toBe(true);
-    expect(byKey.announcement.fallback).toBe(false);
+    expect(byKey.announcement.fallback).toBe(true);
   });
+
+  it.each([
+    {
+      discord_post_signups: false,
+      discord_post_signups_channel_id: '',
+      roles: [],
+    },
+    {
+      discord_post_signups: true,
+      discord_post_signups_channel_id: '',
+      roles: [],
+    },
+    {
+      discord_post_signups: true,
+      discord_post_signups_channel_id: '900000000000000007',
+      roles: ['900000000000000005'],
+    },
+  ])(
+    'checks announcement roles only when the notice is sent: $discord_post_signups $discord_post_signups_channel_id',
+    ({ roles, ...settings }) => {
+      const descriptors = settingsDescriptors(
+        {
+          ...DISCORD_CONFIG_DEFAULTS,
+          ...settings,
+          discord_announcement: true,
+          discord_announcement_channel_id: '900000000000000003',
+          discord_announcement_role_ids: ['900000000000000005'],
+        },
+        { isRepeater: false, showNotifyNewEvents: false },
+      );
+      expect(descriptors.find((d) => d.key === 'announcement')).toMatchObject({
+        action: roles.length ? 'announcement' : 'signup_fallback',
+        channel_id: '900000000000000003',
+        role_ids: roles,
+      });
+    },
+  );
 
   it('uses separate fallback transport and prospective start destination', () => {
     const descriptors = settingsDescriptors(
