@@ -61,7 +61,7 @@ import {
  *  plus the repeater-only `discord_notify_new_events` flag — that field lives
  *  on createEventInputSchema + editRepeaterSchema directly (not in the shared
  *  sub-schema) because non-repeater forms don't expose it, but the JSX still
- *  references it under the `isRepeater` guard. */
+ *  references it under the `showNotifyNewEvents` guard. */
 export type DiscordFields = z.input<typeof discordConfigSchema> & {
   discord_notify_new_events?: boolean;
 };

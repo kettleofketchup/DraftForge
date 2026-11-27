@@ -70,7 +70,6 @@ export function DiscordLogSection({
   >(null);
 
   // Merge DMs into activity log as synthetic NOTIFICATION entries
-  // (must be before early returns to keep hook order stable)
   const allLogs = useMemo(() => {
     if (!discordState) return [];
     const dmLogs: DiscordEventState['logs'] = discordState.dms.map(
