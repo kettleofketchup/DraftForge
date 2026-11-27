@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios';
 import { z } from 'zod';
 
 import type {
@@ -14,8 +15,10 @@ import type {
   StartMentionScope,
 } from '~/components/events/schemas';
 import {
+  discordEventStateSchema,
   eventListItemSchema,
   eventResponseSchema,
+  type DiscordEventState,
 } from '~/components/events/schemas';
 import {
   signupHistoryPageSchema,
@@ -591,12 +594,15 @@ export async function getRepeaterSubscribers(
   return data;
 }
 
-export async function getEventDiscordState(eventId: number) {
+export async function getEventDiscordState(
+  eventId: number,
+): Promise<DiscordEventState | null> {
   try {
     const { data } = await axios.get(`/events/${eventId}/discord/`);
-    return data;
-  } catch {
-    return null;
+    return discordEventStateSchema.parse(data);
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 404) return null;
+    throw error;
   }
 }
 

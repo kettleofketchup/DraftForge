@@ -26,9 +26,9 @@ Run with --apply to commit. Default is dry-run.
 Usage:
     python scripts/cleanup_stale_repeater_events.py REPEATER_ID [--apply]
 
-Note: the Discord-side scheduled event living in the guild is NOT removed --
-only the local DiscordEvent row. An admin must remove the guild-side event
-manually (or extend this script to call the Discord API).
+Cancellation uses the shared lifecycle service, including ready-check history,
+standing cleanup and Discord scheduled-event deletion queued after commit.
+Events with a started tournament are refused.
 """
 
 import argparse
@@ -67,6 +67,7 @@ from events.models import (  # noqa: E402
 from events.services import (  # noqa: E402
     _promote_from_waitlist,
     _python_weekday,
+    cancel_event,
     generate_events_for_repeater,
 )
 
@@ -109,7 +110,7 @@ def find_correct_day_events(
 
 
 def find_target_event(stale: Event, candidates: list[Event]) -> Event | None:
-    """Closest candidate by scheduled_at within 7 days, else None."""
+    """Closest by scheduled_at, less than 7 days + 1 second away, else None."""
     best: Event | None = None
     best_diff = datetime.timedelta(days=7, seconds=1)
     for c in candidates:
@@ -239,14 +240,15 @@ def migrate_tournament_users(stale: Event, target: Event) -> int:
     return moved
 
 
+@transaction.atomic
 def cancel_stale_event(stale: Event) -> None:
-    if stale.tournament and stale.tournament.state == "future":
-        tournament = stale.tournament
-        stale.tournament = None
-        stale.save(update_fields=["tournament", "updated_at"])
-        tournament.delete()
+    stale = lock_event(stale)
+    if stale.state not in STALE_STATES:
+        raise ValueError("Only upcoming or signups-open events can be cleaned up.")
+    if stale.tournament and stale.tournament.state != "future":
+        raise ValueError("Cannot clean up an event with a started tournament.")
+    cancel_event(stale, actor=None)
     DiscordEvent.objects.filter(event=stale).delete()
-    stale.transition_state(EventState.CANCELLED)
 
 
 def main() -> None:
@@ -354,10 +356,7 @@ def main() -> None:
     if not args.apply:
         print("DRY RUN — no changes made. Re-run with --apply to commit.")
     else:
-        print(
-            "Done. NOTE: any Discord-side scheduled events created by the stale "
-            "events still exist in the guild — clean them up manually."
-        )
+        print("Done. Discord scheduled-event deletions are queued after commit.")
 
 
 if __name__ == "__main__":

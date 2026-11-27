@@ -21,13 +21,20 @@ function PopoverContent({
   sideOffset = 4,
   forceMount,
   instant,
+  portalContainer,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content> & {
   forceMount?: boolean;
   instant?: boolean;
+  portalContainer?: React.ComponentProps<
+    typeof PopoverPrimitive.Portal
+  >['container'];
 }) {
   return (
-    <PopoverPrimitive.Portal forceMount={forceMount}>
+    <PopoverPrimitive.Portal
+      forceMount={forceMount}
+      container={portalContainer}
+    >
       <PopoverPrimitive.Content
         data-slot="popover-content"
         align={align}

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '~/components/ui/tooltip';
@@ -20,6 +21,7 @@ globalThis.ResizeObserver ??=
 function setup() {
   const onSubmit = vi.fn();
   const onConfirm = vi.fn();
+  const onDeleteOpenChange = vi.fn();
   render(
     <TooltipProvider>
       <FormDialog
@@ -31,20 +33,34 @@ function setup() {
         <input data-testid="league-name" defaultValue="Acme League" />
         <DeleteDialog
           open
-          onOpenChange={vi.fn()}
+          onOpenChange={onDeleteOpenChange}
           entityKind="League"
           entityName="Acme League"
           onConfirm={onConfirm}
           inputTestId="dd-input"
           confirmTestId="dd-confirm"
+          cancelTestId="dd-cancel"
         />
       </FormDialog>
     </TooltipProvider>,
   );
-  return { onSubmit, onConfirm };
+  return { onSubmit, onConfirm, onDeleteOpenChange };
 }
 
 describe('DeleteDialog nested in FormDialog', () => {
+  it('Enter activates focused Cancel without deleting or submitting the parent', async () => {
+    const user = userEvent.setup();
+    const { onSubmit, onConfirm, onDeleteOpenChange } = setup();
+    await user.type(screen.getByTestId('dd-input'), 'Acme League');
+    expect(screen.getByTestId('dd-confirm')).toBeEnabled();
+    screen.getByTestId('dd-cancel').focus();
+    expect(screen.getByTestId('dd-cancel')).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onDeleteOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('Enter in the confirm-name input does not submit the outer form', () => {
     const { onSubmit } = setup();
     const input = screen.getByTestId('dd-input');

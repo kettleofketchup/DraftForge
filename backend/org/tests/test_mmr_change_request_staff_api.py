@@ -778,7 +778,7 @@ class ApproveRealCacheopsTests(StaffApiFixture, TransactionTestCase):
         self.assertIsNone(
             OrgUserGameMmr.objects.get(org_user=self.ou, game_type=DOTA).verified_at
         )
-        self.assertEqual(LeagueUser.objects.get(pk=self.lu.pk).mmr, 3100)
+        self.assertEqual(LeagueUser.objects.get(pk=self.lu.pk).mmr, 3000)
         list(OrgUser.objects.filter(pk=self.ou.pk))
 
         self.assertEqual(self.approve(self.staff, org_req).status_code, 200)

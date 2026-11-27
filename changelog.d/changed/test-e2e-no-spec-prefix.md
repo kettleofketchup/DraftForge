@@ -1,1 +1,0 @@
-- A unit test now fails when a Playwright spec file or directory name starts with a number, so numbered spec names cannot creep back after #950.

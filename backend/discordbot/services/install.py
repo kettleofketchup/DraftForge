@@ -27,7 +27,7 @@ from discordbot.services.users import (
     check_bot_guild_access,
 )
 from org.models import Organization
-from org.permissions import has_org_admin_access
+from org.permissions import has_org_admin_access, has_org_staff_access
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -149,6 +149,8 @@ def bot_guild_name(guild_id: str) -> str | None:
 def check_discord_bot_status(request: Request, pk: int) -> JsonResponse:
     """Whether the DraftForge bot can see the org's Discord server, and its name."""
     org = get_object_or_404(Organization, pk=pk)
+    if not has_org_staff_access(request.user, org):
+        return JsonResponse({"error": "Permission denied"}, status=403)
     if not org.discord_server_id:
         status = DiscordBotStatus(has_bot=False, reason="no_server_configured")
     else:
