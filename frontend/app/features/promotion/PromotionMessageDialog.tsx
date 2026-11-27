@@ -32,6 +32,10 @@ export interface PromotionMessageDialogProps {
   gameLabel: string;
   onClose: () => void;
   onSent: (send: PromoSendResult | null) => void;
+  onSending?: () => void;
+  onSendFailed?: () => void;
+  /** The org records contacts in an external contact log. */
+  syncConfigured?: boolean;
 }
 
 const TITLE: Record<ComposeMode, string> = {
@@ -49,6 +53,9 @@ export function PromotionMessageDialog({
   gameLabel,
   onClose,
   onSent,
+  onSending,
+  onSendFailed,
+  syncConfigured = false,
 }: PromotionMessageDialogProps) {
   return (
     <Dialog
@@ -90,6 +97,10 @@ export function PromotionMessageDialog({
                 candidate={composer.candidate}
                 templates={templates}
                 onSent={onSent}
+                onSending={onSending}
+                onSendFailed={onSendFailed}
+                syncConfigured={syncConfigured}
+                onStale={onClose}
                 mode={composer.mode}
                 embedded
               />

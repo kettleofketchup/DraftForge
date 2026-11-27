@@ -1,0 +1,1 @@
+- Team-draft picks stay listed under their team after a knocked-out team's captain takes over a live team (#923).

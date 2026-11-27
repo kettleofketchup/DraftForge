@@ -28,6 +28,8 @@ function row(overrides: Partial<CandidateRow>): CandidateRow {
     mmr: null,
     recent_count: 1,
     last_messaged: null,
+    contact_recorded: false,
+    external_contact: null,
     earning_send_exists: false,
     signed_up: false,
     ...overrides,

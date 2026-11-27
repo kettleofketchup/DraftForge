@@ -43,7 +43,14 @@ class LeadershipKindsTest(SimpleTestCase):
     def test_contribution_kinds_unchanged(self) -> None:
         self.assertEqual(
             kinds_for("contribution"),
-            {"promo_message", "event_host", "event_helper", "manual"},
+            {
+                "promo_message",
+                "event_host",
+                "event_helper",
+                "manual",
+                "promo_void",
+                "promo_restore",
+            },
         )
 
     def test_rated_and_placement_kinds(self) -> None:

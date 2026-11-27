@@ -8,7 +8,8 @@ import {
 } from '~/components/ui/data-table';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
-import type { ApiToken } from './schemas';
+import { cn } from '~/lib/utils';
+import { operationLabel, type ApiToken } from './schemas';
 
 export type ApiTokenColumnId =
   | 'name'
@@ -37,6 +38,58 @@ export function relativeTime(iso: string | null): string {
   return iso
     ? formatDistanceToNow(new Date(iso), { addSuffix: true })
     : 'Never';
+}
+
+/** A token's granted operations, by their human labels. */
+function OperationList({
+  operations,
+  className,
+  'data-testid': testId,
+}: {
+  operations: string[];
+  className?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <ul
+      className={cn(
+        'flex flex-col gap-0.5 text-xs text-muted-foreground',
+        className,
+      )}
+      aria-label="Granted operations"
+      data-testid={testId}
+    >
+      {operations.map((op) => (
+        <li key={op} className="break-words" title={op}>
+          {operationLabel(op)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TokenStatus({
+  token: t,
+  'data-testid': testId,
+}: {
+  token: ApiToken;
+  'data-testid': string;
+}) {
+  return t.revoked_at ? (
+    <Badge
+      variant="outline"
+      title={
+        t.revoked_by ? `Revoked by ${DisplayName(t.revoked_by)}` : undefined
+      }
+      data-testid={testId}
+    >
+      Revoked
+    </Badge>
+  ) : (
+    <Badge variant="secondary" data-testid={testId}>
+      Active
+    </Badge>
+  );
 }
 
 const time = (iso: string | null): number =>
@@ -68,13 +121,26 @@ export function makeApiTokenColumns({
         const t = row.original;
         return (
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="break-words font-medium">{t.name}</span>
+            <span
+              className="break-words font-medium"
+              data-testid={`${testIdPrefix}-name-${t.id}`}
+            >
+              {t.name}
+            </span>
             <span className="font-mono text-xs break-all text-muted-foreground sm:hidden">
               {maskedToken(t.prefix)}
             </span>
             <span className="text-xs text-muted-foreground md:hidden">
               {t.user ? DisplayName(t.user) : 'Deleted user'} · last used{' '}
               {relativeTime(t.last_used_at).toLowerCase()}
+            </span>
+            <OperationList operations={t.operations} className="sm:hidden" />
+            {/* On phones the status sits here so the name keeps its width. */}
+            <span className="mt-1 sm:hidden">
+              <TokenStatus
+                token={t}
+                data-testid={`${testIdPrefix}-status-mobile-${t.id}`}
+              />
             </span>
           </div>
         );
@@ -90,12 +156,24 @@ export function makeApiTokenColumns({
       enableSorting: false,
       header: 'Token',
       cell: ({ row }) => (
-        <code
-          className="font-mono text-xs"
-          data-testid={`${testIdPrefix}-prefix-${row.original.id}`}
-        >
-          {maskedToken(row.original.prefix)}
-        </code>
+        <div className="flex flex-col gap-1">
+          <code
+            className="font-mono text-xs"
+            data-testid={`${testIdPrefix}-prefix-${row.original.id}`}
+          >
+            {maskedToken(row.original.prefix)}
+          </code>
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid={`${testIdPrefix}-created-${row.original.id}`}
+          >
+            Created {relativeTime(row.original.created_at).toLowerCase()}
+          </span>
+          <OperationList
+            operations={row.original.operations}
+            data-testid={`${testIdPrefix}-operations-${row.original.id}`}
+          />
+        </div>
       ),
       meta: {
         headClassName: 'hidden w-40 sm:table-cell',
@@ -155,32 +233,15 @@ export function makeApiTokenColumns({
       accessorFn: (t) => (t.revoked_at ? 'Revoked' : 'Active'),
       enableSorting: false,
       header: 'Status',
-      cell: ({ row }) => {
-        const t = row.original;
-        return t.revoked_at ? (
-          <Badge
-            variant="outline"
-            title={
-              t.revoked_by
-                ? `Revoked by ${DisplayName(t.revoked_by)}`
-                : undefined
-            }
-            data-testid={`${testIdPrefix}-status-${t.id}`}
-          >
-            Revoked
-          </Badge>
-        ) : (
-          <Badge
-            variant="secondary"
-            data-testid={`${testIdPrefix}-status-${t.id}`}
-          >
-            Active
-          </Badge>
-        );
-      },
+      cell: ({ row }) => (
+        <TokenStatus
+          token={row.original}
+          data-testid={`${testIdPrefix}-status-${row.original.id}`}
+        />
+      ),
       meta: {
-        headClassName: 'w-20',
-        cellClassName: 'w-20',
+        headClassName: 'hidden w-20 sm:table-cell',
+        cellClassName: 'hidden w-20 sm:table-cell',
       },
     },
     actions: onRevoke

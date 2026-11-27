@@ -24,6 +24,7 @@ BEFORE_MOVE = [
     ("draft", "0003_backfill_herodraft_chat_memberships"),
 ]
 MOVE_MIGRATION = ("app", "0109_move_team_draft_models_to_draft")
+BEFORE_LATER_SCHEMA = [("draft", "0006_retarget_tournament_models")]
 EVENTS_BACKFILL = ("events", "0001_squashed_0034")
 APP = "app"
 DRAFT = "draft"
@@ -122,8 +123,10 @@ class TeamMoveMigrationTests(TransactionTestCase):
                 "discordbot_draftactivityinstance": 0,
             },
         )
+        sql_latest = _table_sql()
+        self.assertEqual(set(sql_latest), set(TEAM_TABLES + DISCORDBOT_TABLES))
+        self._migrate(BEFORE_LATER_SCHEMA)
         sql_before = _table_sql()
-        self.assertEqual(set(sql_before), set(TEAM_TABLES + DISCORDBOT_TABLES))
 
         self._migrate(BEFORE_MOVE)
 
@@ -151,7 +154,7 @@ class TeamMoveMigrationTests(TransactionTestCase):
         log_entry.refresh_from_db()
         self.assertEqual(log_entry.content_type_id, ids["draft"])
         self.assertEqual(_row_counts(), counts)
-        self.assertEqual(_table_sql(), sql_before)
+        self.assertEqual(_table_sql(), sql_latest)
         self.assertEqual(
             DraftActivityChannel.objects.get(channel_id="team-move-1").team_draft_id,
             draft.pk,
