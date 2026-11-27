@@ -110,8 +110,6 @@ export const DiscordIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-/** Reusable checkbox field for Discord config options. The `name` prop is
- *  constrained to known DiscordFields keys — a typo'd literal is a TS error. */
 function CheckboxField({
   control,
   name,
@@ -156,7 +154,6 @@ function CheckboxField({
   );
 }
 
-/** Reusable dropdown for reminder timing */
 function HoursSelect({
   control,
   name,
