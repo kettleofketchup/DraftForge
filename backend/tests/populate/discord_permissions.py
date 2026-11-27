@@ -16,6 +16,7 @@ from django.utils import timezone
 from app.cache_utils import invalidate_model, invalidate_obj
 from app.models import CustomUser
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
+from discordbot.permissions.reader import FIXTURE_TOKEN_FP
 from events.constants import EventState
 from events.models import Event
 from league.models import League
@@ -144,14 +145,33 @@ def _events(org_pk: int) -> Any:
     )
 
 
+def permission_snapshot_keys() -> list[str]:
+    """Every reader cache key the fixture guild's scenarios can write."""
+    scope = f"{FIXTURE_TOKEN_FP}:{PERMISSION_GUILD_ID}"
+    channels = (
+        PERMISSION_ANNOUNCEMENT_CHANNEL_ID,
+        PERMISSION_ATTENDANCE_CHANNEL_ID,
+        PERMISSION_HISTORY_CHANNEL_ID,
+        PERMISSION_HISTORY_THREAD_ID,
+    )
+    kinds = ["bot", "guild", "member", "channels"]
+    kinds.append(f"event:{PERMISSION_SCHEDULED_EVENT_ID}")
+    for channel in channels:
+        kinds += [
+            f"channel:{channel}",
+            f"thread-member:{channel}",
+            f"message:{channel}:{PERMISSION_SIGNUP_MESSAGE_ID}",
+        ]
+    return [
+        f"discord_perm_refresh:{scope}",
+        f"discord_perm_generation:{scope}",
+        *(f"discord_perm:v1:{scope}:{kind}" for kind in kinds),
+        *(f"discord_perm_channel_fence:{scope}:{channel}" for channel in channels),
+    ]
+
+
 def clear_permission_snapshots() -> None:
-    if hasattr(cache, "delete_pattern"):
-        for prefix in (
-            "discord_perm:v1",
-            "discord_perm_refresh",
-            "discord_perm_generation",
-        ):
-            cache.delete_pattern(f"{prefix}:*:{PERMISSION_GUILD_ID}*")
+    cache.delete_many(permission_snapshot_keys())
 
 
 def set_permission_scenario(name: str) -> None:

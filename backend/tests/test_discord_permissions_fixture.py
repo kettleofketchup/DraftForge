@@ -3,21 +3,26 @@ from unittest.mock import patch
 
 from celery import Celery
 from celery.app.task import Task
+from django.conf import settings
 from django.core.cache import cache
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import CustomUser
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup
 from discordbot.permissions.schemas import PermissionChecksResponse
 from events.models import Event
+from org.tests.mmr_request_mixin import MmrRequestTestMixin
 from tests.data.discord_permissions import (
     PERMISSION_ATTENDANCE_CHANNEL_ID,
     PERMISSION_GUILD_ID,
     PERMISSION_ORG,
 )
 from tests.populate.discord_permissions import (
+    FIXTURE_KEY,
+    clear_permission_snapshots,
     discord_permissions_test_data,
+    permission_snapshot_keys,
     populate_discord_permissions_data,
 )
 from tests.test_discord_permissions import (
@@ -43,6 +48,14 @@ def _forbid(*args: Any, **kwargs: Any) -> None:
     raise AssertionError("populate dispatched a task")
 
 
+ISOLATED_CACHE: dict[str, dict[str, str]] = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "discord-permissions-fixture",
+    }
+}
+
+
 @override_settings(TEST=True)
 class DiscordPermissionsFixtureTest(TestCase):
     def setUp(self) -> None:
@@ -53,7 +66,8 @@ class DiscordPermissionsFixtureTest(TestCase):
         self.factory = APIRequestFactory()
 
     def clear_snapshot_cache(self) -> None:
-        cache.delete_pattern(f"discord_perm*{PERMISSION_GUILD_ID}*")
+        cache.delete(FIXTURE_KEY)
+        clear_permission_snapshots()
 
     def scenario(self, name: str) -> Any:
         request = self.factory.post(
@@ -211,6 +225,21 @@ class DiscordPermissionsFixtureTest(TestCase):
         )
         self.assertEqual(data.data, second.data)
 
+    @override_settings(CACHES=ISOLATED_CACHE)
+    @patch("tests.test_discord_permissions.isTestEnvironment", return_value=True)
+    def test_scenario_switch_clears_snapshots_on_locmem(self, _env: Any) -> None:
+        self.scenario("all_granted")
+        self.assertEqual(self.attendance_status(), "verified")
+        keys = permission_snapshot_keys()
+        self.assertTrue(cache.get_many(keys))
+        unrelated = "permission-fixture-unrelated"
+        cache.set(unrelated, "keep")
+        self.addCleanup(cache.delete, unrelated)
+        self.scenario("attendance_missing_embed")
+        self.assertEqual(cache.get_many(keys), {})
+        self.assertEqual(cache.get(unrelated), "keep")
+        self.assertEqual(self.attendance_status(), "missing_permissions")
+
     def test_populate_dispatches_no_tasks(self) -> None:
         with (
             patch.object(Task, "apply_async", _forbid),
@@ -244,3 +273,20 @@ class DiscordPermissionsFixtureTest(TestCase):
             for call in calls:
                 self.assertEqual(call().status_code, 404)
         self.assertIsNone(cache.get(f"discord_perm_fixture:{PERMISSION_GUILD_ID}"))
+
+
+class MmrRequestCacheCleanupTest(SimpleTestCase):
+    def test_mixin_restores_cache_after_class_decorator(self) -> None:
+        @override_settings(CACHES=ISOLATED_CACHE)
+        class DecoratedMixinTest(MmrRequestTestMixin, SimpleTestCase):
+            pass
+
+        original = settings.CACHES
+        try:
+            DecoratedMixinTest.setUpClass()
+            self.assertEqual(settings.CACHES, ISOLATED_CACHE)
+            DecoratedMixinTest.tearDownClass()
+            DecoratedMixinTest.doClassCleanups()
+            self.assertEqual(settings.CACHES, original)
+        finally:
+            DecoratedMixinTest.doClassCleanups()

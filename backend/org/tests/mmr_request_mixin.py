@@ -30,13 +30,10 @@ class MmrRequestTestMixin:
             MEDIA_ROOT=cls.media_root, CACHES=LOCMEM_CACHES
         )
         cls._media_override.enable()
+        # Class cleanups unwind LIFO, after Django's own class-level overrides.
+        cls.addClassCleanup(shutil.rmtree, cls.media_root, ignore_errors=True)  # type: ignore[attr-defined]
+        cls.addClassCleanup(cls._media_override.disable)  # type: ignore[attr-defined]
         super().setUpClass()  # type: ignore[misc]
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        super().tearDownClass()  # type: ignore[misc]
-        cls._media_override.disable()
-        shutil.rmtree(cls.media_root, ignore_errors=True)
 
     def setUp(self) -> None:
         super().setUp()  # type: ignore[misc]
