@@ -31,7 +31,6 @@ import {
   openSignupsFromForm,
   toRepeaterCreatePayload,
 } from './createEventPayload';
-import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
   EVENT_TEMPLATE_DEFAULTS,
@@ -59,6 +58,7 @@ import {
   SIGNUP_OPEN_DEFAULTS,
   type ReadyCheckFields,
 } from './schemas';
+import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
 import { signupLineFrom } from './signupLine';
 import { signupOpenFrom } from './signupOpen';
 import { SERIES_IMMEDIATE_HELP, SignupOpenSection } from './SignupOpenSection';

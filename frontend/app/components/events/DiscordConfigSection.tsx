@@ -22,6 +22,18 @@ import {
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
 import {
+  DiscordPermissionBadge,
+  RecheckPermissionsButton,
+  usePermissionPreview,
+  type PermissionCheckResult,
+  type PermissionQuery,
+  type PermissionScope,
+} from '~/features/discord-permissions';
+import {
+  SETTINGS_OPERATIONS,
+  settingsDescriptors,
+} from '~/features/discord-permissions/descriptors';
+import {
   EventDiscordPreviewButton,
   type DiscordPreviewContext,
   type PreviewKind,
@@ -54,7 +66,7 @@ import {
  *  plus the repeater-only `discord_notify_new_events` flag — that field lives
  *  on createEventInputSchema + editRepeaterSchema directly (not in the shared
  *  sub-schema) because non-repeater forms don't expose it, but the JSX still
- *  references it under the `isRepeater` guard. */
+ *  references it under the `showNotifyNewEvents` guard. */
 export type DiscordFields = z.input<typeof discordConfigSchema> & {
   discord_notify_new_events?: boolean;
 };
@@ -101,12 +113,14 @@ function CheckboxField({
   name,
   label,
   description,
+  diagnostic,
   action,
 }: {
   control: Control<DiscordFields>;
   name: DiscordFieldName;
   label: string;
   description: string;
+  diagnostic?: ReactNode;
   action?: ReactNode;
 }) {
   return (
@@ -129,6 +143,7 @@ function CheckboxField({
               {label}
             </FormLabel>
             <FormDescription>{description}</FormDescription>
+            {diagnostic}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </FormItem>
@@ -247,8 +262,12 @@ const signupReminderMeta = EVENT_SECTION_FIELDS.discord.discord_signup_reminder;
 const SUBSCRIBE_NOTE =
   "Members subscribe on the series page, or with Notify Me on the event's signup post in Discord.";
 
-interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
+export interface DiscordConfigSectionProps<
+  T extends FieldValues & DiscordFields,
+> {
   control: Control<T>;
+  permissionScope?: PermissionScope | null;
+  canCheckPermissions?: boolean;
   isRepeater: boolean;
   organizationId: number;
   /** Gates the repeater-only "Post new events" block. Defaults to
@@ -262,17 +281,111 @@ interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
   showSignupReminder?: boolean;
 }
 
-export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
+export function DiscordConfigSection<T extends FieldValues & DiscordFields>(
+  props: DiscordConfigSectionProps<T>,
+) {
+  return props.canCheckPermissions && props.permissionScope ? (
+    <CheckedDiscordConfigSection {...props} scope={props.permissionScope} />
+  ) : (
+    <DiscordConfigFields {...props} />
+  );
+}
+
+function CheckedDiscordConfigSection<T extends FieldValues & DiscordFields>(
+  props: DiscordConfigSectionProps<T> & { scope: PermissionScope },
+) {
+  const values = useWatch({ control: props.control }) as DiscordFields;
+  const descriptors = settingsDescriptors(values, {
+    isRepeater: props.isRepeater,
+    showNotifyNewEvents: props.showNotifyNewEvents ?? props.isRepeater,
+    showSignupReminder: props.showSignupReminder ?? props.isRepeater,
+  });
+  const query = usePermissionPreview({
+    scope: props.scope,
+    descriptors,
+    enabled: true,
+  });
+  return <DiscordConfigFields {...props} permissionQuery={query} />;
+}
+
+function DiscordConfigFields<T extends FieldValues & DiscordFields>({
   control: parentControl,
+  permissionScope,
+  canCheckPermissions = false,
+  permissionQuery,
   isRepeater,
   organizationId,
   showNotifyNewEvents = isRepeater,
   previewContext,
   showSignupReminder = isRepeater,
-}: DiscordConfigSectionProps<T>) {
+}: DiscordConfigSectionProps<T> & { permissionQuery?: PermissionQuery }) {
   // T extends DiscordFields by the generic constraint, so narrowing to
   // Control<DiscordFields> is sound: we touch only the discord-config slice.
   const control = parentControl as unknown as Control<DiscordFields>;
+  const values = useWatch({ control }) as DiscordFields;
+  const descriptors = settingsDescriptors(values, {
+    isRepeater,
+    showNotifyNewEvents,
+    showSignupReminder,
+  });
+  const resultFor = (key: string): PermissionCheckResult | undefined => {
+    const descriptor = descriptors.find((d) => d.key === key);
+    if (!descriptor) return undefined;
+    const noServer: PermissionCheckResult = {
+      ...descriptor,
+      status: 'unconfigured',
+      reason: 'no_server_configured',
+      destination: {
+        kind: 'none',
+        channel_id: null,
+        parent_id: null,
+        name: null,
+        channel_type: null,
+        source: null,
+      },
+      required_all: [],
+      required_any: [],
+      missing: [],
+      granted: null,
+      effective_permissions: null,
+      raw_permissions: null,
+      base_granted: null,
+      bypass: null,
+      blockers: [],
+      checked_at: null,
+      expires_at: null,
+      retry_after_seconds: null,
+      refresh_state: null,
+    };
+    return permissionScope ? permissionQuery?.results.get(key) : noServer;
+  };
+  const diagnostic = (key: string, relatedKeys: string[] = []) => {
+    const keys = [key, ...relatedKeys].filter((candidate) =>
+      descriptors.some((d) => d.key === candidate),
+    );
+    if (!canCheckPermissions || !keys.length) return null;
+    const operation = SETTINGS_OPERATIONS[key];
+    const checks = keys.map((candidate) => ({
+      operationLabel:
+        candidate === 'signup_post'
+          ? 'Primary signup'
+          : candidate === 'signup_fallback'
+            ? 'Announcement fallback'
+            : SETTINGS_OPERATIONS[candidate].label,
+      result: resultFor(candidate),
+    }));
+    return (
+      <DiscordPermissionBadge
+        operationLabel={operation.label}
+        result={checks[0]?.result}
+        checks={relatedKeys.length ? checks : undefined}
+        state={permissionQuery?.state ?? 'idle'}
+        disabled={!values[operation.field]}
+        data-testid={`discord-permission-badge-${key}`}
+      />
+    );
+  };
+  const signupDiagnostic = diagnostic('signup_post', ['signup_fallback']);
 
   const [
     createEvent,
@@ -346,11 +459,19 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
 
   return (
     <div className="space-y-4">
+      {permissionQuery && (
+        <RecheckPermissionsButton
+          onRecheck={permissionQuery.recheck}
+          isRechecking={permissionQuery.isRechecking}
+          data-testid="discord-permission-recheck"
+        />
+      )}
       <Subsection testId="discord-subsection-server-event" title="Server event">
         <div className="rounded-md border border-border p-3 space-y-3">
           <CheckboxField
             control={control}
             name="discord_create_event"
+            diagnostic={diagnostic('scheduled_event_create')}
             label="Create Discord scheduled event"
             description="Automatically creates a scheduled event in your Discord server"
             action={preview('scheduled_event')}
@@ -360,6 +481,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
               <CheckboxField
                 control={control}
                 name="discord_sync_signups"
+                diagnostic={diagnostic('scheduled_event_update')}
                 label="Synchronize signups"
                 description="Keep website and Discord event signups in sync"
                 action={preview('scheduled_event_sync')}
@@ -367,6 +489,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
               <CheckboxField
                 control={control}
                 name="discord_mark_interested"
+                diagnostic={diagnostic('mark_interested')}
                 label="Mark signups as interested"
                 description="Players who sign up will be marked as interested on the Discord event"
               />
@@ -445,6 +568,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_post_signups"
+            diagnostic={!values.discord_post_signups && signupDiagnostic}
             label="Post event signup embed"
             description="Post an embed to a channel where users can react to sign up"
             action={preview('signup_post')}
@@ -454,6 +578,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
               <PostChannelField
                 control={control}
                 name="discord_post_signups_channel_id"
+                diagnostic={signupDiagnostic}
                 label="Signup channel"
                 description="Channel where the signup embed will be posted"
                 organizationId={organizationId}
@@ -490,6 +615,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_start_mention"
+            diagnostic={diagnostic('start_mention')}
             label="Mention signed-up members before start"
             description="Reply to the signup post with an @mention of every signed-up member shortly before the event starts"
             action={preview('start_mention')}
@@ -567,6 +693,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_announcement"
+            diagnostic={diagnostic('announcement')}
             label="Pre-day announcement"
             description="Post an announcement in a channel before the event"
             action={preview('announcement_notice')}
@@ -631,6 +758,10 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_confirm_attendance"
+            diagnostic={
+              !values.discord_confirm_attendance &&
+              diagnostic('attendance_reminder')
+            }
             label="Post attendance reminder in Discord"
             description={ATTENDANCE_REMINDER_DESCRIPTION}
             action={preview('attendance_reminder')}
@@ -645,6 +776,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
                 <PostChannelField
                   control={control}
                   name="discord_confirm_attendance_channel_id"
+                  diagnostic={diagnostic('attendance_reminder')}
                   label={discordLabel('discord_confirm_attendance_channel_id')}
                   organizationId={organizationId}
                   blankState={blankState('attendance')}
@@ -661,6 +793,9 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_profile_reminder"
+            diagnostic={
+              !values.discord_profile_reminder && diagnostic('profile_reminder')
+            }
             label="Profile update reminder"
             description={PROFILE_REMINDER_DESCRIPTION}
             action={preview('profile_reminder')}
@@ -675,6 +810,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
                 <PostChannelField
                   control={control}
                   name="discord_profile_reminder_channel_id"
+                  diagnostic={diagnostic('profile_reminder')}
                   label={discordLabel('discord_profile_reminder_channel_id')}
                   organizationId={organizationId}
                   blankState={blankState('profile')}
@@ -692,6 +828,10 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
             <CheckboxField
               control={control}
               name="discord_notify_new_events"
+              diagnostic={
+                !values.discord_notify_new_events &&
+                diagnostic('new_event_notice')
+              }
               label="Post new events"
               description={NEW_EVENTS_DESCRIPTION}
               action={preview('new_event_post')}
@@ -701,6 +841,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
                 <PostChannelField
                   control={control}
                   name="discord_new_event_channel_id"
+                  diagnostic={diagnostic('new_event_notice')}
                   label={discordLabel('discord_new_event_channel_id')}
                   organizationId={organizationId}
                   blankState={blankState('newEvent')}
@@ -736,6 +877,7 @@ export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
             <CheckboxField
               control={control}
               name="discord_signup_reminder"
+              diagnostic={diagnostic('signup_reminder')}
               label={
                 isRepeater
                   ? SIGNUP_REMINDER_LABEL

@@ -1,34 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from django.conf import settings
-from django.db.models import Avg, Max
+from django.db.models import Avg
 
-from common.game import GameType
-from league.models import LeagueUser
-from org.mmr import org_mmr_for
+from league.mmr_sync import recompute_league_mmrs
+from org.mmr import LEAGUE_GAME
+from org.models import OrgUserGameMmr
 from steam.models import LeaguePlayerStats
-from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from app.models import CustomUser
     from league.models import League
     from org.models import Organization
-
-logger = get_logger(__name__)
-
-
-def _skip_verified(league_user: LeagueUser) -> bool:
-    if league_user.mmr_verified_at is None:
-        return False
-    logger.info(
-        "league_mmr_recompute_skipped_verified",
-        system="steam",
-        subsystem="mmr",
-        league_user_id=league_user.pk,
-    )
-    return True
 
 
 def get_league_avg_kda(league_id: int) -> float:
@@ -90,64 +76,33 @@ def calculate_mmr_adjustment(stats: LeaguePlayerStats) -> int:
     return max(-500, min(500, adjustment))
 
 
+def recompute_league_mmrs_for_users(
+    user_ids: Iterable[int],
+    *,
+    organization_id: int | None = None,
+    league_id: int | None = None,
+) -> list[int]:
+    """Recompute unverified league MMRs (org MMR + best adjustment) for users."""
+    ids = list(user_ids)
+    if not ids:
+        return []
+    rows = OrgUserGameMmr.objects.nocache().filter(
+        org_user__user_id__in=ids, game_type=LEAGUE_GAME
+    )
+    if organization_id is not None:
+        rows = rows.filter(org_user__organization_id=organization_id)
+    base_mmrs = dict(rows.values_list("org_user_id", "mmr"))
+    return recompute_league_mmrs(base_mmrs, trigger="adjustment", league_id=league_id)
+
+
 def update_user_league_mmr(
     user: CustomUser,
     organization: Organization | None = None,
     league: League | None = None,
-) -> None:
-    """
-    Set user's league_mmr to base mmr + best league adjustment.
-
-    Without a base MMR (no organization, or no org Dota MMR) nothing is written.
-
-    Args:
-        user: CustomUser instance
-        organization: Optional Organization to get base MMR from OrgUser
-        league: Optional League to update LeagueUser.mmr
-    """
-    base_mmr = (
-        org_mmr_for(organization.pk, user.pk, GameType.DOTA2) if organization else 0
+) -> list[int]:
+    """Recompute the user's league MMRs, optionally scoped to an org or league."""
+    return recompute_league_mmrs_for_users(
+        [user.pk],
+        organization_id=organization.pk if organization is not None else None,
+        league_id=league.pk if league is not None else None,
     )
-
-    if not base_mmr:
-        return
-
-    best_adjustment = user.league_stats.aggregate(Max("mmr_adjustment"))[
-        "mmr_adjustment__max"
-    ]
-
-    if best_adjustment is None:
-        best_adjustment = 0
-
-    calculated_league_mmr = base_mmr + best_adjustment
-
-    if league:
-        try:
-            league_user = LeagueUser.objects.get(user=user, league=league)
-            if _skip_verified(league_user):
-                return
-            league_user.mmr = calculated_league_mmr
-            league_user.save(update_fields=["mmr"])
-            logger.debug(
-                "league_mmr_updated",
-                system="steam",
-                subsystem="mmr",
-                username=user.username,
-                mmr=calculated_league_mmr,
-                base_mmr=base_mmr,
-                adjustment=best_adjustment,
-            )
-        except LeagueUser.DoesNotExist:
-            # No LeagueUser entry, nothing to update
-            pass
-    else:
-        # No league context, nothing to update
-        logger.debug(
-            "league_mmr_skipped",
-            system="steam",
-            subsystem="mmr",
-            username=user.username,
-            reason="no_league_context",
-            base_mmr=base_mmr,
-            adjustment=best_adjustment,
-        )

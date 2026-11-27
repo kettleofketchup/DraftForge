@@ -8,7 +8,9 @@ interface ScrollAreaProps extends React.ComponentProps<
 > {
   /** Control scrollbar visibility: "auto" (default), "always", "scroll", "hover" */
   type?: 'auto' | 'always' | 'scroll' | 'hover';
-  viewportProps?: React.ComponentProps<typeof ScrollAreaPrimitive.Viewport>;
+  viewportProps?: React.ComponentProps<typeof ScrollAreaPrimitive.Viewport> & {
+    'data-testid'?: string;
+  };
 }
 
 function ScrollArea({

@@ -119,6 +119,10 @@ Each post that sends a channel message has its own channel field:
 | Profile reminder | `discord_profile_reminder_channel_id` | Announcement channel |
 | New-event post | `discord_new_event_channel_id` | Announcement channel, whether or not the pre-day announcement is on |
 
+Each setting shows a permission badge for the destination it would actually use (own channel, fallback or posted message), green only when the bot has every permission that action needs. See [Discord Permission Badges](events/discord-permissions.md).
+
+The signup destination receives a regular message in a text or announcement channel, or an event-titled post in a forum channel.
+
 The start mention has no channel: it replies to the signup post. Existing events and series have the three new fields blank, so they keep posting where they did before. An optional picker shows *Use announcement channel (#name)* while it is blank, has a clear button to go back to blank, and warns when neither it nor the announcement channel is set. The announcement channel picker sits in the pre-day announcement card while that post is on; otherwise it is shown at the end of the channel posts whenever a post with no channel of its own would fall back to it.
 
 The Discord section of the event, series and organization defaults forms is split into three groups:
@@ -327,6 +331,8 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/{id}/complete/` | Complete the event from `roll_call` or `in_progress`, award host/helper points and finalize attendance outcomes (org admin). Returns the event; `400` from any other state or when another close won the race. |
 | PUT | `/api/events/{id}/staff/` | Set host and helpers (org admin). Body: `{"host_id": <int\|null>, "helper_ids": [<int>, ...]}`. Returns the event. `400` if the host is also a helper or a user doesn't exist. Writes an `OrgLog` `set_event_staff` entry. |
 | GET | `/api/events/{id}/discord-logs/` | Discord notification audit log for the event's tournament |
+| GET | `/api/events/{id}/permission-checks/` | Read-only Discord permission checks for the saved event's destinations (event staff). `?refresh=true` rechecks. See [Discord Permission Badges](events/discord-permissions.md). |
+| POST | `/api/events/{id}/permission-checks/` | Permission checks for unsaved edits to this event (event staff). Body: `{"checks": [...], "refresh": <bool>}`. |
 | GET | `/api/events/{id}/lobby-password/` | The event's lobby password. Org staff get `{mode, password, source, can_manage}`, registered players (approved or confirmed signup, or rostered) get `{password}`, anyone else `404`. Never cached. |
 | POST | `/api/events/{id}/lobby-password/regenerate/` | New random lobby password (org staff); `409` in fixed mode. Existing lobbies keep theirs. |
 
@@ -355,3 +361,4 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | GET | `/api/events/defaults/` | Get org event defaults |
 | PATCH | `/api/events/defaults/{id}/` | Update org defaults |
 | GET | `/api/discord/organizations/{id}/channels/` | List Discord channels |
+| POST | `/api/discord/organizations/{id}/permission-checks/` | Read-only Discord permission checks for draft creation, series and defaults settings (org staff). Body: `{"checks": [...], "refresh": <bool>}`. |

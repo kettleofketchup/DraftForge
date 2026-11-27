@@ -21,6 +21,7 @@ vi.mock('~/components/api/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/components/api/api')>()),
   getOrgEventDefaults: api.getOrgEventDefaults,
   fetchCurrentUser: vi.fn().mockResolvedValue({}),
+  fetchOrganization: vi.fn().mockResolvedValue({ pk: 1, staff_ids: [] }),
   getDiscordChannels: vi.fn().mockResolvedValue([]),
   getDiscordRoles: vi.fn().mockResolvedValue([]),
   getLeagues: vi.fn().mockResolvedValue([]),

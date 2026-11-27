@@ -48,7 +48,14 @@ from discordbot.models import (
     DiscordMessageLog,
     DMType,
 )
+from discordbot.permissions import service as permission_service
+from discordbot.permissions.actions import EVENT_ACTIONS, PUBLIC_PREVIEW_ACTIONS
+from discordbot.permissions.schemas import PermissionChecksRequest
 from discordbot.serializers_discord_event import DiscordEventDetailSerializer
+from discordbot.services.permissions import (
+    DiscordPermissionRefreshThrottle,
+    validation_error_details,
+)
 from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
@@ -60,6 +67,7 @@ from events.discord.channels import (
     profile_reminder_channel,
 )
 from events.discord.gates import initial_state_for_new_event
+from events.discord.permissions import preview_event_checks, saved_event_checks
 from events.discord.preview import PreviewInputError, build_discord_preview
 from events.discord.preview_schema import DiscordPreviewRequest
 from events.discord.state import signup_list_queryset
@@ -850,7 +858,6 @@ class EventViewSet(viewsets.ModelViewSet):
         if org_id:
             qs = qs.filter(organization_id=org_id)
 
-        # Filter by state (single or comma-separated)
         state = params.get("state")
         states = params.get("states")
         if states:
@@ -1715,6 +1722,50 @@ class EventViewSet(viewsets.ModelViewSet):
         )
         return Response(_event_payload(event.pk, request.user))
 
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="permission-checks",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def permission_checks(self, request: Request, pk: str | None = None) -> Response:
+        event = self.get_object()
+        if not has_event_staff_access(request.user, event):
+            return Response({"error": "Permission denied"}, status=403)
+        if request.method == "POST":
+            try:
+                body = PermissionChecksRequest.model_validate(request.data)
+            except PydanticValidationError as exc:
+                return Response(
+                    {
+                        "error": "Invalid permission check request",
+                        "detail": validation_error_details(exc),
+                    },
+                    status=400,
+                )
+            if any(
+                check.action not in EVENT_ACTIONS & PUBLIC_PREVIEW_ACTIONS
+                for check in body.checks
+            ):
+                return Response({"error": "Unsupported preview action"}, status=400)
+            checks = preview_event_checks(event, body)
+            refresh = body.refresh
+        else:
+            checks = saved_event_checks(event)
+            refresh = request.query_params.get("refresh", "").lower() == "true"
+        throttled = refresh and not DiscordPermissionRefreshThrottle().allow_request(
+            request, self
+        )
+        result = permission_service.run_checks(
+            event.organization.discord_server_id or None,
+            checks,
+            refresh=refresh and not throttled,
+        )
+        if throttled:
+            for check in result.checks:
+                check.refresh_state = "throttled"
+        return Response(result.model_dump(mode="json"))
+
     @action(detail=True, methods=["get"])
     def discord(self, request: Request, pk: str | None = None) -> Response:
         """Get Discord state for this event.
@@ -1789,7 +1840,6 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         reason = parse_staff_reason(request.data)
 
-        # Optional MMR override from admin
         mmr_override = None
         game_type = game_for_event(signup.event)
         if request.data:

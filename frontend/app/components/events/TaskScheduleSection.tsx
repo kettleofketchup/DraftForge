@@ -3,12 +3,31 @@ import { Play } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import api from '~/components/api/axios';
+import {
+  DiscordPermissionBadge,
+  type PermissionCheckResult,
+  type PermissionQuery,
+} from '~/features/discord-permissions';
+
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
+
+export const TASK_PERMISSION_KEYS: Record<string, string[]> = {
+  signup_post: ['signup_post', 'signup_fallback'],
+  announcement: ['announcement'],
+  confirm_attendance: ['attendance_reminder'],
+  profile_reminder: ['profile_reminder'],
+  start_mention: ['start_mention'],
+  signup_reminder: ['signup_reminder'],
+  scheduled_event: ['scheduled_event_create'],
+  signup_update: ['signup_edit'],
+  draft_dm: ['draft_dm'],
+  herodraft_dm: ['herodraft_dm'],
+};
 
 interface FiredByUser {
   pk: number;
@@ -91,12 +110,16 @@ interface TaskScheduleSectionProps {
   eventId: number;
   isAdmin?: boolean;
   eventTimezone?: string;
+  permissionResults?: Map<string, PermissionCheckResult>;
+  permissionState?: PermissionQuery['state'];
 }
 
 export function TaskScheduleSection({
   eventId,
   isAdmin,
   eventTimezone,
+  permissionResults,
+  permissionState = 'idle',
 }: TaskScheduleSectionProps) {
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
   const queryClient = useQueryClient();
@@ -191,6 +214,27 @@ export function TaskScheduleSection({
               {/* Task name + description */}
               <td className="py-2.5">
                 <div className="font-medium text-foreground">{task.label}</div>
+                {permissionResults &&
+                  (TASK_PERMISSION_KEYS[task.task] ?? []).map((key) => {
+                    const resolvedKey =
+                      key === 'signup_edit' &&
+                      !permissionResults.has(key) &&
+                      permissionResults.has('announcement_edit')
+                        ? 'announcement_edit'
+                        : key;
+                    const result = permissionResults.get(resolvedKey);
+                    if (!result) return null;
+                    return (
+                      <DiscordPermissionBadge
+                        key={resolvedKey}
+                        operationLabel={task.label}
+                        result={result}
+                        state={permissionState}
+                        disabled={task.status === 'disabled'}
+                        data-testid={`task-permission-${task.task}-${resolvedKey}`}
+                      />
+                    );
+                  })}
                 {task.description && (
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {task.description}

@@ -16,7 +16,11 @@ import { Label } from '~/components/ui/label';
 import { Textarea } from '~/components/ui/textarea';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { cn } from '~/lib/utils';
-import { formatMmrDate, requestTargetLabel as targetLabel } from './format';
+import {
+  formatMmrDate,
+  screenshotRemovedLabel,
+  requestTargetLabel as targetLabel,
+} from './format';
 import { useRejectMmrRequest } from './queries';
 import type { MmrScope } from './queryKeys';
 import { reviewErrorMessage } from './reviewErrors';
@@ -85,9 +89,11 @@ function Screenshot({ request }: { request: MmrChangeRequest }) {
         data-testid={`mmr-card-no-screenshot-${request.id}`}
       >
         <ImageOff className="size-4" aria-hidden />
-        {request.source === 'staff' && !request.has_screenshot
-          ? 'No screenshot'
-          : 'Screenshot unavailable'}
+        {request.screenshot_purged_at
+          ? screenshotRemovedLabel(request)
+          : request.source === 'staff' && !request.has_screenshot
+            ? 'No screenshot'
+            : 'Screenshot unavailable'}
       </div>
     );
   }

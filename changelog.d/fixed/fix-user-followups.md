@@ -1,2 +1,0 @@
-- Signed-in users who open the backend login page (`/login/`) are now sent to the site's home page instead of getting a server error.
-- `manage.py refresh_avatars --force` now re-fetches every Discord avatar, including ones whose current image still loads; before, the flag was accepted but ignored.
