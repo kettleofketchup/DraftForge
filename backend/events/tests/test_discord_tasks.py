@@ -385,7 +385,6 @@ class SendSignupUpdateTaskTest(_DiscordTaskTestCase):
 
         send_signup_update(self.event.pk)
 
-        # PATCH must have been called and the URL must reference the message id.
         patch_calls = [
             c for c in mock_req.call_args_list if c.args and c.args[0] == "PATCH"
         ]
@@ -410,7 +409,6 @@ class SendEventAnnouncementComponentsTest(_DiscordTaskTestCase):
 
         send_event_announcement(self.event.pk)
 
-        # Find the POST call to the messages endpoint
         post_calls = [
             c for c in mock_req.call_args_list if c.args and c.args[0] == "POST"
         ]
