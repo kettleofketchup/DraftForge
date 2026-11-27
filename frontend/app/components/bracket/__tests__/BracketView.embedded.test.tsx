@@ -59,6 +59,7 @@ vi.mock('~/store/userStore', async () => {
 vi.mock('~/store/bracketStore', async () => {
   const { create } = await import('zustand');
   const store = create(() => ({
+    tournamentId: null as number | null,
     matches: [] as BracketMatch[],
     isDirty: false,
     setMatchWinner: () => {},
@@ -257,6 +258,7 @@ describe('BracketView embedded in the Activity', () => {
 
     expect(navigate).toHaveBeenCalledWith('/tournament/7/bracket/match/42', {
       replace: true,
+      state: { bracketMatchSelection: { tournamentId: 7, matchId: '42' } },
     });
   });
 });

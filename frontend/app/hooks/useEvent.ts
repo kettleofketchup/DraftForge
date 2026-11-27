@@ -71,6 +71,8 @@ import { organizationQueryKey } from '~/components/organization/hooks/useOrganiz
 import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
 import { PositionSchema } from '~/components/user/schemas';
 import type { PositionsType, UserType } from '~/components/user/types';
+import { invalidatePermissionChecks } from '~/features/discord-permissions/lifecycle';
+import type { PermissionScope } from '~/features/discord-permissions/schemas';
 import {
   invalidateConductQueries,
   invalidateOrgContributionQueries,
@@ -434,7 +436,8 @@ export function useUpdateEventRepeaterMutation(repeaterId: number) {
   return useMutation({
     mutationFn: (payload: Partial<EventRepeaterType>) =>
       updateEventRepeaterAPI(repeaterId, payload),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await invalidatePermissionChecks(queryClient, {}, 'reset');
       queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
       queryClient.invalidateQueries({
         queryKey: repeaterKeys.detail(repeaterId),
@@ -475,7 +478,17 @@ export function useUpdateEventMutation(eventId: number) {
   return useMutation({
     mutationFn: (payload: EventWritePayload) =>
       updateEventAPI(eventId, payload),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      await invalidatePermissionChecks(
+        queryClient,
+        {
+          predicate: (query) => {
+            const scope = query.queryKey[2] as PermissionScope | undefined;
+            return scope?.kind === 'event' && scope.eventId === eventId;
+          },
+        },
+        'reset',
+      );
       queryClient.setQueryData(['event', eventId], data);
       queryClient.invalidateQueries({ queryKey: ['events'] });
       // The Activity Log + Task Schedule panels poll on their own
@@ -641,7 +654,17 @@ export function useUpdateOrgDefaultsMutation(orgId: number) {
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
       updateOrgEventDefaults(id, data),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await invalidatePermissionChecks(
+        queryClient,
+        {
+          predicate: (query) => {
+            const scope = query.queryKey[2] as PermissionScope | undefined;
+            return scope?.kind === 'org' && scope.orgId === orgId;
+          },
+        },
+        'reset',
+      );
       queryClient.invalidateQueries({
         queryKey: ['org-event-defaults', orgId],
       });

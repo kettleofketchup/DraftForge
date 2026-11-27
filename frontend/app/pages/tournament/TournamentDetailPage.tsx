@@ -1,8 +1,14 @@
 import { CircleX, Pencil, ShieldAlert, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import {
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useParams,
+} from 'react-router';
 import { toast } from 'sonner';
 import { deleteTournament } from '~/components/api/api';
+import { isLocalBracketMatchSelection } from '~/components/bracket/matchSelectionNavigation';
 import { toGameType } from '~/components/game/constants';
 import { useCurrentOrganization } from '~/components/organization/hooks/useOrganization';
 import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
@@ -39,6 +45,8 @@ const log = getLogger('TournamentDetailPage');
 export const TournamentDetailPage: React.FC = () => {
   const { pk, '*': slug } = useParams<{ pk: string; '*': string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navigationType = useNavigationType();
   const pkNum = pk ? parseInt(pk, 10) : null;
 
   const currentUser = useUserStore((state) => state.currentUser);
@@ -167,13 +175,23 @@ export const TournamentDetailPage: React.FC = () => {
 
     setActiveTab(tab);
     setPendingDraftId(Number.isNaN(draftId) ? null : draftId);
-    setPendingMatchId(matchId);
+    // The bracket already opened its own selection; a late echo must not reopen it.
+    const localMatchSelection = isLocalBracketMatchSelection(
+      navigationType,
+      location.state,
+      pkNum,
+      matchId,
+    );
+    setPendingMatchId(localMatchSelection ? null : matchId);
     if (isLive && !useTournamentStore.getState().live) {
       setAutoAdvance(true);
     }
     setLive(isLive);
   }, [
     slug,
+    navigationType,
+    location.state,
+    pkNum,
     setActiveTab,
     setLive,
     setAutoAdvance,

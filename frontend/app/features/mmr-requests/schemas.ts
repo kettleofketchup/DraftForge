@@ -57,6 +57,7 @@ export const MmrChangeRequestSchema = z.object({
   current_verified: z.boolean(),
   has_screenshot: z.boolean(),
   screenshot_url: z.string().nullable(),
+  screenshot_purged_at: z.string().nullable(),
   can_review: z.boolean(),
 });
 export type MmrChangeRequest = z.infer<typeof MmrChangeRequestSchema>;

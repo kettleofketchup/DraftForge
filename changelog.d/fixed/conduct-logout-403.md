@@ -1,1 +1,0 @@
-- Logging out on an event page no longer flashes a "session expired" error while staff-only conduct panels and event controls are hidden.

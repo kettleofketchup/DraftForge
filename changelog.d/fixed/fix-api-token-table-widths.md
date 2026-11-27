@@ -1,1 +1,0 @@
-- The API access tokens table no longer squashes the Name column into the Token header in organization settings.

@@ -1,9 +1,25 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  act,
+  fireEvent,
+  render as renderView,
+  screen,
+} from '@testing-library/react';
+import type { ReactElement } from 'react';
+
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProfileButton } from '../login';
+
+function render(view: ReactElement) {
+  return renderView(
+    <QueryClientProvider client={new QueryClient()}>
+      {view}
+    </QueryClientProvider>,
+  );
+}
 
 const { logout, clearUser } = vi.hoisted(() => ({
   logout: vi.fn<() => Promise<void>>(),

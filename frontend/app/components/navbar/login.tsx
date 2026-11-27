@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useClickAway } from '@uidotdev/usehooks';
 import { LogOutIcon, UserPenIcon } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -26,6 +27,7 @@ import { Button } from '~/components/ui/button';
 import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { DiscordIcon } from '~/components/ui/icons';
 import { Skeleton } from '~/components/ui/skeleton';
+import { invalidatePermissionChecks } from '~/features/discord-permissions/lifecycle';
 import { getLogger } from '~/lib/logger';
 import type { SessionHint } from '~/lib/sessionHint';
 const log = getLogger('login');
@@ -45,7 +47,6 @@ const AvatarContainer: React.FC<AvatarProps> = (props) => {
   );
 };
 
-// Try to get cached user from sessionStorage (client-side only)
 const getCachedUser = (): UserType | null => {
   try {
     const stored = sessionStorage.getItem('dtx-storage');
@@ -60,6 +61,7 @@ const getCachedUser = (): UserType | null => {
 };
 
 export const ProfileButton: React.FC = () => {
+  const queryClient = useQueryClient();
   const { t } = useTranslation('navbar');
   const currentUser = useUserStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -86,6 +88,7 @@ export const ProfileButton: React.FC = () => {
     } catch (err) {
       log.warn('logout_failed', { err });
     } finally {
+      await invalidatePermissionChecks(queryClient, {}, 'remove');
       clearUser();
     }
   };
@@ -190,17 +193,14 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
     setCachedUser(getCachedUser());
   }, []);
 
-  // Use cached user after mount, then switch to store user after hydration
   const user = hasHydrated
     ? currentUser
     : mounted && cachedUser
       ? cachedUser
       : currentUser;
 
-  // Check auth after hydration - background refresh
   useEffect(() => {
     if (hasHydrated) {
-      // If we already have a user (from cache or store), just refresh in background
       if (user?.username) {
         setIsCheckingAuth(false);
         getCurrentUser();
@@ -233,7 +233,6 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
     );
   }
 
-  // If we have a user (cached or from store), show them immediately
   const hasUser = user?.username !== undefined && user?.username !== null;
 
   if (hasUser) {

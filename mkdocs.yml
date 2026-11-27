@@ -97,6 +97,7 @@ nav:
           - Overview: features/events.md
           - Roll Call: features/events/roll-call.md
           - Signup Ledger: features/events/signup-ledger.md
+          - Discord Permissions: features/events/discord-permissions.md
           - Discord Message Preview: features/events/discord-message-preview.md
       - Organization Locked Features: features/organization-locked-features.md
       - Organization Conduct: features/organization-conduct.md

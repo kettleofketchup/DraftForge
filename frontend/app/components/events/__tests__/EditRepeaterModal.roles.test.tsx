@@ -14,6 +14,10 @@ import { createI18nInstance } from '~/i18n/config';
 import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 
 // Mutation seam: the PATCH body is the assertion target.
+vi.mock('~/components/organization/hooks/useOrganization', () => ({
+  useOrganization: () => ({ organization: null }),
+}));
+
 const mutateAsync = vi.fn().mockResolvedValue({});
 vi.mock('~/hooks/useEvent', () => ({
   useUpdateEventRepeaterMutation: () => ({ mutateAsync, isPending: false }),

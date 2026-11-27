@@ -55,6 +55,7 @@ vi.mock('~/store/userStore', async () => {
 vi.mock('~/store/bracketStore', async () => {
   const { create } = await import('zustand');
   const store = create(() => ({
+    tournamentId: null as number | null,
     matches: [] as BracketMatch[],
     isDirty: false,
     setMatchWinner: () => {},

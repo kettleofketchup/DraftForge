@@ -52,6 +52,7 @@ import {
   DiscordConnectionCard,
   discordConnectKeys,
 } from '~/features/discord-connect';
+import { invalidatePermissionChecks } from '~/features/discord-permissions/lifecycle';
 import { invalidatePromotionQueries } from '~/features/org-features/queryKeys';
 
 export type OrgProfileSection = 'general' | 'discord' | 'members' | 'rules';
@@ -125,6 +126,12 @@ export function useOrgProfileSections(
     if (!organization.pk) return false;
     try {
       await updateOrganization(organization.pk, data);
+      if (
+        (data.discord_server_id || null) !==
+        (organization.discord_server_id || null)
+      ) {
+        await invalidatePermissionChecks(queryClient, {}, 'remove');
+      }
       form.reset(data);
       queryClient.invalidateQueries({
         queryKey: organizationQueryKey(organization.pk),
