@@ -38,6 +38,7 @@ from events.discord import (
     notify_new_event,
     notify_signup_changed,
 )
+from events.discord.gates import repeater_generates
 from events.eligibility import (
     EligibilityResult,
     claim_friend_id,
@@ -1802,10 +1803,8 @@ def _today() -> datetime.date:
 
 def generate_events_for_repeater(repeater: EventRepeater) -> list[Event]:
     """Generate upcoming events for a repeater. Returns list of created Events."""
-    if not repeater.is_active:
-        return []
     today = _today()
-    if repeater.ends_at and repeater.ends_at < today:
+    if not repeater_generates(repeater, today).would_send:
         return []
 
     to_date = today + timedelta(days=repeater.generate_days_ahead)
@@ -1844,6 +1843,27 @@ class OccurrenceCollision(ValueError):
     """A requested one-off timestamp collides with an existing or generated occurrence."""
 
 
+def off_schedule_collision(
+    repeater: EventRepeater, scheduled_at: datetime.datetime
+) -> str | None:
+    """Why a one-off at `scheduled_at` would be rejected, or None when it is free."""
+    if Event.objects.filter(
+        event_repeater=repeater, scheduled_at=scheduled_at
+    ).exists():
+        return "An event in this series is already scheduled for that time."
+
+    today = _today()
+    horizon = max(
+        scheduled_at.date(), today + timedelta(days=repeater.generate_days_ahead)
+    )
+    if scheduled_at in set(_get_next_occurrences(repeater, today, horizon)):
+        return (
+            "That time is a scheduled occurrence of this series. "
+            "Pick a different time for a one-off event."
+        )
+    return None
+
+
 def create_off_schedule_event(
     repeater: EventRepeater,
     *,
@@ -1859,22 +1879,9 @@ def create_off_schedule_event(
     be "not found". repeater.is_active is deliberately not checked — a paused
     series is a legitimate template.
     """
-    if Event.objects.filter(
-        event_repeater=repeater, scheduled_at=scheduled_at
-    ).exists():
-        raise OccurrenceCollision(
-            "An event in this series is already scheduled for that time."
-        )
-
-    today = _today()
-    horizon = max(
-        scheduled_at.date(), today + timedelta(days=repeater.generate_days_ahead)
-    )
-    if scheduled_at in set(_get_next_occurrences(repeater, today, horizon)):
-        raise OccurrenceCollision(
-            "That time is a scheduled occurrence of this series. "
-            "Pick a different time for a one-off event."
-        )
+    collision = off_schedule_collision(repeater, scheduled_at)
+    if collision is not None:
+        raise OccurrenceCollision(collision)
 
     event = Event(
         organization=repeater.organization,
@@ -1917,6 +1924,30 @@ def create_off_schedule_event(
         scheduled_at=scheduled_at.isoformat(),
     )
     return event
+
+
+SERIES_SHARED_FIELDS: tuple[str, ...] = ("name", "description")
+REPEATER_SCHEDULE_FIELDS: tuple[str, ...] = (
+    "day_of_week",
+    "time_of_day",
+    "timezone",
+    "starts_at",
+    "frequency",
+    "is_active",
+)
+SERIES_CASCADE_CONFIG_FIELDS = [
+    f for f in EVENT_CONFIG_FIELDS if f not in SIGNUP_OPEN_POLICY_FIELDS
+]
+
+
+def apply_repeater_config_to_event(repeater: EventRepeater, event: Event) -> None:
+    """Copy the series config every cascade copies; the policy and password stay out."""
+    for field_name in SERIES_SHARED_FIELDS:
+        setattr(event, field_name, getattr(repeater, field_name))
+    _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
+    _copy_mixin_fields(repeater, event, SERIES_CASCADE_CONFIG_FIELDS)
+    _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+    _copy_mixin_fields(repeater, event, DOTA_LOBBY_CONFIG_FIELDS)
 
 
 @transaction.atomic
@@ -2017,14 +2048,10 @@ def sync_future_events(
         .exclude(is_off_schedule=True)
         .select_related("tournament")
     )
-    shared_fields = ["name", "description"]
-    config_fields = [
-        f for f in EVENT_CONFIG_FIELDS if f not in SIGNUP_OPEN_POLICY_FIELDS
-    ]
     update_fields = (
-        shared_fields
+        list(SERIES_SHARED_FIELDS)
         + TOURNAMENT_TEMPLATE_FIELDS
-        + config_fields
+        + SERIES_CASCADE_CONFIG_FIELDS
         + DISCORD_CONFIG_FIELDS
         + DOTA_LOBBY_CONFIG_FIELDS
         + ["dota_lobby_password"]
@@ -2038,12 +2065,7 @@ def sync_future_events(
         previous_password = event.dota_lobby_password
         previous_mode = event.dota_lobby_password_mode
         previous_draft_options = event_draft_option_values(event)
-        for field_name in shared_fields:
-            setattr(event, field_name, getattr(repeater, field_name))
-        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
-        _copy_mixin_fields(repeater, event, config_fields)
-        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
-        _copy_mixin_fields(repeater, event, DOTA_LOBBY_CONFIG_FIELDS)
+        apply_repeater_config_to_event(repeater, event)
         event.dota_lobby_password = series_lobby_password(
             repeater, previous_mode, previous_password
         )

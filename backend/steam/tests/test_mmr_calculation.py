@@ -159,6 +159,14 @@ class TestMMRCalculation(TestCase):
         self.league_user.refresh_from_db()
         self.assertEqual(self.league_user.mmr, 3800)
 
+    def test_update_user_league_mmr_without_scope_recomputes_league(self) -> None:
+        LeaguePlayerStats.objects.create(
+            user=self.user, league_id=12345, games_played=10, mmr_adjustment=150
+        )
+        update_user_league_mmr(self.user)
+        self.league_user.refresh_from_db()
+        self.assertEqual(self.league_user.mmr, 4150)
+
     def _stamp_verified(self, mmr: int) -> None:
         LeagueUser.objects.filter(pk=self.league_user.pk).update(
             mmr=mmr, mmr_verified_at=timezone.now(), mmr_verified_by=self.user
@@ -184,9 +192,9 @@ class TestMMRCalculation(TestCase):
         self.assertIsNotNone(row.mmr_verified_at)
 
     def test_update_user_league_mmr_league_without_organization(self) -> None:
-        """Should leave league_mmr unchanged when no organization is given."""
+        """Without an organization the league's own org MMR is the base."""
         self.league_user.mmr = 3800
         self.league_user.save(update_fields=["mmr"])
         update_user_league_mmr(self.user, league=self.league)
         self.league_user.refresh_from_db()
-        self.assertEqual(self.league_user.mmr, 3800)
+        self.assertEqual(self.league_user.mmr, 4000)

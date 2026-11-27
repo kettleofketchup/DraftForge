@@ -17,6 +17,7 @@ from django.dispatch import receiver
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
+from league.mmr_sync import league_mmr_seeds
 from league.models import LeagueUser
 from org.mmr import LEAGUE_GAME, org_mmr_map
 from org.models import OrgUser
@@ -274,7 +275,9 @@ def handle_tournament_user_addition(
             "user_id", flat=True
         )
     )
-    league_mmrs = org_mmr_map(org.pk, set(added_pks or ()) - seeded, LEAGUE_GAME)
+    league_mmrs = league_mmr_seeds(
+        org_mmr_map(org.pk, set(added_pks or ()) - seeded, LEAGUE_GAME)
+    )
 
     for user in added_users:
         # Step 1: Create OrgUser if it doesn't exist

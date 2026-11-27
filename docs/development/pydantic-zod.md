@@ -79,7 +79,11 @@ The converter refuses what it cannot render faithfully instead of falling back t
 - recursive models (a `$def` that reaches itself);
 - `$ref` outside `#/$defs/`, or a `$ref` with sibling keywords such as `default`
   (a default on a field whose type is another model or an enum produces one);
-- a bundle whose root schema has no `title`.
+- a bundle whose root schema has no `title`;
+- a `oneOf` without a `discriminator`, or one whose members are not `$ref`s.
+
+Tagged unions (`Annotated[A | B, Field(discriminator="type")]`) become
+`z.discriminatedUnion("type", [ASchema, BSchema])`, so `z.infer` keeps the union type.
 
 Model and field validators (`@model_validator`, `@field_validator`) do not reach Zod.
 Write a Vitest test for any rule the frontend must also enforce.

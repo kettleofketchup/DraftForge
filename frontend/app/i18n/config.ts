@@ -1,8 +1,10 @@
 import { createInstance, type i18n as I18nInstance } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
+import enDiscordPreview from './locales/en/discordPreview.json';
 import enLobby from './locales/en/lobby.json';
 import enNavbar from './locales/en/navbar.json';
+import esDiscordPreview from './locales/es/discordPreview.json';
 import esLobby from './locales/es/lobby.json';
 import esNavbar from './locales/es/navbar.json';
 
@@ -16,11 +18,19 @@ export function createI18nInstance(locale: string): I18nInstance {
     lng: locale,
     fallbackLng: FALLBACK_LOCALE,
     supportedLngs: [...SUPPORTED_LOCALES],
-    ns: ['navbar', 'lobby'],
+    ns: ['navbar', 'lobby', 'discordPreview'],
     defaultNS: 'navbar',
     resources: {
-      en: { navbar: enNavbar, lobby: enLobby },
-      es: { navbar: esNavbar, lobby: esLobby },
+      en: {
+        navbar: enNavbar,
+        lobby: enLobby,
+        discordPreview: enDiscordPreview,
+      },
+      es: {
+        navbar: esNavbar,
+        lobby: esLobby,
+        discordPreview: esDiscordPreview,
+      },
     },
     interpolation: { escapeValue: false },
     react: { useSuspense: false },

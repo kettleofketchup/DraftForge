@@ -15,6 +15,7 @@ export {
   getTournaments,
   getTournamentsBasic,
   getTournamentsPage,
+  removeTournamentMember,
   updateTournament,
 } from './tournamentAPI';
 
