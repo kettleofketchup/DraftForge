@@ -50,6 +50,7 @@ DISCORD_ACTIVITY_ENABLED = env_bool("DISCORD_ACTIVITY_ENABLED")
 READY_CHECK_AUTOMATIC_LIVE = env_bool("READY_CHECK_AUTOMATIC_LIVE")
 DFLOGO_EMOJI_ID = os.environ.get("DFLOGO_EMOJI_ID")
 SITE_URL = os.environ.get("SITE_URL", "https://localhost")
+ORG_API_CREDENTIAL_KEYS = os.environ.get("ORG_API_CREDENTIAL_KEYS", "")
 
 # Internal service auth — celery workers and Discord bot call Django via HTTP
 INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
