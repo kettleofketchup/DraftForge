@@ -80,7 +80,6 @@ def check_scheduled_events() -> str:
             )
             continue
 
-        # Update via internal API
         if se.is_recurring and se.next_post_at:
             dt = datetime.fromisoformat(se.next_post_at) + timedelta(days=7)
             update_scheduled_event(
@@ -116,8 +115,8 @@ def sweep_stale_discord_leases() -> int:
       Admins should investigate via the original failed log row before it
       ages out.
 
-    The 60-second beat cadence keeps total worker-crash recovery latency
-    below ~1.5 min (5min sweep threshold + 30s next poll).
+    The 60-second beat sweeps pending leases after the 5-minute threshold;
+    reminder retries then wait for the next 30-second poll.
 
     Both deletes happen server-side via the internal endpoint — the
     worker stays ORM-free.

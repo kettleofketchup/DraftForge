@@ -1076,6 +1076,8 @@ class DraftActivityTests(ClearIntentsMixin, TestCase):
 
         interaction = SimpleNamespace(
             guild=SimpleNamespace(id=1),
+            guild_id=1,
+            message=None,
             channel=SimpleNamespace(type=discord.ChannelType.voice),
             response=SimpleNamespace(launch_activity=AsyncMock()),
         )

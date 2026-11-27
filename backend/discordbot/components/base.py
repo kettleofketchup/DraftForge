@@ -226,6 +226,8 @@ class SignupButton(ui.Button):
             if result["action"] == "signed_up":
                 await respond_to_signup_user(
                     interaction,
+                    event_id=self.event_id,
+                    result="signed_up",
                     content=f"✅ {signed_up_text(result['status'], result.get('unmet_labels'))}",
                 )
             elif result["action"] == "needs_modal":
@@ -306,6 +308,8 @@ class TentativeButton(ui.Button):
             if result["action"] == "tentative":
                 await respond_to_signup_user(
                     interaction,
+                    event_id=self.event_id,
+                    result="tentative",
                     content="❓ Marked as tentative. We'll count you as interested!",
                 )
             elif result["action"] == "error":
@@ -339,7 +343,10 @@ class DeclineButton(ui.Button):
 
             if result["action"] == "declined":
                 await respond_to_signup_user(
-                    interaction, content="You've declined the event."
+                    interaction,
+                    event_id=self.event_id,
+                    result="declined",
+                    content="You've declined the event.",
                 )
             else:
                 await interaction.response.send_message(
@@ -493,11 +500,15 @@ class ScreenshotUploadModal(ui.Modal):
                 if result.get("signed_up"):
                     await respond_to_signup_user(
                         interaction,
+                        event_id=self.event_id,
+                        result="signed_up",
                         content=f"✅ {result.get('message', 'Screenshot uploaded! You are signed up.')}",
                     )
                 else:
                     await respond_to_signup_user(
                         interaction,
+                        event_id=self.event_id,
+                        result="screenshot_saved",
                         content=f"✅ {result.get('message', 'Screenshot saved.')}",
                     )
             else:

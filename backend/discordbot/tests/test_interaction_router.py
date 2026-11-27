@@ -1,5 +1,6 @@
 """Component interaction routing in discordbot.interaction_router."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import ExitStack, asynccontextmanager
 from types import SimpleNamespace
@@ -119,3 +120,51 @@ class RouteComponentInteractionTests(IsolatedAsyncioTestCase):
                         h.interaction, "event_decline:abc"
                     )
             self.assertIn("custom_id_decode_failed", [e["event"] for e in logs])
+
+
+class DMClickHookTests(IsolatedAsyncioTestCase):
+    def _interaction(self, *, guild_id: int | None) -> MagicMock:
+        interaction = MagicMock()
+        interaction.guild_id = guild_id
+        interaction.message.id = 111
+        interaction.user.id = 222
+        interaction.response.is_done = MagicMock(return_value=True)
+        interaction.response.send_message = AsyncMock()
+        return interaction
+
+    async def _route(self, interaction: MagicMock, custom_id: str) -> MagicMock:
+        with ExitStack() as stack:
+            _Harness(stack)
+            record = stack.enter_context(patch(f"{MOD}.record_dm_click"))
+            await interaction_router.route_component_interaction(interaction, custom_id)
+            await asyncio.gather(*list(interaction_router._click_tasks))
+        return record
+
+    async def test_dm_click_schedules_record(self) -> None:
+        record = await self._route(self._interaction(guild_id=None), "event_signup:5")
+        record.assert_called_once_with("111", "222")
+
+    async def test_guild_click_does_not_record(self) -> None:
+        record = await self._route(self._interaction(guild_id=9), "event_signup:5")
+        record.assert_not_called()
+
+    async def test_click_without_message_not_recorded(self) -> None:
+        interaction = self._interaction(guild_id=None)
+        interaction.message = None
+        record = await self._route(interaction, "event_signup:5")
+        record.assert_not_called()
+
+    async def test_record_failure_is_logged_not_raised(self) -> None:
+        with ExitStack() as stack:
+            _Harness(stack)
+            stack.enter_context(
+                patch(f"{MOD}.record_dm_click", side_effect=RuntimeError("down"))
+            )
+            with capture_logs() as logs:
+                await interaction_router.route_component_interaction(
+                    self._interaction(guild_id=None), "event_signup:5"
+                )
+                await asyncio.gather(*list(interaction_router._click_tasks))
+        failed = [e for e in logs if e["event"] == "dm_click_record_failed"]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["subsystem"], "dm")

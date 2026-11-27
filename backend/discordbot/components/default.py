@@ -91,6 +91,8 @@ class DefaultSignupModal(ui.Modal):
             if result["action"] == "signed_up":
                 await respond_to_signup_user(
                     interaction,
+                    event_id=self.event_id,
+                    result="signed_up",
                     content=f"✅ {signed_up_text(result['status'], result.get('unmet_labels'))}",
                 )
             elif result["action"] == "error":

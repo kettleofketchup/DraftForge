@@ -2,11 +2,9 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
 
-from discordbot.utils import (
-    DiscordRateLimitTimeout,
-    sync_create_dm_channel,
-    sync_send_dm,
-)
+from discordbot.dm_ledger import ClaimResult
+from discordbot.models import DMStatus
+from discordbot.utils import DiscordRateLimitTimeout
 from events.tournament_tasks import (
     send_tournament_draft_links,
     send_tournament_herodraft_links,
@@ -25,10 +23,15 @@ def _ok_response(data: dict[str, str]) -> MagicMock:
     return response
 
 
+GRANTED = ClaimResult(
+    id=1, granted=True, status=DMStatus.PENDING, attempts=1, created=True
+)
+
+
 def _discord_request(method: str, url: str, **kwargs: object) -> MagicMock:
     if url.endswith("/users/@me/channels"):
-        return _ok_response({"id": "dm-channel"})
-    return _ok_response({"id": "msg-1"})
+        return _ok_response({"id": "900100"})
+    return _ok_response({"id": "900200"})
 
 
 PARTICIPANTS = [
@@ -38,36 +41,11 @@ PARTICIPANTS = [
 
 
 @override_settings(TEST=False)
-@patch("discordbot.utils._log_discord_message", return_value=None)
+@patch("discordbot.dm.finalize_dm", return_value=True)
+@patch("discordbot.dm.mark_dm_sending", return_value=True)
+@patch("discordbot.dm.claim_dm", return_value=GRANTED)
 @patch("discordbot.utils.requests.request", side_effect=_discord_request)
-class SyncSendDmRateLimitTimeoutTest(SimpleTestCase):
-    @patch(
-        "discordbot.utils._acquire_rate_limit_token",
-        side_effect=RATE_LIMIT_TIMEOUT,
-    )
-    def test_create_dm_channel_timeout_returns_none(
-        self, _token: MagicMock, _request: MagicMock, _log: MagicMock
-    ) -> None:
-        self.assertIsNone(sync_create_dm_channel("111"))
-
-    @patch(
-        "discordbot.utils._acquire_rate_limit_token",
-        side_effect=[True, RATE_LIMIT_TIMEOUT],
-    )
-    def test_send_dm_timeout_returns_none_and_logs_failure(
-        self, _token: MagicMock, _request: MagicMock, log_message: MagicMock
-    ) -> None:
-        self.assertIsNone(
-            sync_send_dm("111", content="hi", tournament_log_id=7),
-        )
-        log_message.assert_called_once()
-        self.assertFalse(log_message.call_args.kwargs["success"])
-        self.assertEqual(log_message.call_args.kwargs["tournament_log_id"], 7)
-
-
-@override_settings(TEST=False)
-@patch("discordbot.utils._log_discord_message", return_value=None)
-@patch("discordbot.utils.requests.request", side_effect=_discord_request)
+@patch("events.tournament_tasks.create_activity_notification_invite", return_value=None)
 @patch("events.tournament_tasks.update_tournament_log")
 @patch(
     "events.tournament_tasks.create_tournament_log",
@@ -107,8 +85,11 @@ class TournamentDmLoopRateLimitTimeoutTest(SimpleTestCase):
         _participants: MagicMock,
         _create_log: MagicMock,
         update_log: MagicMock,
+        _invite: MagicMock,
         request: MagicMock,
-        _log_message: MagicMock,
+        _claim: MagicMock,
+        _mark: MagicMock,
+        finalize: MagicMock,
     ) -> None:
         with patch(
             "discordbot.utils._acquire_rate_limit_token", side_effect=self.TOKENS
@@ -116,6 +97,10 @@ class TournamentDmLoopRateLimitTimeoutTest(SimpleTestCase):
             result = send_tournament_draft_links(1, 42)
         self.assertIn("1/2", result)
         self._assert_finalized(update_log, request)
+        self.assertEqual(finalize.call_count, 2)
+        self.assertEqual(
+            finalize.call_args_list[0].args[1].error_class, "rate_limit_timeout"
+        )
 
     @patch("events.tournament_tasks.get_match_participants", return_value=PARTICIPANTS)
     @patch(
@@ -133,8 +118,11 @@ class TournamentDmLoopRateLimitTimeoutTest(SimpleTestCase):
         _participants: MagicMock,
         _create_log: MagicMock,
         update_log: MagicMock,
+        _invite: MagicMock,
         request: MagicMock,
-        _log_message: MagicMock,
+        _claim: MagicMock,
+        _mark: MagicMock,
+        finalize: MagicMock,
     ) -> None:
         with patch(
             "discordbot.utils._acquire_rate_limit_token", side_effect=self.TOKENS
@@ -144,3 +132,7 @@ class TournamentDmLoopRateLimitTimeoutTest(SimpleTestCase):
             )
         self.assertIn("1/2", result)
         self._assert_finalized(update_log, request)
+        self.assertEqual(finalize.call_count, 2)
+        self.assertEqual(
+            finalize.call_args_list[0].args[1].error_class, "rate_limit_timeout"
+        )

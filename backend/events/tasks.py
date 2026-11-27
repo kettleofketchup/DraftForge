@@ -38,13 +38,14 @@ from app.internal_client import (
     update_discord_event,
     update_event_dm,
 )
-from discordbot.models import DMType
+from discordbot.dm import DMOutcome, DMRequest, send_dm
+from discordbot.dm_keys import signup_reminder_key
+from discordbot.models import DMKind, DMStatus, DMSubject, DMType
 from discordbot.utils import (
     DISCORD_API_BASE,
     MessageDeletedError,
     _get_headers,
     sync_edit_message,
-    sync_send_dm,
     sync_send_embed_with_components,
     sync_send_embed_with_components_no_log,
 )
@@ -93,6 +94,7 @@ from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from discordbot.schemas import DiscordEventStateSchema
+    from events.schemas import RepeaterSubscriberSchema
 
 logger = get_logger(__name__)
 log = get_logger(__name__)
@@ -1573,6 +1575,62 @@ def check_event_reminders() -> str:
     return fire_due_reminders()
 
 
+TEST_FAKE_MESSAGE_ID = "test-fake-message-id"
+
+
+class EventDMCreateFailed(RuntimeError):
+    pass
+
+
+def _send_subscriber_reminder(
+    *,
+    event_id: int,
+    organization_id: int | None,
+    repeater_id: int | None,
+    discord_event_pk: int | None,
+    sub: "RepeaterSubscriberSchema",
+    embed: dict[str, Any],
+    components: list[dict[str, Any]] | None,
+) -> tuple[DMOutcome, int | None]:
+    dm_pk: int | None = None
+
+    def _on_claimed(ledger_id: int, _status: DMStatus) -> None:
+        nonlocal dm_pk
+        if not sub.org_user_pk:
+            return
+        resp = create_event_dm(
+            discord_event=discord_event_pk,
+            org_user=sub.org_user_pk,
+            dm_type=DMType.SIGNUP_REMINDER,
+            delivered=False,
+            ledger_entry=ledger_id,
+        )
+        if not resp or not resp.ok:
+            raise EventDMCreateFailed(
+                f"create_event_dm failed: {resp.status_code if resp else 'no response'}"
+            )
+        dm_pk = resp.json().get("id")
+
+    outcome = send_dm(
+        DMRequest(
+            kind=DMKind.SIGNUP_REMINDER,
+            idempotency_key=signup_reminder_key(event_id=event_id, user_pk=sub.user_pk),
+            discord_user_id=sub.discord_id or None,
+            recipient_user_id=sub.user_pk,
+            organization_id=organization_id,
+            subject=(DMSubject.EVENT, event_id),
+            context={
+                "discord_event_id": discord_event_pk,
+                "repeater_id": repeater_id,
+            },
+            embed=embed,
+            components=components,
+        ),
+        on_claimed=_on_claimed,
+    )
+    return outcome, dm_pk
+
+
 @shared_task(acks_late=True, reject_on_worker_lost=True)
 def send_subscriber_notifications(event_id: int) -> str:
     """Send signup reminder DMs to repeater subscribers who haven't signed up.
@@ -1584,10 +1642,9 @@ def send_subscriber_notifications(event_id: int) -> str:
     (source="signup_reminder", source_id=event_id) only.
 
     Filters out subscribers who already have an EventSignup for this event.
-    Uses create-first pattern for crash safety:
-    1. Create DiscordEventDM record (delivered=False)
-    2. Send DM
-    3. Update record with delivery status
+    Each DM goes through ``send_dm``: the ledger row is claimed first, the
+    DiscordEventDM (delivered=False) is created from the claim hook, then the
+    DM is sent and the record updated with the delivery status.
 
     Rate-limited at 1 DM/second to respect Discord limits.
     """
@@ -1645,6 +1702,9 @@ def send_subscriber_notifications(event_id: int) -> str:
     sent = 0
     skipped = 0
     failed = 0
+    duplicate = 0
+    test_mode = 0
+    ledger_unavailable = 0
 
     try:
         for sub in subscribers:
@@ -1652,34 +1712,34 @@ def send_subscriber_notifications(event_id: int) -> str:
                 skipped += 1
                 continue
 
-            # Create DM record via internal API (crash safety + idempotency)
-
-            dm_pk = None
-            if sub.org_user_pk:
-                dm_resp = create_event_dm(
-                    discord_event=discord_event_pk,
-                    org_user=sub.org_user_pk,
-                    dm_type=DMType.SIGNUP_REMINDER,
-                    delivered=False,
-                )
-                if not dm_resp or not dm_resp.ok:
-                    # Likely already exists (idempotency) or error
-                    skipped += 1
-                    continue
-                dm_pk = dm_resp.json().get("id")
-
-            result = sync_send_dm(sub.discord_id, embed=embed, components=components)
-
-            if result:
+            outcome, dm_pk = _send_subscriber_reminder(
+                event_id=event_id,
+                organization_id=event.organization_id or None,
+                repeater_id=event.event_repeater_id,
+                discord_event_pk=discord_event_pk,
+                sub=sub,
+                embed=embed,
+                components=components,
+            )
+            if outcome.status in (DMStatus.SENT, DMStatus.SKIPPED_TEST_MODE):
                 if dm_pk:
                     update_event_dm(
                         dm_pk,
-                        message_id=result.get("id", ""),
+                        message_id=outcome.message_id or TEST_FAKE_MESSAGE_ID,
                         sent_at=datetime.now(tz.utc).isoformat(),
                         delivered=True,
                     )
                 sent += 1
+                if outcome.status == DMStatus.SKIPPED_TEST_MODE:
+                    test_mode += 1
+            elif outcome.status == "duplicate":
+                duplicate += 1
+                skipped += 1
+            elif outcome.status == DMStatus.SKIPPED_NO_DISCORD:
+                skipped += 1
             else:
+                if outcome.status == "ledger_unavailable":
+                    ledger_unavailable += 1
                 failed += 1
     except Exception as exc:
         # Finalize as failure so the sweeper ages this out and admins can
@@ -1696,17 +1756,20 @@ def send_subscriber_notifications(event_id: int) -> str:
         )
         raise
 
-    # success=True only if at least one DM was actually delivered;
-    # all-failed marks success=False so the sweeper can age it out and
-    # the next poll can retry.
+    # An unreachable ledger fails the batch so the lease retry runs; the
+    # idempotency keys turn already-sent subscribers into duplicates.
+    success = ledger_unavailable == 0 and (sent + duplicate) > 0
     finalize_discord_message_log(
         log_pk,
-        success=sent > 0,
+        success=success,
         response_data={
             "type": "signup_reminder_batch",
             "sent": sent,
             "skipped": skipped,
             "failed": failed,
+            "duplicate": duplicate,
+            "skipped_test_mode": test_mode,
+            "ledger_unavailable": ledger_unavailable,
         },
     )
 
@@ -1718,5 +1781,7 @@ def send_subscriber_notifications(event_id: int) -> str:
         sent=sent,
         skipped=skipped,
         failed=failed,
+        duplicate=duplicate,
+        ledger_unavailable=ledger_unavailable,
     )
     return f"Sent {sent} DMs, skipped {skipped}, failed {failed} for event {event_id}"

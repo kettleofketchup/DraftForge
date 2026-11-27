@@ -28,7 +28,9 @@ from celery import Task, shared_task
 from django.conf import settings
 
 from app.internal_client import create_tournament_log, update_tournament_log
-from discordbot.utils import sync_send_dm
+from discordbot.dm import DELIVERED_OUTCOMES, DMRequest, send_dm, task_run_id
+from discordbot.dm_keys import lobby_info_key
+from discordbot.models import DMKind, DMSubject
 from events.discord.tournament_embeds import build_lobby_info_embed
 from lobby import internal_api
 from lobby.client import DotaLobbyClient, DotaLobbyError
@@ -500,12 +502,12 @@ def reconcile_dota_lobbies() -> dict[str, int] | str:
     return counts
 
 
-@shared_task
-def send_lobby_info(game_lobby_id: int) -> str:
+@shared_task(bind=True)
+def send_lobby_info(self: Task, game_lobby_id: int) -> str:
     """DM rostered players the lobby name, password and their side (opt-in).
 
     The password is read from dota_lobby, so it is the one players need. It
-    goes out in the DM only: no per-message log row stores the embed.
+    goes out in the DM only: the ledger row stores no embed.
     """
 
     if not _enabled():
@@ -541,6 +543,7 @@ def send_lobby_info(game_lobby_id: int) -> str:
     )
     tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
 
+    task_id = task_run_id(self)
     sent = 0
     failed_users = []
     for person in recipients:
@@ -553,9 +556,36 @@ def send_lobby_info(game_lobby_id: int) -> str:
             matchup=matchup,
             region=info.get("region") or "",
         )
-        # No tournament_log_id: the per-message log would store the embed,
-        # and with it the password.
-        if sync_send_dm(person["discord_id"], embed=embed):
+        outcome = send_dm(
+            DMRequest(
+                kind=DMKind.LOBBY_INFO,
+                idempotency_key=lobby_info_key(
+                    game_lobby_id=game_lobby_id,
+                    task_id=task_id,
+                    discord_id=person["discord_id"],
+                ),
+                discord_user_id=person["discord_id"] or None,
+                recipient_user_id=person.get("user_pk"),
+                organization_id=info.get("organization_id"),
+                subject=(DMSubject.GAME_LOBBY, game_lobby_id),
+                tournament_log_id=tournament_log_id,
+                context={"side": person["side"]},
+                embed=embed,
+            )
+        )
+        if outcome.auth_rejected:
+            if tournament_log_id:
+                update_tournament_log(
+                    tournament_log_id,
+                    recipient_count=sent,
+                    message=(
+                        f"Stopped sending lobby info after {sent}/{len(recipients)}: "
+                        "Discord rejected the bot token"
+                    ),
+                    success=False,
+                )
+            return "Stopped: Discord rejected the bot token"
+        if outcome.status in DELIVERED_OUTCOMES:
             sent += 1
         else:
             failed_users.append(person.get("username") or person["discord_id"])

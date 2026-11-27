@@ -480,7 +480,7 @@ def notify_info(request: Request, pk: int) -> Response:
 
     row = get_object_or_404(
         GameLobby.objects.select_related(
-            "game__tournament", "radiant_team", "dire_team"
+            "game__tournament__league", "radiant_team", "dire_team"
         ),
         pk=pk,
     )
@@ -513,6 +513,11 @@ def notify_info(request: Request, pk: int) -> Response:
             "ended": row.ended,
             "tournament_id": tournament.pk if tournament else None,
             "tournament_name": tournament.name if tournament else "",
+            "organization_id": (
+                tournament.league.organization_id
+                if tournament and tournament.league
+                else None
+            ),
             "enabled": bool(tournament and tournament.discord_send_lobby_info),
             "name": str(row.request.get("name") or ""),
             "region": str(row.request.get("region") or ""),
