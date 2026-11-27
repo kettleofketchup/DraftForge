@@ -10,10 +10,20 @@ from django.test import TestCase
 from django.utils import timezone as tz
 
 from app.models import CustomUser
+from discordbot.models import DiscordEvent
 from events.constants import EventState, RepeatFrequency, SignupAction, SignupStatus
 from events.ledger import ActorRole, SignupMeans
-from events.models import Event, EventRepeater, EventSignup, SignupLedgerEntry
+from events.models import (
+    Event,
+    EventRepeater,
+    EventSignup,
+    ReadyCheck,
+    ReadyCheckEntry,
+    SignupLedgerEntry,
+)
+from events.ready_check_constants import ReadyCheckPhase
 from org.models import Organization
+from org.standing import api as standing
 from tournament.models import Tournament
 
 _SCRIPT = (
@@ -75,6 +85,97 @@ class CleanupMovedEventTests(TestCase):
             .exclude(action=SignupAction.BACKFILLED)
             .order_by("pk")
         )
+
+    def test_cancel_stale_event_uses_shared_lifecycle_before_discord_row_deletion(
+        self,
+    ) -> None:
+        stale = self._event("Stale", self.sunday, EventState.SIGNUPS_OPEN)
+        tournament = Tournament.objects.create(name="Future", date_played=tz.now())
+        stale.tournament = tournament
+        stale.save(update_fields=["tournament"])
+        signup = self._signup(stale, self.mover, SignupStatus.APPROVED)
+        check = ReadyCheck.objects.create(event=stale)
+        ReadyCheckEntry.objects.create(
+            ready_check=check, signup=signup, user=self.mover
+        )
+        discord = DiscordEvent.objects.create(
+            event=stale,
+            guild_id="cleanup-guild",
+            scheduled_event_id="cleanup-scheduled",
+        )
+
+        with (
+            patch("events.services.delete_discord_scheduled_event.delay") as delete,
+            patch(
+                "events.services.standing.on_event_closed",
+                wraps=standing.on_event_closed,
+            ) as closed,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            cleanup.cancel_stale_event(stale)
+            delete.assert_not_called()
+
+        stale.refresh_from_db()
+        check.refresh_from_db()
+        self.assertEqual(stale.state, EventState.CANCELLED)
+        self.assertIsNone(stale.tournament_id)
+        self.assertFalse(Tournament.objects.filter(pk=tournament.pk).exists())
+        self.assertFalse(DiscordEvent.objects.filter(pk=discord.pk).exists())
+        self.assertEqual(check.phase, ReadyCheckPhase.CANCELLED)
+        rows = list(SignupLedgerEntry.objects.filter(event=stale).order_by("pk"))
+        self.assertEqual(
+            [row.action for row in rows],
+            [SignupAction.READY_CHECK_WITHDRAWN, SignupAction.READY_CHECK_TRANSITION],
+        )
+        for row in rows:
+            self.assertEqual(row.actor_role, ActorRole.SYSTEM)
+            self.assertIsNone(row.actor_user_id)
+            self.assertEqual(row.reason, "event_cancelled")
+        closed.assert_called_once_with(
+            stale, cancelled=True, source="cancel", actor=None
+        )
+        delete.assert_called_once_with("cleanup-guild", "cleanup-scheduled")
+
+    def test_cancel_stale_event_rechecks_lifecycle_under_lock(self) -> None:
+        stale = self._event("Stale", self.sunday, EventState.UPCOMING)
+        for state in (
+            EventState.ROLL_CALL,
+            EventState.IN_PROGRESS,
+            EventState.COMPLETED,
+            EventState.CANCELLED,
+        ):
+            with self.subTest(state=state):
+                Event.objects.filter(pk=stale.pk).update(state=state)
+                with self.assertRaises(ValueError):
+                    cleanup.cancel_stale_event(stale)
+                self.assertEqual(Event.objects.get(pk=stale.pk).state, state)
+
+    def test_cancel_stale_event_preserves_started_tournament(self) -> None:
+        stale = self._event("Stale", self.sunday, EventState.SIGNUPS_OPEN)
+        tournament = Tournament.objects.create(
+            name="Started", date_played=tz.now(), state="in_progress"
+        )
+        stale.tournament = tournament
+        stale.save(update_fields=["tournament"])
+        with self.assertRaises(ValueError):
+            cleanup.cancel_stale_event(stale)
+        stale.refresh_from_db()
+        self.assertEqual(stale.state, EventState.SIGNUPS_OPEN)
+        self.assertEqual(stale.tournament_id, tournament.pk)
+        self.assertTrue(Tournament.objects.filter(pk=tournament.pk).exists())
+
+    def test_cancel_stale_event_rolls_back_if_standing_cleanup_fails(self) -> None:
+        stale = self._event("Stale", self.sunday, EventState.SIGNUPS_OPEN)
+        discord = DiscordEvent.objects.create(event=stale, guild_id="cleanup-guild")
+        with patch(
+            "events.services.standing.on_event_closed",
+            side_effect=RuntimeError("standing failed"),
+        ):
+            with self.assertRaises(RuntimeError):
+                cleanup.cancel_stale_event(stale)
+        stale.refresh_from_db()
+        self.assertEqual(stale.state, EventState.SIGNUPS_OPEN)
+        self.assertTrue(DiscordEvent.objects.filter(pk=discord.pk).exists())
 
     def test_migrate_signups_records_pair(self) -> None:
         stale = self._event(
@@ -293,9 +394,26 @@ class CleanupMovedEventTests(TestCase):
             event=stale, user=self.mover, status=SignupStatus.APPROVED
         )
         baseline = SignupLedgerEntry.objects.count()
+        discord = DiscordEvent.objects.create(
+            event=stale,
+            guild_id="cleanup-guild",
+            scheduled_event_id="cleanup-scheduled",
+        )
+        check = ReadyCheck.objects.create(event=stale)
 
-        self._run_main()
+        with (
+            patch("events.services.delete_discord_scheduled_event.delay") as delete,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self._run_main()
+        delete.assert_not_called()
 
         self.assertEqual(SignupLedgerEntry.objects.count(), baseline)
         row.refresh_from_db()
+        stale.refresh_from_db()
+        check.refresh_from_db()
+        discord.refresh_from_db()
         self.assertEqual(row.event_id, stale.pk)
+        self.assertEqual(stale.state, EventState.UPCOMING)
+        self.assertEqual(check.phase, ReadyCheckPhase.OPEN)
+        self.assertEqual(discord.scheduled_event_id, "cleanup-scheduled")
