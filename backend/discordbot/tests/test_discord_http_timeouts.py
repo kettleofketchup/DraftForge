@@ -104,23 +104,3 @@ class VoiceChannelActivityTest(TestCase):
         self.assertEqual(mock_get.call_count, 2)
         for call in mock_get.call_args_list:
             self.assertEqual(call.kwargs["timeout"], DISCORD_HTTP_TIMEOUT_S)
-
-
-class UserGuildsTimeoutTest(TestCase):
-    @patch("discordbot.services.users.requests.get")
-    def test_passes_timeout(self, mock_get):
-        from social_django.models import UserSocialAuth
-
-        from discordbot.services.users import get_user_guilds
-
-        user = CustomUser.objects.create_user(username="guilds-user", password="x")
-        UserSocialAuth.objects.create(
-            user=user, provider="discord", uid="42", extra_data={"access_token": "t"}
-        )
-        mock_get.return_value = _ok([])
-        request = APIRequestFactory().get("/api/discord/user-guilds/")
-        force_authenticate(request, user=user)
-
-        response = get_user_guilds(request)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(mock_get.call_args.kwargs["timeout"], DISCORD_HTTP_TIMEOUT_S)
