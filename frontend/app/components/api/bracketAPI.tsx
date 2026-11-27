@@ -10,7 +10,7 @@ import {
 import type { BracketMatch } from '~/components/bracket/types';
 import { api } from './axios';
 
-// set_team_placement in backend/app/views/bracket.py
+// set_team_placement in backend/tournament/views/bracket.py
 export const SetTeamPlacementResponseSchema = z.object({
   team_id: z.number(),
   placement: z.number().nullable(),
@@ -52,17 +52,17 @@ export async function advanceWinner(
 }
 
 /**
- * Save bracket matches to backend
+ * Save bracket matches to backend. `version` is the bracket version they were
+ * loaded from; the backend returns 409 `bracket_stale` if it has changed.
  */
 export async function saveBracket(
   tournamentId: number,
   matches: BracketMatch[],
+  version: string | null = null,
 ): Promise<BracketResponseDTO> {
   const response = await api.post(
     `/bracket/tournaments/${tournamentId}/save/`,
-    {
-      matches,
-    },
+    { matches, version },
   );
   return BracketResponseSchema.parse(response.data);
 }

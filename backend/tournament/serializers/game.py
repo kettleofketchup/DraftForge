@@ -145,6 +145,11 @@ class BracketSaveSerializer(serializers.Serializer):
     matches = serializers.ListField(
         child=serializers.DictField(), help_text="List of match objects to save"
     )
+    version = serializers.CharField(
+        required=False,
+        allow_null=True,
+        help_text="Bracket version the payload was built from; a mismatch is a 409",
+    )
 
 
 class BracketGenerateSerializer(serializers.Serializer):

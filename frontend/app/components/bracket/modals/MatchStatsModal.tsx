@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQueryClient } from '@tanstack/react-query';
 import { BarChart3, Link2, Loader2, RotateCcw, Swords } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -19,7 +19,10 @@ import {
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { usePersistMatchResult } from '~/hooks/useBracket';
+import {
+  MATCH_RESULT_MUTATION_KEY,
+  usePersistMatchResult,
+} from '~/hooks/useBracket';
 import { useCanManageCurrentTournament } from '~/hooks/useCanManageTournament';
 import { useGameLobby } from '~/hooks/useGameLobby';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
@@ -65,8 +68,14 @@ export function MatchStatsModal({
   const setMatchWinner = useBracketStore((state) => state.setMatchWinner);
   const advanceWinner = useBracketStore((state) => state.advanceWinner);
   const unsetMatchWinner = useBracketStore((state) => state.unsetMatchWinner);
+  const holdResultForSave = useBracketStore((state) => state.holdResultForSave);
   const queryClient = useQueryClient();
   const persistMatchResult = usePersistMatchResult(tournament?.pk ?? undefined);
+  const savingGameIds = useMutationState({
+    filters: { mutationKey: MATCH_RESULT_MUTATION_KEY, status: 'pending' },
+    select: (m) =>
+      (m.state.variables as { gameId?: number } | undefined)?.gameId,
+  });
 
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -92,13 +101,14 @@ export function MatchStatsModal({
         )
       : null;
 
+  const resultSaving = savingGameIds.includes(match.gameId);
   const isGameComplete = match.status === 'completed';
   const hasMatchId = !!match.steamMatchId;
 
-  // A saved bracket with no other pending edits persists the result straight
+  // A saved bracket with no structural edits persists the result straight
   // away; otherwise the server's teams may differ, so it rides the next Save.
   const canPersistResult = () =>
-    !!match.gameId && !useBracketStore.getState().isDirty;
+    !!match.gameId && !useBracketStore.getState().hasStructuralEdits;
 
   const handleSetWinner = (winner: 'radiant' | 'dire') => {
     const persist = canPersistResult();
@@ -106,6 +116,8 @@ export function MatchStatsModal({
     advanceWinner(match.id);
     if (persist && match.gameId) {
       persistMatchResult.mutate({ gameId: match.gameId, winner });
+    } else {
+      holdResultForSave();
     }
   };
 
@@ -114,6 +126,8 @@ export function MatchStatsModal({
     unsetMatchWinner(match.id);
     if (persist && match.gameId) {
       persistMatchResult.mutate({ gameId: match.gameId, winner: null });
+    } else {
+      holdResultForSave();
     }
   };
 
@@ -270,7 +284,7 @@ export function MatchStatsModal({
                       lobbyWinnerSlot === 'radiant' && 'ring-2 ring-warning',
                     )}
                     onClick={() => handleSetWinner('radiant')}
-                    disabled={persistMatchResult.isPending}
+                    disabled={resultSaving}
                     data-testid="radiantWinsButton"
                     data-lobby-suggested={
                       lobbyWinnerSlot === 'radiant' || undefined
@@ -288,7 +302,7 @@ export function MatchStatsModal({
                       lobbyWinnerSlot === 'dire' && 'ring-2 ring-warning',
                     )}
                     onClick={() => handleSetWinner('dire')}
-                    disabled={persistMatchResult.isPending}
+                    disabled={resultSaving}
                     data-testid="direWinsButton"
                     data-lobby-suggested={
                       lobbyWinnerSlot === 'dire' || undefined
@@ -317,7 +331,7 @@ export function MatchStatsModal({
                 <SecondaryButton
                   size="sm"
                   onClick={handleUnsetWinner}
-                  disabled={persistMatchResult.isPending}
+                  disabled={resultSaving}
                   data-testid="unsetWinnerButton"
                 >
                   <RotateCcw className="size-4 mr-1" />
