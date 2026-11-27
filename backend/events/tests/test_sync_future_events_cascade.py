@@ -42,7 +42,6 @@ class SyncFutureEventsReturnTypeTest(_DiscordTaskTestCase):
 
         result = sync_future_events(repeater)
 
-        # Now returns a list of Event instances (was: int count)
         self.assertEqual({e.pk for e in result}, {e1.pk, e2.pk})
 
     def test_does_not_touch_past_state_events(self):
