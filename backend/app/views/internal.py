@@ -280,7 +280,6 @@ def get_sync_discord_state(request: Request) -> Response:
     """Bulk state for sync_discord_events — all active events' Discord status.
 
     Returns event IDs that have: signup posts, scheduled events, recent log attempts.
-    Replaces 4 separate queries in sync_discord_events task.
     """
 
     now = tz.now()
