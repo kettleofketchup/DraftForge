@@ -1,0 +1,53 @@
+repos:
+  # Ruff replaces black + isort. `ruff` lints (config in pyproject.toml
+  # [tool.ruff]): import order (I), bans base stdlib logging in OTEL-flow code
+  # (TID), enforces annotations (ANN). `ruff-format` does the formatting.
+  # Run `pre-commit autoupdate` to bump the rev.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      # Format first, then lint/check — so the check sees formatted code.
+      - id: ruff-format
+      - id: ruff
+        args: [--fix]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+    -   id: check-yaml
+        args: ['--unsafe']
+    -   id: end-of-file-fixer
+        exclude: ^frontend/shadcn-lint-suppressions\.json$
+    -   id: trailing-whitespace
+        exclude: ^scripts/slot_tests/fixtures/
+  # Enforce structured-logging taxonomy: every get_logger(...) call must pass a
+  # string-literal event name + system= + subsystem=. Only files binding a
+  # logger via get_logger are checked (stdlib-logging files are ignored).
+  - repo: local
+    hooks:
+      - id: logging-taxonomy
+        name: structured logging taxonomy (system/subsystem)
+        entry: python3 backend/scripts/check_logging_taxonomy.py
+        language: system
+        files: \.py$
+        pass_filenames: true
+      - id: prettier-frontend
+        name: prettier (frontend)
+        entry: frontend/scripts/prettier-check-files.sh
+        language: system
+        files: ^frontend/
+        exclude: ^frontend/app/data/CHANGELOG\.md$
+        pass_filenames: true
+      - id: frontend-shadcn-lint
+        name: shadcn design-system lint (frontend)
+        entry: frontend/scripts/shadcn-lint-files.sh
+        language: system
+        files: ^frontend/(app/.*\.(js|jsx|ts|tsx)|eslint\.shadcn\.config\.js|shadcn-lint-suppressions\.json|eslint-rules/.*\.js)$
+        pass_filenames: true
+      # One whole-project run per commit (tsc needs the full program), not per file.
+      - id: frontend-typecheck
+        name: tsc typecheck (frontend)
+        entry: npm --prefix frontend run typecheck
+        language: system
+        files: ^frontend/(.*\.(ts|tsx|mts|cts)|[^/]+\.config\.[cm]?js|tsconfig[^/]*\.json|package(-lock)?\.json)$
+        pass_filenames: false
+        require_serial: true
