@@ -25,8 +25,8 @@ class MmrRequestTestMixin:
     @classmethod
     def setUpClass(cls) -> None:
         cls.media_root = tempfile.mkdtemp(prefix="mmr-media-")
-        cls.addClassCleanup(shutil.rmtree, cls.media_root, ignore_errors=True)  # type: ignore[attr-defined]
-        cls.enterClassContext(  # type: ignore[attr-defined]
+        cls.addClassCleanup(shutil.rmtree, cls.media_root, ignore_errors=True)
+        cls.enterClassContext(
             override_settings(MEDIA_ROOT=cls.media_root, CACHES=LOCMEM_CACHES)
         )
         super().setUpClass()  # type: ignore[misc]
