@@ -281,6 +281,11 @@ export function EditRepeaterModal({
               control={form.control}
               isRepeater={true}
               organizationId={repeater?.organization ?? 0}
+              previewContext={
+                repeater
+                  ? { type: 'repeater', repeaterId: repeater.id }
+                  : undefined
+              }
             />
           ),
         },

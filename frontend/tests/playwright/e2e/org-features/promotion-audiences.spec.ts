@@ -505,7 +505,10 @@ test.describe('Promotion candidate audiences @cicd', () => {
         r.request().method() === 'DELETE',
     );
     await page.getByTestId(`promo-undo-${send.id}`).click();
-    expect((await undoing).status()).toBe(204);
+    // Undo answers 200 with the DM's writeback summary; its receipt stays.
+    const undone = await undoing;
+    expect(undone.status()).toBe(200);
+    expect(await undone.json()).toHaveProperty('writeback');
     await expect(page.getByTestId('promo-sent-banner')).toHaveCount(0);
     await page.getByTestId('promo-dialog-close').click();
     await page.getByTestId('promo-hide-messaged').click();

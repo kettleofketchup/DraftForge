@@ -32,9 +32,11 @@ vi.mock('~/store/bracketStore', async () => {
   const store = create(() => ({
     matches: [],
     isDirty: false,
+    hasStructuralEdits: false,
     setMatchWinner: () => {},
     advanceWinner: () => {},
     unsetMatchWinner: () => {},
+    holdResultForSave: () => {},
   }));
   return { useBracketStore: store };
 });
@@ -46,6 +48,7 @@ vi.mock('~/hooks/useHeroDraft', () => ({
   useResetHeroDraft: () => ({ isPending: false, mutateAsync: vi.fn() }),
 }));
 vi.mock('~/hooks/useBracket', () => ({
+  MATCH_RESULT_MUTATION_KEY: ['bracket-match-result'],
   usePersistMatchResult: () => ({ isPending: false, mutate: persistMutate }),
 }));
 vi.mock('~/hooks/useGameLobby', () => ({ useGameLobby }));
@@ -129,7 +132,7 @@ describe('MatchStatsModal layout', () => {
 describe('MatchStatsModal match result persistence (issue #466)', () => {
   beforeEach(() => {
     persistMutate.mockReset();
-    useBracketStore.setState({ isDirty: false });
+    useBracketStore.setState({ isDirty: false, hasStructuralEdits: false });
   });
 
   it('persists the winner of a saved match straight away', () => {
@@ -142,8 +145,22 @@ describe('MatchStatsModal match result persistence (issue #466)', () => {
     expect(persistMutate).toHaveBeenCalledWith({ gameId: 42, winner: 'dire' });
   });
 
-  it('leaves the winner for Save when the bracket has other unsaved edits', () => {
-    useBracketStore.setState({ isDirty: true });
+  it('persists a winner while an earlier result is still saving', () => {
+    useBracketStore.setState({ isDirty: true, hasStructuralEdits: false });
+    render(<MatchStatsModal match={match} isOpen onClose={() => {}} />, {
+      wrapper: Wrapper,
+    });
+
+    fireEvent.click(screen.getByTestId('radiantWinsButton'));
+
+    expect(persistMutate).toHaveBeenCalledWith({
+      gameId: 42,
+      winner: 'radiant',
+    });
+  });
+
+  it('leaves the winner for Save when the bracket has structural edits', () => {
+    useBracketStore.setState({ isDirty: true, hasStructuralEdits: true });
     render(<MatchStatsModal match={match} isOpen onClose={() => {}} />, {
       wrapper: Wrapper,
     });

@@ -97,6 +97,7 @@ nav:
           - Overview: features/events.md
           - Roll Call: features/events/roll-call.md
           - Signup Ledger: features/events/signup-ledger.md
+          - Discord Message Preview: features/events/discord-message-preview.md
       - Organization Locked Features: features/organization-locked-features.md
       - Organization Conduct: features/organization-conduct.md
       - Organization Leadership: features/organization-leadership.md
@@ -106,6 +107,7 @@ nav:
       - Steam Friend ID Verification: features/steam-friend-id.md
       - MMR Sync API: features/org-mmr-sync-api.md
       - Lobby Bot League Access: features/lobby-bot-league-access.md
+      - Promotion Contact Sync: features/promotion-contact-sync.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md
