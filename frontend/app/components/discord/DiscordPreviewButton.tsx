@@ -1,6 +1,6 @@
 import { useQuery, type QueryKey } from '@tanstack/react-query';
 import { Eye } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   SecondaryButton,
@@ -16,9 +16,13 @@ import {
 } from '~/components/ui/tooltip';
 import { extractApiError } from '~/lib/apiError';
 
+export type DiscordPreviewRenderControls = {
+  closeAndThen: (callback: () => void) => void;
+};
+
 type FetchedProps<T> = {
   fetchPreview: () => Promise<T>;
-  render: (data: T) => ReactNode;
+  render: (data: T, controls: DiscordPreviewRenderControls) => ReactNode;
 };
 
 type StaticProps = {
@@ -46,7 +50,11 @@ function PreviewResult<T>({
   queryKey,
   fetchPreview,
   render,
-}: { queryKey: QueryKey } & FetchedProps<T>) {
+  controls,
+}: {
+  queryKey: QueryKey;
+  controls: DiscordPreviewRenderControls;
+} & FetchedProps<T>) {
   const { t } = useTranslation('discordPreview');
   const query = useQuery({
     queryKey,
@@ -88,7 +96,7 @@ function PreviewResult<T>({
     );
   }
 
-  return <>{render(query.data)}</>;
+  return <>{render(query.data, controls)}</>;
 }
 
 export function DiscordPreviewButton<T>({
@@ -108,10 +116,28 @@ export function DiscordPreviewButton<T>({
   const { t } = useTranslation('discordPreview');
   const [open, setOpen] = useState(false);
   const [openCount, setOpenCount] = useState(0);
+  const pendingNavigation = useRef<(() => void) | null>(null);
+
+  useEffect(
+    () => () => {
+      pendingNavigation.current = null;
+    },
+    [],
+  );
 
   const onOpenChange = (next: boolean) => {
-    if (next) setOpenCount((n) => n + 1);
+    if (next) {
+      pendingNavigation.current = null;
+      setOpenCount((n) => n + 1);
+    }
     setOpen(next);
+  };
+
+  const controls: DiscordPreviewRenderControls = {
+    closeAndThen: (callback) => {
+      pendingNavigation.current = callback;
+      setOpen(false);
+    },
   };
 
   const button = (
@@ -152,6 +178,14 @@ export function DiscordPreviewButton<T>({
       <InfoDialog
         open={open}
         onOpenChange={onOpenChange}
+        onCloseAutoFocus={(event) => {
+          const navigate = pendingNavigation.current;
+          pendingNavigation.current = null;
+          if (navigate) {
+            event.preventDefault();
+            navigate();
+          }
+        }}
         title={title}
         description={description ?? t('dialog.description')}
         closeLabel={t('dialog.close')}
@@ -166,6 +200,7 @@ export function DiscordPreviewButton<T>({
               queryKey={[...queryKey, openCount]}
               fetchPreview={fetchPreview}
               render={render}
+              controls={controls}
             />
           ) : null}
         </div>

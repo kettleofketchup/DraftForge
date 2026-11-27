@@ -18,6 +18,9 @@ export interface InfoDialogProps {
   open: boolean;
   /** Callback when open state changes */
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: React.ComponentProps<
+    typeof DialogContent
+  >['onCloseAutoFocus'];
   /** Dialog title. Accepts a node so callers can attach test ids / markup. */
   title: React.ReactNode;
   /** Dialog description for accessibility (visually hidden if not provided) */
@@ -57,6 +60,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
     {
       open,
       onOpenChange,
+      onCloseAutoFocus,
       title,
       description,
       children,
@@ -71,6 +75,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           ref={ref}
+          onCloseAutoFocus={onCloseAutoFocus}
           data-testid={testId}
           className={cn('max-w-[calc(100%-2rem)]', sizeClasses[size])}
         >
