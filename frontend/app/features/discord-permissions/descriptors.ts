@@ -163,8 +163,8 @@ export function isSettingEnabled(values: DiscordFields, key: string): boolean {
   return !!operation && !!values[operation.field];
 }
 
-/** Groups enabled channel checks under the one picker that shows the channel
- *  they send to: a channel picked in several places is badged once. */
+/** Groups enabled channel checks under the one picker that owns the channel
+ *  they send to: a channel picked in several places gets a single group. */
 export function channelPermissionGroups(
   values: DiscordFields,
   descriptors: readonly CheckDescriptor[],
