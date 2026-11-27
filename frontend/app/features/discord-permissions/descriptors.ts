@@ -202,8 +202,8 @@ export function channelUseLabel(
   if (descriptor.key === 'signup_fallback')
     return values.discord_post_signups_channel_id
       ? `${label} (announcement fallback)`
-      : `${label} (no signup channel; uses this one)`;
+      : `${label} (no signup channel; uses the announcement channel)`;
   if (descriptor.key !== 'announcement' && descriptor.fallback)
-    return `${label} (no channel of its own; uses this one)`;
+    return `${label} (no channel of its own; uses the announcement channel)`;
   return label;
 }

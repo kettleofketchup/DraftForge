@@ -227,19 +227,21 @@ test.describe('Discord permission badges @cicd', () => {
     expect(fallback?.destination.channel_id).toBe(
       data.channel_ids.announcement,
     );
-    await expect(badge(reopened, 'attendance_reminder')).toHaveCount(0);
-    await expect(
-      reopened.getByTestId('discord-permission-shared-attendance_reminder'),
-    ).toHaveText('Permissions shown on Announcement channel.');
+    await expect(badge(reopened, 'attendance_reminder')).toHaveText(
+      'Permissions verified',
+    );
     await expect(badge(reopened, 'announcement')).toHaveText(
       'Permissions verified',
     );
+    await expect(
+      reopened.getByTestId(/^discord-permission-shared-/),
+    ).toHaveCount(0);
     await badge(reopened, 'announcement').click();
     const panel = page.getByRole('dialog', {
       name: 'Announcement channel permission details',
     });
     await expect(panel).toContainText(
-      'Post attendance reminder in Discord (no channel of its own; uses this one) can post here.',
+      'Post attendance reminder in Discord (no channel of its own; uses the announcement channel) can post here.',
     );
     await expect(
       panel.getByTestId('discord-permission-details-attendance_reminder'),
@@ -500,11 +502,17 @@ test.describe('Discord permission badges @cicd', () => {
       'discord-announcement-channel-select',
       data.channel_ids.announcement,
     );
-    await expect(signup).toHaveCount(0);
     await expect(announcement).toHaveText('Permissions verified');
-    await expect(
-      modal.getByTestId('discord-permission-shared-signup_post'),
-    ).toHaveText('Permissions shown on Announcement channel.');
+    await expect(signup).toHaveText('Permissions verified');
+    await signup.click();
+    const shared = page.getByRole('dialog', {
+      name: 'Signup channel permission details',
+    });
+    await expect(shared).toContainText('Pre-day announcement can post here.');
+    await expect(shared).toContainText(
+      'Post event signup embed can post here.',
+    );
+    await page.keyboard.press('Escape');
   });
 
   test('each channel badge covers only the settings that send there and scrolls details in a short viewport', async ({
@@ -522,10 +530,9 @@ test.describe('Discord permission badges @cicd', () => {
     const trigger = badge(modal, 'signup_post');
     await expect(trigger).toHaveText('2 settings blocked');
     await expect(badge(modal, 'signup_fallback')).toHaveCount(0);
-    await expect(badge(modal, 'attendance_reminder')).toHaveCount(0);
-    await expect(
-      modal.getByTestId('discord-permission-shared-attendance_reminder'),
-    ).toHaveText('Permissions shown on Signup channel.');
+    await expect(badge(modal, 'attendance_reminder')).toHaveText(
+      '2 settings blocked',
+    );
     const announcement = badge(modal, 'announcement');
     await expect(announcement).toHaveText('Permissions verified');
     await announcement.click();

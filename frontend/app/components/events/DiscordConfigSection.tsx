@@ -387,7 +387,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
   };
   const channelDiagnostic = (picker: ChannelPicker) => {
     if (!canCheckPermissions) return null;
-    const group = groups.get(picker);
+    let group = groups.get(picker);
     if (!group) {
       const descriptor = descriptors.find((d) => d.key === picker);
       const owner = descriptor?.channel_id
@@ -397,15 +397,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
         : picker === 'signup_post' && values.discord_announcement
           ? 'announcement'
           : undefined;
-      if (owner)
-        return (
-          <p
-            data-testid={`discord-permission-shared-${picker}`}
-            className="text-sm text-muted-foreground"
-          >
-            Permissions shown on {channelLabels[owner]}.
-          </p>
-        );
+      if (owner) group = groups.get(owner);
     }
     const checks = (group?.checks ?? []).map((descriptor) => ({
       operationLabel: channelUseLabel(descriptor, values),
