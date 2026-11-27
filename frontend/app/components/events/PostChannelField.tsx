@@ -1,4 +1,5 @@
 import { TriangleAlert } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { Control } from 'react-hook-form';
 import { Alert, AlertDescription } from '~/components/ui/alert';
 import {
@@ -24,6 +25,7 @@ interface PostChannelFieldProps {
   name: PostChannelFieldName;
   label: string;
   description?: string;
+  diagnostic?: ReactNode;
   organizationId: number;
   /** Where the post goes when its own channel is blank. */
   blankState: PostChannelState;
@@ -36,6 +38,7 @@ export function PostChannelField({
   name,
   label,
   description,
+  diagnostic,
   organizationId,
   blankState,
   noChannelWarning,
@@ -65,6 +68,7 @@ export function PostChannelField({
               data-testid={testId}
             />
           </FormControl>
+          {diagnostic}
           {description && <FormDescription>{description}</FormDescription>}
           {!field.value && blankState.kind === 'none' && (
             <Alert

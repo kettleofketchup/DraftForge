@@ -204,6 +204,9 @@ class _PreviewTestCase(_DiscordTaskTestCase):
                     "discordbot.utils._rate_limited_request", side_effect=fake_request
                 )
             )
+            stack.enter_context(
+                patch("events.tasks.resolve_signup_channel_type", return_value=15)
+            )
             stack.enter_context(patch("events.tasks.req.post", side_effect=fake_post))
             stack.enter_context(patch("events.tasks.req.patch", side_effect=fake_patch))
             for target in ("events.tasks", "events.discord.embeds"):

@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
+import { invalidatePermissionChecks } from '~/features/discord-permissions/lifecycle';
 import { useLatestSearchParams } from '~/hooks/useLatestSearchParams';
 import { discordConnectKeys } from './queries';
 import { DiscordConnectErrorSchema, type DiscordConnectError } from './schemas';
@@ -29,14 +30,16 @@ export function useDiscordConnectResult(orgId?: number): void {
     if (!result) return;
     if (result === 'connected') {
       setTimeout(() => toast.success('Discord server connected'), 0);
-      if (orgId != null) {
-        void queryClient.invalidateQueries({
-          queryKey: organizationQueryKey(orgId),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: discordConnectKeys.botStatus(orgId),
-        });
-      }
+      void invalidatePermissionChecks(queryClient, {}, 'remove').then(() => {
+        if (orgId != null) {
+          void queryClient.invalidateQueries({
+            queryKey: organizationQueryKey(orgId),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: discordConnectKeys.botStatus(orgId),
+          });
+        }
+      });
     } else {
       const parsed = DiscordConnectErrorSchema.safeParse(reason);
       const message = parsed.success

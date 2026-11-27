@@ -17,7 +17,6 @@ import {
 } from '~/components/teamdraft/schemas';
 import { useUpdateEventRepeaterMutation } from '~/hooks/useEvent';
 import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
-import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
   dotaLobbyResetValues,
@@ -46,6 +45,7 @@ import {
   SIGNUP_OPEN_DEFAULTS,
   signupOpenSchema,
 } from './schemas';
+import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import {
   SERIES_IMMEDIATE_HELP,

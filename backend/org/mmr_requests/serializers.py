@@ -79,6 +79,7 @@ class MmrChangeRequestSerializer(serializers.ModelSerializer):
             "current_verified",
             "has_screenshot",
             "screenshot_url",
+            "screenshot_purged_at",
             "can_review",
         )
         read_only_fields = fields

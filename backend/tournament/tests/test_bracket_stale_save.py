@@ -5,6 +5,8 @@ from typing import Any
 from django.test import TestCase
 from rest_framework.response import Response
 
+from app.models import CustomUser
+from tournament.models import Team, Tournament
 from tournament.tests import test_bracket
 
 
@@ -102,3 +104,22 @@ class SaveBracketStaleVersionTest(TestCase):
         self.winners_r1.lobbies.create(external_ref="ref", state="in_game")
 
         self.assertEqual(self._version(), before)
+
+    def test_foreign_team_is_refused_even_with_current_version(self) -> None:
+        other = Tournament.objects.create(
+            name="Other", date_played=self.tournament.date_played
+        )
+        foreign = Team.objects.create(
+            name="Foreign",
+            captain=CustomUser.objects.create_user(username="foreign", password="test"),
+            tournament=other,
+        )
+        loaded = self._version()
+        matches = self._payload()
+        matches[0]["radiantTeam"] = {"pk": foreign.pk}
+
+        response = self._save(matches, loaded)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "team_not_in_tournament")
+        self.assertEqual(self._version(), loaded)

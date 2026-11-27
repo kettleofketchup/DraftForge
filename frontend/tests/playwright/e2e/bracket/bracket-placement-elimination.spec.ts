@@ -49,7 +49,7 @@ async function loadBracket(page: Page, tournamentPk: number): Promise<void> {
 
 async function openMatch(page: Page, node: Locator): Promise<Locator> {
   await expect(node).toBeVisible({ timeout: 10000 });
-  await node.click({ force: true });
+  await node.click();
   const dialog = page.locator('[data-testid="matchStatsModal"]');
   await expect(dialog).toBeVisible({ timeout: 5000 });
   return dialog;
@@ -90,6 +90,35 @@ function placementOf(teams: PlacedTeam[], pk: number): number | null {
   expect(team, `team ${pk}`).toBeDefined();
   return team!.placement;
 }
+
+test('@cicd match opening waits for a closing dialog to release pointer events', async ({
+  page,
+}) => {
+  await page.setContent(`
+    <body style="pointer-events: none">
+      <button data-testid="bracket-match-node">Match</button>
+      <div data-testid="matchStatsModal" hidden>Match details</div>
+      <script>
+        document.querySelector('button').addEventListener('click', () => {
+          document.querySelector('[data-testid="matchStatsModal"]').hidden = false;
+        });
+      </script>
+    </body>
+  `);
+  const node = page.locator('[data-testid="bracket-match-node"]');
+  const dialog = page.locator('[data-testid="matchStatsModal"]');
+
+  await node.click({ force: true });
+  await expect(dialog).toBeHidden();
+  await page.evaluate(() => {
+    // Keep pointer events blocked until the closing dialog releases them.
+    setTimeout(() => {
+      document.body.style.pointerEvents = '';
+    }, 1000);
+  });
+
+  await openMatch(page, node);
+});
 
 test.describe('Bracket placement on elimination (e2e)', () => {
   test.describe.configure({ mode: 'serial' });

@@ -38,6 +38,11 @@ from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_discord import seed_discord_members
 from .test_discord_activity import discord_activity_setup
+from .test_discord_permissions import (
+    discord_permissions_data,
+    reset_discord_permissions,
+    set_discord_permission_scenario,
+)
 from .test_dota_lobby import (
     dota_lobby_data,
     dota_lobby_game_lobby,
@@ -396,6 +401,21 @@ urlpatterns = [
         "signup-history/reset/",
         reset_signup_history,
         name="test-signup-history-reset",
+    ),
+    path(
+        "discord-permissions/data/",
+        discord_permissions_data,
+        name="test-discord-permissions-data",
+    ),
+    path(
+        "discord-permissions/reset/",
+        reset_discord_permissions,
+        name="test-discord-permissions-reset",
+    ),
+    path(
+        "discord-permissions/scenario/",
+        set_discord_permission_scenario,
+        name="test-discord-permissions-scenario",
     ),
     path("healthz/", healthz, name="test-healthz"),
     # Bracket scenario helpers (gated on TEST=true)

@@ -129,6 +129,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | Tournament | Discovery tournaments (906 has open signups, org 32) | 900-906 | - |
 | Org / League | Game MMR Org / Game MMR League (per-game org MMR) | 50 | 17944 |
 | Org | Signup History Org (signup history, no league) | 60 | - |
+| Org / League | Permission Badges Org / Permission Badges League (Discord permission badges, synthetic server 900000000000000070, scenarios via `/api/tests/discord-permissions/scenario/`) | 70 | 17970 |
 | Tournament | Activity Bracket Test (Discord Activity bracket, DTX League, 2 of 6 games done) | 950 | - |
 
 | User | PK | Role | Login fixture |
@@ -149,5 +150,6 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | discovery_member | 1100 | member of org 30 only (tournament discovery) | `loginAsUser(context, 1100)` |
 | gom_player_1..5, gom_display, gom_edit, gom_approve | 8000-8007 | per-game org MMR (org 50) | `loginAdmin()` drives the specs |
 | hist_staff, hist_withdrawer, hist_button, hist_reaction, hist_staff_added, hist_long_nick, hist_outsider | 9000-9006 | signup history (org 60): 9000 org admin, 9006 non-member | `loginAsUser(context, pk)` |
+| perm_staff, perm_league_staff, perm_outsider | 9100-9102 | Discord permission badges (org/league 70): 9100 org staff, 9101 league staff only, 9102 outsider | `loginAsUser(context, pk)` |
 
 > **NOTE**: When this table drifts from source, read `backend/tests/data/users.py` and `backend/tests/data/organizations.py` for truth.

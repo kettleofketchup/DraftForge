@@ -55,8 +55,10 @@ def get_bracket(request: Request, tournament_id: int) -> Response:
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    # cacheops would key this on app_game only and serve stale select_related teams.
     games = (
-        Game.objects.filter(tournament=tournament)
+        Game.objects.nocache()
+        .filter(tournament=tournament)
         .select_related(
             "radiant_team", "dire_team", "winning_team", "next_game", "loser_next_game"
         )
@@ -142,6 +144,23 @@ def generate_bracket(request: Request, tournament_id: int) -> Response:
     )
 
 
+def _foreign_team_ids(tournament: Tournament, matches: list[dict]) -> list[int]:
+    requested: set[int] = set()
+    for match in matches:
+        for slot in ("radiantTeam", "direTeam"):
+            team = match.get(slot)
+            if isinstance(team, dict) and team.get("pk"):
+                requested.add(team["pk"])
+    if not requested:
+        return []
+    own = set(
+        Team.objects.nocache()
+        .filter(tournament=tournament, pk__in=requested)
+        .values_list("pk", flat=True)
+    )
+    return sorted(requested - own)
+
+
 @api_view(["POST"])
 @permission_classes([IsTournamentStaff])
 @transaction.atomic
@@ -185,6 +204,23 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
         )
 
     matches = serializer.validated_data["matches"]
+    foreign_team_ids = _foreign_team_ids(tournament, matches)
+    if foreign_team_ids:
+        log.warning(
+            "bracket_save_foreign_teams",
+            system="bracket",
+            subsystem="save",
+            tournament_id=tournament_id,
+            team_ids=foreign_team_ids,
+        )
+        return Response(
+            {
+                "error": "Bracket references teams that are not in this tournament",
+                "code": "team_not_in_tournament",
+                "team_ids": foreign_team_ids,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     client_version = serializer.validated_data.get("version")
     current_version = bracket_version(
         Game.objects.nocache().filter(tournament=tournament)

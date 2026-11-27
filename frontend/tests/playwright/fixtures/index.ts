@@ -169,6 +169,15 @@ export {
   type EventInfo,
 } from './events';
 
+// Discord permission badge utilities
+export {
+  getDiscordPermissionsData,
+  resetDiscordPermissions,
+  setDiscordPermissionScenario,
+  type DiscordPermissionScenario,
+  type DiscordPermissionsData,
+} from './discord-permissions';
+
 // dota_lobby utilities (dota-lobby specs, simulated dota_lobby)
 export {
   SIMULATOR_SKIP_REASON,

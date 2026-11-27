@@ -114,6 +114,9 @@ jobs:
       - name: Check the generated bot access API is current
         run: just py::gen-bot-access-api --check
 
+      - name: Check the generated Discord permissions API is current
+        run: just py::gen-discord-permissions-api --check
+
       - name: Check the generated Discord preview API is current
         run: just py::gen-discord-preview --check
 

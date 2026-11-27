@@ -94,6 +94,33 @@ describe('MmrRequestCard', () => {
     expect(screen.getByText('Screenshot unavailable')).toBeInTheDocument();
   });
 
+  it('says the screenshot was removed after the retention window', () => {
+    renderCard({
+      status: 'approved',
+      source: 'staff',
+      reviewed_at: '2026-11-01T12:00:00Z',
+      has_screenshot: false,
+      screenshot_url: null,
+      screenshot_purged_at: '2026-11-09T03:30:00Z',
+    });
+    expect(screen.getByTestId('mmr-card-no-screenshot-77')).toHaveTextContent(
+      'Screenshot removed after 7 days',
+    );
+    expect(screen.queryByText('No screenshot')).not.toBeInTheDocument();
+  });
+
+  it('says the screenshot was removed when the decision date is unknown', () => {
+    renderCard({
+      status: 'rejected',
+      has_screenshot: false,
+      screenshot_url: null,
+      screenshot_purged_at: '2026-11-08T03:30:00Z',
+    });
+    expect(screen.getByTestId('mmr-card-no-screenshot-77')).toHaveTextContent(
+      'Screenshot removed',
+    );
+  });
+
   it('opens the enlarged screenshot', async () => {
     renderCard();
     fireEvent.click(screen.getByTestId('mmr-card-screenshot-77'));
