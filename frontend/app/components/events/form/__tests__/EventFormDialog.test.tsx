@@ -29,6 +29,10 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock('sonner', () => ({ toast: { error: toastError, success: vi.fn() } }));
 
 import { EventFormDialog, type EventFormTab } from '../EventFormDialog';
+import {
+  useEventFormNavigation,
+  type EventFormNavigation,
+} from '../EventFormNavigation';
 import { eventTabForField } from '../tabs';
 
 // FormDialog renders a Radix ScrollArea, which jsdom cannot satisfy.
@@ -451,6 +455,150 @@ describe('EventFormDialog search', () => {
     name.focus();
     fireEvent.keyDown(name, { key: 'k', metaKey: true });
     expect(search()).toHaveFocus();
+  });
+});
+
+function NavigateTo({ field }: { field: string }) {
+  const navigation = useEventFormNavigation();
+  return (
+    <button
+      type="button"
+      data-testid={`go-${field}`}
+      onClick={() => navigation?.navigateToField(field)}
+    >
+      {navigation ? 'navigate' : 'no host'}
+    </button>
+  );
+}
+
+function Capture({
+  onNavigation,
+}: {
+  onNavigation: (navigation: EventFormNavigation | null) => void;
+}) {
+  onNavigation(useEventFormNavigation());
+  return null;
+}
+
+describe('EventFormDialog field navigation', () => {
+  const navTabs: EventFormTab[] = [
+    {
+      value: 'event',
+      content: (
+        <div data-testid="panel-event">
+          <NumberOrText name="name" label="Event Name" />
+        </div>
+      ),
+    },
+    {
+      value: 'tournament',
+      content: (
+        <div data-testid="panel-tournament">
+          <NumberOrText name="people_per_team" label="People Per Team" />
+          <NumberOrText name="min_mmr" label="Minimum MMR" />
+        </div>
+      ),
+    },
+    {
+      value: 'discord',
+      lazy: true,
+      content: (
+        <div data-testid="panel-discord">
+          <NavigateTo field="name" />
+          <NavigateTo field="min_mmr" />
+          <NavigateTo field="unknown_future_field" />
+        </div>
+      ),
+    },
+  ];
+
+  it('navigates to registered and runtime-owned fields without resetting dirty values', async () => {
+    render(<Harness tabs={navTabs} />);
+    const name = screen.getByTestId('input-name');
+    fireEvent.change(name, { target: { value: 'Unsaved name' } });
+    pick('tournament');
+    fireEvent.change(screen.getByTestId('input-people_per_team'), {
+      target: { value: '7' },
+    });
+    pick('discord');
+
+    fireEvent.click(screen.getByTestId('go-name'));
+    await frame();
+    expect(isActive('event')).toBe(true);
+    expect(screen.getByTestId('input-name')).toBe(name);
+    expect(name).toHaveValue('Unsaved name');
+    expect(name).toHaveFocus();
+    expect(name.closest('[data-field]')).toHaveAttribute('data-search-hit');
+
+    pick('discord');
+    // min_mmr is registered under Approval but renders under Tournament here.
+    fireEvent.click(screen.getByTestId('go-min_mmr'));
+    await frame();
+    expect(isActive('tournament')).toBe(true);
+    expect(screen.getByTestId('input-min_mmr')).toHaveFocus();
+    expect(screen.getByTestId('input-people_per_team')).toHaveValue('7');
+    expect(panelOf('panel-discord')).toHaveAttribute('hidden');
+  });
+
+  it('reveals a registered lazy target that has not been visited', async () => {
+    const tabs: EventFormTab[] = [
+      navTabs[0],
+      { ...defaultTabs[1], lazy: true },
+      {
+        value: 'discord',
+        content: <NavigateTo field="people_per_team" />,
+      },
+    ];
+    render(<Harness tabs={tabs} />);
+    expect(screen.queryByTestId('input-people_per_team')).toBeNull();
+    pick('discord');
+    fireEvent.click(screen.getByTestId('go-people_per_team'));
+    await frame();
+    expect(isActive('tournament')).toBe(true);
+    expect(screen.getByTestId('input-people_per_team')).toHaveFocus();
+  });
+
+  it('uses an available first-section fallback', async () => {
+    const tabs: EventFormTab[] = [
+      navTabs[0],
+      { value: 'discord', content: <NavigateTo field="min_mmr" /> },
+    ];
+    render(<Harness tabs={tabs} />);
+    pick('discord');
+    fireEvent.click(screen.getByTestId('go-min_mmr'));
+    await frame();
+    expect(isActive('event')).toBe(true);
+    expect(panelOf('panel-event')).toHaveFocus();
+    expect(panelOf('panel-event')).toHaveAttribute('data-search-hit');
+    expect(screen.getByTestId('input-name')).toHaveValue('Event');
+  });
+
+  it('is optional outside a host', () => {
+    render(<NavigateTo field="name" />);
+    expect(screen.getByTestId('go-name')).toHaveTextContent('no host');
+    fireEvent.click(screen.getByTestId('go-name'));
+  });
+
+  it('ignores navigation after parent close', async () => {
+    let navigation: EventFormNavigation | null = null;
+    const tabs: EventFormTab[] = [
+      ...navTabs.slice(0, 2),
+      {
+        value: 'discord',
+        content: <Capture onNavigation={(n) => (navigation = n)} />,
+      },
+    ];
+    const { rerender } = render(<Harness tabs={tabs} />);
+    const retained = navigation as EventFormNavigation | null;
+    expect(retained).not.toBeNull();
+    rerender(<Harness tabs={tabs} open={false} />);
+    act(() => retained?.navigateToField('min_mmr'));
+    await frame();
+    rerender(<Harness tabs={tabs} open />);
+    await frame();
+    expect(isActive('event')).toBe(true);
+    expect(isActive('tournament')).toBe(false);
+    expect(screen.getByTestId('input-min_mmr')).not.toHaveFocus();
   });
 });
 
