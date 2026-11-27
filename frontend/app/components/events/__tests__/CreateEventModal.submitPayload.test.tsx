@@ -183,6 +183,8 @@ const REPEATER_PAYLOAD = {
   hero_grace_time_ms: 30000,
   hero_reserve_time_ms: 90000,
   hero_timer_enabled: true,
+  line_switch_restamps: true,
+  line_withdraw_forfeits: true,
   lobby_steam_league_id: null,
   min_mmr: null,
   name: 'Night 5',
