@@ -1949,8 +1949,26 @@ def sync_future_events(
             .exclude(is_off_schedule=True)
             .exclude(scheduled_at__in=new_occurrences)
         )
-        for event in list(doomed):
-            teardown_event(event)
+        for event in list(doomed.order_by("pk")):
+            with transaction.atomic():
+                locked = lock_event(event)
+                if (
+                    locked.state != EventState.UPCOMING
+                    or locked.is_off_schedule
+                    or locked.event_repeater_id != repeater.pk
+                    or locked.scheduled_at in new_occurrences
+                ):
+                    continue
+                if _has_signup_records(locked.pk):
+                    logger.info(
+                        "realign_skipped_signup_records",
+                        system="events",
+                        subsystem="services",
+                        event_id=locked.pk,
+                        repeater_id=repeater.pk,
+                    )
+                    continue
+                teardown_event(locked)
 
         # Generate any missing occurrences. The existing helper handles
         # the "row already exists" check via its pre-insert filter.
