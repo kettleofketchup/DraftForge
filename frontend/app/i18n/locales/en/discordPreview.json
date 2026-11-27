@@ -101,6 +101,7 @@
   },
   "status": {
     "needs_input": "Fill in these fields to see a preview: {{fields}}",
+    "needs_input_intro": "Fill in these fields to see a preview:",
     "unavailable": "Previews are available when creating or editing an event, which uses these defaults."
   },
   "variant": {

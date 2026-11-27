@@ -1,9 +1,19 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { I18nextProvider, setI18n } from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  EventFormNavigationProvider,
+  type EventFormNavigation,
+} from '~/components/events/form/EventFormNavigation';
 import { Form } from '~/components/ui/form';
 import { createI18nInstance, FALLBACK_LOCALE } from '~/i18n/config';
 import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
@@ -71,6 +81,41 @@ function renderButton(
         />
       </FormHarness>
     </TestQueryClientProvider>,
+  );
+}
+
+function renderWithNavigation(
+  context: DiscordPreviewContext,
+  kind: Parameters<typeof EventDiscordPreviewButton>[0]['kind'],
+) {
+  const navigation: EventFormNavigation = { navigateToField: vi.fn() };
+  const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+  render(
+    <TestQueryClientProvider>
+      <FormHarness values={{ name: '', timezone: 'UTC' }}>
+        <EventFormNavigationProvider value={navigation}>
+          <form onSubmit={onSubmit}>
+            <EventDiscordPreviewButton
+              kind={kind}
+              organizationId={7}
+              context={context}
+            />
+          </form>
+        </EventFormNavigationProvider>
+      </FormHarness>
+    </TestQueryClientProvider>,
+  );
+  return { navigateToField: navigation.navigateToField, onSubmit };
+}
+
+function needsInput(missing: string[]) {
+  mocks.preview.mockResolvedValue(
+    previewResponse({
+      status: 'needs_input',
+      missing,
+      messages: [],
+      destination: null,
+    }),
   );
 }
 
@@ -262,6 +307,136 @@ describe('EventDiscordPreviewButton', () => {
         'Fill in these fields to see a preview: Name, Date and time',
       ),
     ).toBeInTheDocument();
+  });
+
+  describe('missing prerequisite actions', () => {
+    it('maps schedule to frequency after closing the preview', async () => {
+      needsInput(['schedule']);
+      const { navigateToField, onSubmit } = renderWithNavigation(
+        { type: 'repeater', repeaterId: 3 },
+        'scheduled_event',
+      );
+      const dialog = await openDialog('scheduled_event');
+      const action = await within(dialog).findByTestId(
+        'discord-preview-missing-schedule',
+      );
+      expect(action).toHaveAttribute('type', 'button');
+      expect(action).toHaveTextContent('Schedule');
+      expect(
+        within(dialog).getByText('Fill in these fields to see a preview:'),
+      ).toBeInTheDocument();
+      fireEvent.click(action);
+      await waitFor(() =>
+        expect(navigateToField).toHaveBeenCalledWith('frequency'),
+      );
+      expect(navigateToField).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('discord-preview-dialog')).toBeNull();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['name', 'name'],
+      ['scheduled_at', 'scheduled_at'],
+    ])('exposes a separate %s action', async (code, field) => {
+      needsInput(['name', 'scheduled_at']);
+      const { navigateToField, onSubmit } = renderWithNavigation(
+        { type: 'new_event', organizationId: 7 },
+        'signup_post',
+      );
+      const dialog = await openDialog();
+      await within(dialog).findByTestId('discord-preview-missing-name');
+      expect(
+        within(dialog).getByTestId('discord-preview-missing-scheduled_at'),
+      ).toHaveTextContent('Date and time');
+      fireEvent.click(
+        within(dialog).getByTestId(`discord-preview-missing-${code}`),
+      );
+      await waitFor(() => expect(navigateToField).toHaveBeenCalledTimes(1));
+      expect(navigateToField).toHaveBeenCalledWith(field);
+      expect(screen.queryByTestId('discord-preview-dialog')).toBeNull();
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it.each(['<img onerror=x>[data-field=x]', '__proto__', 'constructor'])(
+      'leaves unknown prerequisite %s as escaped text',
+      async (unknown) => {
+        needsInput(['name', 'scheduled_at', unknown]);
+        const { navigateToField } = renderWithNavigation(
+          { type: 'new_event', organizationId: 7 },
+          'signup_post',
+        );
+        const dialog = await openDialog();
+        const list = await within(dialog).findByTestId(
+          'discord-preview-needs-input',
+        );
+        expect(within(list).getByText(unknown).tagName).toBe('LI');
+        expect(list.querySelector('img')).toBeNull();
+        expect(within(list).getAllByRole('button')).toHaveLength(2);
+        expect(
+          list.querySelector('[data-testid^="discord-preview-missing-<"]'),
+        ).toBeNull();
+        expect(navigateToField).not.toHaveBeenCalled();
+      },
+    );
+
+    it('falls back to text without a navigation provider', async () => {
+      needsInput(['schedule']);
+      renderButton({ type: 'repeater', repeaterId: 3 }, 'scheduled_event');
+      const dialog = await openDialog('scheduled_event');
+      expect(
+        await within(dialog).findByText(
+          'Fill in these fields to see a preview: Schedule',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).queryByTestId('discord-preview-missing-schedule'),
+      ).toBeNull();
+    });
+
+    it('stays static and makes no request for defaults with a provider', async () => {
+      const navigation: EventFormNavigation = { navigateToField: vi.fn() };
+      render(
+        <TestQueryClientProvider>
+          <FormHarness values={{}}>
+            <EventFormNavigationProvider value={navigation}>
+              <EventDiscordPreviewButton
+                kind="scheduled_event"
+                organizationId={7}
+              />
+            </EventFormNavigationProvider>
+          </FormHarness>
+        </TestQueryClientProvider>,
+      );
+      const dialog = await openDialog('scheduled_event');
+      expect(
+        within(dialog).getByTestId('discord-preview-unavailable'),
+      ).toBeInTheDocument();
+      expect(mocks.preview).not.toHaveBeenCalled();
+    });
+
+    it('renders translated prerequisite actions in Spanish', async () => {
+      setI18n(createI18nInstance('es'));
+      needsInput(['name', 'scheduled_at', 'schedule']);
+      renderWithNavigation(
+        { type: 'repeater', repeaterId: 3 },
+        'scheduled_event',
+      );
+      const dialog = await openDialog('scheduled_event');
+      expect(
+        await within(dialog).findByText(
+          'Completa estos campos para ver una vista previa:',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByTestId('discord-preview-missing-name'),
+      ).toHaveTextContent('Nombre');
+      expect(
+        within(dialog).getByTestId('discord-preview-missing-scheduled_at'),
+      ).toHaveTextContent('Fecha y hora');
+      expect(
+        within(dialog).getByTestId('discord-preview-missing-schedule'),
+      ).toHaveTextContent('Horario');
+    });
   });
 
   it('renders the scheduled event card', async () => {
