@@ -413,12 +413,14 @@ it('bounds and focuses its scrollable details within available viewport space', 
   fireEvent.click(mountBadge());
   const panel = screen.getByRole('dialog');
   expect(panel.className).toContain('--radix-popover-content-available-height');
-  expect(panel).toHaveClass(
-    'overflow-y-auto',
-    'overscroll-contain',
-    'touch-pan-y',
-  );
-  expect(panel).toHaveAttribute('tabindex', '0');
+  expect(panel).toHaveClass('overflow-hidden');
+  const title = screen.getByTestId('discord-permission-details-title');
+  const scroll = screen.getByTestId('discord-permission-details-scroll');
+  expect(title).toHaveTextContent('Announcement permissions');
+  expect(scroll).not.toContainElement(title);
+  expect(scroll).toHaveClass('overscroll-contain', 'touch-pan-y');
+  expect(scroll).toHaveAttribute('tabindex', '0');
+  expect(scroll).toHaveFocus();
 });
 
 it('keeps the details portal inside an enclosing dialog scroll lock', () => {

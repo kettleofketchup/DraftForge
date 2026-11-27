@@ -1,9 +1,13 @@
-import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { Check, CircleHelp, Clock, Info, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { badgeVariants } from '~/components/ui/badge';
 import { DiscordIcon } from '~/components/ui/icons';
-import { Popover, PopoverTrigger } from '~/components/ui/popover';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '~/components/ui/popover';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
 import { VERIFICATION_LIMITATION } from './copy';
 import { PermissionDetails } from './PermissionDetails';
@@ -122,6 +126,7 @@ export function DiscordPermissionBadge({
   });
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const scrollViewport = useRef<HTMLDivElement>(null);
   useEffect(
     () => () => {
       if (closeTimer.current !== null) clearTimeout(closeTimer.current);
@@ -221,7 +226,7 @@ export function DiscordPermissionBadge({
           intent.current.pinned = pinned;
           intent.current.dismissed = !pinned;
           setOpen(pinned);
-          if (pinned) panel.current?.focus();
+          if (pinned) scrollViewport.current?.focus({ preventScroll: true });
         }}
       >
         <DiscordIcon
@@ -236,82 +241,104 @@ export function DiscordPermissionBadge({
           className="opacity-70"
         />
       </PopoverTrigger>
-      <PopoverPrimitive.Portal container={portalContainer}>
-        <PopoverPrimitive.Content
-          ref={panel}
-          className="bg-popover text-popover-foreground z-50 rounded-md border p-4 shadow-md outline-hidden w-80 max-w-[calc(100vw-2rem)] max-h-[min(24rem,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain touch-pan-y"
-          collisionPadding={16}
-          collisionBoundary={portalContainer ?? undefined}
-          tabIndex={0}
-          aria-label={`${operationLabel} permission details`}
-          onOpenAutoFocus={(event) => {
-            if (!intent.current.pinned) event.preventDefault();
-          }}
-          onEscapeKeyDown={() => {
-            restoreTrigger.current = true;
-          }}
-          onPointerDownOutside={() => {
-            restoreTrigger.current = false;
-          }}
-          onCloseAutoFocus={(event) => {
-            if (restoreTrigger.current) {
-              event.preventDefault();
-              trigger.current?.focus({ preventScroll: true });
-            } else if (!intent.current.focused) event.preventDefault();
-          }}
-          onPointerEnter={(event) => hoverEnter(event.pointerType)}
-          onPointerLeave={(event) => hoverLeave(event.pointerType)}
-          onFocusCapture={() => {
-            intent.current.focused = true;
-            cancelClose();
-          }}
-          onBlurCapture={(event) => {
-            if (event.currentTarget.contains(event.relatedTarget)) return;
-            intent.current.focused = false;
-            closeAfterLeave();
+      <PopoverContent
+        ref={panel}
+        instant
+        portalContainer={portalContainer}
+        className="flex flex-col w-80 max-w-[calc(100vw-2rem)] max-h-[min(24rem,var(--radix-popover-content-available-height))] overflow-hidden p-0"
+        collisionPadding={16}
+        collisionBoundary={portalContainer ?? undefined}
+        aria-label={`${operationLabel} permission details`}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          if (intent.current.pinned)
+            scrollViewport.current?.focus({ preventScroll: true });
+        }}
+        onEscapeKeyDown={() => {
+          restoreTrigger.current = true;
+        }}
+        onPointerDownOutside={() => {
+          restoreTrigger.current = false;
+        }}
+        onCloseAutoFocus={(event) => {
+          if (restoreTrigger.current) {
+            event.preventDefault();
+            trigger.current?.focus({ preventScroll: true });
+          } else if (!intent.current.focused) event.preventDefault();
+        }}
+        onPointerEnter={(event) => hoverEnter(event.pointerType)}
+        onPointerLeave={(event) => hoverLeave(event.pointerType)}
+        onFocusCapture={() => {
+          intent.current.focused = true;
+          cancelClose();
+        }}
+        onBlurCapture={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget)) return;
+          intent.current.focused = false;
+          closeAfterLeave();
+        }}
+      >
+        <h2
+          className="shrink-0 border-b px-4 py-3 text-sm font-semibold"
+          data-testid="discord-permission-details-title"
+        >
+          {operationLabel} permissions
+        </h2>
+        <ScrollArea
+          className="min-h-0 flex-1 px-4 py-3"
+          viewportProps={{
+            ref: scrollViewport,
+            tabIndex: 0,
+            role: 'region',
+            'aria-label': `${operationLabel} permission details content`,
+            'data-testid': 'discord-permission-details-scroll',
+            className:
+              'overscroll-contain touch-pan-y focus-visible:ring-inset',
           }}
         >
-          {disabled && (
-            <p className="mb-3 text-sm text-muted-foreground">
-              This option is disabled. The check is diagnostic only.
-            </p>
-          )}
-          <div className="space-y-4">
-            {entries.map((entry, index) => {
-              const visible =
-                state === 'ready' || state === 'idle'
-                  ? entry.result
-                  : undefined;
-              const status = badgeView(
-                entry.result,
-                state,
-                now,
-                disabled,
-              ).label;
-              return visible ? (
-                <PermissionDetails
-                  key={entry.operationLabel}
-                  result={visible}
-                  operationLabel={entry.operationLabel}
-                  statusLabel={status}
-                  historical={isExpired(visible, now)}
-                />
-              ) : (
-                <section
-                  key={entry.operationLabel}
-                  className="flex flex-col gap-2 text-sm"
-                >
-                  <h3 className="font-semibold">
-                    {entry.operationLabel} permissions
-                  </h3>
-                  <p>{views[index]?.label ?? view.label}</p>
-                  <p>{VERIFICATION_LIMITATION}</p>
-                </section>
-              );
-            })}
+          <div className="flex flex-col gap-4">
+            {disabled && (
+              <p className="text-sm text-muted-foreground">
+                This option is disabled. The check is diagnostic only.
+              </p>
+            )}
+            <div className="flex flex-col gap-4">
+              {entries.map((entry, index) => {
+                const visible =
+                  state === 'ready' || state === 'idle'
+                    ? entry.result
+                    : undefined;
+                const status = badgeView(
+                  entry.result,
+                  state,
+                  now,
+                  disabled,
+                ).label;
+                return visible ? (
+                  <PermissionDetails
+                    key={entry.operationLabel}
+                    result={visible}
+                    operationLabel={entry.operationLabel}
+                    statusLabel={status}
+                    historical={isExpired(visible, now)}
+                  />
+                ) : (
+                  <section
+                    key={entry.operationLabel}
+                    className="flex flex-col gap-2 text-sm"
+                  >
+                    <h3 className="font-semibold">
+                      {entry.operationLabel} permissions
+                    </h3>
+                    <p>{views[index]?.label ?? view.label}</p>
+                    <p>{VERIFICATION_LIMITATION}</p>
+                  </section>
+                );
+              })}
+            </div>
           </div>
-        </PopoverPrimitive.Content>
-      </PopoverPrimitive.Portal>
+        </ScrollArea>
+      </PopoverContent>
     </Popover>
   );
 }

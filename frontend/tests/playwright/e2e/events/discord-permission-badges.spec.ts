@@ -22,6 +22,41 @@ function badge(scope: Page | Locator, key: string): Locator {
   return scope.getByTestId(`discord-permission-badge-${key}`);
 }
 
+async function expectFullyInside(content: Locator, container: Locator) {
+  await expect
+    .poll(async () => {
+      const inner = await content.boundingBox();
+      const outer = await container.boundingBox();
+      return (
+        !!inner &&
+        !!outer &&
+        inner.y >= outer.y &&
+        inner.y + inner.height <= outer.y + outer.height &&
+        inner.x >= outer.x &&
+        inner.x + inner.width <= outer.x + outer.width
+      );
+    })
+    .toBe(true);
+}
+
+async function expectPaddedScroll(panel: Locator) {
+  const outer = (await panel.boundingBox())!;
+  const title = (await panel
+    .getByTestId('discord-permission-details-title')
+    .boundingBox())!;
+  const scroll = (await panel
+    .getByTestId('discord-permission-details-scroll')
+    .boundingBox())!;
+  expect(scroll.y).toBeGreaterThanOrEqual(title.y + title.height + 8);
+  expect(scroll.y + scroll.height).toBeLessThanOrEqual(
+    outer.y + outer.height - 8,
+  );
+  expect(scroll.x).toBeGreaterThanOrEqual(outer.x + 12);
+  expect(scroll.x + scroll.width).toBeLessThanOrEqual(
+    outer.x + outer.width - 12,
+  );
+}
+
 async function expectNeutral(target: Locator) {
   expect(
     await target.evaluate((element) =>
@@ -330,6 +365,48 @@ test.describe('Discord permission badges @cicd', () => {
     await page.mouse.click(5, 100);
     await expect(details).toBeHidden();
   });
+  for (const edge of ['start', 'end'] as const) {
+    test(`State details stay inside a short viewport with a trigger at the ${edge}`, async ({
+      page,
+    }) => {
+      const checks = await state(page);
+      await page.setViewportSize({ width: 390, height: 500 });
+      const trigger = badge(checks, 'attendance_reminder');
+      await trigger.evaluate((el, block) => el.scrollIntoView({ block }), edge);
+      await trigger.click();
+      const panel = page.getByRole('dialog', {
+        name: 'attendance reminder permission details',
+        exact: true,
+      });
+      const title = panel.getByTestId('discord-permission-details-title');
+      const scroll = panel.getByTestId('discord-permission-details-scroll');
+      await expect(title).toHaveText('attendance reminder permissions');
+      await expectPaddedScroll(panel);
+      const bounds = await panel.boundingBox();
+      expect(bounds!.y).toBeGreaterThanOrEqual(15);
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(485);
+      expect(bounds!.x).toBeGreaterThanOrEqual(15);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(375);
+      await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0);
+      await expectFullyInside(scroll.locator('h3').first(), scroll);
+      await expectFullyInside(title, panel);
+      const background = await page.evaluate(() => window.scrollY);
+      await scroll.focus();
+      await page.keyboard.press('End');
+      await expectFullyInside(panel.locator('p').last(), scroll);
+      await expectFullyInside(title, panel);
+      await scroll.hover();
+      await page.mouse.wheel(0, 600);
+      expect(await page.evaluate(() => window.scrollY)).toBe(background);
+      await page.keyboard.press('Home');
+      await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0);
+      await expectFullyInside(scroll.locator('h3').first(), scroll);
+      await page.keyboard.press('Escape');
+      await expect(panel).toBeHidden();
+      await expect(trigger).toBeFocused();
+    });
+  }
+
   test('one Discord signup badge keeps both destinations and scrolls details in a short viewport', async ({
     page,
   }) => {
@@ -390,33 +467,56 @@ test.describe('Discord permission badges @cicd', () => {
     expect(bounds).not.toBeNull();
     expect(bounds!.y).toBeGreaterThanOrEqual(15);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(485);
-    expect(
-      await panel.evaluate((el) => el.scrollHeight > el.clientHeight),
-    ).toBe(true);
-    const background = await modal.evaluate((el) =>
-      Array.from(
-        el.querySelectorAll('[data-radix-scroll-area-viewport]'),
-        (v) => v.scrollTop,
-      ),
+    const title = panel.getByTestId('discord-permission-details-title');
+    await expect(title).toHaveText('Signup post permissions');
+    await expectPaddedScroll(panel);
+    await expectFullyInside(panel, modal);
+    const footer = modal.getByTestId('form-dialog-submit');
+    await expectFullyInside(footer, modal);
+    const scroll = panel.getByTestId('discord-permission-details-scroll');
+    await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0);
+    await expectFullyInside(title, panel);
+    await expectFullyInside(
+      panel.getByRole('heading', { name: 'Primary signup permissions' }),
+      scroll,
     );
-    await panel.hover();
+    expect(
+      await scroll.evaluate((el) => el.scrollHeight > el.clientHeight),
+    ).toBe(true);
+    const backgroundScroll = () =>
+      modal.evaluate((el) => ({
+        page: window.scrollY,
+        viewports: Array.from(
+          el.querySelectorAll('[data-radix-scroll-area-viewport]'),
+        )
+          .filter(
+            (viewport) =>
+              !viewport.closest(
+                '[aria-label="Signup post permission details"]',
+              ),
+          )
+          .map((viewport) => viewport.scrollTop),
+      }));
+    const background = await backgroundScroll();
+    await scroll.hover();
     await page.mouse.wheel(0, 350);
     await expect
-      .poll(() => panel.evaluate((el) => el.scrollTop))
+      .poll(() => scroll.evaluate((el) => el.scrollTop))
       .toBeGreaterThan(0);
-    expect(
-      await modal.evaluate((el) =>
-        Array.from(
-          el.querySelectorAll('[data-radix-scroll-area-viewport]'),
-          (v) => v.scrollTop,
-        ),
-      ),
-    ).toEqual(background);
-    await panel.focus();
+    expect(await backgroundScroll()).toEqual(background);
+    await expectFullyInside(title, panel);
+    await scroll.focus();
     await page.keyboard.press('End');
-    await expect(panel.locator('p').last()).toBeInViewport();
+    await expectFullyInside(panel.locator('p').last(), scroll);
+    await expectFullyInside(title, panel);
+    await page.mouse.wheel(0, 500);
+    expect(await backgroundScroll()).toEqual(background);
     await page.keyboard.press('Home');
-    await expect.poll(() => panel.evaluate((el) => el.scrollTop)).toBe(0);
+    await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0);
+    await expectFullyInside(
+      panel.getByRole('heading', { name: 'Primary signup permissions' }),
+      scroll,
+    );
     const session = await page.context().newCDPSession(page);
     await session.send('Emulation.setTouchEmulationEnabled', { enabled: true });
     const x = bounds!.x + bounds!.width / 2;
@@ -443,8 +543,10 @@ test.describe('Discord permission badges @cicd', () => {
       touchPoints: [],
     });
     await expect
-      .poll(() => panel.evaluate((el) => el.scrollTop))
+      .poll(() => scroll.evaluate((el) => el.scrollTop))
       .toBeGreaterThan(0);
+    await expectFullyInside(title, panel);
+    expect(await backgroundScroll()).toEqual(background);
     await session.send('Emulation.setTouchEmulationEnabled', {
       enabled: false,
     });
