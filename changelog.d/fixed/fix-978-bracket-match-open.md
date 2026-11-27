@@ -1,1 +1,0 @@
-- Keep closed bracket match dialogs from reopening when a delayed match URL update finishes, while preserving direct links and browser history navigation.

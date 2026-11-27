@@ -1,2 +1,0 @@
-- The bracket tab now shows a team's new name, captain and deputy right after they change, instead of the old ones for up to an hour (#962).
-- Moving from one tournament's bracket to another no longer shows the first tournament's matches, and unsaved bracket edits no longer stop the next tournament from loading or get saved into it. Saving a bracket with teams from another tournament is now refused (#962).

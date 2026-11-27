@@ -1,1 +1,0 @@
-- Run stale-event maintenance cancellation through shared lifecycle cleanup, preserving rollback safety and scheduling external Discord cleanup after commit.

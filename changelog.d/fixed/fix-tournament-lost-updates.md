@@ -1,3 +1,0 @@
-- A bracket Save made from a copy another admin has since changed is now refused with a message and a Reload button, instead of clearing their results. Your unsaved edits stay until you reload.
-- Removing a player from a tournament no longer drops players another admin added since your page loaded.
-- Entering a second match result right after the first now saves both; the second no longer stays unsaved or disappears when the first one finishes saving.

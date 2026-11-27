@@ -1,1 +1,0 @@
-- Keep Enter on a dialog's focused Cancel or Keep button from triggering confirmation, including nested deletion dialogs.
