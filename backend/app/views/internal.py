@@ -638,10 +638,8 @@ def clear_event_signup_state(request: Request) -> Response:
       - DiscordMessageLog.success=False for source=event_announcement+source_id=event_id
         (clears `existing_logs` dedup)
 
-    Called by:
-      - send_signup_update on MessageDeletedError (auto-recovery for externally
-        deleted posts)
-      - fire_event_task for task_name="signup_post" (admin "repost" button)
+    Called by send_signup_update on MessageDeletedError with
+    ``expected_message_id`` (auto-recovery for externally deleted posts).
     """
 
     err = _validate_required(request.data, ["event_id"])

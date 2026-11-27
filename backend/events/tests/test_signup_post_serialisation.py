@@ -12,6 +12,14 @@ from structlog.testing import capture_logs
 from app.internal_client import InternalAPIUnavailable
 from app.redis_client import set_client_for_tests
 from config.signup_post import SignupPostConfig
+from discordbot.models import (
+    DiscordEvent,
+    DiscordEventMsgSignup,
+    DiscordMessageLog,
+    SignupDeliveryStatus,
+    SignupPostDeliveryState,
+)
+from discordbot.utils import MessageDeletedError
 from events import signup_post_lock
 from events.constants import SignupStatus
 from events.discord.dispatch import notify_signup_changed
@@ -19,6 +27,7 @@ from events.models import Event, EventSignup
 from events.tasks import send_signup_update
 from events.tests._internal_client_orm import DiscordTestMixin, _get_event_signups_orm
 from events.tests.base import EventTestCase
+from events.tests.test_signup_post_send import response
 
 
 class FakePipeline:
@@ -77,6 +86,12 @@ class BrokenRedis:
             raise redis.ConnectionError("down")
 
         return fail
+
+
+CURRENT_CHANNEL = "100000000000000011"
+CURRENT_MESSAGE = "100000000000000012"
+STALE_MESSAGE = "100000000000000013"
+SYNTH_GUILD = "200000000000000001"
 
 
 def _posted_state() -> SimpleNamespace:
@@ -322,6 +337,128 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
         self.edit.assert_not_called()
         self.assertNotIn(signup_post_lock.pending_key(self.pk), self.redis.data)
         self.assertIsNotNone(signup_post_lock.acquire_lock(self.pk))
+
+    def _current_post(self, message_id: str) -> SignupPostDeliveryState:
+        signup = DiscordEventMsgSignup.objects.create(
+            event=self.post_event,
+            channel_id=CURRENT_CHANNEL,
+            channel_type="text",
+            has_posted=True,
+            message_id=message_id,
+        )
+        DiscordEvent.objects.create(
+            event=self.post_event, guild_id=SYNTH_GUILD, signup_message=signup
+        )
+        DiscordMessageLog.objects.create(
+            source="event_announcement",
+            source_id=self.pk,
+            success=True,
+            channel_id=CURRENT_CHANNEL,
+            discord_message_id=message_id,
+            embed_data={},
+        )
+        return SignupPostDeliveryState.objects.create(
+            event=self.post_event,
+            generation=2,
+            attempts=1,
+            state=SignupDeliveryStatus.DELIVERED,
+        )
+
+    def _edit_target(self, message_id: str) -> None:
+        self.enterContext(
+            patch(
+                "events.tasks.get_discord_event_state",
+                return_value=SimpleNamespace(
+                    signup_posted=True,
+                    signup_message_id=message_id,
+                    signup_channel_type="text",
+                    signup_channel_id=CURRENT_CHANNEL,
+                    signup_thread_id=None,
+                ),
+            )
+        )
+
+    def _posted(self) -> bool:
+        return DiscordEventMsgSignup.objects.get(event=self.post_event).has_posted
+
+    def _successful_logs(self) -> int:
+        return DiscordMessageLog.objects.filter(
+            source="event_announcement", source_id=self.pk, success=True
+        ).count()
+
+    def test_current_message_404_resets(self) -> None:
+        self._current_post(CURRENT_MESSAGE)
+        self._edit_target(CURRENT_MESSAGE)
+        self.edit.side_effect = MessageDeletedError(CURRENT_CHANNEL, CURRENT_MESSAGE)
+
+        result = send_signup_update(self.pk)
+
+        self.assertIn("Recovered", result)
+        self.assertFalse(self._posted())
+        self.assertEqual(self._successful_logs(), 0)
+        state = SignupPostDeliveryState.objects.get(event=self.post_event)
+        self.assertEqual(
+            (state.generation, state.attempts, state.state),
+            (3, 0, SignupDeliveryStatus.READY),
+        )
+
+    def test_stale_message_404_is_noop(self) -> None:
+        self._current_post(CURRENT_MESSAGE)
+        self._edit_target(STALE_MESSAGE)
+        self.edit.side_effect = MessageDeletedError(CURRENT_CHANNEL, STALE_MESSAGE)
+
+        with capture_logs() as logs:
+            result = send_signup_update(self.pk)
+
+        self.assertNotIn("Recovered", result)
+        self.assertTrue(self._posted())
+        self.assertEqual(self._successful_logs(), 1)
+        state = SignupPostDeliveryState.objects.get(event=self.post_event)
+        self.assertEqual(
+            (state.generation, state.state), (2, SignupDeliveryStatus.DELIVERED)
+        )
+        events = [entry["event"] for entry in logs]
+        self.assertNotIn("signup_message_orphaned_recovered", events)
+        self.assertIn("signup_message_orphan_not_current", events)
+
+    def test_recovery_unavailable_retries_without_claiming_recovered(self) -> None:
+        self._current_post(CURRENT_MESSAGE)
+        self._edit_target(CURRENT_MESSAGE)
+        self.edit.side_effect = MessageDeletedError(CURRENT_CHANNEL, CURRENT_MESSAGE)
+        malformed = response(200, {})
+        malformed._content = b"not json"
+        for reply in (None, response(503, {}), malformed, response(200, [])):
+            with (
+                self.subTest(reply=reply),
+                patch("events.tasks.clear_event_signup_state", return_value=reply),
+                patch.object(send_signup_update, "retry", side_effect=Retry()),
+                capture_logs() as logs,
+                self.assertRaises(Retry),
+            ):
+                send_signup_update(self.pk)
+            self.assertTrue(self._posted())
+            self.assertEqual(self._successful_logs(), 1)
+            self.assertNotIn(
+                "signup_message_orphaned_recovered", [entry["event"] for entry in logs]
+            )
+
+    def test_transient_patch_failure_does_not_reset(self) -> None:
+        self._current_post(CURRENT_MESSAGE)
+        self._edit_target(CURRENT_MESSAGE)
+        self.edit.return_value = None
+
+        with (
+            patch.object(send_signup_update, "retry", side_effect=Retry()),
+            self.assertRaises(Retry),
+        ):
+            send_signup_update(self.pk)
+
+        self.assertTrue(self._posted())
+        self.assertEqual(self._successful_logs(), 1)
+        state = SignupPostDeliveryState.objects.get(event=self.post_event)
+        self.assertEqual(
+            (state.generation, state.state), (2, SignupDeliveryStatus.DELIVERED)
+        )
 
     def _drain_queued_runs(self) -> None:
         while self.apply_async.call_args_list:

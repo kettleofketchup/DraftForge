@@ -905,6 +905,19 @@ def _log_signup_post_edit_applied(
     )
 
 
+def _deleted_signup_message_cleared(event_id: int, message_id: str) -> bool:
+    resp = clear_event_signup_state(event_id=event_id, expected_message_id=message_id)
+    if resp is None or resp.status_code != 200:
+        raise InternalAPIUnavailable("signup-recovery")
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        raise InternalAPIUnavailable("signup-recovery") from exc
+    if not isinstance(body, dict) or type(body.get("cleared")) is not bool:
+        raise InternalAPIUnavailable("signup-recovery")
+    return body["cleared"]
+
+
 def _send_signup_update_impl(
     event_id: int, interaction_id: str | None, dirty_since_ms: int | None = None
 ) -> str:
@@ -971,7 +984,15 @@ def _send_signup_update_impl(
             components=result["components"],
         )
     except MessageDeletedError:
-        clear_event_signup_state(event_id=event.pk)
+        if not _deleted_signup_message_cleared(event.pk, str(message_id)):
+            log.warning(
+                "signup_message_orphan_not_current",
+                channel_id=str(edit_channel_id),
+                message_id=str(message_id),
+                reason="discord_404_unknown_message",
+                **fields,
+            )
+            return f"Skipped: deleted message is not the current signup post for event {event.pk}"
         log.warning(
             "signup_message_orphaned_recovered",
             channel_id=str(edit_channel_id),
