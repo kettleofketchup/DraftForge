@@ -29,7 +29,20 @@ Only a current `verified` result is green. History labels such as **Posted** des
 - **Guild**: scheduled-event operations check server-level permissions, not the announcement channel.
 - **Recipient**: DM delivery depends on the recipient and cannot be established by server permission bits.
 
-Signup settings show one Discord badge with an Info icon. Its details list the primary signup and announcement fallback checks separately. The badge is green only when every applicable check is current and verified; a working destination cannot hide a missing, unknown, expired or unsupported result at the other destination. Details scroll within the available viewport, including on small screens. For example, an attendance reminder configured for **attendance-updates** is checked there, even when the announcement badge for **event-updates** is green. Clearing the attendance channel previews **event-updates (fallback)** without saving the form.
+### One badge per channel
+
+Each channel picker shows a compact Discord status badge with an Info icon directly underneath. It covers **only enabled settings that send to that channel**. If several pickers select the same channel, one badge covers it; the other pickers point to that badge instead of repeating it. Options without their own channel, such as **Mention signed-up members before start**, retain their status beside the option. Discord State retains its separate per-action rows.
+
+- **Signup channel** checks the primary **Post event signup embed** destination. A missing permission in a different announcement channel cannot make this badge red.
+- **Announcement channel** combines **Pre-day announcement**, **Post new events** and any other enabled setting that uses this channel. The signup fallback check appears here, not under a different signup channel. A per-post channel left blank also contributes here; details explain that it uses this channel because it has no channel of its own.
+- An explicit attendance, profile or new-event channel checks only uses of that destination. Clearing it moves its check to the announcement channel's badge immediately, without saving.
+
+A channel badge such as **2 settings blocked** tells you how many enabled settings cannot send there. Its details start with **Blocked**, **Working** and **Unable to verify**, naming each affected setting before showing the required/missing permissions. For example: **Pre-day announcement won't post here — missing Embed Links.** Unknown, expired, unsupported and unchecked uses are not described as working or known blocked. A setting with multiple checks is counted once, with each use listed separately.
+
+Disabled settings do not affect a channel's status; a channel with no enabled uses is neutral. Green means **every enabled use of that channel** has a current, verified result. A verified use cannot hide another use that is missing, unknown, expired or unsupported. Details keep a fixed header and scroll within the available viewport, including on small screens.
+
+!!! note "Blocked does not change your settings"
+    A blocked setting means Discord currently prevents that use. It does **not** switch the option off or disable saving. You can retain your intended configuration, fix the channel permissions and recheck.
 
 Unsaved form edits are checked against the draft settings. Creation forms, series and organization defaults use organization previews; an existing event uses event-scoped previews. Discord State checks saved settings and historical references even when no Discord history exists yet.
 

@@ -1,4 +1,5 @@
 import type { DiscordFields } from '~/components/events/DiscordConfigSection';
+import { EVENT_SECTION_FIELDS } from '~/components/events/form/settingsFields';
 import type { ActionKind, CheckDescriptor } from './schemas';
 
 export const SETTINGS_OPERATIONS: Record<
@@ -115,4 +116,94 @@ export function settingsDescriptors(
   if (opts.showSignupReminder ?? opts.isRepeater)
     add('signup_reminder', 'signup_reminder_dm');
   return checks;
+}
+
+export type ChannelPicker =
+  | 'signup_post'
+  | 'announcement'
+  | 'attendance_reminder'
+  | 'profile_reminder'
+  | 'new_event_notice';
+
+const PICKER_FIELDS: Record<ChannelPicker, keyof DiscordFields> = {
+  announcement: 'discord_announcement_channel_id',
+  signup_post: 'discord_post_signups_channel_id',
+  attendance_reminder: 'discord_confirm_attendance_channel_id',
+  profile_reminder: 'discord_profile_reminder_channel_id',
+  new_event_notice: 'discord_new_event_channel_id',
+};
+
+const NATIVE_PICKER: Record<string, ChannelPicker> = {
+  signup_post: 'signup_post',
+  signup_fallback: 'announcement',
+  announcement: 'announcement',
+  attendance_reminder: 'attendance_reminder',
+  profile_reminder: 'profile_reminder',
+  new_event_notice: 'new_event_notice',
+};
+
+export const SETTING_LABELS: Record<string, string> = {
+  signup_post: EVENT_SECTION_FIELDS.discord.discord_post_signups.label,
+  signup_fallback: EVENT_SECTION_FIELDS.discord.discord_post_signups.label,
+  announcement: EVENT_SECTION_FIELDS.discord.discord_announcement.label,
+  attendance_reminder:
+    EVENT_SECTION_FIELDS.discord.discord_confirm_attendance.label,
+  profile_reminder: EVENT_SECTION_FIELDS.discord.discord_profile_reminder.label,
+  new_event_notice:
+    EVENT_SECTION_FIELDS.discord.discord_notify_new_events.label,
+};
+
+export type ChannelGroup = {
+  channelId: string | null;
+  checks: CheckDescriptor[];
+};
+
+export function isSettingEnabled(values: DiscordFields, key: string): boolean {
+  const operation = SETTINGS_OPERATIONS[key];
+  return !!operation && !!values[operation.field];
+}
+
+/** Groups enabled channel checks under the one picker that shows the channel
+ *  they send to: a channel picked in several places is badged once. */
+export function channelPermissionGroups(
+  values: DiscordFields,
+  descriptors: readonly CheckDescriptor[],
+): Map<ChannelPicker, ChannelGroup> {
+  const enabled = descriptors.filter(
+    (d) => d.key in NATIVE_PICKER && isSettingEnabled(values, d.key),
+  );
+  const picked = (picker: ChannelPicker) =>
+    (values[PICKER_FIELDS[picker]] as string | undefined) || null;
+  const visible = new Set<ChannelPicker>();
+  for (const d of enabled)
+    visible.add(d.fallback ? 'announcement' : NATIVE_PICKER[d.key]);
+  if (values.discord_announcement) visible.add('announcement');
+  const order = Object.keys(PICKER_FIELDS) as ChannelPicker[];
+  const groups = new Map<ChannelPicker, ChannelGroup>();
+  for (const d of enabled) {
+    const native = d.fallback ? 'announcement' : NATIVE_PICKER[d.key];
+    const owner =
+      (d.channel_id &&
+        order.find((p) => visible.has(p) && picked(p) === d.channel_id)) ||
+      native;
+    const group = groups.get(owner) ?? { channelId: d.channel_id, checks: [] };
+    group.checks.push(d);
+    groups.set(owner, group);
+  }
+  return groups;
+}
+
+/** The setting a check belongs to, plus how it reached this channel. */
+export function channelUseLabel(
+  descriptor: CheckDescriptor,
+  values: DiscordFields,
+): string {
+  const label = SETTING_LABELS[descriptor.key] ?? descriptor.key;
+  if (descriptor.key === 'signup_fallback')
+    return values.discord_post_signups_channel_id
+      ? `${label} (announcement fallback)`
+      : `${label} (no signup channel; uses this one)`;
+  if (descriptor.key !== 'announcement' && descriptor.fallback)
+    return `${label} (no channel of its own; uses this one)`;
+  return label;
 }
