@@ -66,14 +66,19 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 41
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 232
-MERGE_CLAIM_QUERIES = 209
-DELETE_API_QUERIES = 124
-DELETE_ADMIN_QUERIES = 177
-DELETE_ADMIN_CONFIRM_QUERIES = 55
+# Connection ledgers add 11 queries to merge/delete: one owner-loss EXISTS,
+# seven SET_NULL updates (connection creator/updater/credential owner/authorizer,
+# run requester, adoption actor, token issuer), and three membership cascades
+# (delivery SELECT, pull-target DELETE, sync-state DELETE). Admin confirmation
+# adds three ledger SELECTs; admin deletion includes that confirmation cost.
+MERGE_DISCORD_QUERIES = 243
+MERGE_CLAIM_QUERIES = 220
+DELETE_API_QUERIES = 135
+DELETE_ADMIN_QUERIES = 191
+DELETE_ADMIN_CONFIRM_QUERIES = 58
 PROMO_SEND_QUERIES = 30
 PROMO_UNDO_QUERIES = 13
-PROMO_RELEASE_QUERIES = 138
+PROMO_RELEASE_QUERIES = 149
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8

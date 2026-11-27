@@ -38,14 +38,16 @@ class ConnectionSerializer(serializers.ModelSerializer):
         return bool(obj.outbound_credential_ciphertext)
 
     def get_inbound_credentials(self, obj: OrgApiConnection) -> list[dict[str, Any]]:
-        return list(
-            obj.tokens.order_by("pk").values(
-                "id",
-                "prefix",
-                "user_id",
-                "issued_by_id",
-                "operations",
-                "created_at",
-                "revoked_at",
-            )
+        fields = (
+            "id",
+            "prefix",
+            "user_id",
+            "issued_by_id",
+            "operations",
+            "created_at",
+            "revoked_at",
         )
+        return [
+            {field: getattr(token, field) for field in fields}
+            for token in sorted(obj.tokens.all(), key=lambda token: token.pk)
+        ]

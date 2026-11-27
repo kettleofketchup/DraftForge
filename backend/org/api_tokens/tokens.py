@@ -111,7 +111,7 @@ def lookup_token(raw: str) -> OrgApiToken | None:
         return None
     prefix, secret = parsed
     token = (
-        OrgApiToken.objects.select_related("user", "organization")
+        OrgApiToken.objects.select_related("user", "organization", "connection")
         .filter(prefix=prefix)
         .first()
     )

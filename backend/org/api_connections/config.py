@@ -124,6 +124,7 @@ def apply_config_patch(
             )
         ) and (
             "outbound_auth" in patch
+            or old_origin != new_origin
             or any(
                 patch.get(field) is True
                 for field in (

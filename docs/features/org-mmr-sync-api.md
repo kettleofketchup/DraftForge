@@ -46,6 +46,27 @@ can be issued while MMR sync API is off. Contributions alone does not show it. A
 for an operation the token lacks gets `403 operation_not_granted`. The promotion
 operation is described in [promotion contact sync](promotion-contact-sync.md).
 
+### Replacing migrated connection keys
+
+A migrated connection can retain multiple legacy keys with different grants. Those keys
+keep their individual grants until explicitly replaced. The first issue or rotation on
+such a connection replaces **all** its legacy keys with one key holding the connection's
+full `operations` list. This can grant more permissions than any single legacy key held.
+
+The session-admin endpoints `POST api-connections/<id>/issue-key/` and
+`POST api-connections/<id>/rotate-key/` require explicit confirmation in this case.
+Without it they return `409 grant_confirmation_required` with the resulting `operations`
+list, and leave the old keys untouched. Review that list, narrow the connection's grants
+if necessary, then send `{"confirmed_operations": ["mmr:read", "mmr:write"]}` with exactly
+the intended grants. Editing connection grants revokes existing keys immediately.
+A successful issue or rotation returns the new key once with `Cache-Control: no-store`.
+
+Connection creation, edits, enabling, key issuance and rotation share an administrative
+budget of 30 requests per minute per org and per acting admin. Reading, revoking keys,
+archiving connections and PATCH requests containing only disabled flags (plus
+`config_version`) remain available when that budget is exhausted. Do not combine an
+emergency disable with a name or configuration edit.
+
 ## Limits and usage
 
 | Limit | Default | Applies to |

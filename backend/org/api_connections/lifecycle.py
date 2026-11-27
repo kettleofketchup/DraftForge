@@ -1,7 +1,7 @@
 import secrets
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, Q
 from django.utils import timezone
 from rest_framework.exceptions import APIException
 
@@ -23,8 +23,16 @@ class ConnectionConflict(APIException):
     status_code = 409
     default_code = "configuration_changed"
 
-    def __init__(self, code: str = "configuration_changed") -> None:
-        super().__init__({"code": code, "detail": code})
+    def __init__(
+        self,
+        code: str = "configuration_changed",
+        *,
+        operations: list[str] | None = None,
+    ) -> None:
+        detail: dict[str, object] = {"code": code, "detail": code}
+        if operations is not None:
+            detail["operations"] = operations
+        super().__init__(detail)
 
 
 def invalidate_work(connection: OrgApiConnection) -> None:
@@ -42,7 +50,11 @@ def revoke_connection_keys(connection: OrgApiConnection, *, actor: CustomUser) -
 
 
 def issue_connection_key(
-    connection: OrgApiConnection, *, actor: CustomUser, rotate: bool
+    connection: OrgApiConnection,
+    *,
+    actor: CustomUser,
+    rotate: bool,
+    confirmed_operations: list[str] | None = None,
 ) -> tuple[OrgApiToken, str]:
     with transaction.atomic():
         current = (
@@ -69,6 +81,15 @@ def issue_connection_key(
         active = current.tokens.filter(revoked_at__isnull=True).exists()
         if active and not rotate and not current.legacy_multi_credential:
             raise ConnectionConflict("credential_exists")
+        if current.legacy_multi_credential:
+            try:
+                confirmed = parse_operations(confirmed_operations)
+            except ValueError:
+                confirmed = []
+            if set(confirmed) != set(operations):
+                raise ConnectionConflict(
+                    "grant_confirmation_required", operations=operations
+                )
         revoke_connection_keys(current, actor=actor)
         while True:
             prefix = secrets.token_hex(PREFIX_BYTES)
@@ -102,6 +123,19 @@ def issue_connection_key(
 def handle_credential_owner_loss(
     user: CustomUser, *, organization_id: int | None = None
 ) -> None:
+    tokens = OrgApiToken.objects.filter(user=user, revoked_at__isnull=True)
+    principals = OrgApiConnection.objects.filter(
+        Q(outbound_credential_owner=user) | Q(outbound_authorizer=user)
+    )
+    if organization_id is not None:
+        tokens = tokens.filter(organization_id=organization_id)
+        principals = principals.filter(organization_id=organization_id)
+    if (
+        not CustomUser.objects.filter(pk=user.pk)
+        .filter(Exists(tokens) | Exists(principals))
+        .exists()
+    ):
+        return
     with transaction.atomic():
         unattached = OrgApiToken.objects.filter(
             user=user, connection__isnull=True, revoked_at__isnull=True

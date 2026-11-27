@@ -1,5 +1,10 @@
+from django.db import transaction
+
 from app.models import CustomUser
 from org.models import OrgApiConnection, OrgLog
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def audit_connection(
@@ -19,4 +24,14 @@ def audit_connection(
             "fields": sorted(fields or []),
             "credential_changed": credential_changed,
         },
+    )
+
+    transaction.on_commit(
+        lambda: log.info(
+            "api_connection_lifecycle",
+            system="org",
+            subsystem="api_connections",
+            connection_id=connection.pk,
+            reason=action,
+        )
     )

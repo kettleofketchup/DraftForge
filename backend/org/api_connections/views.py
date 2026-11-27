@@ -2,6 +2,7 @@ from typing import Any
 
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.authentication import SessionAuthentication
@@ -35,7 +36,7 @@ from org.api_connections.serializers import ConnectionSerializer
 from org.api_tokens.operations import entitlements_for
 from org.feature_errors import require_feature, require_org_admin
 from org.feature_keys import FeatureKey
-from org.models import Organization, OrgApiConnection
+from org.models import Organization, OrgApiConnection, OrgApiToken
 
 
 class ConnectionRateLimited(APIException):
@@ -129,7 +130,12 @@ def connections(request: Request, org_id: int) -> Response:
     org = _org(request, org_id)
     if request.method == "GET":
         return Response(
-            ConnectionSerializer(org.api_connections.order_by("pk"), many=True).data
+            ConnectionSerializer(
+                org.api_connections.order_by("pk").prefetch_related(
+                    Prefetch("tokens", queryset=OrgApiToken.objects.order_by("pk"))
+                ),
+                many=True,
+            ).data
         )
     check_action_budget(org.pk, request.user.pk)
     try:
@@ -170,7 +176,25 @@ def connection_detail(request: Request, org_id: int, connection_id: int) -> Resp
     connection = _connection(org, connection_id)
     if request.method == "GET":
         return Response(ConnectionSerializer(connection).data)
-    check_action_budget(org.pk, request.user.pk)
+    disable_fields = {
+        "enabled",
+        "inbound_enabled",
+        "mmr_push_enabled",
+        "mmr_pull_enabled",
+        "promotion_push_enabled",
+    }
+    disable_only = (
+        type(request.data) is dict
+        and bool(set(request.data) & disable_fields)
+        and not (set(request.data) - disable_fields - {"config_version"})
+        and all(
+            value is False
+            for field, value in request.data.items()
+            if field != "config_version"
+        )
+    )
+    if request.method != "DELETE" and not disable_only:
+        check_action_budget(org.pk, request.user.pk)
     try:
         with transaction.atomic():
             current = OrgApiConnection.objects.select_for_update().get(pk=connection.pk)
@@ -266,9 +290,11 @@ def connection_key(
 ) -> Response:
     org = _org(request, org_id)
     connection = _connection(org, connection_id)
-    if request.data:
+    allowed = set() if action == "revoke" else {"confirmed_operations"}
+    if type(request.data) is not dict or set(request.data) - allowed:
         return Response({"code": "invalid_config"}, status=400)
-    check_action_budget(org.pk, request.user.pk)
+    if action != "revoke":
+        check_action_budget(org.pk, request.user.pk)
     if action == "revoke":
         with transaction.atomic():
             current = OrgApiConnection.objects.select_for_update().get(pk=connection.pk)
@@ -284,7 +310,10 @@ def connection_key(
         response = Response(ConnectionSerializer(current).data)
     else:
         token, raw = issue_connection_key(
-            connection, actor=request.user, rotate=action == "rotate"
+            connection,
+            actor=request.user,
+            rotate=action == "rotate",
+            confirmed_operations=request.data.get("confirmed_operations"),
         )
         connection.refresh_from_db()
         response = Response(

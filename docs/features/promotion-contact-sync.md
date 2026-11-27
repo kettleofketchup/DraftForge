@@ -57,6 +57,10 @@ promotion-only token can be issued without the MMR sync API feature. The same re
 through the API is `POST /api/organizations/<id>/api-tokens/` with
 `{"name": "Contact log adaptor", "operations": ["promotion:import"]}`.
 
+When several legacy credentials are migrated onto one connection, replacing them can
+consolidate their grants. Review and explicitly confirm the resulting grant list before
+[replacing migrated connection keys](org-mmr-sync-api.md#replacing-migrated-connection-keys).
+
 Grants are fixed when the token is created. Every request checks, in order: the token,
 its org, the operation grant (`403 operation_not_granted`), the operation's feature, that
 the owner is still an org admin, and the rate budget. Tokens that existed before grants

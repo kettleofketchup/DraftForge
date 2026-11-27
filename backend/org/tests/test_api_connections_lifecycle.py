@@ -1,19 +1,24 @@
 import json
 
 from django.contrib import admin
+from django.db import transaction
 from django.test import RequestFactory, override_settings
-from rest_framework.exceptions import PermissionDenied
+from structlog.testing import capture_logs
 
 from app.models import CustomUser
 from events.tests.actors import SYSTEM
-from org.api_connections.authority import assert_connection_authority
+from org.api_connections.authority import (
+    ConnectionAuthorityLost,
+    assert_connection_authority,
+)
 from org.api_connections.config import apply_config_patch
 from org.api_connections.lifecycle import (
+    ConnectionConflict,
     handle_credential_owner_loss,
     issue_connection_key,
 )
 from org.api_connections.schemas import ConnectionConfigError
-from org.api_tokens.tokens import issue_token
+from org.api_tokens.tokens import issue_token, lookup_token
 from org.models import OrgApiConnection, OrgApiSyncRun, OrgApiToken, OrgLog
 from org.tests.test_api_connections_crypto import OLD_KEY
 from org.tests.test_api_tokens import ApiTokenBase
@@ -39,7 +44,12 @@ class ConnectionLifecycleTests(ApiTokenBase):
             operations=["mmr:read"],
         )
         connection.refresh_from_db()
-        token, raw = issue_connection_key(connection, actor=self.admin2, rotate=True)
+        token, raw = issue_connection_key(
+            connection,
+            actor=self.admin2,
+            rotate=True,
+            confirmed_operations=["mmr:write", "mmr:read"],
+        )
         self.assertEqual(token.connection_id, connection.pk)
         self.assertEqual(token.user, self.admin2)
         self.assertEqual(self.bearer(old.raw).get(self.sync_url()).status_code, 401)
@@ -102,10 +112,11 @@ class ConnectionLifecycleTests(ApiTokenBase):
             connection, direction="mmr_push", testing=True, requester=self.admin
         )
         self.org.admins.remove(self.admin)
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(ConnectionAuthorityLost) as lost:
             assert_connection_authority(
                 connection, direction="mmr_push", testing=True, requester=self.admin2
             )
+        lost.exception.cleanup()
         connection.refresh_from_db()
         self.assertIsNone(connection.outbound_authorizer_id)
         self.assertFalse(connection.mmr_push_enabled)
@@ -138,10 +149,13 @@ class ConnectionLifecycleTests(ApiTokenBase):
             mmr_pull_enabled=True,
         )
         self.org.admins.remove(self.admin)
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(ConnectionAuthorityLost) as lost:
             assert_connection_authority(
                 connection, direction="mmr_pull", testing=True, requester=self.admin2
             )
+        lost.exception.cleanup()
+        connection.refresh_from_db()
+        self.assertIsNone(connection.outbound_authorizer_id)
         other.refresh_from_db()
         self.assertEqual(other.outbound_authorizer_id, self.admin.pk)
         self.assertTrue(other.mmr_pull_enabled)
@@ -290,3 +304,108 @@ class ConnectionLifecycleTests(ApiTokenBase):
         )
         issued.token.refresh_from_db()
         self.assertIsNotNone(issued.token.revoked_at)
+
+    def test_owner_loss_without_api_state_uses_one_query_no_savepoint(self) -> None:
+        with self.assertNumQueries(1):
+            handle_credential_owner_loss(self.member)
+
+    def test_auth_none_origin_change_reauthorizes_acting_admin(self) -> None:
+        connection = OrgApiConnection.objects.create(
+            organization=self.org,
+            name="No auth",
+            outbound_base_url="https://old.example",
+            outbound_authorizer=self.admin,
+            mmr_pull_enabled=True,
+        )
+        current = apply_config_patch(
+            connection,
+            actor=self.admin2,
+            patch={"outbound_base_url": "https://new.example"},
+            expected_version=1,
+        )
+        self.assertEqual(current.outbound_authorizer_id, self.admin2.pk)
+
+    def test_authority_loss_is_typed_and_cleanup_survives_caller_rollback(self) -> None:
+        current = OrgApiConnection.objects.create(
+            organization=self.org,
+            name="Lost",
+            outbound_authorizer=self.admin,
+            mmr_pull_enabled=True,
+        )
+        self.org.admins.remove(self.admin)
+        try:
+            with transaction.atomic():
+                assert_connection_authority(
+                    current,
+                    direction="mmr_pull",
+                    testing=True,
+                    requester=self.admin2,
+                )
+        except ConnectionAuthorityLost as exc:
+            current.refresh_from_db()
+            self.assertEqual(current.outbound_authorizer_id, self.admin.pk)
+            self.assertFalse(
+                OrgLog.objects.filter(action="api_connection_owner_lost").exists()
+            )
+            self.assertEqual(exc.principal_id, self.admin.pk)
+            self.assertEqual(exc.organization_id, self.org.pk)
+            self.assertEqual(exc.connection_id, current.pk)
+            exc.cleanup()
+        else:
+            self.fail("Expected authority loss")
+        current.refresh_from_db()
+        self.assertIsNone(current.outbound_authorizer_id)
+        self.assertFalse(current.mmr_pull_enabled)
+        self.assertTrue(
+            OrgLog.objects.filter(
+                action="api_connection_owner_lost",
+                details__connection_id=current.pk,
+            ).exists()
+        )
+
+    def test_lookup_token_eagerly_loads_connection(self) -> None:
+        issued = issue_token(self.org, self.admin, "Lookup")
+        with self.assertNumQueries(1):
+            token = lookup_token(issued.raw)
+            self.assertEqual(token.connection.pk, issued.token.connection_id)
+
+    def test_lifecycle_logs_fixed_reason_and_connection_without_secrets(self) -> None:
+        current = OrgApiConnection.objects.create(
+            organization=self.org,
+            name="Logged",
+            inbound_enabled=True,
+            operations=["mmr:read"],
+        )
+        with capture_logs() as logs, self.captureOnCommitCallbacks(execute=True):
+            token, raw = issue_connection_key(current, actor=self.admin, rotate=False)
+            handle_credential_owner_loss(self.admin)
+        events = [row for row in logs if row.get("subsystem") == "api_connections"]
+        self.assertEqual(
+            {row["reason"] for row in events},
+            {
+                "issue_connection_key",
+                "api_connection_owner_lost",
+            },
+        )
+        self.assertTrue(
+            all(
+                row["system"] == "org" and row["connection_id"] == current.pk
+                for row in events
+            )
+        )
+        self.assertNotIn(raw, json.dumps(events))
+        self.assertNotIn(token.secret_hash, json.dumps(events))
+
+    def test_multi_credential_issue_requires_exact_grant_confirmation(self) -> None:
+        issued = issue_token(self.org, self.admin, "Legacy")
+        current = issued.token.connection
+        OrgApiConnection.objects.filter(pk=current.pk).update(
+            legacy_multi_credential=True
+        )
+        current.refresh_from_db()
+        with self.assertRaises(ConnectionConflict) as ctx:
+            issue_connection_key(current, actor=self.admin2, rotate=True)
+        self.assertEqual(ctx.exception.detail["code"], "grant_confirmation_required")
+        self.assertEqual(ctx.exception.detail["operations"], ["mmr:read", "mmr:write"])
+        issued.token.refresh_from_db()
+        self.assertIsNone(issued.token.revoked_at)

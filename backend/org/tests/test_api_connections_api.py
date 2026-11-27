@@ -7,6 +7,7 @@ from django.test import RequestFactory, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from org.api_connections.lifecycle import issue_connection_key
 from org.api_connections.views import ConnectionRateLimited, check_action_budget
 from org.api_tokens.tokens import issue_token
 from org.features import FeatureKey, set_org_feature
@@ -321,3 +322,112 @@ class ConnectionApiTests(ApiTokenBase):
         response = self.client.post(self.url, {"name": "Limited"}, format="json")
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.data["code"], "rate_limited")
+
+    def test_exhausted_budget_allows_only_fail_safe_actions(self) -> None:
+        issued = issue_token(self.org, self.admin, "Emergency")
+        url = f"{self.url}{issued.token.connection_id}/"
+        for _ in range(30):
+            check_action_budget(self.org.pk, self.admin.pk)
+        self.client.force_authenticate(self.admin2)
+        for action in ("issue-key", "rotate-key"):
+            self.assertEqual(
+                self.client.post(f"{url}{action}/", {}, format="json").status_code, 429
+            )
+        self.assertEqual(
+            self.client.patch(
+                url, {"config_version": 1, "enabled": True}, format="json"
+            ).status_code,
+            429,
+        )
+        self.assertEqual(
+            self.client.patch(
+                url,
+                {"config_version": 1, "enabled": False, "name": "Other"},
+                format="json",
+            ).status_code,
+            429,
+        )
+        response = self.client.patch(
+            url,
+            {"config_version": 1, "enabled": False, "inbound_enabled": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            self.client.post(f"{url}revoke-key/", {}, format="json").status_code, 200
+        )
+        self.assertEqual(self.client.delete(url).status_code, 200)
+
+    def test_list_credentials_query_count_is_constant(self) -> None:
+        issue_token(self.org, self.admin, "First")
+        with self.assertNumQueries(4):
+            response = self.client.get(self.url)
+        for i in range(4):
+            issue_token(self.org, self.admin, f"Other {i}")
+        with self.assertNumQueries(4):
+            response = self.client.get(self.url)
+        self.assertEqual(len(response.data), 5)
+        self.assertEqual(len(response.data[0]["inbound_credentials"]), 1)
+
+    def test_legacy_multi_key_http_confirmation_names_exact_new_grants(self) -> None:
+        for action in ("issue", "rotate"):
+            with self.subTest(action=action):
+                issued = issue_token(
+                    self.org, self.admin, action, operations=["mmr:read"]
+                )
+                current = issued.token.connection
+                OrgApiConnection.objects.filter(pk=current.pk).update(
+                    legacy_multi_credential=True,
+                    operations=["mmr:read", "mmr:write"],
+                )
+                OrgApiToken.objects.filter(pk=issued.token.pk).update(
+                    legacy_credential=True
+                )
+                other = OrgApiToken.objects.create(
+                    organization=self.org,
+                    connection=current,
+                    user=self.admin2,
+                    legacy_credential=True,
+                    prefix=f"legacy-{action}",
+                    secret_hash="0" * 64,
+                    operations=["mmr:write"],
+                )
+                url = f"{self.url}{current.pk}/{action}-key/"
+                for body in ({}, {"confirmed_operations": ["mmr:read"]}):
+                    denied = self.client.post(url, body, format="json")
+                    self.assertEqual(denied.status_code, 409, denied.data)
+                    self.assertEqual(denied.data["code"], "grant_confirmation_required")
+                    self.assertEqual(
+                        denied.data["operations"], ["mmr:read", "mmr:write"]
+                    )
+                    self.assertEqual(
+                        current.tokens.filter(revoked_at__isnull=True).count(), 2
+                    )
+                response = self.client.post(
+                    url,
+                    {"confirmed_operations": ["mmr:read", "mmr:write"]},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 201, response.data)
+                self.assertEqual(response["Cache-Control"], "no-store")
+                token = OrgApiToken.objects.get(pk=response.data["credential"]["id"])
+                self.assertEqual(token.operations, ["mmr:read", "mmr:write"])
+                self.assertEqual(
+                    current.tokens.filter(revoked_at__isnull=True).count(), 1
+                )
+                other.refresh_from_db()
+                self.assertIsNotNone(other.revoked_at)
+
+    def test_credential_order_is_stable_on_list_and_detail(self) -> None:
+        issued = issue_token(self.org, self.admin, "Order")
+        current = issued.token.connection
+        rotated, _ = issue_connection_key(current, actor=self.admin2, rotate=True)
+        expected = [issued.token.pk, rotated.pk]
+        detail = self.client.get(f"{self.url}{current.pk}/")
+        listed = self.client.get(self.url)
+        self.assertEqual(
+            [row["id"] for row in detail.data["inbound_credentials"]], expected
+        )
+        self.assertEqual(
+            [row["id"] for row in listed.data[0]["inbound_credentials"]], expected
+        )
