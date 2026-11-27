@@ -33,7 +33,6 @@ _READ_WORKERS = ThreadPoolExecutor(
     max_workers=4, thread_name_prefix="discord-permissions"
 )
 _READ_SLOTS = threading.BoundedSemaphore(4)
-FIXTURE_TOKEN_FP: str = "test-fixture-v1"
 
 
 def _release_read_slot(future: Future[Any]) -> None:
@@ -214,7 +213,7 @@ class SnapshotReader:
         self.deadline: float = time.monotonic() + min(15.0, budget_s)
         self.read_timeout_s: float = min(5.0, read_timeout_s)
         self.token_fp: str = (
-            FIXTURE_TOKEN_FP
+            "test-fixture-v1"
             if isinstance(source, FixtureSource)
             else hashlib.sha256(
                 (

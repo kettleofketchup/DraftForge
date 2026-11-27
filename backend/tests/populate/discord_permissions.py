@@ -16,7 +16,6 @@ from django.utils import timezone
 from app.cache_utils import invalidate_model, invalidate_obj
 from app.models import CustomUser
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
-from discordbot.permissions.reader import FIXTURE_TOKEN_FP
 from events.constants import EventState
 from events.models import Event
 from league.models import League
@@ -46,6 +45,8 @@ from tests.populate.utils import delete_events
 from user.models import PositionsModel
 
 FIXTURE_KEY: str = f"discord_perm_fixture:{PERMISSION_GUILD_ID}"
+# discordbot.permissions.reader keys FixtureSource snapshots by this token.
+FIXTURE_TOKEN_FP: str = "test-fixture-v1"
 
 
 def _ensure_user(data: TestUser) -> CustomUser:
