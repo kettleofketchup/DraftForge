@@ -1,6 +1,6 @@
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import deepcopy
 from dataclasses import replace
 from datetime import timedelta
@@ -249,6 +249,10 @@ class ReaderTests(SimpleTestCase):
             (f"/guilds/{G}", check()),
             (f"/guilds/{G}/channels", check()),
             (
+                f"/channels/{T}",
+                check(A.START_MENTION, T, reference_present=True),
+            ),
+            (
                 f"/channels/{T}/thread-members/{B}",
                 check(A.START_MENTION, T, reference_present=True),
             ),
@@ -273,22 +277,44 @@ class ReaderTests(SimpleTestCase):
                     self.run_checks([requested]).checks[0].status, "verified"
                 )
                 release = threading.Event()
+                entered = threading.Event()
                 finished = threading.Event()
-                original = self.source.get
+                reader = SnapshotReader(self.source)
+                original = reader._get
+                original_channel = reader.channel
+                worker_path = delayed_path in (
+                    f"/channels/{T}",
+                    f"/channels/{T}/thread-members/{B}",
+                )
 
-                def get(path: str, timeout: float) -> tuple[int, Any, dict[str, str]]:
+                def get(path: str) -> tuple[int, Any, dict[str, str]]:
                     if path == delayed_path:
-                        try:
-                            release.wait(timeout=3)
-                            return original(path, timeout)
-                        finally:
-                            finished.set()
-                    return original(path, timeout)
+                        reader.deadline = time.monotonic() - 1
+                        entered.set()
+                        if worker_path:
+                            self.assertTrue(release.wait(timeout=3))
+                        raise requests.Timeout()
+                    return original(path)
 
-                reader = SnapshotReader(self.source, budget_s=0.15)
+                def channel(*args: Any) -> Any:
+                    try:
+                        return original_channel(*args)
+                    finally:
+                        finished.set()
+
+                def exhausted_wait(futures: Any, **kwargs: Any) -> Any:
+                    self.assertTrue(entered.wait(timeout=3))
+                    return set(), set(futures)
+
                 try:
                     with (
-                        patch.object(self.source, "get", side_effect=get),
+                        patch.object(reader, "_get", side_effect=get),
+                        patch.object(reader, "channel", side_effect=channel),
+                        patch(
+                            "discordbot.permissions.service.wait",
+                            side_effect=exhausted_wait if worker_path else None,
+                            wraps=None if worker_path else wait,
+                        ),
                         patch(
                             "discordbot.permissions.service.SnapshotReader",
                             return_value=reader,
@@ -308,7 +334,8 @@ class ReaderTests(SimpleTestCase):
                             self.assertEqual(result.refresh_state, "coalesced")
                 finally:
                     release.set()
-                    self.assertTrue(finished.wait(timeout=3))
+                    if worker_path:
+                        self.assertTrue(finished.wait(timeout=3))
                 self.assertEqual(
                     self.run_checks([requested]).checks[0].status, "unknown"
                 )
@@ -316,6 +343,118 @@ class ReaderTests(SimpleTestCase):
                 self.assertEqual(
                     self.run_checks([requested], True).checks[0].status, "verified"
                 )
+
+    def _exhaust_pending_thread_refresh(
+        self,
+    ) -> tuple[threading.Event, threading.Event, SnapshotReader]:
+        requested = [
+            check(A.START_MENTION, T, reference_present=True),
+            check(key="sibling"),
+        ]
+        self.assertTrue(
+            all(x.status == "verified" for x in self.run_checks(requested).checks)
+        )
+        release = threading.Event()
+        entered = threading.Event()
+        finished = threading.Event()
+        reader = SnapshotReader(self.source)
+        original_get = reader._get
+        original_channel = reader.channel
+
+        def get(path: str) -> tuple[int, Any, dict[str, str]]:
+            if path == f"/channels/{T}":
+                entered.set()
+                self.assertTrue(release.wait(timeout=3))
+            return original_get(path)
+
+        def channel(guild_id: str, channel_id: str, refresh: bool) -> Any:
+            try:
+                return original_channel(guild_id, channel_id, refresh)
+            finally:
+                if channel_id == T:
+                    finished.set()
+
+        def exhausted_wait(futures: Any, **kwargs: Any) -> Any:
+            self.assertTrue(entered.wait(timeout=3))
+            done, pending = wait(futures, timeout=3, return_when="FIRST_COMPLETED")
+            self.assertEqual(len(done), 1)
+            reader.deadline = time.monotonic() - 1
+            return done, pending
+
+        with (
+            patch.object(reader, "_get", side_effect=get),
+            patch.object(reader, "channel", side_effect=channel),
+            patch("discordbot.permissions.service.wait", side_effect=exhausted_wait),
+            patch("discordbot.permissions.service.SnapshotReader", return_value=reader),
+        ):
+            failed = self.run_checks(requested, True).checks
+        self.assertFalse(release.is_set())
+        self.assertEqual(
+            [(x.key, x.status, x.reason) for x in failed],
+            [("post", "unknown", "network_error"), ("sibling", "verified", None)],
+        )
+        return release, finished, reader
+
+    def _finish(self, release: threading.Event, finished: threading.Event) -> None:
+        release.set()
+        self.assertTrue(finished.wait(timeout=3))
+
+    def test_pending_channel_refresh_keeps_sibling_verified(self) -> None:
+        release, finished, _ = self._exhaust_pending_thread_refresh()
+        try:
+            followup = self.run_checks(
+                [check(A.START_MENTION, T, reference_present=True), check(key="s")]
+            ).checks
+            self.assertEqual(
+                [(x.status, x.reason) for x in followup],
+                [("unknown", "network_error"), ("verified", None)],
+            )
+        finally:
+            self._finish(release, finished)
+        late = self.run_checks([check(A.START_MENTION, T, reference_present=True)])
+        self.assertEqual(late.checks[0].status, "unknown")
+
+    def test_later_refresh_ignores_exhausted_generation(self) -> None:
+        release, finished, reader = self._exhaust_pending_thread_refresh()
+        requested = [check(A.START_MENTION, T, reference_present=True)]
+        try:
+            cache.delete(f"discord_perm_refresh:test-fixture-v1:{G}")
+            fresh = self.run_checks(requested, True).checks[0]
+            self.assertEqual(fresh.status, "verified")
+            reader.exhaust_channel_refresh(G, T)
+        finally:
+            self._finish(release, finished)
+        retained = self.run_checks(requested).checks[0]
+        self.assertEqual(retained.status, "verified")
+        self.assertEqual(retained.checked_at, fresh.checked_at)
+
+    def test_exhausted_channel_success_not_revived_after_failure_ttl(self) -> None:
+        for requested in (
+            check(A.START_MENTION, T, reference_present=True),
+            check(A.SIGNUP_EDIT, T, reference_present=True, message_id=M),
+        ):
+            with self.subTest(action=requested.action):
+                cache.clear()
+                self.data = scenario()
+                self.source = RecordingSource(self.data)
+                old = self.run_checks([requested]).checks[0]
+                self.assertEqual(old.status, "verified")
+                self._finish(*self._exhaust_pending_thread_refresh()[:2])
+                later = timezone.now() + timedelta(seconds=11)
+                self.source.calls.clear()
+                target = (
+                    f"/channels/{T}/messages/{M}"
+                    if requested.message_id
+                    else f"/channels/{T}/thread-members/{B}"
+                )
+                self.data[target] = {"status": 403}
+                with patch("django.utils.timezone.now", return_value=later):
+                    result = self.run_checks([requested]).checks[0]
+                self.assertEqual(
+                    (result.status, result.reason), ("unknown", "forbidden_read")
+                )
+                self.assertIn(f"/channels/{T}", self.source.calls)
+                self.assertIn(target, self.source.calls)
 
     def test_coalesced_refresh_reports_original_checked_at(self) -> None:
         first = self.run_checks([check()], True).checks[0]

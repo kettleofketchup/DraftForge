@@ -284,6 +284,7 @@ class SnapshotReader:
         *,
         missing: ReasonCode = "resource_unavailable",
         absent_ok: bool = False,
+        channel_scope: str | None = None,
     ) -> _Read:
         with self._guard:
             lock = self._locks.setdefault(path, threading.Lock())
@@ -293,6 +294,13 @@ class SnapshotReader:
             bypass = self._refresh_allowed(guild_id, refresh)
             key = f"discord_perm:v1:{self.token_fp}:{guild_id}:{kind}"
             cached = None if bypass else cache.get(key)
+            if cached is not None and channel_scope:
+                fence = cache.get(
+                    f"discord_perm_channel_fence:{self.token_fp}:{guild_id}:"
+                    f"{channel_scope}"
+                )
+                if fence is not None and cached.observation.observed_at <= fence:
+                    cached = None
             if cached is not None and cached.observation.expires_at > timezone.now():
                 entry = cached
                 with self._guard:
@@ -450,11 +458,49 @@ class SnapshotReader:
             guild_id, f"/guilds/{guild_id}/channels", "channels", parse, refresh
         )
 
+    def exhaust_channel_refresh(self, guild_id: str, channel_id: str) -> None:
+        observed = timezone.now()
+        entry = _Read(
+            None,
+            "network_error",
+            Observation(observed, observed + timedelta(seconds=10)),
+        )
+        path = f"channel-refresh:{channel_id}"
+        self.reads[path] = entry
+        self.observations[path] = entry.observation
+        generation = f"discord_perm_generation:{self.token_fp}:{guild_id}"
+        if self._refresh.get(guild_id) and cache.get(generation) == self._refresh_token:
+            cache.set(
+                f"discord_perm_channel_failure:{self.token_fp}:{guild_id}:"
+                f"{self._refresh_token}:{channel_id}",
+                entry,
+                timeout=10,
+            )
+            cache.set(
+                f"discord_perm_channel_fence:{self.token_fp}:{guild_id}:{channel_id}",
+                observed,
+                timeout=60,
+            )
+
     def channel(
         self, guild_id: str, channel_id: str, refresh: bool
     ) -> tuple[ChannelSnap | None, ReasonCode | None]:
         _id(guild_id)
         _id(channel_id)
+        if not self._refresh_allowed(guild_id, refresh):
+            generation = cache.get(
+                f"discord_perm_generation:{self.token_fp}:{guild_id}"
+            )
+            failure = cache.get(
+                f"discord_perm_channel_failure:{self.token_fp}:{guild_id}:"
+                f"{generation}:{channel_id}"
+            )
+            if failure is not None and failure.observation.expires_at > timezone.now():
+                path = f"channel-refresh:{channel_id}"
+                self.reads[path] = failure
+                self.observations[path] = failure.observation
+                self.channel_dependencies[channel_id] = {path}
+                return None, failure.error
         listed = self._channels(guild_id, refresh)
         path = f"/guilds/{guild_id}/channels"
         entry = listed
@@ -469,7 +515,12 @@ class SnapshotReader:
                 return channel
 
             entry = self._read(
-                guild_id, path, f"channel:{channel_id}", parse_channel, refresh
+                guild_id,
+                path,
+                f"channel:{channel_id}",
+                parse_channel,
+                refresh,
+                channel_scope=channel_id,
             )
             channel = entry.value
         dependencies = {path}
@@ -501,6 +552,7 @@ class SnapshotReader:
                 parse_member,
                 refresh,
                 absent_ok=True,
+                channel_scope=channel_id,
             )
             dependencies.add(path)
             channel = replace(
@@ -551,5 +603,6 @@ class SnapshotReader:
             f"message:{channel_id}:{message_id}",
             parse,
             refresh,
+            channel_scope=channel_id,
         )
         return entry.value, entry.error

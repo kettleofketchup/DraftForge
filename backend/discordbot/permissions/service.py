@@ -79,7 +79,9 @@ def run_checks(
         if ids:
             reader._channels(guild_id, refresh)
             if time.monotonic() >= reader.deadline:
-                channels = {cid: (None, "network_error") for cid in ids}
+                for cid in ids:
+                    reader.exhaust_channel_refresh(guild_id, cid)
+                    channels[cid] = (None, "network_error")
             else:
                 executor = ThreadPoolExecutor(max_workers=4)
                 futures = {
@@ -94,6 +96,7 @@ def run_checks(
                         channels[futures[future]] = future.result()
                     for future in pending:
                         future.cancel()
+                        reader.exhaust_channel_refresh(guild_id, futures[future])
                         channels[futures[future]] = (None, "network_error")
                 finally:
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -110,6 +113,8 @@ def run_checks(
                 dependencies.update(
                     reader.channel_dependencies.get(check.channel_id, set())
                 )
+                if f"channel-refresh:{check.channel_id}" in reader.reads:
+                    dependencies.add(f"channel-refresh:{check.channel_id}")
             if channel:
                 if channel.type in (10, 11, 12) and channel.parent_id:
                     parent, parent_error = reader.channel(
