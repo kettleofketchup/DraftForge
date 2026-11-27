@@ -299,32 +299,40 @@ export function useEventActionMutation(eventId: number) {
       },
     }),
     cancelEvent: useMutation({
+      // A changed key detaches pending mutations instead of replacing their options.
+      mutationKey: ['event', eventId, 'cancel'],
+      onMutate: () => ({ eventId }) as const,
       mutationFn: (options: CancelEventOptions | void) =>
         cancelEventAPI(eventId, options || undefined),
-      onSuccess: (data) => {
-        queryClient.setQueryData(['event', eventId], data);
+      onSuccess: (data, _options, { eventId: affectedEventId }) => {
+        queryClient.setQueryData(['event', affectedEventId], data);
         void invalidateEventLists(queryClient);
-        invalidateSignupHistory(queryClient, eventId);
+        invalidateSignupHistory(queryClient, affectedEventId);
         void invalidateConductQueries(queryClient, data.organization);
         void invalidateOrgStandingQueries(queryClient, data.organization);
         void queryClient.invalidateQueries({
-          queryKey: ['event-signups', eventId],
+          queryKey: ['event-signups', affectedEventId],
         });
       },
     }),
     deleteEvent: useMutation({
+      mutationKey: ['event', eventId, 'delete'],
       retry: false,
+      onMutate: () =>
+        ({
+          eventId,
+          orgId: queryClient.getQueryData<EventType>(['event', eventId])
+            ?.organization,
+        }) as const,
       mutationFn: (options: DeleteEventOptions | void) =>
         deleteEventAPI(eventId, options || undefined),
-      onSuccess: () => {
-        const orgId = queryClient.getQueryData<EventType>([
-          'event',
-          eventId,
-        ])?.organization;
+      onSuccess: (_data, _options, { eventId: affectedEventId, orgId }) => {
         void invalidateEventLists(queryClient);
-        queryClient.removeQueries({ queryKey: ['event', eventId] });
-        queryClient.removeQueries({ queryKey: ['event-signups', eventId] });
-        removeSignupHistoryQueries(queryClient, eventId);
+        queryClient.removeQueries({ queryKey: ['event', affectedEventId] });
+        queryClient.removeQueries({
+          queryKey: ['event-signups', affectedEventId],
+        });
+        removeSignupHistoryQueries(queryClient, affectedEventId);
         void invalidateConductQueries(queryClient);
         void invalidateOrgStandingQueries(queryClient, orgId);
         if (orgId != null) void invalidatePromotionQueries(queryClient, orgId);

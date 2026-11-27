@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   contributionsKeys,
+  promotionKeys,
   standingKeys,
 } from '~/features/org-features/queryKeys';
 
@@ -70,7 +71,10 @@ function setup() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  const hook = renderHook(() => useEventActionMutation(EVENT_ID), { wrapper });
+  const hook = renderHook(({ eventId }) => useEventActionMutation(eventId), {
+    wrapper,
+    initialProps: { eventId: EVENT_ID },
+  });
   const invalid = (key: readonly unknown[]) =>
     client.getQueryState(key)?.isInvalidated ?? false;
   return { hook, keys, invalid, client };
@@ -242,4 +246,165 @@ describe('lifecycle preservation mutations', () => {
     expect(api.deleteEvent).toHaveBeenCalledOnce();
     expect(client.getQueryData(own)).toEqual({ id: EVENT_ID });
   });
+});
+
+describe('lifecycle mutations keep the original event across route changes', () => {
+  const nextId = EVENT_ID + 1;
+  const nextEvent = {
+    id: nextId,
+    organization: OTHER_ORG,
+    state: 'signups_open',
+  };
+  const originalEvent = {
+    id: EVENT_ID,
+    organization: ORG_ID,
+    state: 'signups_open',
+  };
+  const signupA = ['event-signups', EVENT_ID];
+  const signupB = ['event-signups', nextId];
+  const historyA = signupHistoryKey(EVENT_ID, {});
+  const historyB = signupHistoryKey(nextId, {});
+
+  beforeEach(() => {
+    api.cancelEvent.mockReset();
+    api.deleteEvent.mockReset();
+  });
+
+  function seed(client: QueryClient) {
+    client.setQueryData(['event', EVENT_ID], originalEvent);
+    client.setQueryData(['event', nextId], nextEvent);
+    client.setQueryData(signupA, [{ id: 71 }]);
+    client.setQueryData(signupB, [{ id: 81 }]);
+    client.setQueryData(historyA, { pages: ['A'] });
+    client.setQueryData(historyB, { pages: ['B'] });
+  }
+
+  it('cancellation updates and invalidates A, not the newly rendered B', async () => {
+    const { hook, client, invalid, keys } = setup();
+    seed(client);
+    const response = { ...originalEvent, state: 'cancelled' };
+    let finish!: (data: typeof response) => void;
+    api.cancelEvent.mockReturnValue(
+      new Promise<typeof response>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    let request!: Promise<unknown>;
+    act(() => {
+      request = hook.result.current.cancelEvent.mutateAsync({
+        reason: 'Schedule changed',
+      });
+    });
+    await waitFor(() => expect(api.cancelEvent).toHaveBeenCalledOnce());
+    hook.rerender({ eventId: nextId });
+    await act(async () => {
+      finish(response);
+      await request;
+    });
+
+    expect(api.cancelEvent.mock.calls).toEqual([
+      [EVENT_ID, { reason: 'Schedule changed' }],
+    ]);
+    expect(client.getQueryData(['event', EVENT_ID])).toEqual(response);
+    expect(client.getQueryData(['event', nextId])).toEqual(nextEvent);
+    expect(invalid(signupA)).toBe(true);
+    expect(invalid(historyA)).toBe(true);
+    expect(invalid(signupB)).toBe(false);
+    expect(invalid(historyB)).toBe(false);
+    expect(invalid(keys.contribBoard)).toBe(true);
+    expect(invalid(keys.otherOrgBoard)).toBe(false);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: signupA });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ['event-signup-history', EVENT_ID],
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: signupB });
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: ['event-signup-history', nextId],
+    });
+  });
+
+  it.each([undefined, { confirm: true }])(
+    'deletion %j removes A caches and invalidates A organization, leaving B untouched',
+    async (options) => {
+      const { hook, client, invalid, keys } = setup();
+      seed(client);
+      const promotionA = promotionKeys.events(ORG_ID, 11);
+      const promotionB = promotionKeys.events(OTHER_ORG, 11);
+      client.setQueryData(promotionA, []);
+      client.setQueryData(promotionB, []);
+      let finish!: () => void;
+      api.deleteEvent.mockReturnValue(
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      const remove = vi.spyOn(client, 'removeQueries');
+      let request!: Promise<unknown>;
+      act(() => {
+        request = hook.result.current.deleteEvent.mutateAsync(options);
+      });
+      await waitFor(() => expect(api.deleteEvent).toHaveBeenCalledOnce());
+      hook.rerender({ eventId: nextId });
+      await act(async () => {
+        finish();
+        await request;
+      });
+
+      expect(api.deleteEvent.mock.calls).toEqual([[EVENT_ID, options]]);
+      for (const key of [['event', EVENT_ID], signupA, historyA]) {
+        expect(client.getQueryData(key)).toBeUndefined();
+      }
+      expect(client.getQueryData(['event', nextId])).toEqual(nextEvent);
+      expect(client.getQueryData(signupB)).toEqual([{ id: 81 }]);
+      expect(client.getQueryData(historyB)).toEqual({ pages: ['B'] });
+      expect(invalid(keys.contribBoard)).toBe(true);
+      expect(invalid(keys.otherOrgBoard)).toBe(false);
+      expect(invalid(promotionA)).toBe(true);
+      expect(invalid(promotionB)).toBe(false);
+      expect(remove).toHaveBeenCalledWith({ queryKey: ['event', EVENT_ID] });
+      expect(remove).toHaveBeenCalledWith({ queryKey: signupA });
+      expect(remove).toHaveBeenCalledWith({
+        queryKey: ['event-signup-history', EVENT_ID],
+      });
+      expect(remove).not.toHaveBeenCalledWith({ queryKey: ['event', nextId] });
+    },
+  );
+
+  it.each(['cancelEvent', 'deleteEvent'] as const)(
+    '%s keeps A as network target if the route changes before dispatch',
+    async (action) => {
+      const { hook, client } = setup();
+      seed(client);
+      let release!: () => void;
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const barrier = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      client.getMutationCache().config.onMutate = async () => {
+        entered();
+        await barrier;
+      };
+      api.cancelEvent.mockResolvedValue({
+        ...originalEvent,
+        state: 'cancelled',
+      });
+      api.deleteEvent.mockResolvedValue(undefined);
+      let request!: Promise<unknown>;
+      act(() => {
+        request = hook.result.current[action].mutateAsync();
+      });
+      await started;
+      hook.rerender({ eventId: nextId });
+      await act(async () => {
+        release();
+        await request;
+      });
+      expect(api[action].mock.calls).toEqual([[EVENT_ID, undefined]]);
+      expect(client.getQueryData(['event', nextId])).toEqual(nextEvent);
+    },
+  );
 });
