@@ -51,6 +51,18 @@ Entries cannot be edited or deleted through the app or the admin. They outlive t
 
 Each signup that existed when the ledger was added got a `backfilled` entry, marking where its history starts. A `backfilled` entry is not a change in itself. Every change since then writes its own entry, as described below.
 
+## Cancellation and permanent deletion
+
+Cancelling an event retains every live signup and its status, commitment, line stamps and original-signup fields. Its non-removed signups receive `event_cancelled` entries attributed to the staff actor (`staff`/`web`) or system (`system`/`system`). The before snapshot is captured before tournament cleanup, and the after snapshot reflects the remaining placement. Existing event-team placement is retained; linked tournament references can be removed. Ready-check cancellation entries remain alongside the new per-signup entries. No individual withdrawal or waitlist promotion is fabricated.
+
+Cancellation is atomic with its history: if cleanup or an append fails, the database changes roll back together. A second cancellation is rejected without extra entries; a valid reopen followed by cancellation adds a new cycle. The optional API reason accepts up to 2,000 characters; this does not make staff reasons mandatory for other actions.
+
+When an organization staff member tries to delete a record-bearing event, the API returns HTTP 409 and `{"error": "has_signup_records", "count": N}`. **N counts ledger entries, not people or active signups**, including rows with no live signup. An organization administrator must explicitly confirm permanent deletion. The browser requires the exact event name; staff without administrator access can cancel instead where legal, but cannot confirm.
+
+Confirmed deletion removes the live event and signups, without adding cancellation entries or changing existing snapshots. The surviving history is readable in the read-only ledger admin, **not** through the ordinary history endpoint: that endpoint requires a live event and remains staff-only. Series deletion cancels and retains occurrences with any signup or ledger history, makes them standalone, and deletes only truly empty active occurrences. Schedule realignment skips ledger-bearing occurrences without moving their timestamp; the subsequent configuration cascade is unchanged.
+
+The standalone `cleanup_stale_repeater_events` script does not use shared cancellation and does not emit `event_cancelled`. Arbitrary ORM deletes and organization cascades are not guarded by the event DELETE confirmation flow.
+
 ## What gets recorded
 
 Each signup change writes one entry (moving a signup to another event writes one on each event, see [Moved signups](#moved-signups)), in the same database transaction as the change. If the change fails or is rolled back, no entry is kept, and if the entry cannot be written, the change fails too.
@@ -71,6 +83,7 @@ Each signup change writes one entry (moving a signup to another event writes one
 | `promoted` | A waitlisted signup takes a freed seat |
 | `account_merged` | A signup moves to another account in an account merge |
 | `moved_event` | The stale repeater cleanup moves a signup to another event |
+| `event_cancelled` | Shared event cancellation, including a registered occurrence kept during series deletion. One per non-removed signup per cancellation cycle; cancelled, rejected and dropped signups are retained without a new entry. |
 | `voice_presence_set` | An operator sets presence by hand, with a required reason; a resulting confirmation links to this entry through `caused_by` |
 
 The role and means show who acted and how:

@@ -83,7 +83,7 @@ Every config field on the create form is optional and prefilled from the series,
 Pausing a series (`is_active = false`) stops event generation. **Reactivate** turns it back on and realigns in one step, so a paused series doesn't come back with a mix of stale and fresh rows:
 
 1. `is_active` is set back to `true`.
-2. Upcoming events are realigned against the *current* schedule — rows that no longer match a scheduled occurrence (typically left behind by a schedule edit made while paused) are torn down, taking their Discord scheduled event with them, and the missing occurrences are generated.
+2. Upcoming events are realigned against the *current* schedule. Rows that no longer match a scheduled occurrence are torn down only when they have no signup ledger entries; record-bearing rows keep their timestamp. Missing occurrences are generated.
 3. Off-schedule extra sessions are left alone.
 
 The response carries `created_count` plus a message that distinguishes "no new events were due" from "the series' end date has passed", so the page can say which of the two happened. A `PATCH` that flips `is_active` from `false` to `true` realigns identically — `is_active` is part of the schedule-change snapshot that `perform_update` compares.
@@ -92,7 +92,24 @@ While a series is paused, realign is skipped entirely rather than run against a 
 
 ### Deleting a Series
 
-Deleting a series (`events.services.teardown_event_repeater`) also deletes its `upcoming`, `signups_open` and `roll_call` events, with their Discord scheduled events and tournaments. Its `in_progress`, `completed` and `cancelled` events are kept and lose their link to the series.
+Deleting a series (`events.services.teardown_event_repeater`) processes its `upcoming`, `signups_open` and `roll_call` occurrences, including past-dated and off-schedule ones:
+
+- Any occurrence with a signup (including only cancelled, rejected or dropped signups) or historical signup ledger entries is **cancelled and kept**. Its signups and history remain.
+- Genuinely empty occurrences, with neither signups nor ledger entries, are deleted.
+- The processed active occurrences' linked tournaments and live Discord scheduled events are removed. `in_progress`, `completed` and already-`cancelled` occurrences are kept without this cleanup.
+- All retained occurrences become standalone events when the series is removed.
+
+Schedule realignment separately protects every stale upcoming occurrence with ledger entries. It logs `realign_skipped_signup_records` and leaves the event's timestamp unchanged. The usual upcoming configuration cascade still applies: preservation does not mark the occurrence off-schedule or freeze its settings. A legacy signup without any ledger entries does not gain this particular realignment protection.
+
+### Cancelling or deleting an event
+
+**Cancel** is available to event staff in `upcoming`, `signups_open` and `roll_call`. It keeps every signup's ID, status, commitment and line position, closes ready checks, removes the linked tournament, voids attendance outcomes and removes the live Discord scheduled event after commit. Each non-removed signup receives an `event_cancelled` ledger entry; cancelled, rejected and dropped signups remain but do not receive that entry. Repeated cancellation fails without adding entries; reopening and cancelling again records a new cycle.
+
+**Delete** requires organization staff. An ordinary DELETE returns `409 {"error": "has_signup_records", "count": N}` when the event has any ledger entries. This historical record count includes event-only entries and history of deleted signups; it is not the active signup count shown on the page. Only an organization administrator (including its owner or site staff) may explicitly send `?confirm=true`. The browser requires the event's exact name before this second, permanent action and offers cancellation instead wherever the lifecycle allows it. A true confirmation requires administrator access even on an empty event.
+
+Confirmed deletion removes the live event and its signups, but keeps existing ledger IDs and snapshots. It does not manufacture cancellation records. The ordinary event/history page no longer exists; surviving records remain available in the read-only ledger admin. See [Signup Ledger & Line Position](events/signup-ledger.md) for the staff-only live history and snapshot contract.
+
+These guarantees apply to the shared lifecycle services and their REST/admin callers, not arbitrary ORM cascades or the standalone `cleanup_stale_repeater_events` maintenance cancellation path.
 
 ### Discord Integration
 
@@ -284,7 +301,8 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/{id}/open_signups/` | Transition to signups_open |
 | POST | `/api/events/{id}/start_roll_call/` | Transition to roll_call |
 | POST | `/api/events/{id}/start_tournament/` | Start tournament with the confirmed roster |
-| POST | `/api/events/{id}/cancel/` | Cancel event. Deletes the linked tournament **and** the event's live Discord scheduled event, then clears `scheduled_event_id` so the 60-second `sync-discord-events` beat can't resurrect it. Voids the event's attendance outcomes. |
+| POST | `/api/events/{id}/cancel/` | Cancel while retaining signup statuses and writing cancellation history. Optional `{"reason": "text"}` accepts strings up to 2,000 characters; omitted/blank is allowed, null/non-string/oversized input is `400`. Removes the linked tournament and live Discord scheduled event, clears `scheduled_event_id` and voids attendance outcomes. |
+| DELETE | `/api/events/{id}/` | Org staff: delete an empty-history event, or receive `409` with the ledger-entry count. Only org admins may explicitly confirm with `?confirm=true`; existing history survives. |
 | POST | `/api/events/{id}/complete/` | Complete the event from `roll_call` or `in_progress`, award host/helper points and finalize attendance outcomes (org admin). Returns the event; `400` from any other state or when another close won the race. |
 | PUT | `/api/events/{id}/staff/` | Set host and helpers (org admin). Body: `{"host_id": <int\|null>, "helper_ids": [<int>, ...]}`. Returns the event. `400` if the host is also a helper or a user doesn't exist. Writes an `OrgLog` `set_event_staff` entry. |
 | GET | `/api/events/{id}/discord-logs/` | Discord notification audit log for the event's tournament |

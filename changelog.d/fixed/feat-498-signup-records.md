@@ -1,0 +1,1 @@
+- Cancelling events and deleting series preserve signup records; permanently deleting an event with signup history now requires explicit administrator confirmation.
