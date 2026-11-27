@@ -80,6 +80,13 @@ gen-discord-connect-api *args:
         | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
             --out {{quote(root / "frontend/app/features/discord-connect/api.generated.ts")}} "$@"
 
+# Regenerate frontend/app/features/event-discord-preview/schemas.generated.ts from backend/events/discord/preview_schema.py; --check fails instead of writing when stale
+[group('py')]
+gen-discord-preview *args:
+    {{quote(python)}} -I {{quote(backend / "events/discord/export_preview_schema.py")}} \
+        | node {{quote(root / "frontend/scripts/zod-from-json-schema.mjs")}} \
+            --out {{quote(root / "frontend/app/features/event-discord-preview/schemas.generated.ts")}} "$@"
+
 # Regenerate frontend/app/features/bot-access/schemas.generated.ts from backend/lobby/bot_access/schemas.py; --check fails instead of writing when stale
 [group('py')]
 gen-bot-access-api *args:

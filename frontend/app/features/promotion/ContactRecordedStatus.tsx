@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
-import { relativeFromIso, usePreviewOptions } from './feedback';
+import { usePreviewOptions } from '~/components/discord/timestamps';
+import { relativeFromIso } from './feedback';
 import type { ExternalContact, LastMessaged } from './schemas';
 
 export interface ContactRecordedStatusProps {

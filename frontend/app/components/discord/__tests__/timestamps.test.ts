@@ -1,5 +1,11 @@
+// @vitest-environment jsdom
+import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { formatDiscordTimestamps } from '../discordPreview';
+import {
+  formatDiscordTimestamp,
+  formatDiscordTimestamps,
+  usePreviewOptions,
+} from '../timestamps';
 
 const EPOCH = 1794704400;
 const DATE = new Date(EPOCH * 1000);
@@ -158,5 +164,32 @@ describe('formatDiscordTimestamps', () => {
         timeZone: 'UTC',
       }).format(DATE),
     );
+  });
+});
+
+describe('formatDiscordTimestamp', () => {
+  it('formats one unix time the same way as the text form', () => {
+    for (const style of ['t', 'T', 'd', 'D', 'f', 'F'] as const) {
+      expect(formatDiscordTimestamp(EPOCH, style, OPTS)).toBe(
+        formatDiscordTimestamps(`<t:${EPOCH}:${style}>`, OPTS),
+      );
+    }
+  });
+
+  it('R is relative to now', () => {
+    const now = new Date((EPOCH - 120) * 1000);
+    expect(formatDiscordTimestamp(EPOCH, 'R', { ...OPTS, now })).toBe(
+      'in 2 minutes',
+    );
+  });
+});
+
+describe('usePreviewOptions', () => {
+  it('uses the i18n language and the browser time zone', () => {
+    const { result } = renderHook(() => usePreviewOptions());
+    expect(result.current).toEqual({
+      locale: 'en',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
   });
 });
