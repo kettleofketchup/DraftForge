@@ -1,0 +1,1 @@
+- Per-action, per-channel Discord permission badges on event, series and organization defaults settings and Discord State show missing and granted permissions without requiring Administrator. Details keep their title visible above a padded scroll area, including in short viewports and settings dialogs.

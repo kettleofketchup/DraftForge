@@ -92,6 +92,11 @@ export function DiscordConnectionCard({
         Discord server
       </div>
       <div className="text-sm">{summary}</div>
+      {hasBot && (
+        <p className="text-sm text-muted-foreground">
+          Bot connected — action permissions are checked in event settings
+        </p>
+      )}
       <p className="text-sm text-muted-foreground">
         {hasBot
           ? 'Member search, event posts and signups use this server. Switch to add the bot to a different one.'

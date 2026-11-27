@@ -25,6 +25,15 @@ function ListPage() {
 
 function renderAt(url: string) {
   const qc = new QueryClient();
+  qc.setQueryData(
+    [
+      'discordPermissions',
+      1,
+      { kind: 'org', orgId: 4, guildId: 'old' },
+      'draft',
+    ],
+    { checks: [] },
+  );
   const invalidate = vi.spyOn(qc, 'invalidateQueries');
   const router = createMemoryRouter(
     [{ path: '/organizations/:id', Component: Page }],
@@ -37,7 +46,7 @@ function renderAt(url: string) {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  return { invalidate };
+  return { invalidate, qc };
 }
 
 afterEach(() => {
@@ -47,7 +56,7 @@ afterEach(() => {
 
 describe('useDiscordConnectResult', () => {
   it('toasts success, refreshes the org and strips the params', async () => {
-    const { invalidate } = renderAt(
+    const { invalidate, qc } = renderAt(
       '/organizations/4?settings=discord&discord=connected',
     );
 
@@ -55,6 +64,9 @@ describe('useDiscordConnectResult', () => {
       expect(toast.success).toHaveBeenCalledWith('Discord server connected'),
     );
     expect(search).toBe('?settings=discord');
+    expect(
+      qc.getQueryCache().findAll({ queryKey: ['discordPermissions'] }),
+    ).toHaveLength(0);
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: organizationQueryKey(4),
     });

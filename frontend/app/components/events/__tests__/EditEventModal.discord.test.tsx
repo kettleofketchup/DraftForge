@@ -14,6 +14,10 @@ import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 import type { EventType } from '../schemas';
 import { baseEvent } from './readyCheckModalFixtures';
 
+vi.mock('~/components/organization/hooks/useOrganization', () => ({
+  useOrganization: () => ({ organization: null }),
+}));
+
 const mutateAsync = vi.fn().mockResolvedValue({});
 vi.mock('~/hooks/useEvent', () => ({
   useUpdateEventMutation: () => ({ mutateAsync, isPending: false }),

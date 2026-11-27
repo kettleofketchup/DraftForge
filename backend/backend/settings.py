@@ -20,7 +20,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Add parent directory to Python path for paths module
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import logging
@@ -181,6 +180,7 @@ REST_FRAMEWORK = {
         "app.auth.InternalServiceAuth",
     ],
     "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
+    "DEFAULT_THROTTLE_RATES": {"discord_permission_refresh": "5/min"},
 }
 
 # Every entry must be async capable: one sync-only middleware makes each ASGI request

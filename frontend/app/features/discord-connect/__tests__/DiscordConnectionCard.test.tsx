@@ -74,6 +74,11 @@ describe('DiscordConnectionCard', () => {
     expect(
       (await screen.findByTestId('org-discord-connected')).textContent,
     ).toContain('Kettle Server');
+    expect(
+      screen.getByText(
+        'Bot connected — action permissions are checked in event settings',
+      ),
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: /switch server/i })).toBeTruthy();
   });
 

@@ -201,6 +201,26 @@ class DiscordInstallTest(TestCase):
             )
         self._assert_error(response, "bot_missing")
 
+    def test_bot_status_denies_unrelated_user(self) -> None:
+        Organization.objects.filter(pk=self.org.pk).update(discord_server_id=GUILD)
+        unrelated = CustomUser.objects.create_user(username="unrelated_status")
+        self.client.force_authenticate(unrelated)
+        with patch("discordbot.services.install.check_bot_guild_access") as access:
+            response = self.client.get(
+                f"/api/discord/organizations/{self.org.pk}/bot-status/"
+            )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"error": "Permission denied"})
+        access.assert_not_called()
+
+    def test_bot_status_allows_org_staff(self) -> None:
+        self.client.force_authenticate(self.staff)
+        response = self.client.get(
+            f"/api/discord/organizations/{self.org.pk}/bot-status/"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["reason"], "no_server_configured")
+
     def test_status_without_server(self) -> None:
         self.client.force_authenticate(self.admin)
         response = self.client.get(

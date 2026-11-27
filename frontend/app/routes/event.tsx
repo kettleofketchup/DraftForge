@@ -737,6 +737,8 @@ export default function EventPage() {
             <TabsContent value="discord">
               <DiscordLogSection
                 eventId={event.id}
+                guildId={eventOrg?.discord_server_id ?? null}
+                canCheckPermissions={isAdmin && Boolean(eventOrg)}
                 isAdmin={isAdmin}
                 eventTimezone={event.timezone}
               />
