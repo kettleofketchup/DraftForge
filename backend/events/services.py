@@ -1483,8 +1483,8 @@ def cancel_event(event: Event, *, actor: CustomUser | None, reason: str = "") ->
 def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
     """Delete an event and everything Discord/tournament-related it owns.
 
-    Dispatches deletion of the live Discord scheduled event (nothing else in the
-    app removes scheduled events), then removes the linked tournament, DiscordEvent
+    Dispatches deletion of the live Discord scheduled event on commit (nothing
+    else in the app removes scheduled events), then removes the linked tournament, DiscordEvent
     (cascades to messages, logs, DMs) and legacy message logs, then the event row.
     Shared by EventViewSet (single delete), EventRepeaterViewSet (series delete)
     and sync_future_events' realign, so no path leaves ghost events behind.
@@ -1505,8 +1505,12 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
             discord_event = None
         if discord_event is not None:
             if discord_event.scheduled_event_id:
-                delete_discord_scheduled_event.delay(
-                    discord_event.guild_id, discord_event.scheduled_event_id
+                guild_id = discord_event.guild_id
+                scheduled_event_id = discord_event.scheduled_event_id
+                transaction.on_commit(
+                    lambda: delete_discord_scheduled_event.delay(
+                        guild_id, scheduled_event_id
+                    )
                 )
             discord_event.delete()
 
@@ -1521,11 +1525,12 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
 def teardown_event_repeater(
     repeater: EventRepeater, *, actor: CustomUser | None = None
 ) -> None:
-    """Delete a series after tearing down its still-active occurrences.
+    """Delete a series after closing its still-active occurrences.
 
-    Their live Discord scheduled events would otherwise come back as ghosts on the
-    next sync_discord_events run. Completed and cancelled occurrences stay, with
-    Event.event_repeater set to NULL, as the series' history.
+    Active occurrences with any signup or ledger history are cancelled and
+    kept; empty ones are torn down so their live Discord scheduled events
+    can't come back as ghosts. Completed, in-progress and cancelled
+    occurrences stay. Retained rows get Event.event_repeater set to NULL.
     """
     active_states = [
         EventState.UPCOMING,
@@ -1533,9 +1538,22 @@ def teardown_event_repeater(
         EventState.ROLL_CALL,
     ]
     with transaction.atomic():
-        for event in list(repeater.events.filter(state__in=active_states)):
-            teardown_event(event, actor=actor)
+        for event in list(
+            repeater.events.filter(state__in=active_states).order_by("pk")
+        ):
+            locked = lock_event(event)
+            if locked.state not in active_states:
+                continue
+            has_signups = EventSignup.objects.nocache().filter(event=locked).exists()
+            if has_signups or _has_signup_records(locked.pk):
+                cancel_event(locked, actor=actor)
+            else:
+                teardown_event(locked, actor=actor)
         repeater.delete()
+
+
+def _has_signup_records(event_id: int) -> bool:
+    return SignupLedgerEntry.objects.filter(event_id=event_id).exists()
 
 
 # ---------------------------------------------------------------------------
