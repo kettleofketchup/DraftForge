@@ -137,6 +137,7 @@ nav:
       - Staff Overrides: development/staff-overrides.md
       - Org Standing: development/org-standing.md
       - Notification Message Types: development/notifications.md
+      - Discord DM Ledger: development/discord-dm-ledger.md
       - Pydantic to Zod: development/pydantic-zod.md
       - Theming Guide: THEMING-GUIDE.md
       - Demo Videos: ai/demo/index.md
