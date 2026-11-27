@@ -79,6 +79,7 @@ class UserAppRegistrationTests(SimpleTestCase):
                 "discordbot_discordeventdm",
                 "discordbot_draftactivitychannel",
                 "discordbot_draftactivityinstance",
+                "discordbot_discorddm",
                 "org_orguser",
                 "org_orgusergamemmr",
                 "org_mmrchangerequest",
