@@ -109,7 +109,7 @@ def find_correct_day_events(
 
 
 def find_target_event(stale: Event, candidates: list[Event]) -> Event | None:
-    """Closest candidate by scheduled_at within 7 days, else None."""
+    """Closest by scheduled_at, less than 7 days + 1 second away, else None."""
     best: Event | None = None
     best_diff = datetime.timedelta(days=7, seconds=1)
     for c in candidates:
