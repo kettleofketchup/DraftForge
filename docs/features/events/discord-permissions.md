@@ -1,6 +1,6 @@
 # Discord Permission Badges
 
-Permission badges show whether the bot has the effective permissions needed for a particular action at its actual destination. They appear in event, series and organization-default Discord settings, and in an event's **Discord State** and task rows. Open a badge for missing permissions, current granted permissions, blockers, destination and observation time.
+Permission badges show whether the bot has the effective permissions needed for a particular action at its actual destination. They appear in event, series and organization-default Discord settings, and in an event's **Discord State** and task rows. Hover or focus a badge for missing permissions, current granted permissions, blockers, destination and observation time. Click or tap to keep the details open; click the badge again, press Escape or click outside to dismiss.
 
 !!! note "Read-only diagnostics"
     Checking permissions and using **Recheck** only read Discord information. They do not send messages, create scheduled events or fire tasks. A verified check **does not guarantee delivery**: Discord outages, resource changes and execution-time errors can still prevent an action. Diagnostics do not block saving configuration. Saving and firing tasks retain their existing behavior and may send messages.
@@ -39,7 +39,7 @@ These are effective permissions after the bot's roles, channel overwrites and im
 
 | Action | Destination and minimum requirement |
 |---|---|
-| `signup_create` | Forum parent: **View Channel**, **Send Messages**, **Embed Links**. Does not require Create Public Threads. The current nested forum sender does not support text/announcement channels. A forum requiring an unsupplied tag remains blocked. |
+| `signup_create` | Text/announcement channel or forum parent: **View Channel**, **Send Messages**, **Embed Links**. Uses a regular message in text/announcement channels and a post in a forum. Does not require Create Public Threads. A forum requiring an unsupplied tag remains blocked. |
 | `signup_fallback` | Text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. Separate from the primary signup post. |
 | `announcement` | Text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. Announcement role pings apply only when a primary signup post is configured, since only then is the notice linking to it sent. Without one, the announcement badge checks the role-free signup message the announcement channel receives instead. |
 | `attendance_reminder` | Own or fallback text/announcement channel: **View Channel**, **Send Messages**, **Embed Links**. |
@@ -90,7 +90,6 @@ Details expose required permissions (including alternatives), missing flags, all
 | `pending_signup_post` | Wait for the signup post to exist before checking its actual reply destination. |
 | `unsupported_channel_type` | Choose a channel type supported by this action. |
 | `unsupported_endpoint` | The operation has no supported endpoint in the current integration. |
-| `unsupported_signup_transport` | The current primary signup sender supports forum posts, not text/announcement posts. |
 
 | Blocker | Meaning |
 |---|---|

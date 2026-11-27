@@ -104,7 +104,6 @@ ReasonCode = Literal[
     "pending_signup_post",
     "unsupported_channel_type",
     "unsupported_endpoint",
-    "unsupported_signup_transport",
 ]
 BlockerCode = Literal[
     "missing_reference",

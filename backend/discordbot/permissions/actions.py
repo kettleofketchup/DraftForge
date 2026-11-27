@@ -45,7 +45,7 @@ REGISTRY[ActionKind.SIGNUP_CREATE] = ActionProfile(
     "channel",
     _EMBED,
     (),
-    frozenset({15}),
+    frozenset({0, 5, 15}),
     False,
 )
 REGISTRY[ActionKind.START_MENTION] = ActionProfile(

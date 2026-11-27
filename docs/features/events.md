@@ -121,6 +121,8 @@ Each post that sends a channel message has its own channel field:
 
 Each setting shows a permission badge for the destination it would actually use (own channel, fallback or posted message), green only when the bot has every permission that action needs. See [Discord Permission Badges](events/discord-permissions.md).
 
+The signup destination receives a regular message in a text or announcement channel, or an event-titled post in a forum channel.
+
 The start mention has no channel: it replies to the signup post. Existing events and series have the three new fields blank, so they keep posting where they did before. An optional picker shows *Use announcement channel (#name)* while it is blank, has a clear button to go back to blank, and warns when neither it nor the announcement channel is set. The announcement channel picker sits in the pre-day announcement card while that post is on; otherwise it is shown at the end of the channel posts whenever a post with no channel of its own would fall back to it.
 
 The Discord section of the event, series and organization defaults forms is split into three groups:

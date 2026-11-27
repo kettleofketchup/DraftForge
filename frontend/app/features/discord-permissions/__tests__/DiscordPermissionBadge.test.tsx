@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DiscordPermissionBadge, badgeView } from '../DiscordPermissionBadge';
 import { RecheckPermissionsButton } from '../RecheckPermissionsButton';
@@ -38,7 +45,10 @@ function result(
     ...overrides,
   };
 }
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 describe('badgeView', () => {
   it.each([
     ['verified', null, 'success', 'Permissions verified'],
@@ -244,4 +254,79 @@ it('uses a non-submitting batch recheck button and disables duplicate requests',
     <RecheckPermissionsButton onRecheck={onRecheck} isRechecking />,
   );
   expect(screen.getByRole('button').hasAttribute('disabled')).toBe(true);
+});
+
+function mountBadge() {
+  render(
+    <DiscordPermissionBadge
+      operationLabel="Announcement"
+      result={result()}
+      state="ready"
+    />,
+  );
+  return screen.getByRole('button');
+}
+it('renders only the compact badge as its native popover button', () => {
+  const trigger = mountBadge();
+  expect(trigger.tagName).toBe('BUTTON');
+  expect(trigger).toHaveAttribute('type', 'button');
+  expect(trigger).toHaveClass('px-2', 'py-0.5', 'text-success');
+  expect(trigger.className).not.toMatch(/gradient|shadow-lg|min-h-11/);
+  expect(trigger.querySelector('[data-slot="badge"]')).toBeNull();
+  expect(trigger).toHaveAttribute('aria-expanded', 'false');
+});
+it('opens on hover, lets the pointer cross into details, and closes after leaving', () => {
+  vi.useFakeTimers();
+  const trigger = mountBadge();
+  fireEvent.pointerEnter(trigger, { pointerType: 'mouse' });
+  const panel = screen.getByRole('dialog');
+  expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  expect(document.activeElement).not.toBe(panel);
+  fireEvent.pointerLeave(trigger, { pointerType: 'mouse' });
+  act(() => vi.advanceTimersByTime(100));
+  fireEvent.pointerEnter(panel, { pointerType: 'mouse' });
+  act(() => vi.advanceTimersByTime(250));
+  expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  fireEvent.pointerLeave(panel, { pointerType: 'mouse' });
+  act(() => vi.advanceTimersByTime(250));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  vi.useRealTimers();
+});
+it('pins a hovered panel with one click and toggles it closed with the next', () => {
+  vi.useFakeTimers();
+  const trigger = mountBadge();
+  fireEvent.pointerEnter(trigger);
+  fireEvent.click(trigger);
+  fireEvent.pointerLeave(trigger);
+  act(() => vi.advanceTimersByTime(250));
+  expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  fireEvent.click(trigger);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  vi.useRealTimers();
+});
+it('opens on focus and supports Escape and subsequent keyboard activation', async () => {
+  const trigger = mountBadge();
+  fireEvent.focus(trigger);
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  fireEvent.keyDown(trigger, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  fireEvent.click(trigger, { detail: 0 });
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  fireEvent.keyDown(trigger, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+it('ignores touch hover, opens on tap and dismisses on outside interaction', async () => {
+  const trigger = mountBadge();
+  fireEvent(
+    trigger,
+    Object.assign(new MouseEvent('pointerover', { bubbles: true }), {
+      pointerType: 'touch',
+    }),
+  );
+  expect(screen.queryByRole('dialog')).toBeNull();
+  fireEvent.click(trigger);
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  await act(async () => {});
+  fireEvent.pointerDown(document.body);
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });

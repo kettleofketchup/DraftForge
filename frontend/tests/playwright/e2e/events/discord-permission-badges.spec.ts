@@ -298,4 +298,36 @@ test.describe('Discord permission badges @cicd', () => {
       expect(await response.json()).not.toHaveProperty('checks');
     }
   });
+  test('compact badges share one hover, click and keyboard details panel', async ({
+    page,
+  }) => {
+    const checks = await state(page);
+    const trigger = badge(checks, 'attendance_reminder');
+    await expect(trigger).toHaveAttribute('type', 'button');
+    await expect(trigger).toHaveClass(/py-0\.5/);
+    const details = page.getByRole('dialog', {
+      name: 'attendance reminder permission details',
+    });
+    await trigger.hover();
+    await expect(details).toBeVisible();
+    await details.hover();
+    await expect(details).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(details).toBeHidden();
+    await trigger.focus();
+    await expect(details).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(details).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(details).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(details).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(details).toBeHidden();
+    await trigger.click();
+    await expect(details).toBeVisible();
+    await page.mouse.click(5, 100);
+    await expect(details).toBeHidden();
+  });
 });

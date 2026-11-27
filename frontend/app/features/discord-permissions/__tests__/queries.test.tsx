@@ -337,7 +337,10 @@ it.each(['draft', 'unmount', 'viewer'] as const)(
     );
     await waitFor(() => expect(result.current.state).toBe('ready'));
     const late = deferred<PermissionChecksResponse>();
-    vi.mocked(postOrgPermissionChecks).mockReturnValue(late.promise);
+    const fresh = deferred<PermissionChecksResponse>();
+    vi.mocked(postOrgPermissionChecks)
+      .mockReturnValueOnce(late.promise)
+      .mockReturnValue(fresh.promise);
     let recheck!: Promise<void>;
     await act(async () => {
       recheck = result.current.recheck();

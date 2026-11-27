@@ -40,6 +40,37 @@ describe('settingsDescriptors', () => {
     },
   );
 
+  it('checks a primary signup destination independently of its fallback', () => {
+    const primary = '900000000000000007';
+    const fallback = '900000000000000003';
+    const descriptors = settingsDescriptors(
+      {
+        ...DISCORD_CONFIG_DEFAULTS,
+        discord_post_signups: true,
+        discord_post_signups_channel_id: primary,
+        discord_announcement: true,
+        discord_announcement_channel_id: fallback,
+      },
+      { isRepeater: false, showNotifyNewEvents: false },
+    );
+    expect(descriptors).toContainEqual(
+      expect.objectContaining({
+        key: 'signup_post',
+        action: 'signup_create',
+        channel_id: primary,
+        fallback: false,
+      }),
+    );
+    expect(descriptors).toContainEqual(
+      expect.objectContaining({
+        key: 'signup_fallback',
+        action: 'signup_fallback',
+        channel_id: fallback,
+        fallback: true,
+      }),
+    );
+  });
+
   it('omits hidden nested and series controls', () => {
     const descriptors = settingsDescriptors(
       {

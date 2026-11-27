@@ -53,8 +53,6 @@ export const REASON_TEXT: Record<ReasonCode, string> = {
     'This operation does not support the configured channel type.',
   unsupported_endpoint:
     'Discord does not provide a supported endpoint for this operation.',
-  unsupported_signup_transport:
-    'The current signup sender does not support text or announcement channel posts.',
 };
 
 export const BLOCKER_TEXT: Record<

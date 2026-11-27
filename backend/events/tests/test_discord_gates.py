@@ -766,8 +766,11 @@ class TaskCallsGateTest(_DiscordTaskTestCase):
                 posts = [c for c in mock_req.call_args_list if c.args[0] == "POST"]
                 self.assertEqual(len(posts), 1)
 
+    @patch("events.tasks.resolve_signup_channel_type", return_value=15)
     @patch("discordbot.utils._rate_limited_request")
-    def test_signup_only_event_still_posts_signup(self, mock_req: MagicMock) -> None:
+    def test_signup_only_event_still_posts_signup(
+        self, mock_req: MagicMock, _mock_channel_type: MagicMock
+    ) -> None:
         mock_req.return_value = _ok_response({"id": "m1"})
         event = self.make_event(
             discord_post_signups=True,

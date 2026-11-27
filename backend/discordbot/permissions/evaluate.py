@@ -54,9 +54,7 @@ _PING_ROLES = frozenset({ActionKind.SIGNUP_CREATE, ActionKind.ANNOUNCEMENT})
 _UNCONFIGURED = frozenset(
     {"no_server_configured", "no_channel_configured", "pending_signup_post"}
 )
-_UNSUPPORTED = frozenset(
-    {"unsupported_channel_type", "unsupported_endpoint", "unsupported_signup_transport"}
-)
+_UNSUPPORTED = frozenset({"unsupported_channel_type", "unsupported_endpoint"})
 
 
 def evaluate(
@@ -122,11 +120,7 @@ def evaluate(
             return result
         if channel.type not in profile.channel_types:
             result.status = "unsupported"
-            result.reason = (
-                "unsupported_signup_transport"
-                if check.action == ActionKind.SIGNUP_CREATE and channel.type in (0, 5)
-                else "unsupported_channel_type"
-            )
+            result.reason = "unsupported_channel_type"
             return result
         if channel.id != check.destination.channel_id:
             result.reason = "malformed_snapshot"
@@ -200,7 +194,11 @@ def evaluate(
                 )
             )
     if channel is not None and profile.scope == "channel":
-        if check.action == ActionKind.SIGNUP_CREATE and channel.available_tags_required:
+        if (
+            check.action == ActionKind.SIGNUP_CREATE
+            and channel.type == 15
+            and channel.available_tags_required
+        ):
             result.blockers.append(Blocker(code="forum_requires_tag"))
         if in_thread:
             meta = channel.thread_meta

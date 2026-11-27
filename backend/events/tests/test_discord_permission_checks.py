@@ -96,6 +96,43 @@ class EventPermissionTests(EventTestCase):
         self.assertFalse(DiscordEvent.objects.filter(event=self.event).exists())
         self.assertEqual(self.results()["announcement"]["status"], "verified")
 
+    def test_signup_primary_saved_and_preview_match_supported_transports(self) -> None:
+        self.event.discord_post_signups = True
+        self.event.discord_post_signups_channel_id = C
+        self.event.save()
+        for channel_type in (0, 5, 15):
+            with self.subTest(channel_type=channel_type):
+                cache.clear()
+                fixture = scenario()
+                fixture[f"/guilds/{G}/channels"][0]["type"] = channel_type
+                cache.set(f"discord_perm_fixture:{G}", fixture)
+                saved = self.results()["signup_post"]
+                response = self.client.post(
+                    self.url,
+                    {
+                        "checks": [
+                            {
+                                "key": "signup_post",
+                                "action": "signup_create",
+                                "channel_id": C,
+                            }
+                        ]
+                    },
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 200)
+                preview = response.json()["checks"][0]
+                for result in (saved, preview):
+                    self.assertEqual(result["status"], "verified")
+                    self.assertEqual(
+                        result["destination"]["channel_type"], channel_type
+                    )
+                    self.assertEqual(
+                        result["required_all"],
+                        ["VIEW_CHANNEL", "SEND_MESSAGES", "EMBED_LINKS"],
+                    )
+                self.assertEqual(saved["destination"], preview["destination"])
+
     def test_destination_cases_fixture(self) -> None:
         cases = json.loads(
             Path(__file__).with_name("permission_destination_cases.json").read_text()

@@ -118,18 +118,27 @@ class ActionPermissionTests(SimpleTestCase):
         self.assertEqual(result.status, "verified")
         self.assertNotIn("CREATE_PUBLIC_THREADS", result.required_all)
 
-    def test_text_signup_is_unsupported_transport(self) -> None:
+    def test_text_and_announcement_signup_use_embed_permissions(self) -> None:
+        required = (F.VIEW_CHANNEL, F.SEND_MESSAGES, F.EMBED_LINKS)
         for channel_type in (0, 5):
-            with self.subTest(channel_type=channel_type):
-                result = evaluate(
-                    check(A.SIGNUP_CREATE, channel_type=channel_type),
-                    bundle(bits(F.ADMINISTRATOR)),
-                    NOW,
-                )
-                self.assertEqual(
-                    (result.status, result.reason),
-                    ("unsupported", "unsupported_signup_transport"),
-                )
+            for missing in (None, *required):
+                with self.subTest(channel_type=channel_type, missing=missing):
+                    result = evaluate(
+                        check(A.SIGNUP_CREATE, channel_type=channel_type),
+                        bundle(bits(*(flag for flag in required if flag != missing))),
+                        NOW,
+                    )
+                    self.assertEqual(result.required_all, list(required))
+                    self.assertEqual(
+                        result.status,
+                        "verified" if missing is None else "missing_permissions",
+                    )
+                    self.assertEqual(
+                        result.missing,
+                        []
+                        if missing is None
+                        else list(required[required.index(missing) :]),
+                    )
 
     def test_forum_requires_tag_blocks(self) -> None:
         descriptor = check(A.SIGNUP_CREATE, channel_type=15)

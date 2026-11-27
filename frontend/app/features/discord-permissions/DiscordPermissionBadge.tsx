@@ -1,6 +1,6 @@
 import { Check, CircleHelp, Clock, TriangleAlert, X } from 'lucide-react';
-import { Badge } from '~/components/ui/badge';
-import { SecondaryButton } from '~/components/ui/buttons';
+import { useEffect, useRef, useState } from 'react';
+import { badgeVariants } from '~/components/ui/badge';
 import {
   Popover,
   PopoverContent,
@@ -100,6 +100,47 @@ export function DiscordPermissionBadge({
   disabled?: boolean;
   'data-testid'?: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const intent = useRef({
+    pinned: false,
+    hovered: false,
+    focused: false,
+    dismissed: false,
+  });
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(
+    () => () => {
+      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+  const cancelClose = () => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+  };
+  const closeAfterLeave = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => {
+      if (
+        !intent.current.pinned &&
+        !intent.current.hovered &&
+        !intent.current.focused
+      )
+        setOpen(false);
+    }, 180);
+  };
+  const hoverEnter = (pointerType: string) => {
+    if (pointerType === 'touch') return;
+    intent.current.hovered = true;
+    cancelClose();
+    if (!intent.current.dismissed) setOpen(true);
+  };
+  const hoverLeave = (pointerType: string) => {
+    if (pointerType === 'touch') return;
+    intent.current.hovered = false;
+    intent.current.dismissed = false;
+    closeAfterLeave();
+  };
   const now = new Date();
   const view = badgeView(result, state, now, disabled);
   const Icon = icons[view.icon];
@@ -108,26 +149,75 @@ export function DiscordPermissionBadge({
   const destination = visibleResult?.destination;
   const accessibleName = `${operationLabel}: ${view.label}${destination?.name ? ` in #${destination.name}` : destination?.channel_id ? ` in channel ${destination.channel_id}` : ''}`;
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <SecondaryButton
-          type="button"
-          size="sm"
-          className="min-h-11"
-          aria-label={accessibleName}
-          data-testid={
-            testId ?? `discord-permission-badge-${result?.key ?? 'unchecked'}`
-          }
-        >
-          <Badge variant="outline" className={cn('gap-1', tones[view.tone])}>
-            <Icon aria-hidden="true" />
-            {view.label}
-          </Badge>
-        </SecondaryButton>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        cancelClose();
+        if (!next) {
+          intent.current.pinned = false;
+          intent.current.dismissed = true;
+        }
+        setOpen(next);
+      }}
+    >
+      <PopoverTrigger
+        type="button"
+        className={cn(
+          badgeVariants({ variant: 'outline' }),
+          'cursor-pointer',
+          tones[view.tone],
+        )}
+        aria-label={accessibleName}
+        data-testid={
+          testId ?? `discord-permission-badge-${result?.key ?? 'unchecked'}`
+        }
+        onPointerEnter={(event) => hoverEnter(event.pointerType)}
+        onPointerLeave={(event) => hoverLeave(event.pointerType)}
+        onFocus={() => {
+          intent.current.focused = true;
+          cancelClose();
+          if (!intent.current.dismissed) setOpen(true);
+        }}
+        onBlur={(event) => {
+          if (panel.current?.contains(event.relatedTarget)) return;
+          intent.current.focused = false;
+          intent.current.dismissed = false;
+          closeAfterLeave();
+        }}
+        onClick={(event) => {
+          event.preventDefault();
+          cancelClose();
+          const pinned = !intent.current.pinned;
+          intent.current.pinned = pinned;
+          intent.current.dismissed = !pinned;
+          setOpen(pinned);
+          if (pinned) panel.current?.focus();
+        }}
+      >
+        <Icon aria-hidden="true" />
+        {view.label}
       </PopoverTrigger>
       <PopoverContent
+        ref={panel}
         className="max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto"
         aria-label={`${operationLabel} permission details`}
+        onOpenAutoFocus={(event) => {
+          if (!intent.current.pinned) event.preventDefault();
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!intent.current.focused) event.preventDefault();
+        }}
+        onPointerEnter={(event) => hoverEnter(event.pointerType)}
+        onPointerLeave={(event) => hoverLeave(event.pointerType)}
+        onFocusCapture={() => {
+          intent.current.focused = true;
+          cancelClose();
+        }}
+        onBlurCapture={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget)) return;
+          intent.current.focused = false;
+          closeAfterLeave();
+        }}
       >
         {disabled && (
           <p className="mb-3 text-sm text-muted-foreground">

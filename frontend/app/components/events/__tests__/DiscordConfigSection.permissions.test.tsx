@@ -268,8 +268,6 @@ it('keeps disabled operations neutral even when their effective permissions veri
   );
   act(() => form.setValue('discord_confirm_attendance', false));
   expect(
-    screen
-      .getByTestId('discord-permission-badge-attendance_reminder')
-      .querySelector('[data-slot="badge"]'),
+    screen.getByTestId('discord-permission-badge-attendance_reminder'),
   ).not.toHaveClass('text-success');
 });
