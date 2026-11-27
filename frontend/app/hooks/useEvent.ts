@@ -649,10 +649,7 @@ export function useUpdateOrgDefaultsMutation(orgId: number) {
   });
 }
 
-/**
- * Upsert signup user data into the entity adapter cache.
- * Call this after fetching signups to ensure all signup users are in the cache.
- */
+/** After fetching signups, upsert all signup users into the entity adapter cache. */
 export function useEventSignupUsers(
   signups: EventSignupType[] | undefined,
   /**

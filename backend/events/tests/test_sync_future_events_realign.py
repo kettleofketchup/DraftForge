@@ -62,8 +62,7 @@ class SyncFutureEventsRealignTest(_DiscordTaskTestCase):
     def test_realign_true_deletes_stale_occurrence_outside_new_set(self):
         # day_of_week=1 (Monday in Sunday=0 convention)
         repeater = self._make_repeater(day_of_week=1)
-        # Stale row at a date that won't match the new occurrence set
-        # (a fixed historical date the generator won't produce)
+        # Outside the generator's current occurrence window.
         stale_at = datetime(2099, 1, 5, 20, 0, tzinfo=dt_tz.utc)
         stale_event = Event.objects.create(
             organization=self.event.organization,
@@ -101,7 +100,6 @@ class SyncFutureEventsRealignTest(_DiscordTaskTestCase):
             discord_announcement_channel_id="ch_1",
         )
         sync_future_events(repeater, realign_schedule=True)
-        # The kept row should still be there
         self.assertTrue(Event.objects.filter(pk=kept_event.pk).exists())
 
     def test_realign_false_default_no_regeneration(self):

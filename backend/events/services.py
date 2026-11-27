@@ -588,7 +588,6 @@ def apply_signup_input(
                 if role and priorities[role] == 0:
                     priorities[role] = min(slot_idx + 1, 5)
 
-        # Derive per-org binary flags from priorities.
         profile.pos_1 = priorities["carry"] > 0
         profile.pos_2 = priorities["mid"] > 0
         profile.pos_3 = priorities["offlane"] > 0
@@ -787,7 +786,6 @@ def approve_signup(
 
 @transaction.atomic
 def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
-    """Reject a signup."""
     _reread_signup(signup)
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
@@ -869,7 +867,6 @@ def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
 
 @transaction.atomic
 def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
-    """Cancel a signup."""
     _reread_signup(signup)
     before = snapshot(signup)
     prior_status = _withdraw(signup, by_member=_by_member(actor))
@@ -1505,9 +1502,9 @@ def teardown_event(
     An event with signup ledger entries raises SignupRecordsConflict unless
     confirm_signup_records is set by an org admin actor; the ledger survives.
 
-    Dispatches deletion of the live Discord scheduled event on commit (nothing
-    else in the app removes scheduled events), then removes the linked tournament, DiscordEvent
-    (cascades to messages, logs, DMs) and legacy message logs, then the event row.
+    Dispatches deletion of the live Discord scheduled event on commit, then
+    removes the linked tournament, DiscordEvent (cascades to messages, logs,
+    DMs) and legacy message logs, then the event row.
     Shared by EventViewSet (single delete), EventRepeaterViewSet (series delete)
     and sync_future_events' realign, so no path leaves ghost events behind.
     """
@@ -1999,7 +1996,7 @@ def sync_future_events(
         to_date = today + timedelta(days=repeater.generate_days_ahead)
         new_occurrences = set(_get_next_occurrences(repeater, today, to_date))
 
-        # Tear down UPCOMING rows that don't match the new occurrence set.
+        # Ledger-bearing UPCOMING occurrences must survive realignment.
         doomed = (
             Event.objects.filter(
                 event_repeater=repeater,
@@ -2082,7 +2079,6 @@ def sync_future_events(
             event, changed_draft_option_fields(previous_draft_options, event)
         )
 
-    # Single batched invalidation post-commit
     if future_events:
         invalidate_after_commit(*future_events)
 

@@ -963,7 +963,6 @@ class EventViewSet(viewsets.ModelViewSet):
             )
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
-        # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
         open_signups = self.request.query_params.get("open_signups") == "true"
         if initial_state_for_new_event(open_signups) == EventState.SIGNUPS_OPEN:

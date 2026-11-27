@@ -77,16 +77,12 @@ class SeriesDeleteCleanupTest(EventTestCase):
             resp = self.client.delete(f"/api/events/repeaters/{self.repeater.pk}/")
         self.assertEqual(resp.status_code, 204, resp.content)
 
-        # Series gone.
         self.assertFalse(EventRepeater.objects.filter(pk=self.repeater.pk).exists())
-        # Future occurrence + its Discord row gone.
         self.assertFalse(Event.objects.filter(pk=self.future_event.pk).exists())
         self.assertFalse(DiscordEvent.objects.filter(pk=self.discord_event.pk).exists())
-        # Live Discord scheduled event deletion was dispatched.
         mock_delete_task.delay.assert_called_once_with(
             "734185035623825559", "1529289108529352788"
         )
-        # Past occurrence preserved, now orphaned.
         self.past_event.refresh_from_db()
         self.assertIsNone(self.past_event.event_repeater_id)
 
