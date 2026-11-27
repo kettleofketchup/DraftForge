@@ -21,6 +21,9 @@ class OrgSettings(models.Model):
     staff_override_warning_codes = models.JSONField(
         default=default_warning_codes, blank=True
     )
+    signup_record_retention_days = models.PositiveIntegerField(
+        null=True, blank=True, default=None
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
