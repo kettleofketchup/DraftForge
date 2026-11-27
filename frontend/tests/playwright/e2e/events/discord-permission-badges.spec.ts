@@ -106,6 +106,22 @@ async function channelChoices(page: Page) {
   );
 }
 
+async function pickChannel(
+  page: Page,
+  scope: Locator | Page,
+  picker: string,
+  channelId: string,
+) {
+  const trigger = scope.getByTestId(picker);
+  await trigger.click();
+  await page.getByTestId(`${picker}-option-${channelId}`).click();
+  const name =
+    channelId === data.channel_ids.announcement
+      ? 'announcements'
+      : 'attendance';
+  await expect(trigger).toContainText(name);
+}
+
 async function savedChecks(context: BrowserContext, eventId: number) {
   const response = await context.request.get(
     `${API_URL}/events/${eventId}/permission-checks/`,
@@ -448,12 +464,18 @@ test.describe('Discord permission badges @cicd', () => {
     await channelChoices(page);
     const modal = await edit(page, data.fresh_event_pk);
     await modal.getByTestId('discord-discord_post_signups').check();
-    await modal.getByTestId('discord-signup-channel-select').click();
-    await page.keyboard.press('End');
-    await page.keyboard.press('Enter');
-    await modal.getByTestId('discord-announcement-channel-select').click();
-    await page.keyboard.press('Home');
-    await page.keyboard.press('Enter');
+    await pickChannel(
+      page,
+      modal,
+      'discord-signup-channel-select',
+      data.channel_ids.announcement,
+    );
+    await pickChannel(
+      page,
+      modal,
+      'discord-announcement-channel-select',
+      data.channel_ids.attendance,
+    );
     const signup = badge(modal, 'signup_post');
     const announcement = badge(modal, 'announcement');
     await expect(signup).toHaveText('Permissions verified');
@@ -472,9 +494,12 @@ test.describe('Discord permission badges @cicd', () => {
     await modal.getByTestId('discord-discord_confirm_attendance').uncheck();
     await expect(announcement).toHaveText('2 settings blocked');
     await expect(signup).toHaveText('Permissions verified');
-    await modal.getByTestId('discord-announcement-channel-select').click();
-    await page.keyboard.press('End');
-    await page.keyboard.press('Enter');
+    await pickChannel(
+      page,
+      modal,
+      'discord-announcement-channel-select',
+      data.channel_ids.announcement,
+    );
     await expect(signup).toHaveCount(0);
     await expect(announcement).toHaveText('Permissions verified');
     await expect(
@@ -488,9 +513,12 @@ test.describe('Discord permission badges @cicd', () => {
     await channelChoices(page);
     const modal = await edit(page, data.fresh_event_pk);
     await page.getByTestId('discord-discord_post_signups').check();
-    await page.getByTestId('discord-signup-channel-select').click();
-    await page.keyboard.press('Home');
-    await page.keyboard.press('Enter');
+    await pickChannel(
+      page,
+      modal,
+      'discord-signup-channel-select',
+      data.channel_ids.attendance,
+    );
     const trigger = badge(modal, 'signup_post');
     await expect(trigger).toHaveText('2 settings blocked');
     await expect(badge(modal, 'signup_fallback')).toHaveCount(0);

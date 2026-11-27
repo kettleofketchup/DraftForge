@@ -251,6 +251,17 @@ class DiscordPermissionsFixtureTest(TestCase):
             populate_discord_permissions_data(force=False)
         self.assertEqual(discord_permissions_test_data()["message_log_count"], 0)
 
+    @override_settings(INTERNAL_SERVICE_TOKEN="fixture-sync-token")
+    def test_events_are_outside_beat_sync(self) -> None:
+        client = APIClient()
+        client.credentials(HTTP_X_INTERNAL_TOKEN="fixture-sync-token")
+        response = client.get("/api/internal/discord/sync-state/")
+        self.assertEqual(response.status_code, 200, response.content)
+        active = {event["pk"] for event in response.json()["active_events"]}
+        self.assertFalse(
+            active & {self.data["fresh_event_pk"], self.data["posted_event_pk"]}
+        )
+
     def test_endpoints_404_outside_test(self) -> None:
         calls = (
             lambda: discord_permissions_data(

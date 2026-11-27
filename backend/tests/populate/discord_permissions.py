@@ -16,7 +16,7 @@ from django.utils import timezone
 from app.cache_utils import invalidate_model, invalidate_obj
 from app.models import CustomUser
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
-from events.constants import EventState
+from events.constants import DISCORD_SYNC_HORIZON, EventState
 from events.models import Event
 from league.models import League
 from org.models import Organization
@@ -97,7 +97,8 @@ def _ensure_org_and_league(
 def _create_event(
     org: Organization, league: League, staff: CustomUser, name: str
 ) -> Event:
-    start = (timezone.now() + timedelta(days=14)).replace(
+    # Past the sync horizon so celery beat never posts for these events.
+    start = (timezone.now() + DISCORD_SYNC_HORIZON + timedelta(days=14)).replace(
         minute=0, second=0, microsecond=0
     )
     return Event.objects.create(

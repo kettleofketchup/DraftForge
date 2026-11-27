@@ -38,7 +38,7 @@ from discordbot.models import (
 )
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import EventState
+from events.constants import DISCORD_SYNC_HORIZON, EventState
 from events.discord.state import load_discord_event_state, message_log_exists
 from events.ledger import SignupActor
 from events.models import Event, EventRepeater, RepeaterSubscription
@@ -294,7 +294,7 @@ def get_sync_discord_state(request: Request) -> Response:
                 EventState.ROLL_CALL,
             ],
             scheduled_at__gte=now - timedelta(days=1),
-            scheduled_at__lte=now + timedelta(days=30),
+            scheduled_at__lte=now + DISCORD_SYNC_HORIZON,
         )
         .select_related("organization", "event_repeater")
         .values(
