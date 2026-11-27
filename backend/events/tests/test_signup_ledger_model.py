@@ -20,7 +20,7 @@ from events.constants import (
 )
 from events.exceptions import LedgerAppendOnlyError
 from events.models import Event, EventSignup, SignupLedgerEntry
-from events.services import teardown_event
+from events.services import SignupRecordsConflict, teardown_event
 from events.tests.base import EventTestCase
 from user.discord_accounts import merge_discord_accounts
 
@@ -246,7 +246,9 @@ class LedgerSurvivalTest(SignupLedgerModelTestCase):
         )
         event_id = event.pk
 
-        teardown_event(event)
+        with self.assertRaises(SignupRecordsConflict):
+            teardown_event(event, actor=self.admin)
+        teardown_event(event, actor=self.admin, confirm_signup_records=True)
 
         self.assertFalse(Event.objects.filter(pk=event_id).exists())
         self.assertFalse(EventSignup.objects.filter(pk=signup.pk).exists())

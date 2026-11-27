@@ -368,3 +368,75 @@ class SeriesPreservationTest(EventTestCase):
         fetched = Event.objects.nocache().get(pk=event.pk)
         self.assertEqual(fetched.state, EventState.IN_PROGRESS)
         self.assertIsNone(fetched.event_repeater_id)
+
+
+class AdminRecordedDeletionTest(EventTestCase):
+    def _recorded_event(self) -> Event:
+        event = self.make_event()
+        signup = EventSignup.objects.create(
+            event=event, user=self.user, status=SignupStatus.APPROVED
+        )
+        record_signup_change(
+            event=event,
+            subject=self.user,
+            signup=signup,
+            actor=SignupActor.system(),
+            action=SignupAction.SIGNED_UP,
+        )
+        return event
+
+    def _request(self) -> HttpRequest:
+        request = RequestFactory().post("/admin/")
+        request.user = self.admin
+        return request
+
+    def test_single_admin_delete_explicitly_confirms_record_bearing_event(self) -> None:
+        event = self._recorded_event()
+        event_id = event.pk
+        original = list(SignupLedgerEntry.objects.filter(event_id=event_id).values())
+        EventAdmin(Event, admin_site).delete_model(self._request(), event)
+        self.assertFalse(Event.objects.nocache().filter(pk=event_id).exists())
+        self.assertFalse(
+            EventSignup.objects.nocache().filter(event_id=event_id).exists()
+        )
+        self.assertEqual(
+            list(SignupLedgerEntry.objects.filter(event_id=event_id).values()), original
+        )
+
+    @patch("events.services.delete_discord_scheduled_event")
+    def test_bulk_admin_delete_rolls_back_all_events_and_dispatches(
+        self, delete_task: MagicMock
+    ) -> None:
+        first = self._recorded_event()
+        second = self._recorded_event()
+        ids = [first.pk, second.pk]
+        for event in (first, second):
+            DiscordEvent.objects.create(
+                event=event, guild_id="81", scheduled_event_id=str(event.pk)
+            )
+        original = list(SignupLedgerEntry.objects.filter(event_id__in=ids).values())
+        calls = 0
+
+        def fail_second(event: Event, *, actor: Any) -> None:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("late standing failure")
+
+        with (
+            patch("events.services.standing.on_event_deleted", side_effect=fail_second),
+            self.captureOnCommitCallbacks(execute=True),
+            self.assertRaises(RuntimeError),
+        ):
+            EventAdmin(Event, admin_site).delete_queryset(
+                self._request(), Event.objects.filter(pk__in=ids).order_by("pk")
+            )
+        self.assertEqual(Event.objects.nocache().filter(pk__in=ids).count(), 2)
+        self.assertEqual(
+            EventSignup.objects.nocache().filter(event_id__in=ids).count(), 2
+        )
+        self.assertEqual(DiscordEvent.objects.filter(event_id__in=ids).count(), 2)
+        self.assertEqual(
+            list(SignupLedgerEntry.objects.filter(event_id__in=ids).values()), original
+        )
+        delete_task.delay.assert_not_called()

@@ -93,6 +93,7 @@ from org.mmr import game_for_event
 from org.mmr_official import apply_official_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+from org.permissions import has_org_admin_access
 from org.standing import api as standing
 from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
@@ -1480,8 +1481,28 @@ def cancel_event(event: Event, *, actor: CustomUser | None, reason: str = "") ->
     return event
 
 
-def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
+class SignupRecordsConflict(Exception):
+    """Teardown refused: the event has signup ledger entries."""
+
+    def __init__(self, count: int) -> None:
+        super().__init__(f"Event has {count} signup records")
+        self.count: int = count
+
+
+class SignupRecordsPermissionError(PermissionError):
+    """Only an organization admin may delete an event with signup records."""
+
+
+def teardown_event(
+    event: Event,
+    *,
+    actor: CustomUser | None = None,
+    confirm_signup_records: bool = False,
+) -> None:
     """Delete an event and everything Discord/tournament-related it owns.
+
+    An event with signup ledger entries raises SignupRecordsConflict unless
+    confirm_signup_records is set by an org admin actor; the ledger survives.
 
     Dispatches deletion of the live Discord scheduled event on commit (nothing
     else in the app removes scheduled events), then removes the linked tournament, DiscordEvent
@@ -1491,6 +1512,13 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
     """
 
     with transaction.atomic():
+        event = lock_event(event)
+        count = SignupLedgerEntry.objects.filter(event_id=event.pk).count()
+        if count:
+            if not confirm_signup_records:
+                raise SignupRecordsConflict(count)
+            if actor is None or not has_org_admin_access(actor, event.organization):
+                raise SignupRecordsPermissionError(event.pk)
         standing.on_event_deleted(event, actor=actor)
         invalidate_after_commit(event)
         if event.tournament:

@@ -131,6 +131,8 @@ from events.serializers import (
 )
 from events.services import (
     OccurrenceCollision,
+    SignupRecordsConflict,
+    SignupRecordsPermissionError,
     apply_signup_input,
     approve_signup,
     cancel_event,
@@ -1582,9 +1584,22 @@ class EventViewSet(viewsets.ModelViewSet):
             not_in_check_message=SELF_NOT_IN_CHECK_MESSAGE,
         )
 
-    def perform_destroy(self, instance: Event) -> None:
-        """Clean up tournament and Discord messages before deleting event."""
-        teardown_event(instance, actor=self.request.user)
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delete an event; signup history needs an org admin's ?confirm=true."""
+        event = self.get_object()
+        confirm = request.query_params.get("confirm") == "true"
+        if confirm and not has_org_admin_access(request.user, event.organization):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        try:
+            teardown_event(event, actor=request.user, confirm_signup_records=confirm)
+        except SignupRecordsConflict as conflict:
+            return Response(
+                {"error": "has_signup_records", "count": conflict.count},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except SignupRecordsPermissionError:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: str | None = None) -> Response:
