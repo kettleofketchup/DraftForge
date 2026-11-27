@@ -20,7 +20,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Add parent directory to Python path for paths module
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import logging

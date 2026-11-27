@@ -861,7 +861,6 @@ class EventViewSet(viewsets.ModelViewSet):
         if org_id:
             qs = qs.filter(organization_id=org_id)
 
-        # Filter by state (single or comma-separated)
         state = params.get("state")
         states = params.get("states")
         if states:
@@ -1809,7 +1808,6 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
-        # Optional MMR override from admin
         mmr_override = None
         game_type = game_for_event(signup.event)
         if request.data:

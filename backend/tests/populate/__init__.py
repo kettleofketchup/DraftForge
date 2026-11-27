@@ -34,8 +34,6 @@ from tests.populate.bracket import (
     populate_bracket_linking_scenario,
     populate_bracket_unset_winner_tournament,
 )
-
-# Re-export constants
 from tests.populate.constants import (
     DTX_LEAGUE_NAME,
     DTX_ORG_NAME,
@@ -71,8 +69,6 @@ from tests.populate.tournament_discovery import populate_tournament_discovery
 from tests.populate.tournaments import populate_real_tournament_38, populate_tournaments
 from tests.populate.user_edit import populate_user_edit_data
 from tests.populate.users import populate_test_auth_users, populate_users
-
-# Re-export utilities that may be used directly
 from tests.populate.utils import (
     REAL_TOURNAMENT_USERS,
     create_user,

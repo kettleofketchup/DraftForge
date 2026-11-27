@@ -47,7 +47,6 @@ const AvatarContainer: React.FC<AvatarProps> = (props) => {
   );
 };
 
-// Try to get cached user from sessionStorage (client-side only)
 const getCachedUser = (): UserType | null => {
   try {
     const stored = sessionStorage.getItem('dtx-storage');
@@ -194,17 +193,14 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
     setCachedUser(getCachedUser());
   }, []);
 
-  // Use cached user after mount, then switch to store user after hydration
   const user = hasHydrated
     ? currentUser
     : mounted && cachedUser
       ? cachedUser
       : currentUser;
 
-  // Check auth after hydration - background refresh
   useEffect(() => {
     if (hasHydrated) {
-      // If we already have a user (from cache or store), just refresh in background
       if (user?.username) {
         setIsCheckingAuth(false);
         getCurrentUser();
@@ -237,7 +233,6 @@ export const LoginWithDiscordButton: React.FC<props> = () => {
     );
   }
 
-  // If we have a user (cached or from store), show them immediately
   const hasUser = user?.username !== undefined && user?.username !== null;
 
   if (hasUser) {
