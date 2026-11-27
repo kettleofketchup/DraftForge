@@ -13,6 +13,7 @@ from app.models import CustomUser
 from common.game import GameType
 from org.api_connections.lifecycle import ConnectionConflict, issue_connection_key
 from org.api_connections.mutations import MmrMutationContext, MmrRevisionConflict
+from org.api_connections.pull import create_pull_run
 from org.api_connections.revisions import next_revision
 from org.api_tokens.sync import SyncResult, sync_mmrs
 from org.features import FeatureKey, set_org_feature
@@ -20,6 +21,7 @@ from org.mmr import mark_org_mmr_verified, merge_org_mmrs, set_org_mmr
 from org.models import (
     Organization,
     OrgApiConnection,
+    OrgApiSyncRun,
     OrgApiToken,
     OrgMmrRevisionCounter,
     OrgMmrSyncState,
@@ -354,4 +356,45 @@ class IdentityRevisionRaceTests(TransactionTestCase):
                 ).values_list("revision", flat=True)
             ),
             [4, 4],
+        )
+
+
+@skipUnless(connection.vendor == "postgresql", "Requires PostgreSQL row locks")
+class PullRunRaceTests(TransactionTestCase):
+    def test_concurrent_create_pull_run_returns_same_active_run(self) -> None:
+        owner = CustomUser.objects.create_user(username="pull-race-admin")
+        org = Organization.objects.create(name="Pull Race", owner=owner)
+        org.admins.add(owner)
+        set_org_feature(org, FeatureKey.MMR_SYNC, enabled=True, actor=None)
+        connection_row = OrgApiConnection.objects.create(
+            organization=org,
+            name="Pull race",
+            enabled=True,
+            mmr_pull_enabled=True,
+            outbound_base_url="https://sync.example.test",
+            outbound_authorizer=owner,
+            game_type=GameType.DOTA2,
+        )
+        barrier = threading.Barrier(2, timeout=10)
+
+        def create() -> str:
+            try:
+                snapshot = OrgApiConnection.objects.get(pk=connection_row.pk)
+                actor = CustomUser.objects.get(pk=owner.pk)
+                barrier.wait()
+                return str(create_pull_run(snapshot, requester=actor).pk)
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(create) for _ in range(2)]
+            run_ids = [future.result(timeout=30) for future in futures]
+        self.assertEqual(run_ids[0], run_ids[1])
+        self.assertEqual(
+            OrgApiSyncRun.objects.filter(
+                connection=connection_row,
+                kind="mmr_pull",
+                state__in=["queued", "running", "partial"],
+            ).count(),
+            1,
         )

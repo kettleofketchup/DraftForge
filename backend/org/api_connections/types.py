@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
@@ -93,3 +94,41 @@ class ConnectionConfig(ConfigRecord):
     )
     mark_verified: bool = False
     interval_minutes: Annotated[int, Field(ge=15, le=10080)] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotMember:
+    org_user_id: int
+    steam_account_id: int | None
+    discord_id: str | None
+    revision: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class MemberSnapshot:
+    organization_id: int
+    game_type: int
+    members: tuple[SnapshotMember, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class MappedRow:
+    page: int
+    index: int
+    player_id: str | None
+    mmr: int | None
+    error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MappedPage:
+    rows: tuple[MappedRow, ...]
+    has_more: bool = False
+    next_cursor: str | int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StepResult:
+    state: str
+    continuation: bool
+    error_code: str | None = None

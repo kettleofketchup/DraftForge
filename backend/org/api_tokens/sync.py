@@ -1,3 +1,4 @@
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -134,14 +135,31 @@ def _members(org: Organization, entries: list[_Entry]) -> list[OrgUser]:
     )
 
 
+def match_member[M](
+    by_steam: Mapping[int, M],
+    by_discord: Mapping[str, M],
+    *,
+    steam_account_id: int | None,
+    discord_id: str | None,
+    identity: Callable[[M], int],
+) -> M | None | str:
+    via_steam = by_steam.get(steam_account_id) if steam_account_id else None
+    via_discord = by_discord.get(discord_id) if discord_id else None
+    if via_steam and via_discord and identity(via_steam) != identity(via_discord):
+        return "steam_id and discord_id belong to different members"
+    return via_steam or via_discord
+
+
 def _match(
     entry: _Entry, by_steam: dict[int, OrgUser], by_discord: dict[str, OrgUser]
 ) -> OrgUser | None | str:
-    via_steam = by_steam.get(entry.steam_account_id) if entry.steam_account_id else None
-    via_discord = by_discord.get(entry.discord_id) if entry.discord_id else None
-    if via_steam and via_discord and via_steam.pk != via_discord.pk:
-        return "steam_id and discord_id belong to different members"
-    return via_steam or via_discord
+    return match_member(
+        by_steam,
+        by_discord,
+        steam_account_id=entry.steam_account_id,
+        discord_id=entry.discord_id,
+        identity=lambda member: member.pk,
+    )
 
 
 @transaction.atomic
