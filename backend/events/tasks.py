@@ -332,7 +332,7 @@ def open_scheduled_signups() -> str:
 def sync_discord_events() -> str:
     """Reconciliation task: ensure Discord matches the DB for all active events.
 
-    Runs every 5 minutes via celery beat. All reads via internal HTTP API.
+    Runs every 60 seconds via celery beat. All reads via internal HTTP API.
     """
     structured_log = get_logger(__name__)
 
@@ -349,6 +349,7 @@ def sync_discord_events() -> str:
     events_with_signup_post = set(state.events_with_signup)
     events_with_scheduled = set(state.events_with_scheduled)
     events_with_recent_attempt = set(state.events_with_recent_attempt)
+    events_with_signup_blocked = set(state.events_with_signup_blocked)
 
     signup_posts_created = 0
     notices_created = 0
@@ -362,6 +363,7 @@ def sync_discord_events() -> str:
         events_with_signup_post=len(events_with_signup_post),
         events_with_scheduled=len(events_with_scheduled),
         events_with_recent_attempt=len(events_with_recent_attempt),
+        events_with_signup_blocked=len(events_with_signup_blocked),
     )
 
     for event in state.active_events:
@@ -381,6 +383,7 @@ def sync_discord_events() -> str:
             event["state"] == "signups_open"
             and (signup_available or announcement_available)
             and not has_signup
+            and pk not in events_with_signup_blocked
         )
         if signup_eligible:
             structured_log.info(
@@ -395,14 +398,33 @@ def sync_discord_events() -> str:
                 ),
             )
             try:
-                send_event_announcement(pk)
-                signup_posts_created += 1
-                structured_log.info(
-                    "sync_signup_post_created",
-                    system="events",
-                    subsystem="discord",
-                    event_id=pk,
-                )
+                result = run_signup_post(pk)
+                if result.newly_delivered():
+                    signup_posts_created += 1
+                if result.newly_delivered() and result.persisted:
+                    structured_log.info(
+                        "sync_signup_post_created",
+                        system="events",
+                        subsystem="discord",
+                        event_id=pk,
+                        destination=result.destination,
+                    )
+                elif result.newly_delivered():
+                    structured_log.warning(
+                        "sync_signup_post_delivered_unrecorded",
+                        system="events",
+                        subsystem="discord",
+                        event_id=pk,
+                        destination=result.destination,
+                    )
+                else:
+                    structured_log.info(
+                        "sync_signup_post_not_created",
+                        system="events",
+                        subsystem="discord",
+                        event_id=pk,
+                        outcome=result.outcome.value,
+                    )
             except Exception as e:
                 structured_log.exception(
                     "sync_signup_post_failed",

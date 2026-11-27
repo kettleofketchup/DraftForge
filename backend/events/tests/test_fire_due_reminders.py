@@ -1,11 +1,15 @@
 """Test the registry-driven fire path."""
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.utils import timezone
 
-from discordbot.models import DiscordMessageLog
+from discordbot.models import (
+    DiscordMessageLog,
+    SignupDeliveryStatus,
+    SignupPostDeliveryState,
+)
 from events.scheduling.fire import fire_due_reminders
 from events.tests.test_discord_tasks import _DiscordTaskTestCase
 
@@ -28,6 +32,44 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
         self.event.save()
 
         fire_due_reminders()
+        mock_delay.assert_called_once_with(self.event.pk)
+
+    def _due_announcement(self) -> None:
+        self.event.discord_announcement = True
+        self.event.discord_announcement_channel_id = "ch_1"
+        self.event.discord_announcement_hours = 24
+        self.event.scheduled_at = timezone.now() + timedelta(hours=12)
+        self.event.save()
+
+    @patch("events.tasks.send_event_announcement.delay")
+    def test_reminder_poll_skips_blocked_announcement(
+        self, mock_delay: MagicMock
+    ) -> None:
+        self._due_announcement()
+        SignupPostDeliveryState.objects.create(
+            event=self.event,
+            attempts=5,
+            state=SignupDeliveryStatus.EXHAUSTED,
+        )
+
+        fire_due_reminders()
+        mock_delay.assert_not_called()
+
+    @patch("events.tasks.send_event_announcement.delay")
+    def test_reminder_poll_dispatches_when_blocked_lookup_unavailable(
+        self, mock_delay: MagicMock
+    ) -> None:
+        self._due_announcement()
+        SignupPostDeliveryState.objects.create(
+            event=self.event,
+            attempts=5,
+            state=SignupDeliveryStatus.EXHAUSTED,
+        )
+
+        with patch(
+            "events.scheduling.fire.get_signup_blocked_event_ids", return_value=None
+        ):
+            fire_due_reminders()
         mock_delay.assert_called_once_with(self.event.pk)
 
     @patch("events.tasks.send_event_announcement.delay")
