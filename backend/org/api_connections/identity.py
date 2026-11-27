@@ -4,9 +4,8 @@ from contextlib import contextmanager
 from django.db import transaction
 
 from app.models import CustomUser
-from common.game import GameType
 from org.api_connections.mutations import deferred_identity_members, lock_memberships
-from org.api_connections.revisions import record_mmr_change
+from org.api_connections.revisions import lock_revision_counters, record_mmr_change
 from org.models import OrgMmrSyncState, OrgUser, OrgUserGameMmr
 
 
@@ -21,8 +20,11 @@ def batch_identity_changes() -> Iterator[None]:
         yield
     finally:
         deferred_identity_members.reset(token)
-    for member in OrgUser.objects.nocache().filter(pk__in=affected).order_by("pk"):
-        publish_member_identity_change(member)
+    with transaction.atomic():
+        members = lock_memberships(list(affected), required=False)
+        lock_revision_counters(members)
+        for member in sorted(members, key=lambda m: (m.organization_id, m.pk)):
+            publish_member_identity_change(member)
 
 
 @transaction.atomic
@@ -33,14 +35,10 @@ def publish_member_identity_change(org_user: OrgUser) -> None:
         row.game_type: row
         for row in OrgUserGameMmr.objects.nocache().filter(org_user=member)
     }
-    games = (
-        set(rows)
-        | set(
-            OrgMmrSyncState.objects.filter(org_user=member).values_list(
-                "game_type", flat=True
-            )
+    games = set(rows) | set(
+        OrgMmrSyncState.objects.filter(org_user=member).values_list(
+            "game_type", flat=True
         )
-        | set(GameType.values)
     )
     for game in sorted(games):
         row = rows.get(game)
@@ -61,6 +59,7 @@ def publish_user_identity_change(user: CustomUser) -> None:
         .filter(user_id=user.pk)
         .order_by("pk")
     )
+    lock_revision_counters(members)
     for member in members:
         publish_member_identity_change(member)
 
@@ -74,6 +73,7 @@ def user_identity_mutation(user: CustomUser) -> Iterator[None]:
             .filter(user_id=user.pk)
             .order_by("pk")
         )
+        lock_revision_counters(members)
         before = (
             CustomUser.objects.nocache()
             .values_list("steam_account_id", "discordId")

@@ -213,9 +213,11 @@ class CustomUser(AbstractUser):
                 }
             kwargs["update_fields"] = names
             return
-        if final_changed or any(touched.values()):
-            return
-        excluded = set(self.STEAM_VERIFICATION_FIELDS)
+        excluded = (
+            set()
+            if final_changed or any(touched.values())
+            else set(self.STEAM_VERIFICATION_FIELDS)
+        )
         identity_snapshot = self.__dict__.get("_identity_snapshot", {})
         if (
             "discordId" in identity_snapshot

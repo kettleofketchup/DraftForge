@@ -27,8 +27,10 @@ from org.models import (
     Organization,
     OrgApiConnection,
     OrgApiMmrDelivery,
+    OrgMmrRevisionCounter,
     OrgMmrSyncState,
     OrgUser,
+    OrgUserGameMmr,
 )
 from tournament.management.commands.import_prod_tournament import Command
 from tournament.models import Tournament
@@ -520,3 +522,105 @@ class MmrMutationTests(TestCase):
         self.assertGreater(self.state().revision, first)
         self.assertIsNotNone(self.state().verified_at)
         self.assertFalse(OrgApiMmrDelivery.objects.exists())
+
+    def test_unverified_sync_of_unchanged_value_keeps_verification(self) -> None:
+        set_org_mmr(
+            self.member, self.game, 4500, mark_verified=True, verified_by=self.owner
+        )
+        before = self.state()
+        result = sync_mmrs(
+            self.org,
+            self.owner,
+            [{"steam_id": 12345, "mmr": 4500}],
+            mark_verified=False,
+        )
+        self.assertEqual((result.updated, result.unchanged), (0, 1))
+        after = self.state()
+        self.assertEqual(after.revision, before.revision)
+        self.assertEqual(after.verified_at, before.verified_at)
+        row = OrgUserGameMmr.objects.get(org_user=self.member, game_type=self.game)
+        self.assertIsNotNone(row.verified_at)
+        self.assertEqual(row.verified_by_id, self.owner.pk)
+
+    def test_identity_change_skips_games_without_a_value(self) -> None:
+        self.write(4500)
+        self.user.discordId = "987654321012345686"
+        self.user.save(update_fields=["discordId"])
+        self.assertEqual(
+            set(OrgMmrSyncState.objects.values_list("game_type", flat=True)),
+            {self.game},
+        )
+        self.assertEqual(
+            set(OrgApiMmrDelivery.objects.values_list("game_type", flat=True)),
+            {self.game},
+        )
+        self.assertFalse(
+            OrgApiMmrDelivery.objects.exclude(game_type=self.game).exists()
+        )
+
+    def test_stale_verification_save_preserves_newer_discord_id(self) -> None:
+        self.write(4500)
+        stale = CustomUser.objects.get(pk=self.user.pk)
+        self.user.discordId = "987654321012345688"
+        self.user.save(update_fields=["discordId"])
+        before = self.state().revision
+        stale.steam_account_exists_checked_at = timezone.now()
+        stale.save()
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.discordId, "987654321012345688")
+        self.assertIsNotNone(self.user.steam_account_exists_checked_at)
+        self.assertEqual(self.state().revision, before)
+
+    def test_deleting_verifier_records_verification_revision(self) -> None:
+        verifier = CustomUser.objects.create_user(username="deleted-verifier")
+        set_org_mmr(
+            self.member, self.game, 4500, mark_verified=True, verified_by=verifier
+        )
+        before = self.state().revision
+        count = OrgApiMmrDelivery.objects.count()
+        admin_user = CustomUser.objects.create_superuser(
+            username="verifier-delete-admin", password="synthetic"
+        )
+        client = APIClient()
+        client.force_authenticate(admin_user)
+        response = client.delete(f"/api/users/{verifier.pk}/")
+        self.assertEqual(response.status_code, 204)
+        row = OrgUserGameMmr.objects.get(org_user=self.member, game_type=self.game)
+        self.assertIsNone(row.verified_by_id)
+        self.assertIsNotNone(row.verified_at)
+        self.assertGreater(self.state().revision, before)
+        self.assertEqual(OrgApiMmrDelivery.objects.count(), count)
+
+    def test_batched_identity_change_allocates_one_revision(self) -> None:
+        self.write(4500)
+        keeper = CustomUser.objects.create_user(
+            username="batch-keeper", discordId="987654321012345689"
+        )
+        keeper_member = OrgUser.objects.create(organization=self.org, user=keeper)
+        set_org_mmr(keeper_member, self.game, 4500, mark_verified=False)
+        counter = OrgMmrRevisionCounter.objects.get(
+            organization=self.org, game_type=self.game
+        ).revision
+        merge_discord_accounts(keeper, self.user)
+        self.assertEqual(self.state(keeper_member).revision, counter + 1)
+        self.assertEqual(
+            OrgMmrRevisionCounter.objects.get(
+                organization=self.org, game_type=self.game
+            ).revision,
+            counter + 1,
+        )
+
+    def test_admin_deleting_verifier_records_verification_revision(self) -> None:
+        verifier = CustomUser.objects.create_user(username="admin-deleted-verifier")
+        set_org_mmr(
+            self.member, self.game, 4500, mark_verified=True, verified_by=verifier
+        )
+        before = self.state().revision
+        request = RequestFactory().post("/admin/app/customuser/")
+        request.user = self.owner
+        CustomUserAdmin(CustomUser, admin.site).delete_queryset(
+            request, CustomUser.objects.filter(pk=verifier.pk)
+        )
+        row = OrgUserGameMmr.objects.get(org_user=self.member, game_type=self.game)
+        self.assertIsNone(row.verified_by_id)
+        self.assertGreater(self.state().revision, before)

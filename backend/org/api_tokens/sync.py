@@ -225,11 +225,11 @@ def sync_mmrs(
                     extra_log={"old_mmr": old_values.get(user_id, mmr or 0)},
                     sync_context=contexts[user_id],
                 )
-        else:
+        elif changed:
             bulk_set_org_mmrs(
                 org.pk,
                 game_type,
-                {user_id: value for user_id, (_, value) in targets.items()},
+                changed,
                 sync_context=replace(
                     sync_context or MmrMutationContext(), expected_revision=None
                 ),

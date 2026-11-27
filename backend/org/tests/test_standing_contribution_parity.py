@@ -72,14 +72,17 @@ STAFF_PUT_OPEN_QUERIES = 22
 # (delivery SELECT, pull-target DELETE, sync-state DELETE). Admin confirmation
 # adds three ledger SELECTs; admin deletion includes that confirmation cost.
 # MMR locks add 10/15 to Discord/claim merges and two to account deletion.
-MERGE_DISCORD_QUERIES = 253
-MERGE_CLAIM_QUERIES = 235
-DELETE_API_QUERIES = 137
-DELETE_ADMIN_QUERIES = 193
+# Pre-locking revision counters reads tracked games (two SELECTs) when the
+# account is locked and again when deferred identity changes publish; deletion
+# also looks for MMR rows the user verified (one SELECT).
+MERGE_DISCORD_QUERIES = 257
+MERGE_CLAIM_QUERIES = 239
+DELETE_API_QUERIES = 140
+DELETE_ADMIN_QUERIES = 196
 DELETE_ADMIN_CONFIRM_QUERIES = 58
 PROMO_SEND_QUERIES = 30
 PROMO_UNDO_QUERIES = 13
-PROMO_RELEASE_QUERIES = 151
+PROMO_RELEASE_QUERIES = 154
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8

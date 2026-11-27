@@ -7,7 +7,7 @@ from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils.text import capfirst
 
-from org.accounts import lock_account_memberships
+from org.accounts import clear_mmr_verifier, lock_account_memberships
 from org.api_connections.lifecycle import handle_credential_owner_loss
 from org.promotion.services import release_earning_sends
 from org.standing import api as standing
@@ -56,6 +56,7 @@ class CustomUserAdmin(admin.ModelAdmin):
             handle_credential_owner_loss(obj)
             release_earning_sends(obj)
             standing.on_user_deleted(obj, actor=request.user)
+            clear_mmr_verifier(obj)
             super().delete_model(request, obj)
 
     def delete_queryset(
@@ -67,6 +68,7 @@ class CustomUserAdmin(admin.ModelAdmin):
                 handle_credential_owner_loss(user)
                 release_earning_sends(user)
                 standing.on_user_deleted(user, actor=request.user)
+                clear_mmr_verifier(user)
             super().delete_queryset(request, queryset)
 
 

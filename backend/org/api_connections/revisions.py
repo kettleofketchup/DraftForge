@@ -13,6 +13,27 @@ from org.models import (
 )
 
 
+def lock_revision_counters(members: list[OrgUser]) -> None:
+    organizations = {member.pk: member.organization_id for member in members}
+    if not organizations:
+        return
+    games = set(
+        OrgUserGameMmr.objects.nocache()
+        .filter(org_user_id__in=organizations)
+        .values_list("org_user_id", "game_type")
+    ) | set(
+        OrgMmrSyncState.objects.filter(org_user_id__in=organizations).values_list(
+            "org_user_id", "game_type"
+        )
+    )
+    for organization_id, game_type in sorted(
+        {(organizations[member_id], game) for member_id, game in games}
+    ):
+        OrgMmrRevisionCounter.objects.select_for_update().get_or_create(
+            organization_id=organization_id, game_type=game_type
+        )
+
+
 def next_revision(organization_id: int, game_type: int) -> int:
     counter, _ = OrgMmrRevisionCounter.objects.select_for_update().get_or_create(
         organization_id=organization_id, game_type=game_type
@@ -63,6 +84,10 @@ def record_mmr_change(
         and not verification_changed
     ):
         return state.revision if state else 0
+    deferred = deferred_identity_members.get()
+    if identity_changed and deferred is not None:
+        deferred.add(org_user.pk)
+        return state.revision if state else 0
     origin_id = context.origin_connection_id if context else None
     state, _ = OrgMmrSyncState.objects.update_or_create(
         org_user=org_user,
@@ -75,7 +100,6 @@ def record_mmr_change(
         },
     )
     if value != previous_value or identity_changed:
-        deferred = deferred_identity_members.get()
         if deferred is not None:
             deferred.add(org_user.pk)
             return state.revision

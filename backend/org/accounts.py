@@ -8,9 +8,11 @@ from discordbot.models import DiscordEventDM
 from league.mmr import merge_league_users
 from league.models import LeagueUser
 from org.api_connections.mutations import lock_memberships
+from org.api_connections.revisions import lock_revision_counters, record_mmr_change
 from org.models import (
     OrgFeature,
     OrgUser,
+    OrgUserGameMmr,
     PlayerDeadlockProfile,
     PlayerDotaProfile,
     PromoTemplate,
@@ -27,7 +29,35 @@ def lock_account_memberships(users: list[CustomUser]) -> None:
         .values_list("pk", flat=True)
         .distinct()
     )
-    lock_memberships(member_ids)
+    lock_revision_counters(lock_memberships(member_ids))
+
+
+def clear_mmr_verifier(user: CustomUser) -> None:
+    rows = list(OrgUserGameMmr.objects.nocache().filter(verified_by=user))
+    if not rows:
+        return
+    members = {
+        member.pk: member
+        for member in lock_memberships([row.org_user_id for row in rows])
+    }
+    lock_revision_counters(list(members.values()))
+    rows = list(
+        OrgUserGameMmr.objects.nocache().filter(
+            verified_by=user, org_user_id__in=members
+        )
+    )
+    OrgUserGameMmr.objects.filter(pk__in=[row.pk for row in rows]).update(
+        verified_by=None
+    )
+    for row in rows:
+        record_mmr_change(
+            members[row.org_user_id],
+            row.game_type,
+            previous_value=row.mmr,
+            previous_verified_at=row.verified_at,
+            verification_changed=True,
+        )
+    invalidate_after_commit(*rows)
 
 
 def repoint_org_attribution(drop: CustomUser, keep: CustomUser) -> int:

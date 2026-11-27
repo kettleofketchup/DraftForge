@@ -13,7 +13,7 @@ from app.models import CustomUser
 from league.mmr import set_league_mmr
 from league.models import LeagueUser
 from org.api_connections.mutations import lock_memberships
-from org.api_connections.revisions import record_mmr_change
+from org.api_connections.revisions import lock_revision_counters, record_mmr_change
 from org.mmr import LEAGUE_GAME, OrgMmrError, validate_org_mmr
 from org.mmr_official import apply_official_org_mmr
 from org.mmr_requests.permissions import can_review_mmr_request, may_self_verify
@@ -523,6 +523,7 @@ def _repoint_mmr_verifiers(claimer: CustomUser, target_user: CustomUser) -> int:
         .distinct()
     )
     members = {member.pk: member for member in lock_memberships(ids)}
+    lock_revision_counters(list(members.values()))
     game_mmrs = list(
         OrgUserGameMmr.objects.nocache()
         .filter(verified_by=target_user, org_user_id__in=members)

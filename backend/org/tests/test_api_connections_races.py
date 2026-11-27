@@ -3,6 +3,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from unittest import skipUnless
+from unittest.mock import patch
 
 from django.db import connection, connections, transaction
 from django.test import TransactionTestCase
@@ -12,6 +13,7 @@ from app.models import CustomUser
 from common.game import GameType
 from org.api_connections.lifecycle import ConnectionConflict, issue_connection_key
 from org.api_connections.mutations import MmrMutationContext, MmrRevisionConflict
+from org.api_connections.revisions import next_revision
 from org.api_tokens.sync import SyncResult, sync_mmrs
 from org.features import FeatureKey, set_org_feature
 from org.mmr import mark_org_mmr_verified, merge_org_mmrs, set_org_mmr
@@ -290,3 +292,66 @@ class MmrMutationRaceTests(TransactionTestCase):
         state = OrgMmrSyncState.objects.get(org_user=keeper, game_type=self.game)
         self.assertGreater(state.revision, before)
         self.assertEqual(state.value, 4500)
+
+
+@skipUnless(connection.vendor == "postgresql", "Requires PostgreSQL row locks")
+class IdentityRevisionRaceTests(TransactionTestCase):
+    def test_shared_org_identity_changes_do_not_deadlock(self) -> None:
+        owner = CustomUser.objects.create_user(username="identity-race-admin")
+        orgs = [
+            Organization.objects.create(name=f"Identity Race {n}", owner=owner)
+            for n in (1, 2)
+        ]
+        first = CustomUser.objects.create_user(
+            username="identity-race-a", discordId="987654321012345601"
+        )
+        second = CustomUser.objects.create_user(
+            username="identity-race-b", discordId="987654321012345602"
+        )
+        memberships = [
+            OrgUser.objects.create(organization=orgs[0], user=first),
+            OrgUser.objects.create(organization=orgs[1], user=second),
+            OrgUser.objects.create(organization=orgs[1], user=first),
+            OrgUser.objects.create(organization=orgs[0], user=second),
+        ]
+        for member in memberships:
+            set_org_mmr(member, GameType.DOTA2, 4000, mark_verified=False)
+        barrier = threading.Barrier(2, timeout=3)
+        allocations = threading.local()
+
+        def allocate(organization_id: int, game_type: int) -> int:
+            revision = next_revision(organization_id, game_type)
+            if not getattr(allocations, "seen", False):
+                allocations.seen = True
+                try:
+                    barrier.wait()
+                except threading.BrokenBarrierError:
+                    pass
+            return revision
+
+        def change(user_id: int, discord_id: str) -> None:
+            try:
+                user = CustomUser.objects.get(pk=user_id)
+                user.discordId = discord_id
+                user.save(update_fields=["discordId"])
+            finally:
+                connections.close_all()
+
+        with patch("org.api_connections.revisions.next_revision", allocate):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [
+                    pool.submit(change, first.pk, "987654321012345611"),
+                    pool.submit(change, second.pk, "987654321012345612"),
+                ]
+                for future in futures:
+                    future.result(timeout=30)
+        states = OrgMmrSyncState.objects.filter(game_type=GameType.DOTA2)
+        self.assertEqual(states.count(), 4)
+        self.assertEqual(
+            sorted(
+                OrgMmrRevisionCounter.objects.filter(
+                    game_type=GameType.DOTA2
+                ).values_list("revision", flat=True)
+            ),
+            [4, 4],
+        )
