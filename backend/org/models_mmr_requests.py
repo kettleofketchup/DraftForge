@@ -84,6 +84,7 @@ class MmrChangeRequest(models.Model):
         blank=True,
     )
     screenshot_content_type = models.CharField(max_length=32, blank=True)
+    screenshot_purged_at = models.DateTimeField(null=True, blank=True)
     note = models.TextField(blank=True, max_length=TEXT_MAX_LENGTH)
     status = models.CharField(
         max_length=12,
@@ -146,7 +147,10 @@ class MmrChangeRequest(models.Model):
                 name="mmr_request_pending_has_membership",
             ),
             models.CheckConstraint(
-                condition=Q(source="staff") | Q(status="cancelled") | ~Q(screenshot=""),
+                condition=Q(source="staff")
+                | Q(status="cancelled")
+                | ~Q(screenshot="")
+                | Q(screenshot_purged_at__isnull=False),
                 name="mmr_request_member_screenshot_required",
             ),
         ]

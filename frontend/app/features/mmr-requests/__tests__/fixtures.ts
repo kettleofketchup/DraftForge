@@ -31,6 +31,7 @@ export function mmrRequest(
     current_verified: false,
     has_screenshot: true,
     screenshot_url: '/api/mmr-requests/77/screenshot/',
+    screenshot_purged_at: null,
     can_review: true,
     ...overrides,
   };

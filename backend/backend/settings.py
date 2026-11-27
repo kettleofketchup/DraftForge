@@ -618,6 +618,11 @@ if RUNNING_TESTS:
 # League Stats Configuration
 LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))
 
+# Nightly purge deletes MMR request screenshots this many days after the decision.
+MMR_SCREENSHOT_RETENTION_DAYS = int(
+    os.environ.get("MMR_SCREENSHOT_RETENTION_DAYS", "7")
+)
+
 # League configuration
 LEAGUE_CHOICES = app_config.league_choices
 
