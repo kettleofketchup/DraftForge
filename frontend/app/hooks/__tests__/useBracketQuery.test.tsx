@@ -6,18 +6,24 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BracketMatchDTO } from '~/components/bracket/schemas';
 import { mapApiMatchToMatch, useBracketStore } from '~/store/bracketStore';
-import { useBracketQuery, useSaveBracket } from '../useBracket';
+import {
+  reloadBracket,
+  useBracketQuery,
+  usePersistMatchResult,
+  useSaveBracket,
+} from '../useBracket';
 
-const { loadBracket, saveBracket, toast } = vi.hoisted(() => ({
+const { loadBracket, saveBracket, advanceWinner, toast } = vi.hoisted(() => ({
   loadBracket: vi.fn(),
   saveBracket: vi.fn(),
+  advanceWinner: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 vi.mock('~/components/api/bracketAPI', () => ({
   loadBracket,
   saveBracket,
-  advanceWinner: vi.fn(),
+  advanceWinner,
 }));
 vi.mock('sonner', () => ({ toast }));
 
@@ -298,5 +304,190 @@ describe('useSaveBracket', () => {
     expect(state.hasStructuralEdits).toBe(false);
     expect(state.matches[0].winner).toBe('radiant');
     expect(state.matches[0].radiantTeam?.pk).toBe(1);
+  });
+});
+
+describe('bracket store across tournaments', () => {
+  const teamC = { pk: 3, name: 'Tidewater' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loadBracket.mockReset();
+    useBracketStore.setState({
+      tournamentId: null,
+      matches: [],
+      isDirty: false,
+      isVirtual: true,
+    });
+  });
+
+  const mountAt = async (tournamentId: number) => {
+    loadBracket.mockImplementation(async (id: number) => ({
+      tournamentId: id,
+      matches: [apiMatch({ pk: id * 100 })],
+    }));
+    const hook = renderHook(({ id }) => useBracketQuery(id), {
+      wrapper,
+      initialProps: { id: tournamentId },
+    });
+    await waitFor(() =>
+      expect(useBracketStore.getState().matches[0]?.gameId).toBe(
+        tournamentId * 100,
+      ),
+    );
+    return hook;
+  };
+
+  it('clears version, structural edits and pending writes on tournament switch', () => {
+    useBracketStore.setState({
+      tournamentId: 7,
+      baseVersion: 'old',
+      hasStructuralEdits: true,
+      pendingResultWrites: 2,
+      isDirty: true,
+    });
+    useBracketStore.getState().bindTournament(8);
+    expect(useBracketStore.getState()).toMatchObject({
+      tournamentId: 8,
+      baseVersion: null,
+      hasStructuralEdits: false,
+      pendingResultWrites: 0,
+      isDirty: false,
+    });
+    useBracketStore.getState().setMatches([]);
+    expect(useBracketStore.getState().hasStructuralEdits).toBe(true);
+  });
+
+  it('does not reload an old tournament into the current store', async () => {
+    useBracketStore.setState({ tournamentId: 8, baseVersion: 'current' });
+    loadBracket.mockResolvedValue({
+      tournamentId: 7,
+      version: 'old',
+      matches: [apiMatch()],
+    });
+    await reloadBracket(new QueryClient(), 7);
+    expect(useBracketStore.getState().matches).toEqual([]);
+    expect(useBracketStore.getState().baseVersion).toBe('current');
+  });
+
+  it.each(['success', 'error'])(
+    'ignores a late result %s after switching tournaments',
+    async (outcome) => {
+      useBracketStore.getState().bindTournament(7);
+      let finish: () => void = () => undefined;
+      advanceWinner.mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = () =>
+              outcome === 'success'
+                ? resolve({})
+                : reject(new Error('write failed'));
+          }),
+      );
+      const { result } = renderHook(() => usePersistMatchResult(7), {
+        wrapper,
+      });
+      let pending: Promise<unknown> = Promise.resolve();
+      act(() => {
+        pending = result.current
+          .mutateAsync({ gameId: 42, winner: 'radiant' })
+          .catch(() => undefined);
+      });
+      await waitFor(() => expect(advanceWinner).toHaveBeenCalled());
+      expect(useBracketStore.getState().pendingResultWrites).toBe(1);
+      act(() => {
+        useBracketStore.getState().bindTournament(8);
+        useBracketStore.setState({
+          isDirty: true,
+          pendingResultWrites: 1,
+          baseVersion: 'current',
+        });
+      });
+      await act(async () => {
+        finish();
+        await pending;
+      });
+      expect(useBracketStore.getState()).toMatchObject({
+        tournamentId: 8,
+        isDirty: true,
+        pendingResultWrites: 1,
+        baseVersion: 'current',
+      });
+    },
+  );
+
+  it('drops the previous tournament before the next one loads', async () => {
+    const hook = await mountAt(7);
+    loadBracket.mockImplementation(() => new Promise(() => undefined));
+
+    hook.rerender({ id: 8 });
+
+    expect(useBracketStore.getState().matches).toEqual([]);
+    expect(useBracketStore.getState().tournamentId).toBe(8);
+  });
+
+  it('loads the next tournament even with unsaved edits on the previous one', async () => {
+    const hook = await mountAt(7);
+    act(() => {
+      useBracketStore
+        .getState()
+        .assignTeamToSlot('w-1-0', 'radiant', teamC as never);
+    });
+    expect(useBracketStore.getState().isDirty).toBe(true);
+
+    hook.rerender({ id: 8 });
+
+    await waitFor(() =>
+      expect(useBracketStore.getState().matches[0]?.gameId).toBe(800),
+    );
+    expect(loadBracket).toHaveBeenCalledWith(8);
+    expect(useBracketStore.getState().isDirty).toBe(false);
+    expect(useBracketStore.getState().matches[0].radiantTeam?.pk).toBe(1);
+  });
+
+  it('reloads a tournament after switching away and back', async () => {
+    const hook = await mountAt(7);
+    loadBracket.mockImplementation(() => new Promise(() => undefined));
+    hook.rerender({ id: 8 });
+    hook.rerender({ id: 7 });
+
+    await waitFor(() =>
+      expect(useBracketStore.getState().matches[0]?.gameId).toBe(700),
+    );
+  });
+
+  it('refuses to save another tournament’s bracket', async () => {
+    useBracketStore.setState({ tournamentId: 7, isDirty: true });
+    const { result } = renderHook(() => useSaveBracket(8), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync([]).catch(() => undefined);
+    });
+
+    expect(saveBracket).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+  });
+
+  it('ignores a save that finishes after switching tournaments', async () => {
+    useBracketStore.setState({ tournamentId: 7, isDirty: true });
+    let finish: (value: unknown) => void = () => undefined;
+    saveBracket.mockImplementation(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    const { result } = renderHook(() => useSaveBracket(7), { wrapper });
+
+    let pending: Promise<unknown> = Promise.resolve();
+    act(() => {
+      pending = result.current.mutateAsync([]);
+    });
+    await waitFor(() => expect(saveBracket).toHaveBeenCalled());
+    useBracketStore.setState({ tournamentId: 8, matches: [], isDirty: false });
+    await act(async () => {
+      finish({ tournamentId: 7, matches: [apiMatch({ pk: 700 })] });
+      await pending;
+    });
+
+    expect(useBracketStore.getState().tournamentId).toBe(8);
+    expect(useBracketStore.getState().matches).toEqual([]);
   });
 });
