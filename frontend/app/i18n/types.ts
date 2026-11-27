@@ -1,3 +1,4 @@
+import type discordPreview from './locales/en/discordPreview.json';
 import type lobby from './locales/en/lobby.json';
 import type navbar from './locales/en/navbar.json';
 
@@ -7,6 +8,7 @@ declare module 'i18next' {
     resources: {
       navbar: typeof navbar;
       lobby: typeof lobby;
+      discordPreview: typeof discordPreview;
     };
   }
 }

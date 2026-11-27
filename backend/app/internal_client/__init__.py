@@ -16,6 +16,7 @@ Modules:
     events        event state, event reads, repeaters, due scheduled events
     steam         league sync state, matches, league stats, MMR
     ops_notices   emit/resolve operations notices
+    mmr_requests  nightly MMR screenshot retention purge
 
 The tournament client (tournament/game reads, hero-draft creation) lives in
 ``tournament.internal_client`` on the same transport. User avatar and Discord-name
@@ -70,6 +71,7 @@ from app.internal_client.events import (
     get_repeater_subscribers,
     transition_event_state,
 )
+from app.internal_client.mmr_requests import purge_mmr_screenshots
 from app.internal_client.ops_notices import (
     OpsNoticeTransientError,
     emit_ops_notice,
@@ -125,6 +127,7 @@ __all__ = [
     "get_sync_discord_state",
     "get_tracked_steam_league_ids",
     "mark_signup_delivery_sending",
+    "purge_mmr_screenshots",
     "recalculate_user_mmr",
     "resolve_ops_notice",
     "search_message_logs",

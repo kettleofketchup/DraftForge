@@ -3,6 +3,7 @@ from django.db.models import Sum
 from app.models import CustomUser
 from steam.functions.mmr_calculation import (
     calculate_mmr_adjustment,
+    recompute_league_mmrs_for_users,
     update_user_league_mmr,
 )
 from steam.models import LeaguePlayerStats, PlayerMatchStats
@@ -135,8 +136,9 @@ def update_all_league_stats_for_league(league_id: int) -> int:
     for _, stats in updated:
         apply_mmr_adjustment(stats)
 
+    recompute_league_mmrs_for_users([user.pk for user, _ in updated])
+
     for user, stats in updated:
-        update_user_league_mmr(user)
         _log_stats_updated(user, stats)
 
     logger.info(

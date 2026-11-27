@@ -34,8 +34,6 @@ from tests.populate.bracket import (
     populate_bracket_linking_scenario,
     populate_bracket_unset_winner_tournament,
 )
-
-# Re-export constants
 from tests.populate.constants import (
     DTX_LEAGUE_NAME,
     DTX_ORG_NAME,
@@ -48,6 +46,7 @@ from tests.populate.constants import (
 )
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
+from tests.populate.discord_permissions import populate_discord_permissions_data
 from tests.populate.dota_lobby import populate_dota_lobby_data
 from tests.populate.events import populate_events_data
 from tests.populate.game_org_mmr import populate_game_org_mmr_data
@@ -71,8 +70,6 @@ from tests.populate.tournament_discovery import populate_tournament_discovery
 from tests.populate.tournaments import populate_real_tournament_38, populate_tournaments
 from tests.populate.user_edit import populate_user_edit_data
 from tests.populate.users import populate_test_auth_users, populate_users
-
-# Re-export utilities that may be used directly
 from tests.populate.utils import (
     REAL_TOURNAMENT_USERS,
     create_user,
@@ -128,6 +125,8 @@ def populate_all(force: bool = False) -> None:
         # counters every step above relies on.
         ("Game Org MMR Data", populate_game_org_mmr_data),
         ("Signup History Data", populate_signup_history_data),
+        # Explicit pks (org/league 70, users 9100-9102), after Signup History.
+        ("Discord Permission Badges Data", populate_discord_permissions_data),
         # Its tournament (explicit pk 950) brings auto-pk teams, games and
         # matches, so it goes after every pk-sensitive step.
         ("Activity Bracket Data", populate_activity_bracket_data),
@@ -190,6 +189,7 @@ __all__ = [
     "populate_mmr_sync_data",
     "populate_signup_history_data",
     "populate_signup_delivery",
+    "populate_discord_permissions_data",
     "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_league_stats_data",

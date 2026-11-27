@@ -20,7 +20,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Add parent directory to Python path for paths module
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import logging
@@ -31,11 +30,11 @@ from config.discord_api import DISCORD_API_BASE_URL  # noqa: F401
 from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.leagues import app_config
+from config.promotion_sync import PromotionAdaptorConfig, PromotionSyncConfig
 from config.redis_host import is_docker, resolve_redis_host
 from config.signup_post import SignupPostConfig
 from telemetry.config import init_telemetry
 
-# Show cacheops Redis connection warning only once (not on every import)
 warnings.filterwarnings("once", message=r".*cacheops cache is unreachable.*")
 
 log = logging.getLogger(__name__)
@@ -134,7 +133,6 @@ logging.basicConfig(
     format="%(levelname)s:%(name)s:%(message)s",
 )
 
-# Quiet down noisy loggers unless explicitly debugging
 if _log_level != "DEBUG":
     logging.getLogger("app.models").setLevel(logging.INFO)
     logging.getLogger("tournament.functions").setLevel(logging.INFO)
@@ -171,7 +169,6 @@ INSTALLED_APPS = [
 if importlib.util.find_spec("django_linear_migrations") is not None:
     INSTALLED_APPS.append("django_linear_migrations")
 
-# Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -183,6 +180,7 @@ REST_FRAMEWORK = {
         "app.auth.InternalServiceAuth",
     ],
     "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
+    "DEFAULT_THROTTLE_RATES": {"discord_permission_refresh": "5/min"},
 }
 
 # Every entry must be async capable: one sync-only middleware makes each ASGI request
@@ -337,6 +335,12 @@ SIGNUP_POST = SignupPostConfig.from_env(disabled_default=RUNNING_TESTS)
 STEAM_ACCOUNT_LOOKUP_ENABLED: bool = env_bool(
     "STEAM_ACCOUNT_LOOKUP_ENABLED", default=not RUNNING_TESTS and NODE_ENV != "test"
 )
+# Event-promotion org/guild and event/occasion bindings
+# (config/promotion_sync.py, PROMOTION_SYNC_BINDINGS). Empty unless configured.
+PROMOTION_SYNC = PromotionSyncConfig.from_env()
+# Where dispatch_promotion_contacts sends outbox receipts (PROMOTION_ADAPTOR_*).
+# Off by default; while off nothing is sent and no credential is read.
+PROMOTION_ADAPTOR = PromotionAdaptorConfig.from_env()
 
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):
@@ -613,6 +617,11 @@ if RUNNING_TESTS:
 
 # League Stats Configuration
 LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))
+
+# Nightly purge deletes MMR request screenshots this many days after the decision.
+MMR_SCREENSHOT_RETENTION_DAYS = int(
+    os.environ.get("MMR_SCREENSHOT_RETENTION_DAYS", "7")
+)
 
 # League configuration
 LEAGUE_CHOICES = app_config.league_choices

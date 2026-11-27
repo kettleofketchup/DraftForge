@@ -16,6 +16,7 @@ from discordbot.delivery_types import (
 )
 from discordbot.utils import send_to_configured_channel
 from events.discord.embeds import build_announcement_notice, build_announcement_v2
+from events.discord.gates import announcement_branch, signup_post_gate
 from events.schemas import EventTaskSchema
 from telemetry.logging import get_logger
 
@@ -272,16 +273,16 @@ def run_signup_post(
         event = internal_client.get_event_for_task(event_id)
     except (ValueError, InternalAPIUnavailable):
         return done(SignupPostResult(SignupRunOutcome.UNAVAILABLE, event_id))
-    if not event or event.state != "signups_open":
+    if not event or "state_not_signups_open" in signup_post_gate(event).reasons:
         return done(SignupPostResult(SignupRunOutcome.SKIPPED, event_id))
-    signup_available = bool(
-        event.discord_post_signups and event.discord_post_signups_channel_id
-    )
-    announcement_available = bool(
-        event.discord_announcement and event.discord_announcement_channel_id
-    )
-    if not (signup_available or announcement_available):
+    branch = announcement_branch(event)
+    if branch == "none":
         return done(SignupPostResult(SignupRunOutcome.SKIPPED, event_id))
+    signup_available = branch in ("signup_post_only", "signup_post_and_notice")
+    announcement_available = branch in (
+        "signup_post_and_notice",
+        "fallback_signup_post",
+    )
 
     built = _built_payload(event)
     if built is None:
@@ -320,8 +321,10 @@ def run_signup_post(
             title=title,
             source=SIGNUP_SOURCE,
             source_id=event_id,
-            content=built.get("content"),
-            allowed_mentions=built.get("allowed_mentions"),
+            content=built.get("content") if destination == "signup" else None,
+            allowed_mentions=(
+                built.get("allowed_mentions") if destination == "signup" else None
+            ),
             fired_by_user_id=fired_by_user_id,
             before_post=before_post,
             defer_success_finalization=True,

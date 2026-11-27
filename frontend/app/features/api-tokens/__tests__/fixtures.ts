@@ -10,6 +10,7 @@ export function apiToken(overrides: Partial<ApiToken> = {}): ApiToken {
     last_used_at: null,
     revoked_at: null,
     revoked_by: null,
+    operations: ['mmr:read', 'mmr:write'],
     ...overrides,
   };
 }
