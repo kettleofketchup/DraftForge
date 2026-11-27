@@ -283,6 +283,8 @@ class OrgLog(models.Model):
         ("rotate_connection_key", "Rotate Connection Key"),
         ("revoke_connection_key", "Revoke Connection Key"),
         ("api_connection_owner_lost", "API Connection Owner Lost"),
+        ("resume_mmr_deliveries", "Resume MMR Deliveries"),
+        ("resync_mmr_deliveries", "Resync MMR Deliveries"),
         ("void_promo_point", "Void Promotion Point"),
         ("restore_promo_point", "Restore Promotion Point"),
         ("update_external_contact", "Update External Contact"),

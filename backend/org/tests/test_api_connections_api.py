@@ -221,7 +221,6 @@ class ConnectionApiTests(ApiTokenBase):
 
     def test_unimplemented_directions_and_routes_fail_closed(self) -> None:
         for direction in (
-            "mmr_push_enabled",
             "mmr_pull_enabled",
             "promotion_push_enabled",
         ):

@@ -36,6 +36,11 @@ class ConnectionAuthorityLost(PermissionDenied):
             )
 
 
+def denial_code(denied: PermissionDenied) -> str:
+    detail = denied.detail if isinstance(denied.detail, dict) else {}
+    return str(detail.get("code", "not_permitted"))
+
+
 def assert_connection_authority(
     connection: OrgApiConnection,
     *,

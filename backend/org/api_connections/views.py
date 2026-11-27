@@ -1,8 +1,9 @@
 from typing import Any
 
+from django.core import signing
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework.authentication import SessionAuthentication
@@ -28,6 +29,10 @@ from org.api_connections.lifecycle import (
     issue_connection_key,
     revoke_connection_keys,
 )
+from org.api_connections.recovery import (
+    resume_mmr_deliveries,
+    resync_mmr_deliveries,
+)
 from org.api_connections.schemas import (
     ConnectionConfigError,
     validate_connection_config,
@@ -36,7 +41,11 @@ from org.api_connections.serializers import ConnectionSerializer
 from org.api_tokens.operations import entitlements_for
 from org.feature_errors import require_feature, require_org_admin
 from org.feature_keys import FeatureKey
-from org.models import Organization, OrgApiConnection, OrgApiToken
+from org.models import Organization, OrgApiConnection, OrgApiMmrDelivery, OrgApiToken
+
+DELIVERY_PAGE_SIZE = 50
+DELIVERY_STATES = ("pending", "retry", "paused")
+DELIVERY_CURSOR_SALT = "org-api-connections.deliveries"
 
 
 class ConnectionRateLimited(APIException):
@@ -96,8 +105,8 @@ def _check_patch(connection: OrgApiConnection, patch: dict[str, Any]) -> None:
     raw = {field: getattr(connection, field) for field in CONFIG_FIELDS}
     raw.update({key: value for key, value in patch.items() if key in CONFIG_FIELDS})
     config = validate_connection_config(raw)
-    directions = ("mmr_push_enabled", "mmr_pull_enabled", "promotion_push_enabled")
-    if any(patch.get(field) is True for field in directions):
+    unavailable = ("mmr_pull_enabled", "promotion_push_enabled")
+    if any(patch.get(field) is True for field in unavailable):
         raise ConnectionConfigError("direction_unavailable")
     added = set(config.operations) - set(connection.operations)
     required = set(entitlements_for(added))
@@ -109,6 +118,8 @@ def _check_patch(connection: OrgApiConnection, patch: dict[str, Any]) -> None:
             required.add(FeatureKey.MMR_SYNC)
         if config.promotion_push_enabled:
             required.add(FeatureKey.PROMOTION)
+    if config.mmr_push_enabled and not connection.mmr_push_enabled:
+        required.add(FeatureKey.MMR_SYNC)
     for feature in required:
         require_feature(connection.organization, feature)
     if config.outbound_auth != "none" and (
@@ -325,3 +336,110 @@ def connection_key(
         )
     response["Cache-Control"] = "no-store"
     return response
+
+
+def _delivery_row(delivery: OrgApiMmrDelivery) -> dict[str, Any]:
+    entry = (delivery.payload.get("entries") or [{}])[0]
+    return {
+        "delivery_id": str(delivery.delivery_id),
+        "org_user_id": delivery.org_user_id,
+        "game_type": delivery.game_type,
+        "revision": delivery.revision,
+        "state": delivery.state,
+        "attempts": delivery.attempts,
+        "due_at": delivery.due_at,
+        "last_reason": delivery.last_reason,
+        "mmr": entry.get("mmr"),
+        "steam_id": entry.get("steam_id"),
+        "discord_id": entry.get("discord_id"),
+        "destination_origin": delivery.destination_origin,
+        "created_at": delivery.created_at,
+    }
+
+
+def _invalid(code: str = "invalid_request") -> Response:
+    return Response({"code": code, "detail": code}, status=400)
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_deliveries(
+    request: Request, org_id: int, connection_id: int
+) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    params = request.query_params
+    if set(params) - {"state", "cursor"}:
+        return _invalid()
+    state = params.get("state", "")
+    if state and state not in DELIVERY_STATES:
+        return _invalid()
+    rows = OrgApiMmrDelivery.objects.filter(connection=connection)
+    counts = dict(
+        rows.filter(state__in=(*DELIVERY_STATES, "in_flight"))
+        .values("state")
+        .annotate(total=Count("pk"))
+        .values_list("state", "total")
+    )
+    rows = rows.filter(state=state) if state else rows.filter(state__in=DELIVERY_STATES)
+    if cursor := params.get("cursor"):
+        try:
+            position = signing.loads(cursor, salt=DELIVERY_CURSOR_SALT)
+        except signing.BadSignature:
+            return _invalid("invalid_cursor")
+        if (
+            type(position) is not dict
+            or position.get("c") != connection.pk
+            or position.get("s") != state
+            or type(position.get("p")) is not int
+        ):
+            return _invalid("invalid_cursor")
+        rows = rows.filter(pk__gt=position["p"])
+    page = list(rows.order_by("pk")[: DELIVERY_PAGE_SIZE + 1])
+    more = len(page) > DELIVERY_PAGE_SIZE
+    page = page[:DELIVERY_PAGE_SIZE]
+    return Response(
+        {
+            "counts": {
+                name: counts.get(name, 0) for name in (*DELIVERY_STATES, "in_flight")
+            },
+            "items": [_delivery_row(delivery) for delivery in page],
+            "next_cursor": signing.dumps(
+                {"c": connection.pk, "s": state, "p": page[-1].pk},
+                salt=DELIVERY_CURSOR_SALT,
+            )
+            if more
+            else None,
+        }
+    )
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_delivery_recovery(
+    request: Request, org_id: int, connection_id: int, action: str
+) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    allowed = {"config_version"} | ({"confirm"} if action == "resync" else set())
+    if type(request.data) is not dict or set(request.data) - allowed:
+        return _invalid("invalid_config")
+    version = request.data.get("config_version")
+    check_action_budget(org.pk, request.user.pk, kind="manual")
+    try:
+        if action == "resume":
+            resumed = resume_mmr_deliveries(
+                connection, actor=request.user, expected_version=version
+            )
+            return Response({"resumed": resumed})
+        enqueued = resync_mmr_deliveries(
+            connection,
+            actor=request.user,
+            expected_version=version,
+            confirmed=request.data.get("confirm") is True,
+        )
+        return Response({"enqueued": enqueued})
+    except ConnectionConfigError as exc:
+        return _error(exc)

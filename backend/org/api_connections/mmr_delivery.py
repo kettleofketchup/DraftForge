@@ -1,11 +1,28 @@
+from datetime import timedelta
 from uuid import uuid4
 
 from django.db import connection as db_connection
+from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
 from org.api_connections.authority import assert_connection_authority
 from org.api_connections.schemas import canonical_origin
 from org.models import OrgApiConnection, OrgApiMmrDelivery, OrgMmrSyncState
+
+LOOP_WINDOW = timedelta(minutes=10)
+LOOP_LIMIT = 10
+UNSENT_STATES = ("pending", "retry", "paused")
+
+
+def _loop_suspected(connection: OrgApiConnection, state: OrgMmrSyncState) -> bool:
+    recent = OrgApiMmrDelivery.objects.filter(
+        connection=connection,
+        org_user_id=state.org_user_id,
+        game_type=state.game_type,
+        origin_connection__isnull=False,
+        created_at__gte=timezone.now() - LOOP_WINDOW,
+    )
+    return recent.count() >= LOOP_LIMIT
 
 
 def enqueue_mmr_delivery(
@@ -46,7 +63,8 @@ def enqueue_mmr_delivery(
             }
         ],
     }
-    delivery, _ = OrgApiMmrDelivery.objects.get_or_create(
+    guarded = origin_connection_id is not None and _loop_suspected(current, state)
+    delivery, created = OrgApiMmrDelivery.objects.get_or_create(
         connection=current,
         org_user=state.org_user,
         game_type=state.game_type,
@@ -57,6 +75,16 @@ def enqueue_mmr_delivery(
             "origin_connection_id": origin_connection_id,
             "config_version": current.config_version,
             "destination_origin": canonical_origin(current.outbound_base_url),
+            "state": "paused" if guarded else "pending",
+            "last_reason": "sync_loop_suspected" if guarded else "",
         },
     )
+    if created:
+        OrgApiMmrDelivery.objects.filter(
+            connection=current,
+            org_user=state.org_user,
+            game_type=state.game_type,
+            revision__lt=state.revision,
+            state__in=UNSENT_STATES,
+        ).update(state="superseded", last_reason="superseded", lease_token=None)
     return delivery

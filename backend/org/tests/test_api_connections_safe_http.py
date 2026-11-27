@@ -210,6 +210,24 @@ class SafeHttpTests(SimpleTestCase):
                 **kwargs,
             )
 
+    def test_idempotency_header_and_non_json_bodies(self) -> None:
+        key = "0f8c2b6e-1d2a-4c3b-9e5f-7a6b5c4d3e2f"
+        with TlsFixture() as server:
+            self.call_fixture(server, SafeHttpRequest(url=URL, idempotency_key=key))
+        self.assertIn(f"Idempotency-Key: {key}".encode(), server.request)
+        with self.assertRaises(ValueError):
+            SafeHttpRequest(url=URL, idempotency_key="bad\r\nX-Injected: 1")
+        with TlsFixture(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nnope") as server:
+            with self.assertRaises(SafeHttpError) as caught:
+                self.call_fixture(server)
+        self.assertEqual(caught.exception.code, "invalid_json")
+        with TlsFixture(
+            b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 4\r\n\r\nnope"
+        ) as server:
+            response = self.call_fixture(server)
+        self.assertEqual(response.status, 502)
+        self.assertIsNone(response.data)
+
     def test_rebinding_never_redials_hostname(self) -> None:
         with (
             TlsFixture() as server,

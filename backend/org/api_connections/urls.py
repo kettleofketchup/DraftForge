@@ -23,4 +23,21 @@ urlpatterns = [
         {"action": "revoke"},
         name="org-api-connection-revoke",
     ),
+    path(
+        "<int:connection_id>/deliveries/",
+        views.connection_deliveries,
+        name="org-api-connection-deliveries",
+    ),
+    path(
+        "<int:connection_id>/deliveries/resume/",
+        views.connection_delivery_recovery,
+        {"action": "resume"},
+        name="org-api-connection-deliveries-resume",
+    ),
+    path(
+        "<int:connection_id>/deliveries/resync/",
+        views.connection_delivery_recovery,
+        {"action": "resync"},
+        name="org-api-connection-deliveries-resync",
+    ),
 ]

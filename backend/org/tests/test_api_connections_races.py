@@ -14,6 +14,7 @@ from common.game import GameType
 from org.api_connections.lifecycle import ConnectionConflict, issue_connection_key
 from org.api_connections.mutations import MmrMutationContext, MmrRevisionConflict
 from org.api_connections.pull import create_pull_run
+from org.api_connections.push import acquire_delivery_lease
 from org.api_connections.revisions import next_revision
 from org.api_tokens.sync import SyncResult, sync_mmrs
 from org.features import FeatureKey, set_org_feature
@@ -21,6 +22,7 @@ from org.mmr import mark_org_mmr_verified, merge_org_mmrs, set_org_mmr
 from org.models import (
     Organization,
     OrgApiConnection,
+    OrgApiMmrDelivery,
     OrgApiSyncRun,
     OrgApiToken,
     OrgMmrRevisionCounter,
@@ -397,4 +399,65 @@ class PullRunRaceTests(TransactionTestCase):
                 state__in=["queued", "running", "partial"],
             ).count(),
             1,
+        )
+
+
+@skipUnless(connection.vendor == "postgresql", "Requires PostgreSQL row locks")
+class MmrDeliveryLeaseRaceTests(TransactionTestCase):
+    def setUp(self) -> None:
+        owner = CustomUser.objects.create_user(username="push-race-admin")
+        self.org = Organization.objects.create(name="Push Race", owner=owner)
+        self.org.admins.add(owner)
+        set_org_feature(self.org, FeatureKey.MMR_SYNC, enabled=True, actor=None)
+        self.connections = [
+            OrgApiConnection.objects.create(
+                organization=self.org,
+                name=f"Push race {index}",
+                enabled=True,
+                mmr_push_enabled=True,
+                outbound_base_url="https://push.example.test",
+                outbound_authorizer=owner,
+                game_type=GameType.DOTA2,
+            )
+            for index in range(3)
+        ]
+        player = CustomUser.objects.create_user(
+            username="push-race-player", steam_account_id=4242
+        )
+        member = OrgUser.objects.create(organization=self.org, user=player)
+        set_org_mmr(member, GameType.DOTA2, 4000, mark_verified=False)
+
+    def acquire_all(self, delivery_ids: list[object]) -> list[object]:
+        barrier = threading.Barrier(len(delivery_ids), timeout=10)
+
+        def acquire(delivery_id: object) -> object:
+            try:
+                barrier.wait()
+                return acquire_delivery_lease(delivery_id)
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=len(delivery_ids)) as pool:
+            futures = [pool.submit(acquire, value) for value in delivery_ids]
+            return [future.result(timeout=30) for future in futures]
+
+    def test_concurrent_connections_share_two_request_org_semaphore(self) -> None:
+        ids = list(
+            OrgApiMmrDelivery.objects.filter(
+                connection__in=self.connections
+            ).values_list("delivery_id", flat=True)
+        )
+        self.assertEqual(len(ids), 3)
+        fences = self.acquire_all(ids)
+        self.assertEqual(sum(fence is not None for fence in fences), 2)
+        self.assertEqual(OrgApiMmrDelivery.objects.filter(state="in_flight").count(), 2)
+
+    def test_concurrent_claims_of_one_delivery_issue_one_fence(self) -> None:
+        delivery_id = OrgApiMmrDelivery.objects.filter(
+            connection=self.connections[0]
+        ).values_list("delivery_id", flat=True)[0]
+        fences = self.acquire_all([delivery_id, delivery_id])
+        self.assertEqual(sum(fence is not None for fence in fences), 1)
+        self.assertEqual(
+            OrgApiMmrDelivery.objects.get(delivery_id=delivery_id).attempts, 1
         )

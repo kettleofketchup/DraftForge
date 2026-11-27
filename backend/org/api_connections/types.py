@@ -24,6 +24,15 @@ class SafeHttpRequest(ConfigRecord):
     credential: str | None = Field(default=None, repr=False)
     credential_origin: str | None = Field(default=None, repr=False)
     credential_field: CredentialField | None = None
+    idempotency_key: (
+        Annotated[
+            str,
+            Field(
+                pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            ),
+        ]
+        | None
+    ) = None
 
 
 class SafeHttpResponse(ConfigRecord):

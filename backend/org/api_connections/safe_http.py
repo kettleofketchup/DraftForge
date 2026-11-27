@@ -72,6 +72,8 @@ def _render(
         "Accept-Encoding": "gzip, deflate",
         "Connection": "close",
     }
+    if request.idempotency_key is not None:
+        headers["Idempotency-Key"] = request.idempotency_key
     if request.auth != "none":
         if (
             request.credential is None
@@ -149,7 +151,12 @@ def _read_json(response: HTTPResponse, deadline: float, cap: int) -> SafeHttpRes
     if decoder and not decoder.eof:
         raise SafeHttpError("invalid_compression")
     remaining(deadline)
-    data = json.loads(result) if result else None
+    try:
+        data = json.loads(result) if result else None
+    except ValueError:
+        if 200 <= response.status < 300:
+            raise SafeHttpError("invalid_json") from None
+        data = None
     remaining(deadline)
     return SafeHttpResponse(
         status=response.status, data=data, bytes_received=len(result)

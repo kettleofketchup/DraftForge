@@ -17,7 +17,13 @@ def cancel_member_deliveries(
     sub_objs: models.QuerySet,
     using: str,
 ) -> None:
-    pending = sub_objs.filter(state__in=["pending", "in_flight", "retry", "paused"])
+    pending = field.model._default_manager.filter(
+        pk__in=list(
+            sub_objs.filter(
+                state__in=["pending", "in_flight", "retry", "paused"]
+            ).values_list("pk", flat=True)
+        )
+    )
     collector.add_field_update(
         field.model._meta.get_field("state"), "canceled", pending
     )
