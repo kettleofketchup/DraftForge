@@ -22,12 +22,20 @@ export function DeleteSeriesDialog({
       entityKind="Event Series"
       entityName={seriesName}
       description={
-        <>
-          This will delete the series <strong>{seriesName}</strong>. Its
-          upcoming events and events with signups or roll call open are deleted
-          too, along with their Discord events and tournaments. In-progress,
-          completed and cancelled events are kept.
-        </>
+        <div className="space-y-2">
+          <div>
+            This will delete the series <strong>{seriesName}</strong>.
+          </div>
+          <div>
+            Upcoming, signups-open and roll-call occurrences with sign-ups or
+            historical signup records are cancelled and kept. Empty upcoming,
+            signups-open and roll-call occurrences are deleted, along with their
+            Discord scheduled events and tournaments.
+          </div>
+          <div>
+            In-progress, completed and already-cancelled occurrences are kept.
+          </div>
+        </div>
       }
       isLoading={isLoading}
       onConfirm={onConfirm}
