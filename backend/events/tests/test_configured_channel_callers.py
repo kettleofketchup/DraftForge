@@ -47,6 +47,10 @@ class ConfiguredChannelCallersTest(DiscordTestMixin, EventTestCase):
 
     def request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         if method == "GET":
+            if url == f"{DISCORD_API_BASE}/channels/{SIGNUP_CHANNEL}":
+                return response(
+                    200, {"id": SIGNUP_CHANNEL, "guild_id": GUILD, "type": 0}
+                )
             self.assertEqual(url, f"{DISCORD_API_BASE}/channels/{CHANNEL}")
             return response(
                 200, {"id": CHANNEL, "guild_id": GUILD, "type": self.channel_type}
@@ -158,19 +162,17 @@ class ConfiguredChannelCallersTest(DiscordTestMixin, EventTestCase):
                     discord_post_signups_channel_id=SIGNUP_CHANNEL,
                     discord_announcement=True,
                 )
-                with patch(
-                    "events.tasks.sync_send_embed_with_components",
-                    return_value={"id": MESSAGE},
-                ):
-                    send_event_announcement(event.pk)
-                self.assertEqual(len(self.posts()), 1)
+                send_event_announcement(event.pk)
                 self.assertEqual(
-                    self.posts()[0].args[1],
-                    f"{DISCORD_API_BASE}/channels/{CHANNEL}/{route}",
+                    [post.args[1] for post in self.posts()],
+                    [
+                        f"{DISCORD_API_BASE}/channels/{SIGNUP_CHANNEL}/messages",
+                        f"{DISCORD_API_BASE}/channels/{CHANNEL}/{route}",
+                    ],
                 )
                 if kind == 15:
                     self.assertEqual(
-                        self.posts()[0].kwargs["json"]["name"], "Synthetic Title"
+                        self.posts()[1].kwargs["json"]["name"], "Synthetic Title"
                     )
                 notice = DiscordEvent.objects.get(event=event).announcement
                 self.assertEqual(notice.message_id, MESSAGE)

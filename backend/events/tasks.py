@@ -19,8 +19,6 @@ from app.internal_client import (
     create_event_dm,
     create_event_log,
     create_message_log,
-    create_or_update_announcement,
-    create_or_update_signup_message,
     finalize_discord_message_log,
     generate_repeater_events,
     get_active_repeaters,
@@ -43,11 +41,9 @@ from discordbot.utils import (
     DISCORD_API_BASE,
     MessageDeletedError,
     _get_headers,
-    send_to_configured_channel,
     sync_edit_message,
     sync_send_configured_channel,
     sync_send_dm,
-    sync_send_embed_with_components,
     sync_send_embed_with_components_no_log,
 )
 from events.discord import (
@@ -61,7 +57,6 @@ from events.discord import (
     reminder_channel,
 )
 from events.discord.embeds import (
-    build_announcement_notice,
     build_announcement_v2,
     build_subscriber_dm_embed,
 )
@@ -74,6 +69,7 @@ from events.signup_post_lock import (
     now_ms,
     release_lock,
 )
+from events.signup_post_send import run_signup_post
 from events.start_mention import chunk_mentions, start_mention_recipients
 from events.utils import starts_in_future
 from telemetry.logging import get_logger
@@ -209,64 +205,6 @@ def _discord_error_message(data: object, status_code: int) -> str:
     message = f"{data['message']} (code {data.get('code', '?')}, HTTP {status_code})"
     details = _flatten_discord_form_errors(data.get("errors") or {})
     return f"{message}: {'; '.join(details)}" if details else message
-
-
-def _build_signup_message_link(
-    guild_id: str, channel_id: str, post_result: dict[str, Any]
-) -> str | None:
-    """Construct a discord.com message permalink from a sync_send_embed result."""
-    if not guild_id:
-        return None
-    if post_result.get("message"):
-        thread_id = post_result["id"]
-        msg_id = post_result["message"]["id"]
-        return f"https://discord.com/channels/{guild_id}/{thread_id}/{msg_id}"
-    msg_id = post_result["id"]
-    return f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
-
-
-def _update_signup_msg(
-    event_id: int,
-    discord_event_pk: int | None,
-    channel_id: str,
-    post_result: dict[str, Any],
-) -> str | None:
-    """Update signup message record via internal API after Discord post.
-
-    Returns the resolved message_id (or None if the post had no id).
-    """
-    update_data = {
-        "event_id": event_id,
-        "channel_id": channel_id,
-        "has_posted": True,
-        "message_last_updated": datetime.now(tz.utc).isoformat(),
-    }
-    # post_result shape tells us forum-vs-text:
-    #   forum: {"id": <thread_id>, "message": {"id": <msg_id>}, ...}
-    #   text:  {"id": <msg_id>}
-    # channel_type is the contract that downstream edit/modify paths read;
-    # always set it explicitly so the worker doesn't have to infer.
-    if post_result.get("message"):
-        update_data["thread_id"] = post_result["id"]
-        update_data["message_id"] = post_result["message"]["id"]
-        update_data["channel_type"] = "forum"
-    else:
-        update_data["message_id"] = post_result.get("id")
-        update_data["channel_type"] = "text"
-
-    msg_resp = create_or_update_signup_message(**update_data)
-    signup_msg_pk = msg_resp.json().get("id") if msg_resp and msg_resp.ok else None
-
-    if signup_msg_pk:
-        update_discord_event(discord_event_pk, signup_message_id=signup_msg_pk)
-        create_event_log(
-            discord_event_id=discord_event_pk,
-            action="send_signup_post",
-            target_type="DiscordEventMsgSignup",
-            message_id=update_data.get("message_id"),
-            success=True,
-        )
-    return update_data.get("message_id")
 
 
 @shared_task
@@ -533,152 +471,28 @@ def sync_discord_events() -> str:
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
-def send_event_announcement(event_id: int, interaction_id: str | None = None) -> str:
-    """Create an event signup post and an optional announcement.
+def send_event_announcement(
+    event_id: int,
+    interaction_id: str | None = None,
+    generation: int | None = None,
+    manual: bool = False,
+    fired_by_user_id: int | None = None,
+) -> str:
+    """Create an event signup post and an optional announcement notice.
 
-    1. Signup post: full embed + buttons in the signups channel (forum thread
-       or regular message). This is where users sign up. Updated on changes.
-    2. Announcement: lightweight message in the announcement channel linking
-       to the signup post. Posted once, not updated.
-
-    If no signup destination is available, use the enabled announcement
-    destination instead (no separate announcement needed).
-
-    All DB writes go through the internal HTTP API — no direct ORM access.
+    Returns a summary rendered from the typed signup outcome.
     """
     return _run_with_bookends(
         "send_event_announcement",
         event_id,
         interaction_id,
-        lambda: _send_event_announcement_impl(event_id),
+        lambda: run_signup_post(
+            event_id,
+            generation=generation,
+            manual=manual,
+            fired_by_user_id=fired_by_user_id,
+        ).summary(),
     )
-
-
-def _send_event_announcement_impl(event_id: int) -> str:
-    event = get_event_for_task(event_id)
-    if not event:
-        return f"Failed: event {event_id} not found"
-    if event.state != "signups_open":
-        return f"Skipped: event state is {event.state}, not signups_open"
-    signup_available = bool(
-        event.discord_post_signups and event.discord_post_signups_channel_id
-    )
-    announcement_available = bool(
-        event.discord_announcement and event.discord_announcement_channel_id
-    )
-    if not (signup_available or announcement_available):
-        return "Skipped: no signup or announcement destination"
-
-    try:
-        result = build_announcement_v2(event)
-    except InternalAPIUnavailable as exc:
-        return _skip_signup_list_unavailable("send_event_announcement", event_id, exc)
-    embeds = result["embeds"]
-    components = result["components"]
-    signup_content = result.get("content")
-    signup_mentions = result.get("allowed_mentions")
-    thread_name = event.discord_event_title or event.name
-    guild_id = event.organization.discord_server_id
-
-    de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id or "")
-    if not de_resp or not de_resp.ok:
-        logger.error(
-            "discord_event_get_or_create_failed",
-            system="events",
-            subsystem="tasks",
-            event_id=event.pk,
-        )
-        return "Failed: could not get/create DiscordEvent"
-    discord_event_pk = de_resp.json().get("id")
-
-    # Step 1: Create the signup post
-    signup_post_result = None
-    signup_message_link = None
-
-    if signup_available:
-        # Signups channel configured — post there (forum thread or regular)
-        # DiscordMessageLog is written by sync_send_embed_with_components via HTTP
-        signup_post_result = sync_send_embed_with_components(
-            channel_id=event.discord_post_signups_channel_id,
-            embed=embeds,
-            components=components,
-            source="event_announcement",
-            source_id=event.pk,
-            forum_thread_name=thread_name,
-            content=signup_content,
-            allowed_mentions=signup_mentions,
-        )
-
-        if signup_post_result:
-            _update_signup_msg(
-                event.pk,
-                discord_event_pk,
-                event.discord_post_signups_channel_id,
-                signup_post_result,
-            )
-            signup_message_link = _build_signup_message_link(
-                guild_id, event.discord_post_signups_channel_id, signup_post_result
-            )
-
-    if not signup_post_result:
-        if not announcement_available:
-            return f"Signup post for event {event.pk}: no send result"
-        # No signups channel or it failed — post to announcement channel
-        fallback_result = sync_send_embed_with_components(
-            channel_id=event.discord_announcement_channel_id,
-            embed=embeds,
-            components=components,
-            source="event_announcement",
-            source_id=event.pk,
-        )
-
-        if fallback_result:
-            _update_signup_msg(
-                event.pk,
-                discord_event_pk,
-                event.discord_announcement_channel_id,
-                fallback_result,
-            )
-
-        return f"Announced event {event.pk}"
-
-    if not announcement_available:
-        return f"Posted signup for event {event.pk}"
-
-    # Step 2: Post lightweight announcement linking to the signup post
-    notice_result = build_announcement_notice(event, signup_message_link)
-    notice_delivery = send_to_configured_channel(
-        channel_id=event.discord_announcement_channel_id,
-        expected_guild_id=guild_id,
-        title=thread_name,
-        embed=notice_result["embed"],
-        source="event_notice",
-        source_id=event.pk,
-        content=notice_result.get("content"),
-        allowed_mentions=notice_result.get("allowed_mentions"),
-    )
-
-    if notice_delivery.receipt is not None:
-        notice_message_id = notice_delivery.receipt.message_id
-        ann_resp = create_or_update_announcement(
-            event_id=event.pk,
-            channel_id=event.discord_announcement_channel_id,
-            has_posted=True,
-            message_id=notice_message_id,
-            message_last_updated=datetime.now(tz.utc).isoformat(),
-        )
-        ann_pk = ann_resp.json().get("id") if ann_resp and ann_resp.ok else None
-        if ann_pk:
-            update_discord_event(discord_event_pk, announcement_id=ann_pk)
-            create_event_log(
-                discord_event_id=discord_event_pk,
-                action="send_announcement_notice",
-                target_type="DiscordEventMsgAnnouncement",
-                message_id=notice_message_id,
-                success=True,
-            )
-
-    return f"Announced event {event.pk} (signup: {signup_message_link})"
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
