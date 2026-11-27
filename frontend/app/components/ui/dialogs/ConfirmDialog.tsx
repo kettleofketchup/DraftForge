@@ -189,6 +189,7 @@ export const ConfirmDialog = React.forwardRef<
       if (isEditable) return;
 
       if (event.key === 'Enter') {
+        if (target?.closest('button, a[href], [role="button"]')) return;
         event.preventDefault();
         void handleConfirm();
       } else if (event.key === 'Backspace') {
