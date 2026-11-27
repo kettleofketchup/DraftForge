@@ -670,7 +670,6 @@ _TOURNAMENT_RETIRED_DEFS = {
         "_parse_mmr_cell",
         "_flush_org_mmrs",
         "_update_mmr_for_target",
-        "_resync_league_snapshots",
         "import_csv_tournament",
         "bulk_set_org_mmrs",
     ),
