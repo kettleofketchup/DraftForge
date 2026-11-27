@@ -47,6 +47,9 @@ export function ApiTokenTable({
       getRowId={(t) => t.id}
       getRowTestId={(t) => `${testIdPrefix}-row-${t.id}`}
       initialSorting={[{ id: 'created', desc: true }]}
+      // The table fits the settings panel; the token cell shows the creation
+      // time, which leaves the name room beside each token's operations.
+      initialColumnVisibility={{ created: false }}
       toolbarActions={toolbarActions}
       emptyMessage={emptyMessage}
       data-testid={`${testIdPrefix}-table`}

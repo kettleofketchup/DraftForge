@@ -350,6 +350,17 @@ def delete_manual_award(entry: ContributionEntry, *, actor: CustomUser | None) -
     )
 
 
+def _rescore_reversals(entry_ids: list[int], new: int, now: datetime) -> None:
+    """Keep voids and restores equal to the rescored entries they reverse."""
+    reversals = ContributionEntry.objects.nocache().filter(reversal_of_id__in=entry_ids)
+    reversals.filter(kind=ContributionKind.PROMO_VOID.value).update(
+        points=-new, updated_at=now
+    )
+    reversals.filter(kind=ContributionKind.PROMO_RESTORE.value).update(
+        points=new, updated_at=now
+    )
+
+
 @transaction.atomic
 def set_point_value(
     org: Organization,
@@ -370,6 +381,17 @@ def set_point_value(
     if since is not None and not apply_to_past:
         raise ValueError("since requires apply_to_past")
 
+    if kind == ContributionKind.PROMO_MESSAGE.value:
+        # The contact import locks the same row before it reads a point
+        # value, so a credit never uses a value read before this commits.
+        # NO KEY UPDATE, as the import takes: rows referencing the org can
+        # still be inserted meanwhile.
+        list(
+            Organization.objects.nocache()
+            .select_for_update(no_key=True)
+            .filter(pk=org.pk)
+            .values_list("pk", flat=True)
+        )
     old = points_for(org, kind)
     rows = ContributionPointValue.objects.nocache().filter(organization=org, kind=kind)
     if points is None:
@@ -394,7 +416,11 @@ def set_point_value(
         entries = _own_rows().filter(organization=org, kind=kind)
         if since is not None:
             entries = entries.filter(occurred_at__gte=local_day_start_utc(org, since))
-        changed = entries.update(points=new, updated_at=timezone.now())
+        now = timezone.now()
+        reversed_ids = list(entries.values_list("pk", flat=True))
+        changed = entries.update(points=new, updated_at=now)
+        if kind == ContributionKind.PROMO_MESSAGE.value:
+            _rescore_reversals(reversed_ids, new, now)
         OrgLog.objects.create(
             organization=org,
             actor=actor,

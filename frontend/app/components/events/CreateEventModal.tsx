@@ -27,6 +27,10 @@ import {
   useCreateEventRepeaterMutation,
 } from '~/hooks/useEvent';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
+import {
+  openSignupsFromForm,
+  toRepeaterCreatePayload,
+} from './createEventPayload';
 import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
@@ -187,15 +191,15 @@ export function CreateEventModal({
     try {
       const {
         is_recurring,
-        frequency,
-        day_of_week,
-        time_of_day,
-        starts_at,
-        ends_at,
-        generate_days_ahead,
+        frequency: _frequency,
+        day_of_week: _dayOfWeek,
+        time_of_day: _timeOfDay,
+        starts_at: _startsAt,
+        ends_at: _endsAt,
+        generate_days_ahead: _generateDaysAhead,
         scheduled_at: rawScheduledAt,
         event_ends_at: rawEndsAt,
-        discord_notify_new_events,
+        discord_notify_new_events: _notifyNewEvents,
         dota_lobby_password_mode,
         dota_lobby_password,
         dota_lobby_password_saved: _saved,
@@ -234,13 +238,7 @@ export function CreateEventModal({
         await createRepeater.mutateAsync({
           ...shared,
           tournament_league: shared.tournament_league ?? null,
-          discord_notify_new_events: discord_notify_new_events ?? false,
-          frequency,
-          day_of_week: day_of_week ?? null,
-          time_of_day: time_of_day || '19:00',
-          starts_at: starts_at || new Date().toISOString().slice(0, 10),
-          ends_at: ends_at || null,
-          generate_days_ahead,
+          ...toRepeaterCreatePayload(data),
         });
         toast.success('Recurring event created');
       } else {
@@ -257,7 +255,7 @@ export function CreateEventModal({
             ends_at: rawEndsAt ? localToUTC(rawEndsAt, data.timezone) : null,
             discord_signup_reminder: false,
           },
-          openSignups: data.signup_open_mode === 'immediate',
+          openSignups: openSignupsFromForm(data),
         });
 
         const modeMessages = {
@@ -402,6 +400,11 @@ export function CreateEventModal({
               control={form.control}
               isRepeater={isRecurring}
               organizationId={organizationId}
+              previewContext={
+                isRecurring
+                  ? { type: 'new_repeater', organizationId }
+                  : { type: 'new_event', organizationId }
+              }
             />
           ),
         },

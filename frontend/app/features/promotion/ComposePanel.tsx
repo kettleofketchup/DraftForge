@@ -3,6 +3,7 @@ import { Copy, ExternalLink, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
+import { DiscordMessagePreview } from '~/components/discord';
 import {
   BrandSelect,
   BrandSelectContent,
@@ -21,12 +22,17 @@ import {
 } from '~/components/ui/form';
 import { Textarea } from '~/components/ui/textarea';
 import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
-import { formatDiscordTimestamps } from './discordPreview';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import { useUserStore } from '~/store/userStore';
+import {
+  describeExternalWriteback,
+  reportPromoError,
+  undoToastDescription,
+} from './feedback';
 import type { ComposeMode } from './promotionColumns';
 import { useRenderPromo, useSendPromo, useUndoPromoSend } from './queries';
 import {
@@ -52,6 +58,22 @@ export interface ComposePanelProps {
   mode?: ComposeMode;
   /** Inside a dialog that already titles the recipient: no frame or heading. */
   embedded?: boolean;
+  /** Mark sent was pressed; the list may drop this player before onSent. */
+  onSending?: () => void;
+  /** Mark sent failed without recording anything; undoes onSending. */
+  onSendFailed?: () => void;
+  /** The org records contacts in an external contact log, so writeback shows. */
+  syncConfigured?: boolean;
+  /** The recipient turned out to be already contacted; close this panel. */
+  onStale?: () => void;
+}
+
+const CONTACT_ALREADY_RECORDED = 'contact_already_recorded';
+
+function errorCode(err: unknown): string | undefined {
+  const data = (err as { response?: { data?: { code?: unknown } } })?.response
+    ?.data;
+  return typeof data?.code === 'string' ? data.code : undefined;
 }
 
 const MODE_NOTE: Record<ComposeMode, string> = {
@@ -70,12 +92,16 @@ export function ComposePanel({
   onSent,
   mode = 'message',
   embedded = false,
+  onSending,
+  onSendFailed,
+  syncConfigured = false,
+  onStale,
 }: ComposePanelProps) {
   const [templateId, setTemplateId] = useState<number | null>(
     templates[0]?.id ?? null,
   );
   const [sent, setSent] = useState<PromoSendResult | null>(null);
-  const previewOptions = usePreviewOptions();
+  const currentUser = useUserStore((state) => state.currentUser);
 
   useEffect(() => {
     if (templateId == null || !templates.some((t) => t.id === templateId)) {
@@ -104,15 +130,13 @@ export function ComposePanel({
   }, [renderedText, templateId, candidate.user_pk, form]);
 
   const text = useWatch({ control: form.control, name: 'text' }) ?? '';
-  const preview = useMemo(
-    () => formatDiscordTimestamps(text, previewOptions),
-    [text, previewOptions],
-  );
+  const previewMessages = useMemo(() => [{ content: text }], [text]);
   const overLimit = text.length > DISCORD_DM_LIMIT;
   const canSubmit =
     promoSendSchema.safeParse({ text }).success &&
     !send.isPending &&
-    sent == null;
+    sent == null &&
+    candidate.external_contact == null;
 
   const copy = async (): Promise<void> => {
     try {
@@ -124,6 +148,7 @@ export function ComposePanel({
   };
 
   const onSubmit = (values: PromoSendForm): void => {
+    onSending?.();
     send.mutate(
       {
         template_id: templateId,
@@ -142,6 +167,14 @@ export function ComposePanel({
             eventId: event.id,
             recipientId: candidate.user_pk,
           });
+          if (errorCode(err) === CONTACT_ALREADY_RECORDED) {
+            toast.info(
+              `A contact with ${DisplayName(candidate)} is already recorded externally`,
+            );
+            onStale?.();
+            return;
+          }
+          onSendFailed?.();
           toast.error(message || 'Could not record the message');
         },
       },
@@ -150,10 +183,12 @@ export function ComposePanel({
 
   const onUndo = (sendId: number): void => {
     undo.mutate(sendId, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         setSent(null);
         onSent?.(null);
-        toast.success('Send undone');
+        toast.success('Send undone', {
+          description: undoToastDescription(result, syncConfigured),
+        });
       },
       onError: (err) => {
         const message = reportPromoError(log, 'promo_undo_failed', err, {
@@ -174,6 +209,7 @@ export function ComposePanel({
       });
     }
   }, [rendered.error, orgId, event.id, candidate.user_pk]);
+  const writebackText = describeExternalWriteback(sent?.writeback);
   const renderError = rendered.isError
     ? (extractApiError(rendered.error) ?? 'Could not fill in this template.')
     : null;
@@ -311,15 +347,33 @@ export function ComposePanel({
             <span className="text-sm font-medium">
               How it will look in Discord
             </span>
-            <div
-              className="min-h-16 whitespace-pre-wrap break-words rounded-md border border-border bg-base-800/60 p-3 text-sm"
-              data-testid="promo-discord-preview"
-            >
-              {preview}
+            <div data-testid="promo-discord-preview">
+              <DiscordMessagePreview
+                className="min-h-16"
+                messages={previewMessages}
+                author={
+                  currentUser?.pk
+                    ? {
+                        name: DisplayName(currentUser),
+                        avatar: (
+                          <UserAvatar
+                            user={currentUser}
+                            size="lg"
+                            data-testid="promo-sender-avatar"
+                          />
+                        ),
+                        bot: false,
+                      }
+                    : undefined
+                }
+              />
             </div>
           </div>
 
-          {rendered.data &&
+          {/* Once sent, the banner reports the outcome; the render refetched
+              by that send would otherwise say a repeat earns nothing. */}
+          {sent == null &&
+            rendered.data &&
             !rendered.data.will_earn &&
             access.canViewContributions && (
               <p
@@ -330,14 +384,16 @@ export function ComposePanel({
                 for this event, or your role doesn't earn points.
               </p>
             )}
-          {rendered.data?.will_earn && access.canViewContributions && (
-            <p
-              className="text-sm text-muted-foreground"
-              data-testid="promo-earn-points-note"
-            >
-              Marking this sent earns you contribution points.
-            </p>
-          )}
+          {sent == null &&
+            rendered.data?.will_earn &&
+            access.canViewContributions && (
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="promo-earn-points-note"
+              >
+                Marking this sent earns you contribution points.
+              </p>
+            )}
 
           <div className="flex flex-wrap items-center gap-2">
             <SecondaryButton
@@ -376,7 +432,17 @@ export function ComposePanel({
                 className="ml-1 text-primary"
                 data-testid="promo-earned-hint"
               >
-                You earned {sent.points_awarded} points.
+                You earned {sent.points_awarded}{' '}
+                {sent.points_awarded === 1 ? 'point' : 'points'}.
+              </span>
+            )}
+            {syncConfigured && writebackText && (
+              <span
+                className="mt-1 block text-xs text-muted-foreground"
+                data-state={sent.writeback.state}
+                data-testid="promo-external-writeback"
+              >
+                {writebackText}
               </span>
             )}
           </span>

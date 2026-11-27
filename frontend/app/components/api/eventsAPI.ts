@@ -490,20 +490,30 @@ export async function updateOrgEventDefaults(
   return data;
 }
 
-export interface DiscordChannel {
-  id: string;
-  name: string;
-  type: number;
-  type_label: string;
-}
+// backend/discordbot/services/channels.py _fetch_guild_channels
+export const discordChannelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.number().int(),
+  type_label: z.string(),
+});
+export type DiscordChannel = z.infer<typeof discordChannelSchema>;
+const discordChannelsResponseSchema = z.object({
+  channels: z.array(discordChannelSchema),
+});
 
-export interface DiscordRole {
-  id: string;
-  name: string;
-  color: number;
-  mentionable: boolean;
-  position: number;
-}
+// backend/discordbot/services/roles.py _fetch_guild_roles
+export const discordRoleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.number().int(),
+  mentionable: z.boolean(),
+  position: z.number().int(),
+});
+export type DiscordRole = z.infer<typeof discordRoleSchema>;
+const discordRolesResponseSchema = z.object({
+  roles: z.array(discordRoleSchema),
+});
 
 export async function adminAddSignup(
   eventId: number,
@@ -599,10 +609,10 @@ export async function getDiscordChannels(
   if (refresh) params.set('refresh', 'true');
   if (kind === 'voice') params.set('kind', kind);
   const query = params.toString();
-  const { data } = await axios.get<{ channels: DiscordChannel[] }>(
+  const { data } = await axios.get(
     `/discord/organizations/${orgId}/channels/${query ? `?${query}` : ''}`,
   );
-  return data.channels;
+  return discordChannelsResponseSchema.parse(data).channels;
 }
 
 export async function getDiscordRoles(
@@ -610,10 +620,10 @@ export async function getDiscordRoles(
   refresh = false,
 ): Promise<DiscordRole[]> {
   const params = refresh ? '?refresh=true' : '';
-  const { data } = await axios.get<{ roles: DiscordRole[] }>(
+  const { data } = await axios.get(
     `/discord/organizations/${orgId}/roles/${params}`,
   );
-  return data.roles;
+  return discordRolesResponseSchema.parse(data).roles;
 }
 
 export async function getEventSignupHistory(

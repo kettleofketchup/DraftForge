@@ -86,7 +86,7 @@ def _is_pre_draft_team(team: Team) -> bool:
     )
 
 
-def _delete_pre_draft_captain_teams(
+def delete_pre_draft_captain_teams(
     tournament: Tournament, removed_user_ids: set[int]
 ) -> None:
     """Delete pre-draft teams of removed captains; the member-removal signal handles the rest."""
@@ -282,7 +282,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                 added_users = new_users - current_users
 
                 if removed_users:
-                    _delete_pre_draft_captain_teams(
+                    delete_pre_draft_captain_teams(
                         instance, {u.pk for u in removed_users}
                     )
 

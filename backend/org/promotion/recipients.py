@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Final, TypedDict
 
+from django.conf import settings
 from django.db.models import Count, OuterRef, Q, QuerySet, Subquery
 from django.db.models.functions import Coalesce, Greatest
 from django.utils import timezone
@@ -14,6 +15,7 @@ from discordbot.services.discord_members import (
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from org.display_names import guild_nicknames
+from org.integration.ticks import external_contact_exists, external_contacts
 from org.mmr import game_for_event
 from org.models import Organization, OrgUser, OrgUserGameMmr
 from org.models_promotion import PromoSend
@@ -55,6 +57,13 @@ class LastMessaged(TypedDict):
     can_undo: bool
 
 
+class ExternalContact(TypedDict):
+    source: str
+    recorded_at: datetime
+    delivery_verified: bool
+    can_undo: bool
+
+
 class CandidateRow(TypedDict):
     user_pk: int | None
     username: str
@@ -69,6 +78,8 @@ class CandidateRow(TypedDict):
     last_active_at: datetime | None
     discord_joined_at: datetime | None
     last_messaged: LastMessaged | None
+    contact_recorded: bool
+    external_contact: ExternalContact | None
     earning_send_exists: bool
     signed_up: bool
 
@@ -209,6 +220,21 @@ def _parse_joined_at(member: dict[str, Any]) -> datetime | None:
         return None
 
 
+def fetch_guild_members(org: Organization) -> list[dict[str, Any]]:
+    """The org's guild members, raising instead of degrading to empty.
+
+    Raises ``DiscordMembersFetchError`` when the org has no guild, the bot
+    token is not configured or Discord fails. The integration subject
+    universe uses this so an unavailable guild is never mistaken for an
+    empty one; the promoter UI uses ``guild_members``.
+    """
+    if not org.discord_server_id:
+        raise DiscordMembersFetchError("organization has no Discord guild")
+    if not settings.DISCORD_BOT_TOKEN:
+        raise DiscordMembersFetchError("Discord bot token is not configured")
+    return get_discord_members_data(guild_id=org.discord_server_id)
+
+
 def guild_members(org: Organization) -> list[dict[str, Any]]:
     if not org.discord_server_id:
         return []
@@ -227,9 +253,14 @@ def guild_members(org: Organization) -> list[dict[str, Any]]:
 
 def recent_guild_joiners(org: Organization, *, days: int) -> list[GuildJoiner]:
     """Human guild members who joined within ``days``, newest first."""
+    return joiners_since(guild_members(org), days=days)
+
+
+def joiners_since(members: list[dict[str, Any]], *, days: int) -> list[GuildJoiner]:
+    """The human members of ``members`` who joined within ``days``, newest first."""
     since = timezone.now() - timedelta(days=days)
     joiners: list[GuildJoiner] = []
-    for member in guild_members(org):
+    for member in members:
         user = member.get("user") or {}
         if user.get("bot") or not user.get("id"):
             continue
@@ -293,6 +324,8 @@ def _member_row(joiner: GuildJoiner) -> CandidateRow:
         "last_active_at": None,
         "discord_joined_at": joiner["joined_at"],
         "last_messaged": None,
+        "contact_recorded": False,
+        "external_contact": None,
         "earning_send_exists": False,
         "signed_up": False,
     }
@@ -365,7 +398,9 @@ def candidates(
     if hide_signed_up:
         qs = qs.exclude(pk__in=active_signups.values("user_id"))
     if hide_messaged:
-        qs = qs.exclude(pk__in=event_sends.values("recipient_id"))
+        qs = qs.exclude(pk__in=event_sends.values("recipient_id")).exclude(
+            external_contact_exists(event.pk)
+        )
     if term:
         qs = qs.filter(user_name_q(term, org_id=org.pk))
     if user_pk is not None:
@@ -423,6 +458,8 @@ def candidates(
             "last_active_at": getattr(user, "last_active_at", None),
             "discord_joined_at": joined_at.get(user.discordId or ""),
             "last_messaged": last_messaged,
+            "contact_recorded": last_messaged is not None,
+            "external_contact": None,
             "earning_send_exists": user.pk in earning,
             "signed_up": user.pk in signed_up,
         }
@@ -430,6 +467,7 @@ def candidates(
         rows.append(row)
 
     if source != CandidateSource.DISCORD:
+        _attach_external_contacts(event, rows)
         return rows
 
     linked = set(
@@ -449,9 +487,23 @@ def candidates(
             and (not term or _member_matches(joiner["member"], term))
         ):
             merged.append(_member_row(joiner))
-        if len(merged) >= MAX_DISCORD_ROWS:
-            break
-    return merged
+    _attach_external_contacts(event, merged)
+    if hide_messaged:
+        merged = [r for r in merged if not r["contact_recorded"]]
+    # The cap comes after every filter, external contacts included.
+    return merged[:MAX_DISCORD_ROWS]
+
+
+def _attach_external_contacts(event: Event, rows: list[CandidateRow]) -> None:
+    """Fill ``external_contact`` and fold it into ``contact_recorded``."""
+    found = external_contacts(
+        event.pk, [(r["discordId"] or "", r["user_pk"]) for r in rows]
+    )
+    for row in rows:
+        contact = found.get((row["discordId"] or "", row["user_pk"]))
+        if contact is not None:
+            row["external_contact"] = contact
+            row["contact_recorded"] = True
 
 
 def in_pool(org: Organization, event: Event, recipient: CustomUser) -> bool:

@@ -48,6 +48,7 @@ export const BracketMatchSchema = z.object({
 export const BracketResponseSchema = z.object({
   tournamentId: z.number(),
   matches: z.array(BracketMatchSchema),
+  version: z.string().optional(),
 });
 
 // Generate bracket request

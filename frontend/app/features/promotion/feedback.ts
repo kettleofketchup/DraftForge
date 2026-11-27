@@ -1,11 +1,14 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { extractApiError } from '~/lib/apiError';
-import type { getLogger } from '~/lib/logger';
 import {
   formatDiscordTimestamps,
   type DiscordPreviewOptions,
-} from './discordPreview';
+} from '~/components/discord/timestamps';
+import { extractApiError } from '~/lib/apiError';
+import type { getLogger } from '~/lib/logger';
+import type {
+  ExternalWriteback,
+  ExternalWritebackState,
+  PromoUndoResult,
+} from './schemas';
 
 export function reportPromoError(
   log: ReturnType<typeof getLogger>,
@@ -21,11 +24,38 @@ export function reportPromoError(
   return message;
 }
 
-export function usePreviewOptions(): DiscordPreviewOptions {
-  const { i18n } = useTranslation();
-  const locale = i18n?.resolvedLanguage ?? 'en';
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return useMemo(() => ({ locale, timeZone }), [locale, timeZone]);
+const EXTERNAL_WRITEBACK_TEXT: Record<ExternalWritebackState, string> = {
+  pending: 'Waiting to be recorded externally.',
+  in_flight: 'Being recorded externally now.',
+  retry:
+    'The adaptor could not take it yet; DraftForge will try recording it externally again.',
+  paused:
+    'External recording is paused. The send is saved in DraftForge and will be recorded once it resumes.',
+  reconciliation_required:
+    'This send needs review before it can be recorded externally.',
+  applied: 'Recorded externally.',
+  canceled: 'This send will not be recorded externally.',
+};
+
+/**
+ * What happened to writing one local send to the external contact log. Only
+ * `applied` says the log has it; recording the send in DraftForge never
+ * implies that.
+ */
+export function describeExternalWriteback(
+  writeback: ExternalWriteback | null | undefined,
+): string | null {
+  return writeback?.state ? EXTERNAL_WRITEBACK_TEXT[writeback.state] : null;
+}
+
+/** The toast after an undo: it removes the local send, never the receipt. */
+export function undoToastDescription(
+  result: PromoUndoResult,
+  syncConfigured: boolean,
+): string | undefined {
+  const state = describeExternalWriteback(result.writeback);
+  if (!syncConfigured || state == null) return undefined;
+  return `Undo removes it from DraftForge only. ${state}`;
 }
 
 export function relativeFromIso(

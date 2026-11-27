@@ -121,7 +121,7 @@ def build_shuffle_rounds(draft: Draft, teams: QuerySet[Team] | None = None) -> N
     # Assign first captain based on lowest captain MMR
     first_team, tie_data = get_lowest_mmr_team(teams)
     first_round = draft.draft_rounds.order_by("pick_number").first()
-    first_round.captain = first_team.captain
+    first_round.assign_team(first_team)
     if tie_data:
         first_round.was_tie = True
         first_round.tie_roll_data = tie_data
@@ -164,7 +164,7 @@ def reassign_round_captain(
     round.was_tie = False
     round.tie_roll_data = None
     next_team, tie_data = get_lowest_mmr_team(eligible_teams)
-    round.captain = next_team.captain
+    round.assign_team(next_team)
     if tie_data:
         tie_data["pick_number"] = round.pick_number
         tie_data["hold_ms"] = TIE_ROLL_HOLD_MS

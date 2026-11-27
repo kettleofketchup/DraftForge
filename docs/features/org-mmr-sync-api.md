@@ -25,6 +25,27 @@ Org admins manage tokens in **Org Settings → API access**.
 - Creating and revoking tokens is recorded in the org log (`create_api_token`,
   `revoke_api_token`).
 
+### Token operations
+
+Each token is granted a fixed list of operations when it is created:
+
+| Operation | Allows | Needs the feature |
+|-----------|--------|-------------------|
+| `mmr:read` | `GET mmr-sync/` | MMR sync API |
+| `mmr:write` | `POST mmr-sync/` | MMR sync API |
+| `promotion:import` | the adaptor's contact imports: records external contacts and awards and voids promotion points | Promotion |
+
+The create form has a switch per operation, defaulting to the MMR pair, and disables
+operations whose feature is locked. Through the API, `POST api-tokens/` takes an optional
+`"operations": [...]`; without it the token gets `["mmr:read", "mmr:write"]`. An empty or
+unknown list is `400`, and asking for an operation whose feature is locked is `403`.
+These three are the only operations; any other name is unknown. Tokens created before operations
+existed keep the MMR pair. Token rows list their operations, and **API access** is shown
+to org admins when the MMR sync API or Promotion is unlocked, so a promotion-only token
+can be issued while MMR sync API is off. Contributions alone does not show it. A request
+for an operation the token lacks gets `403 operation_not_granted`. The promotion
+operation is described in [promotion contact sync](promotion-contact-sync.md).
+
 ## Limits and usage
 
 | Limit | Default | Applies to |
@@ -101,6 +122,7 @@ org log entry with `source: "api_sync"`.
 |--------|---------|
 | 401 | Missing, unknown or revoked token |
 | 403 `feature_locked` | MMR sync API is off for the org |
+| 403 `operation_not_granted` | The token lacks `mmr:read` (GET) or `mmr:write` (POST) |
 | 403 `not_permitted` | The token's user is no longer an org admin |
 | 404 | The token belongs to a different org |
 | 429 | Per-minute or per-day limit reached; see `Retry-After` |
@@ -109,7 +131,7 @@ org log entry with `source: "api_sync"`.
 
 | Method | Path | Who |
 |--------|------|-----|
-| GET, POST | `/api/organizations/<id>/api-tokens/` | org admin (POST needs the feature on) |
+| GET, POST | `/api/organizations/<id>/api-tokens/` | org admin (POST needs the feature of every requested operation) |
 | DELETE | `/api/organizations/<id>/api-tokens/<token_id>/` | org admin |
 | GET | `/api/organizations/<id>/api-tokens/usage/?days=30` | org admin (max 90 days) |
 | GET | `/api/organizations/<id>/api-limits/` | org admin |

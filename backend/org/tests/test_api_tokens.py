@@ -82,8 +82,10 @@ class TokenManagementTests(ApiTokenBase):
         token = OrgApiToken.objects.get(pk=resp.data["id"])
         self.assertEqual(token.user, self.admin)
         self.assertEqual(token.secret_hash, hash_secret(raw.split("_", 2)[2]))
+        self.assertEqual(resp.data["operations"], ["mmr:read", "mmr:write"])
         listed = self.client.get(f"/api/organizations/{self.org.pk}/api-tokens/")
         self.assertNotIn("token", listed.data[0])
+        self.assertEqual(listed.data[0]["operations"], ["mmr:read", "mmr:write"])
         self.assertTrue(
             OrgLog.objects.filter(
                 organization=self.org, action="create_api_token"

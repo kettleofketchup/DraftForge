@@ -12,12 +12,7 @@ from app.permissions import request_user
 from app.permissions_steam import VOUCH_EXCLUDED_STATUSES
 from common.game import GameType
 from events.capacity import seat_holding_statuses
-from events.constants import (
-    LINE_EXCLUDED_STATUSES,
-    EventState,
-    SignupOpenMode,
-    SignupStatus,
-)
+from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupStatus
 from events.history import reduce_history_rules, reduce_history_snapshot
 from events.line import waitlist_ranks
 from events.mmr_suggestions import suggest_mmr
@@ -51,6 +46,8 @@ from events.signup_schedule import (
     SIGNUP_OPEN_POLICY_FIELDS,
     apply_signup_open_policy,
     policy_from_explicit_open_at,
+    reapply_signup_open_policy_if_changed,
+    signup_policy_snapshot,
 )
 from league.models import League
 from league.permissions import check_lobby_steam_league_id
@@ -789,10 +786,7 @@ class EventSerializer(
         return super().create(validated_data)
 
     def update(self, instance: Event, validated_data: dict[str, Any]) -> Event:
-        before = {
-            f: getattr(instance, f)
-            for f in (*SIGNUP_OPEN_POLICY_FIELDS, "scheduled_at")
-        }
+        before = signup_policy_snapshot(instance)
         upcoming = instance.state == EventState.UPCOMING
         legacy = upcoming and self._takes_legacy_open_at(validated_data)
         if legacy:
@@ -805,18 +799,13 @@ class EventSerializer(
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         update_fields = [*validated_data, "updated_at"]
-        if upcoming and not legacy:
-            policy_changed = any(
-                before[f] != getattr(instance, f) for f in SIGNUP_OPEN_POLICY_FIELDS
-            )
-            moved = before["scheduled_at"] != instance.scheduled_at
-            # A manual event keeps a pre-policy hand-set open time on reschedule.
-            if policy_changed or (
-                moved and instance.signup_open_mode != SignupOpenMode.MANUAL
-            ):
-                apply_signup_open_policy(instance, timezone.now())
-                if "signups_open_at" not in update_fields:
-                    update_fields.append("signups_open_at")
+        if (
+            upcoming
+            and not legacy
+            and reapply_signup_open_policy_if_changed(instance, before, timezone.now())
+            and "signups_open_at" not in update_fields
+        ):
+            update_fields.append("signups_open_at")
         instance.save(update_fields=update_fields)
         return instance
 

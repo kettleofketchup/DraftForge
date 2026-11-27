@@ -22,6 +22,7 @@ cd "${1:-$(git -C "$(dirname "${BASH_SOURCE[0]}")/.." rev-parse --show-toplevel)
 
 populate_imports=(
     backend/common/game.py
+    backend/config/promotion_sync.py
     backend/discordbot/services/users.py
     backend/events/constants.py
     backend/events/ledger.py
@@ -35,6 +36,8 @@ populate_imports=(
     backend/org/contributions/kinds.py
     backend/org/contributions/services.py
     backend/org/features.py
+    backend/org/integration/contacts.py
+    backend/org/integration/receipts.py
     backend/org/leadership/lifecycle.py
     backend/org/leadership/reviews.py
     backend/org/leadership/traits.py

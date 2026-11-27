@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { safeTimeZone } from '~/features/contributions/timezone';
 
 export interface DiscordPreviewOptions {
@@ -5,6 +7,8 @@ export interface DiscordPreviewOptions {
   timeZone: string;
   now?: Date;
 }
+
+export type TimestampStyle = 't' | 'T' | 'd' | 'D' | 'f' | 'F' | 'R';
 
 const TIMESTAMP_RE = /<t:(-?\d+)(?::([tTdDfFR]))?>/g;
 
@@ -18,7 +22,10 @@ const TIME_SHORT: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
 };
 
-const STYLE_OPTIONS: Record<string, Intl.DateTimeFormatOptions> = {
+const STYLE_OPTIONS: Record<
+  Exclude<TimestampStyle, 'R'>,
+  Intl.DateTimeFormatOptions
+> = {
   t: TIME_SHORT,
   T: { ...TIME_SHORT, second: '2-digit' },
   d: { year: 'numeric', month: '2-digit', day: '2-digit' },
@@ -58,23 +65,36 @@ function formatRelative(date: Date, now: Date, locale: string): string {
   return '';
 }
 
+export function formatDiscordTimestamp(
+  unix: number,
+  style: TimestampStyle,
+  opts: DiscordPreviewOptions,
+): string {
+  const date = new Date(unix * 1000);
+  if (Number.isNaN(date.getTime())) return '';
+  const locale = safeLocale(opts.locale);
+  if (style === 'R')
+    return formatRelative(date, opts.now ?? new Date(), locale);
+  return new Intl.DateTimeFormat(locale, {
+    ...STYLE_OPTIONS[style],
+    timeZone: safeTimeZone(opts.timeZone),
+  }).format(date);
+}
+
 export function formatDiscordTimestamps(
   text: string,
   opts: DiscordPreviewOptions,
 ): string {
-  const locale = safeLocale(opts.locale);
-  const timeZone = safeTimeZone(opts.timeZone);
-  const now = opts.now ?? new Date();
   return text.replace(
     TIMESTAMP_RE,
-    (code: string, seconds: string, style: string | undefined) => {
-      const date = new Date(Number(seconds) * 1000);
-      if (Number.isNaN(date.getTime())) return code;
-      if (style === 'R') return formatRelative(date, now, locale);
-      return new Intl.DateTimeFormat(locale, {
-        ...STYLE_OPTIONS[style ?? 'f'],
-        timeZone,
-      }).format(date);
-    },
+    (code: string, seconds: string, style: TimestampStyle | undefined) =>
+      formatDiscordTimestamp(Number(seconds), style ?? 'f', opts) || code,
   );
+}
+
+export function usePreviewOptions(): DiscordPreviewOptions {
+  const { i18n } = useTranslation();
+  const locale = i18n?.resolvedLanguage ?? 'en';
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return useMemo(() => ({ locale, timeZone }), [locale, timeZone]);
 }

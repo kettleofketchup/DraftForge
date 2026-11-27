@@ -104,3 +104,45 @@ describe('useBracketStore.unsetMatchWinner', () => {
     expect(useBracketStore.getState().isDirty).toBe(false);
   });
 });
+
+describe('useBracketStore structural edits (issue #963)', () => {
+  beforeEach(() => {
+    useBracketStore.setState({
+      matches: [
+        baseMatch({
+          id: 'w-1-0',
+          bracketType: 'winners',
+          nextMatchId: 'w-2-0',
+          nextMatchSlot: 'radiant',
+        }),
+        baseMatch({
+          id: 'w-2-0',
+          gameId: 11,
+          bracketType: 'winners',
+          round: 2,
+          radiantTeam: undefined,
+          direTeam: undefined,
+        }),
+      ],
+      isDirty: false,
+      hasStructuralEdits: false,
+    });
+  });
+
+  it('a winner and its advancement are not structural edits', () => {
+    const store = useBracketStore.getState();
+    store.setMatchWinner('w-1-0', 'radiant');
+    store.advanceWinner('w-1-0');
+
+    const next = useBracketStore.getState();
+    expect(next.matches.find((m) => m.id === 'w-2-0')!.radiantTeam).toBe(teamA);
+    expect(next.isDirty).toBe(true);
+    expect(next.hasStructuralEdits).toBe(false);
+  });
+
+  it('placing a team by hand is a structural edit', () => {
+    useBracketStore.getState().assignTeamToSlot('w-2-0', 'dire', teamB);
+
+    expect(useBracketStore.getState().hasStructuralEdits).toBe(true);
+  });
+});
