@@ -21,22 +21,15 @@ LOCMEM_CACHES = {
 
 class MmrRequestTestMixin:
     media_root: ClassVar[str]
-    _media_override: ClassVar[override_settings]
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.media_root = tempfile.mkdtemp(prefix="mmr-media-")
-        cls._media_override = override_settings(
-            MEDIA_ROOT=cls.media_root, CACHES=LOCMEM_CACHES
+        cls.addClassCleanup(shutil.rmtree, cls.media_root, ignore_errors=True)  # type: ignore[attr-defined]
+        cls.enterClassContext(  # type: ignore[attr-defined]
+            override_settings(MEDIA_ROOT=cls.media_root, CACHES=LOCMEM_CACHES)
         )
-        cls._media_override.enable()
         super().setUpClass()  # type: ignore[misc]
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        super().tearDownClass()  # type: ignore[misc]
-        cls._media_override.disable()
-        shutil.rmtree(cls.media_root, ignore_errors=True)
 
     def setUp(self) -> None:
         super().setUp()  # type: ignore[misc]
