@@ -20,6 +20,7 @@ from events.constants import (
 from events.models import Event, EventSignup, ReadyCheck, SignupLedgerEntry
 from events.overrides import StaffReasonRequired
 from events.permissions import has_event_staff_access
+from events.ready_check_constants import REMOVED_SIGNUP_STATUSES
 from events.schemas import SignupSnapshot
 from telemetry.logging import get_logger
 
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "PLACEMENT_ACTIONS",
+    "REMOVED_STATUS_FOR",
+    "RESTORABLE_ACTIONS",
     "ActorRole",
     "SignupAction",
     "SignupActor",
@@ -35,6 +38,7 @@ __all__ = [
     "current_interaction_id",
     "event_snapshot",
     "is_placement",
+    "latest_restorable_withdrawal",
     "record_ready_check_transition",
     "record_signup_change",
     "require_staff_reason",
@@ -54,6 +58,18 @@ PLACEMENT_ACTIONS: frozenset[str] = frozenset(
         SignupAction.TRANSFERRED_IN,
         SignupAction.SWAPPED,
     }
+)
+
+REMOVED_STATUS_FOR: dict[str, str] = {
+    SignupAction.WITHDREW: SignupStatus.CANCELLED,
+    SignupAction.DECLINED: SignupStatus.CANCELLED,
+    SignupAction.REJECTED: SignupStatus.REJECTED,
+}
+
+RESTORABLE_ACTIONS: frozenset[str] = frozenset(REMOVED_STATUS_FOR)
+
+_PLACE_HANDOFF_ACTIONS: frozenset[str] = frozenset(
+    {SignupAction.MOVED_EVENT, SignupAction.TRANSFERRED_OUT}
 )
 
 CORRELATION_ID_MAX_LENGTH = 64
@@ -209,6 +225,41 @@ def snapshot(
         event_team_id=signup.event_team_id,
         extra=dict(extra) if extra else {},
     )
+
+
+def _after_status(entry: SignupLedgerEntry) -> str | None:
+    if entry.after is not None and entry.after.get("status"):
+        return str(entry.after["status"])
+    return REMOVED_STATUS_FOR.get(entry.action)
+
+
+def latest_restorable_withdrawal(signup: EventSignup) -> SignupLedgerEntry | None:
+    """The withdrawal, decline or rejection that still describes the row, if any."""
+    entries = list(
+        SignupLedgerEntry.objects.filter(
+            event_id=signup.event_id, subject_user_id=signup.user_id, signup=signup
+        ).order_by("-occurred_at", "-pk")
+    )
+    index = next(
+        (i for i, e in enumerate(entries) if e.action in RESTORABLE_ACTIONS), None
+    )
+    if index is None:
+        return None
+    candidate = entries[index]
+    if candidate.before is None:
+        return None
+    if candidate.before.get("status") in REMOVED_SIGNUP_STATUSES:
+        return None
+    removed_status = _after_status(candidate)
+    if removed_status != signup.status:
+        return None
+    for later in entries[:index]:
+        if later.action in _PLACE_HANDOFF_ACTIONS:
+            return None
+        later_status = (later.after or {}).get("status")
+        if later_status is not None and later_status != removed_status:
+            return None
+    return candidate
 
 
 def event_snapshot(event: Event) -> dict[str, Any]:
