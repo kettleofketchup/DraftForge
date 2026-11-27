@@ -11,10 +11,17 @@ import { useForm } from 'react-hook-form';
 import { I18nextProvider, setI18n } from 'react-i18next';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  eventFieldTestIds,
+  EventFormDialog,
+  EventIdentityFields,
+  OneOffScheduleFields,
+} from '~/components/events/form';
+import {
   EventFormNavigationProvider,
   type EventFormNavigation,
 } from '~/components/events/form/EventFormNavigation';
 import { Form } from '~/components/ui/form';
+import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance, FALLBACK_LOCALE } from '~/i18n/config';
 import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 import type { DiscordPreviewContext } from '../context';
@@ -356,6 +363,95 @@ describe('EventDiscordPreviewButton', () => {
       expect(screen.queryByTestId('discord-preview-dialog')).toBeNull();
       expect(onSubmit).not.toHaveBeenCalled();
     });
+
+    it.each([
+      ['name', 'one-off-name-input'],
+      ['scheduled_at', 'one-off-scheduled-input'],
+    ])(
+      'reveals %s in a one-off host and keeps the unsaved description',
+      async (code, testId) => {
+        needsInput(['name', 'scheduled_at']);
+        const onValid = vi.fn();
+        const ids = eventFieldTestIds('one-off');
+        function OneOffHost() {
+          const form = useForm<{
+            name: string;
+            description: string;
+            scheduled_at: string;
+          }>({
+            defaultValues: { name: '', description: '', scheduled_at: '' },
+          });
+          return (
+            <EventFormDialog
+              open
+              onOpenChange={() => {}}
+              title="Add one-off event"
+              submitLabel="Create"
+              form={form}
+              onValid={onValid}
+              isSubmitting={false}
+              tabTestIdPrefix="one-off"
+              tabs={[
+                {
+                  value: 'event',
+                  content: (
+                    <>
+                      <EventIdentityFields
+                        control={form.control}
+                        testIds={ids}
+                      />
+                      <OneOffScheduleFields
+                        control={form.control}
+                        testIds={ids}
+                        showEndsAt={false}
+                      />
+                    </>
+                  ),
+                },
+                {
+                  value: 'discord',
+                  lazy: true,
+                  content: (
+                    <EventDiscordPreviewButton
+                      kind="signup_post"
+                      organizationId={7}
+                      context={{ type: 'series_one_off', repeaterId: 3 }}
+                    />
+                  ),
+                },
+              ]}
+            />
+          );
+        }
+        render(
+          <TestQueryClientProvider>
+            <TooltipProvider>
+              <OneOffHost />
+            </TooltipProvider>
+          </TestQueryClientProvider>,
+        );
+        fireEvent.change(screen.getByTestId('one-off-description-input'), {
+          target: { value: 'Unsaved description' },
+        });
+        fireEvent.mouseDown(screen.getByTestId('one-off-tab-discord'), {
+          button: 0,
+        });
+        const dialog = await openDialog();
+        fireEvent.click(
+          await within(dialog).findByTestId(`discord-preview-missing-${code}`),
+        );
+        await waitFor(() => expect(screen.getByTestId(testId)).toHaveFocus());
+        expect(screen.queryByTestId('discord-preview-dialog')).toBeNull();
+        expect(screen.getByTestId('one-off-tab-event')).toHaveAttribute(
+          'aria-selected',
+          'true',
+        );
+        expect(screen.getByTestId('one-off-description-input')).toHaveValue(
+          'Unsaved description',
+        );
+        expect(onValid).not.toHaveBeenCalled();
+      },
+    );
 
     it.each(['<img onerror=x>[data-field=x]', '__proto__', 'constructor'])(
       'leaves unknown prerequisite %s as escaped text',
