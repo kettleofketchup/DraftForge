@@ -10,6 +10,8 @@ import {
 import { useCallback, useEffect, useMemo } from 'react';
 
 import type {
+  CancelEventOptions,
+  DeleteEventOptions,
   EventRepeaterListItem,
   EventRepeaterType,
   EventStaffPayload,
@@ -297,17 +299,23 @@ export function useEventActionMutation(eventId: number) {
       },
     }),
     cancelEvent: useMutation({
-      mutationFn: () => cancelEventAPI(eventId),
+      mutationFn: (options: CancelEventOptions | void) =>
+        cancelEventAPI(eventId, options || undefined),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         void invalidateEventLists(queryClient);
         invalidateSignupHistory(queryClient, eventId);
         void invalidateConductQueries(queryClient, data.organization);
         void invalidateOrgStandingQueries(queryClient, data.organization);
+        void queryClient.invalidateQueries({
+          queryKey: ['event-signups', eventId],
+        });
       },
     }),
     deleteEvent: useMutation({
-      mutationFn: () => deleteEventAPI(eventId),
+      retry: false,
+      mutationFn: (options: DeleteEventOptions | void) =>
+        deleteEventAPI(eventId, options || undefined),
       onSuccess: () => {
         const orgId = queryClient.getQueryData<EventType>([
           'event',
@@ -315,6 +323,7 @@ export function useEventActionMutation(eventId: number) {
         ])?.organization;
         void invalidateEventLists(queryClient);
         queryClient.removeQueries({ queryKey: ['event', eventId] });
+        queryClient.removeQueries({ queryKey: ['event-signups', eventId] });
         removeSignupHistoryQueries(queryClient, eventId);
         void invalidateConductQueries(queryClient);
         void invalidateOrgStandingQueries(queryClient, orgId);
@@ -441,7 +450,14 @@ export function useDeleteEventRepeaterMutation() {
       queryClient.removeQueries({ queryKey: repeaterKeys.detail(repeater.id) });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: ['event'] });
+      void queryClient.invalidateQueries({ queryKey: ['event-signups'] });
+      void queryClient.invalidateQueries({
+        queryKey: ['event-signup-history'],
+      });
       void invalidateConductQueries(queryClient, repeater.organization);
+      void invalidateOrgStandingQueries(queryClient, repeater.organization);
+      void invalidatePromotionQueries(queryClient, repeater.organization);
     },
   });
 }

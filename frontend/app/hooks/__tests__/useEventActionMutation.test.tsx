@@ -162,3 +162,84 @@ describe('useEventActionMutation signup history invalidation', () => {
     expect(client.getQueryData(other)).toBeDefined();
   });
 });
+
+describe('lifecycle preservation mutations', () => {
+  beforeEach(() => {
+    api.cancelEvent
+      .mockReset()
+      .mockResolvedValue({ id: EVENT_ID, organization: ORG_ID });
+    api.deleteEvent.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('propagates delete confirmation explicitly without upgrading default callers', async () => {
+    const { hook } = setup();
+    await act(async () => {
+      await hook.result.current.deleteEvent.mutateAsync();
+      await hook.result.current.deleteEvent.mutateAsync({ confirm: false });
+      await hook.result.current.deleteEvent.mutateAsync({ confirm: true });
+    });
+    expect(api.deleteEvent.mock.calls).toEqual([
+      [EVENT_ID, undefined],
+      [EVENT_ID, { confirm: false }],
+      [EVENT_ID, { confirm: true }],
+    ]);
+  });
+
+  it('refreshes this event signups on cancel and awaits its result', async () => {
+    const { hook, client, invalid } = setup();
+    const own = ['event-signups', EVENT_ID];
+    const other = ['event-signups', EVENT_ID + 1];
+    client.setQueryData(own, [{ id: 1 }]);
+    client.setQueryData(other, [{ id: 2 }]);
+    await act(async () => {
+      await hook.result.current.cancelEvent.mutateAsync({
+        reason: 'Schedule changed',
+      });
+    });
+    expect(api.cancelEvent).toHaveBeenCalledWith(EVENT_ID, {
+      reason: 'Schedule changed',
+    });
+    expect(invalid(own)).toBe(true);
+    expect(invalid(other)).toBe(false);
+  });
+
+  it('removes only the deleted event detail, signup and history caches', async () => {
+    const { hook, client } = setup();
+    const own = [
+      ['event', EVENT_ID],
+      ['event-signups', EVENT_ID],
+      ['event-signup-history', EVENT_ID, {}],
+    ];
+    const other = [
+      ['event', EVENT_ID + 1],
+      ['event-signups', EVENT_ID + 1],
+      ['event-signup-history', EVENT_ID + 1, {}],
+    ];
+    for (const key of [...own, ...other]) client.setQueryData(key, {});
+    await act(async () => {
+      await hook.result.current.deleteEvent.mutateAsync({ confirm: true });
+    });
+    for (const key of own) expect(client.getQueryData(key)).toBeUndefined();
+    for (const key of other) expect(client.getQueryData(key)).toBeDefined();
+  });
+
+  it('does not retry a rejected delete or remove caches', async () => {
+    const { hook, client } = setup();
+    const own = ['event', EVENT_ID];
+    client.setQueryData(own, { id: EVENT_ID });
+    const failure = {
+      response: {
+        status: 409,
+        data: { error: 'has_signup_records', count: 3 },
+      },
+    };
+    api.deleteEvent.mockRejectedValue(failure);
+    await act(async () => {
+      await expect(hook.result.current.deleteEvent.mutateAsync()).rejects.toBe(
+        failure,
+      );
+    });
+    expect(api.deleteEvent).toHaveBeenCalledOnce();
+    expect(client.getQueryData(own)).toEqual({ id: EVENT_ID });
+  });
+});
