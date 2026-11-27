@@ -109,7 +109,7 @@ Schedule realignment separately protects every stale upcoming occurrence with le
 
 Confirmed deletion removes the live event and its signups, but keeps existing ledger IDs and snapshots. It does not manufacture cancellation records. The ordinary event/history page no longer exists; surviving records remain available in the read-only ledger admin. See [Signup Ledger & Line Position](events/signup-ledger.md) for the staff-only live history and snapshot contract.
 
-These guarantees apply to the shared lifecycle services and their REST/admin callers, not arbitrary ORM cascades or the standalone `cleanup_stale_repeater_events` maintenance cancellation path.
+The `cleanup_stale_repeater_events` maintenance script also uses shared cancellation: remaining non-removed signups receive system-attributed history, ready checks close, attendance outcomes are voided, and Discord scheduled-event deletion is queued after commit. Maintenance only accepts `upcoming` or `signups_open` events and refuses a linked tournament that has started. Arbitrary ORM cascades and the generic internal transition endpoint do not have these lifecycle guarantees.
 
 ### Discord Integration
 
@@ -268,7 +268,8 @@ Finalize and void each run once per event, inside the close's transaction, so a
 Complete press racing the cleanup job does not double-process. They run whether or not
 Conduct is unlocked; while it is locked they only finalize or void outcomes that already
 exist. `conduct_finalized_at` is read-only on `EventSerializer`. The generic internal
-`/transition/` endpoint and `cleanup_stale_repeater_events` skip these hooks.
+`/transition/` endpoint skips these hooks; stale-repeater maintenance uses shared
+cancellation and runs them.
 
 A member's own cancel within the org's late-cancel window (or after the start) before
 the event closes is recorded as a late cancel or no-show; staff actions never are.

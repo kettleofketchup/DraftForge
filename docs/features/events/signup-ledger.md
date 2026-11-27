@@ -61,7 +61,7 @@ When an organization staff member tries to delete a record-bearing event, the AP
 
 Confirmed deletion removes the live event and signups, without adding cancellation entries or changing existing snapshots. The surviving history is readable in the read-only ledger admin, **not** through the ordinary history endpoint: that endpoint requires a live event and remains staff-only. Series deletion cancels and retains occurrences with any signup or ledger history, makes them standalone, and deletes only truly empty active occurrences. Schedule realignment skips ledger-bearing occurrences without moving their timestamp; the subsequent configuration cascade is unchanged.
 
-The standalone `cleanup_stale_repeater_events` script does not use shared cancellation and does not emit `event_cancelled`. Arbitrary ORM deletes and organization cascades are not guarded by the event DELETE confirmation flow.
+The `cleanup_stale_repeater_events` script uses shared cancellation and emits system-attributed `event_cancelled` entries for the remaining non-removed signups. With no supplied reason, those entries have an empty reason; ready-check closure keeps its separate `event_cancelled` machine reason. Signups and their statuses remain in place. Maintenance refuses events outside `upcoming`/`signups_open` and linked tournaments that have started. Arbitrary ORM deletes and organization cascades are not guarded by the event DELETE confirmation flow.
 
 ## What gets recorded
 

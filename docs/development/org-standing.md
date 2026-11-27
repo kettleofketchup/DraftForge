@@ -289,7 +289,8 @@ org member (own row) and, with a private board, refuses everyone else.
 | `ledger.upsert_event_entry` | Closed by the leadership track |
 | Promotion wrapper named `has_promo_entry` | Stays |
 | `dedupe_host_helpers` calls `on_event_changed` itself; Event PATCH passes every changed field | Stays |
-| The internal transition endpoint and `cleanup_stale_repeater_events` change event state without the hooks | Open |
+| The internal transition endpoint changes event state without the hooks | Open |
+| `cleanup_stale_repeater_events` uses shared cancellation and runs the standing close hooks | Closed |
 
 ## Adding a track
 

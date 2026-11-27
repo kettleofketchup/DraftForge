@@ -41,7 +41,7 @@ function statusOf(err: unknown): number | undefined {
   return (err as { response?: { status?: number } })?.response?.status;
 }
 
-// The dialogs treat Enter on any button as confirm; keep it on this button.
+// Keep this composed cancellation action's Enter activation local.
 function keepEnterLocal(e: KeyboardEvent<HTMLButtonElement>) {
   if (e.key === 'Enter') e.stopPropagation();
 }
