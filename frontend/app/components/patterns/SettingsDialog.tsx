@@ -117,11 +117,6 @@ function isTypingTarget(t: HTMLElement): boolean {
   );
 }
 
-/**
- * Full-screen settings form: a searchable category sidebar (a tab strip on
- * phones) beside the active category's fields. Search matches category names,
- * keywords and the labels and headings rendered in each mounted category.
- */
 interface SettingsLayoutOptions<V extends string> {
   /** Resets to the first section each time this turns true. */
   open: boolean;
@@ -720,7 +715,8 @@ function useSettingsLayout<V extends string>({
 
 /**
  * Full-screen settings form: a searchable category sidebar (a tab strip on
- * phones) beside the active category's fields.
+ * phones) beside the active category's fields. Search matches category names,
+ * keywords and the labels and headings rendered in each mounted category.
  */
 export function SettingsDialog<V extends string>({
   open,
