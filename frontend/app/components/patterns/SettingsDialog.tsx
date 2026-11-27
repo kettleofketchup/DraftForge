@@ -124,7 +124,7 @@ interface SettingsLayoutOptions<V extends string> {
   testIdPrefix: string;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
-  /** Requested section, e.g. from the URL; falls back to the first when unknown or hidden. */
+  /** Requested section, e.g. from the URL; falls back to the first when unknown or null. */
   value?: string | null;
   onValueChange?: (value: V) => void;
 }

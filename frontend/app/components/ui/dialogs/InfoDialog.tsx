@@ -18,7 +18,7 @@ export interface InfoDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Accepts a node so callers can attach test ids / markup. */
   title: React.ReactNode;
-  /** Omitted: a visually hidden fallback is derived from the title. */
+  /** Omitted: a visually hidden "<title> dialog", or "Dialog" for a non-string title. */
   description?: string;
   children: React.ReactNode;
   size?: InfoDialogSize;
