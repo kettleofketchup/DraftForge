@@ -63,6 +63,7 @@ SERIES_CONFIG: dict[str, Any] = {
     "post_cull_fill_mode": "voice_arrival",
     "line_withdraw_forfeits": False,
     "line_switch_restamps": False,
+    "staff_reason_policy": "all_staff_changes",
     "allow_active_mmr": False,
     "allow_previous_rank": False,
     "allow_battlecup_rating": False,

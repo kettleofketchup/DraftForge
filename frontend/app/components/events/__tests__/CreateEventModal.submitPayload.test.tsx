@@ -208,6 +208,7 @@ const REPEATER_PAYLOAD = {
   roll_call_mode: 'manual',
   signup_open_mode: 'manual',
   signups_open_hours_before: 72,
+  staff_reason_policy: 'optional',
   start_cull_enabled: false,
   start_cull_minutes_after: 1,
   starts_at: '2026-11-25',
