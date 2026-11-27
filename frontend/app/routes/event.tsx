@@ -168,6 +168,10 @@ import {
 import { useContextGameType, useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { usePageNav } from '~/hooks/usePageNav';
+import {
+  useIsOrganizationAdmin,
+  useIsOrganizationStaff,
+} from '~/hooks/usePermissions';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserDotaProfile } from '~/hooks/useUserProfile';
 import { extractApiError } from '~/lib/apiError';
@@ -207,6 +211,8 @@ export default function EventPage() {
   // Permission check uses backend-derived flag (covers org staff AND league staff).
   const isAdmin = event?.user_can_manage ?? false;
   const eventOrgAccess = useOrgFeatureAccess(eventOrg ?? undefined);
+  const isEventOrgAdmin = useIsOrganizationAdmin(eventOrg);
+  const isEventOrgStaff = useIsOrganizationStaff(eventOrg);
   const canComplete = canCompleteEvent(event, eventOrgAccess);
   const { memberFor: conductMemberFor } = useEventConduct(
     event,
@@ -534,11 +540,13 @@ export default function EventPage() {
                 onStartRollCallClick={() => setShowRollCallConfirm(true)}
                 onReopenSignupsClick={() => setShowReopenConfirm(true)}
                 onOpenRollCallClick={() => navigate(`/rollcall/${eventId}`)}
-                onDeleteConfirmed={() => {
-                  actions.deleteEvent.mutate(undefined, {
-                    onSuccess: () => navigate('/events'),
-                  });
+                canDelete={isEventOrgStaff}
+                isOrganizationAdmin={isEventOrgAdmin}
+                onDelete={(options) => actions.deleteEvent.mutateAsync(options)}
+                onCancel={async () => {
+                  await actions.cancelEvent.mutateAsync();
                 }}
+                onDeleted={() => navigate('/events')}
                 canComplete={canComplete}
                 showCompletePointsNote={showCompletePointsNote}
                 onCompleteConfirmed={async () => {
