@@ -1,0 +1,1 @@
+- Fixed signup posts sent to Discord text channels while preserving forum posts as threads.

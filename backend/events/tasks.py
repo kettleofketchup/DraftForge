@@ -78,6 +78,7 @@ from events.discord.gates import (
     signup_reminder_gate,
     start_mention_gate,
 )
+from events.discord.signup_destination import resolve_signup_channel_type
 from events.scheduling.fire import fire_due_reminders
 from events.signup_post_lock import (
     acquire_lock,
@@ -265,6 +266,7 @@ def _update_signup_msg(
         update_data["message_id"] = post_result["message"]["id"]
         update_data["channel_type"] = "forum"
     else:
+        update_data["thread_id"] = None
         update_data["message_id"] = post_result.get("id")
         update_data["channel_type"] = "text"
 
@@ -488,7 +490,6 @@ def sync_discord_events() -> str:
                     error=str(e),
                 )
 
-        # 2. Discord scheduled event
         has_scheduled = (
             pk in events_with_scheduled
             or ("create_discord_event", pk) in existing_logs
@@ -605,12 +606,17 @@ def _send_event_announcement_impl(event_id: int) -> str:
         return "Failed: could not get/create DiscordEvent"
     discord_event_pk = de_resp.json().get("id")
 
-    # Step 1: Create the signup post
     signup_post_result = None
     signup_message_link = None
 
-    if signup_available:
-        # Signups channel configured — post there (forum thread or regular)
+    channel_type = (
+        resolve_signup_channel_type(
+            event.discord_post_signups_channel_id, guild_id or ""
+        )
+        if signup_available
+        else None
+    )
+    if channel_type is not None:
         # DiscordMessageLog is written by sync_send_embed_with_components via HTTP
         signup_post_result = sync_send_embed_with_components(
             channel_id=event.discord_post_signups_channel_id,
@@ -618,7 +624,7 @@ def _send_event_announcement_impl(event_id: int) -> str:
             components=components,
             source="event_announcement",
             source_id=event.pk,
-            forum_thread_name=thread_name,
+            forum_thread_name=thread_name if channel_type == 15 else None,
             content=signup_content,
             allowed_mentions=signup_mentions,
         )
@@ -659,7 +665,6 @@ def _send_event_announcement_impl(event_id: int) -> str:
     if not announcement_available:
         return f"Posted signup for event {event.pk}"
 
-    # Step 2: Post lightweight announcement linking to the signup post
     notice_result = build_announcement_notice(event, signup_message_link)
     notice_api_result = sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
@@ -1504,7 +1509,6 @@ def fire_event_reminder(
 
     source, builder = REMINDER_MAP[reminder_type]
 
-    # Idempotency check
     if check_message_log_exists(source, event_id):
         return f"Already fired: {reminder_type} for event {event_id}"
 

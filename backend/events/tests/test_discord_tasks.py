@@ -12,6 +12,7 @@ from celery.exceptions import Retry
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from requests import Response
 from requests.exceptions import HTTPError
 from structlog.testing import capture_logs
 
@@ -32,11 +33,12 @@ from discordbot.models import (
 )
 from discordbot.schemas import DMClaimBody
 from discordbot.tests.ledger_bridge import ledger_bridge
-from discordbot.utils import DISCORD_API_BASE
+from discordbot.utils import DISCORD_API_BASE, sync_send_embed_with_components
 from events.constants import EventState
 from events.models import EventRepeater, RepeaterSubscription
 from events.schemas import RepeaterSubscriberSchema
 from events.tasks import (
+    build_announcement_notice,
     build_announcement_v2,
     check_event_reminders,
     fire_event_reminder,
@@ -51,6 +53,14 @@ from events.tests.base import EventTestCase
 from events.tests.test_signup_post_independence import destination_pairs
 from org.models import OrgUser
 from user.models import PositionsModel
+
+GUILD: str = "guild-1"
+SIGNUP_BUILD: dict[str, Any] = {
+    "embeds": [{"title": "Signup embed"}],
+    "components": [{"type": 1, "components": [{"type": 2, "custom_id": "x"}]}],
+    "content": "<@&42>",
+    "allowed_mentions": {"parse": [], "roles": ["42"]},
+}
 
 
 def _ok_response(payload: dict[str, Any]) -> MagicMock:
@@ -88,6 +98,57 @@ class FakeDiscord:
         return _discord_response(200, {"id": str(900000 + n)})
 
 
+def _error_response(status: int) -> Response:
+    resp = Response()
+    resp.status_code = status
+    resp._content = b'{"message": "Missing Access", "code": 50001}'
+    return resp
+
+
+def _metadata(channel: str, kind: int) -> dict[str, Any]:
+    return {"id": channel, "guild_id": GUILD, "type": kind}
+
+
+def _discord_api(
+    metadata: dict[str, dict[str, Any] | None],
+    *,
+    failing_posts: frozenset[str] = frozenset(),
+) -> Callable[..., Any]:
+    """Method/path-aware Discord double; unexpected requests fail the test."""
+
+    def dispatch(method: str, url: str, **kwargs: Any) -> Any:
+        path = url.removeprefix(f"{DISCORD_API_BASE}/channels/").split("/")
+        channel = path[0]
+        if method == "GET" and len(path) == 1 and channel in metadata:
+            payload = metadata[channel]
+            return _ok_response(payload) if payload else _error_response(404)
+        if method == "POST" and len(path) == 2 and path[1] in {"messages", "threads"}:
+            if channel in failing_posts:
+                return _error_response(403)
+            if path[1] == "threads":
+                return _ok_response(
+                    {"id": "signup-thread", "message": {"id": "signup-message"}}
+                )
+            return _ok_response({"id": "signup-message"})
+        if method == "PATCH" and len(path) == 3 and path[1] == "messages":
+            return _ok_response({"id": path[2]})
+        raise AssertionError(f"unexpected Discord request {method} {url}")
+
+    return dispatch
+
+
+def _calls(mock_req: MagicMock, method: str | None = None) -> list[tuple[str, str]]:
+    return [
+        (c.args[0], c.args[1])
+        for c in mock_req.call_args_list
+        if method is None or c.args[0] == method
+    ]
+
+
+def _url(channel: str, suffix: str = "") -> str:
+    return f"{DISCORD_API_BASE}/channels/{channel}{suffix}"
+
+
 class _DiscordTaskTestCase(DiscordTestMixin, EventTestCase):
     """EventTestCase + ORM-backed internal_client patches.
 
@@ -99,7 +160,14 @@ class _DiscordTaskTestCase(DiscordTestMixin, EventTestCase):
     """
 
 
-class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
+class _GuildDiscordTaskTestCase(_DiscordTaskTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.org.discord_server_id = GUILD
+        self.org.save()
+
+
+class SendEventAnnouncementTaskTest(_GuildDiscordTaskTestCase):
     @patch("discordbot.utils._rate_limited_request")
     def test_announcement_creates_log(self, mock_req: MagicMock) -> None:
         mock_req.return_value = _ok_response({"id": "111222333"})
@@ -125,13 +193,59 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
         )
         mock_req.assert_not_called()
 
+    @patch("events.tasks.build_announcement_v2", return_value=SIGNUP_BUILD)
+    @patch("discordbot.utils._rate_limited_request")
+    def test_primary_signup_operation_and_payload(
+        self, mock_req: MagicMock, _build: MagicMock
+    ) -> None:
+        long_title = "T" * 150
+        for kind, title in ((0, ""), (5, ""), (15, ""), (15, long_title)):
+            with self.subTest(kind=kind, title=title):
+                event = self.make_event(
+                    discord_post_signups=True,
+                    discord_post_signups_channel_id="signup-channel",
+                    discord_event_title=title,
+                )
+                mock_req.reset_mock()
+                mock_req.side_effect = _discord_api(
+                    {"signup-channel": _metadata("signup-channel", kind)}
+                )
+                send_event_announcement(event.pk)
+                suffix = "/threads" if kind == 15 else "/messages"
+                self.assertEqual(
+                    _calls(mock_req),
+                    [
+                        ("GET", _url("signup-channel")),
+                        ("POST", _url("signup-channel", suffix)),
+                    ],
+                )
+                payload = mock_req.call_args.kwargs["json"]
+                row = DiscordEventMsgSignup.objects.get(event=event)
+                if kind == 15:
+                    expected_name = (title or event.name)[:100]
+                    self.assertEqual(
+                        payload, {"name": expected_name, "message": SIGNUP_BUILD}
+                    )
+                    self.assertEqual(
+                        (row.thread_id, row.channel_type), ("signup-thread", "forum")
+                    )
+                else:
+                    self.assertEqual(payload, SIGNUP_BUILD)
+                    self.assertEqual((row.thread_id, row.channel_type), (None, "text"))
+                self.assertEqual(
+                    (row.channel_id, row.message_id),
+                    ("signup-channel", "signup-message"),
+                )
+        self.assertEqual(len(long_title[:100]), 100)
+
     @patch("discordbot.utils._rate_limited_request")
     def test_signup_destination_matrix(self, mock_req: MagicMock) -> None:
-        for signup, announcement in product(
+        for kind, signup, announcement in product(
+            (0, 15),
             destination_pairs("signup-channel"),
             destination_pairs("announcement-channel"),
         ):
-            with self.subTest(signup=signup, announcement=announcement):
+            with self.subTest(kind=kind, signup=signup, announcement=announcement):
                 event = self.make_event(
                     discord_post_signups=signup[0],
                     discord_post_signups_channel_id=signup[1] or "",
@@ -139,10 +253,19 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                     discord_announcement_channel_id=announcement[1] or "",
                 )
                 mock_req.reset_mock()
-                mock_req.return_value = _ok_response({"id": "signup-message"})
-                with patch(
-                    "events.tasks.build_announcement_v2", wraps=build_announcement_v2
-                ) as build:
+                mock_req.side_effect = _discord_api(
+                    {"signup-channel": _metadata("signup-channel", kind)}
+                )
+                with (
+                    patch(
+                        "events.tasks.build_announcement_v2",
+                        wraps=build_announcement_v2,
+                    ) as build,
+                    patch(
+                        "events.tasks.build_announcement_notice",
+                        wraps=build_announcement_notice,
+                    ) as notice,
+                ):
                     send_event_announcement(event.pk)
                 has_signup = bool(signup[0] and signup[1])
                 has_announcement = bool(announcement[0] and announcement[1])
@@ -150,14 +273,15 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                 urls = [c.args[1] for c in posts]
                 expected = []
                 if has_signup:
-                    expected.append(
-                        f"{DISCORD_API_BASE}/channels/signup-channel/threads"
-                    )
+                    suffix = "/threads" if kind == 15 else "/messages"
+                    expected.append(_url("signup-channel", suffix))
                 if has_announcement:
-                    expected.append(
-                        f"{DISCORD_API_BASE}/channels/announcement-channel/messages"
-                    )
+                    expected.append(_url("announcement-channel", "/messages"))
                 self.assertEqual(urls, expected)
+                self.assertEqual(
+                    _calls(mock_req, "GET"),
+                    [("GET", _url("signup-channel"))] if has_signup else [],
+                )
                 if not expected:
                     mock_req.assert_not_called()
                     build.assert_not_called()
@@ -181,6 +305,8 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                 self.assertTrue(row.has_posted)
                 self.assertEqual(row.channel_id, log.channel_id)
                 self.assertEqual(row.message_id, "signup-message")
+                forum = has_signup and kind == 15
+                self.assertEqual(row.thread_id, "signup-thread" if forum else None)
                 self.assertEqual(
                     DiscordEvent.objects.get(event=event).signup_message_id, row.pk
                 )
@@ -192,6 +318,108 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                 )
                 if has_signup and has_announcement:
                     self.assertNotIn("components", posts[1].kwargs["json"])
+                    parent = "signup-thread" if forum else "signup-channel"
+                    self.assertEqual(
+                        notice.call_args.args[1],
+                        f"https://discord.com/channels/{GUILD}/{parent}/signup-message",
+                    )
+                else:
+                    notice.assert_not_called()
+
+    @patch("events.tasks.build_announcement_v2", return_value=SIGNUP_BUILD)
+    @patch("discordbot.utils._rate_limited_request")
+    def test_primary_failure_fallback_matrix(
+        self, mock_req: MagicMock, _build: MagicMock
+    ) -> None:
+        invalid_metadata = {
+            "lookup": None,
+            "boolean": {**_metadata("signup-channel", 0), "type": True},
+            "string": {**_metadata("signup-channel", 0), "type": "0"},
+            "missing": {"id": "signup-channel", "guild_id": GUILD},
+            "wrong-channel": _metadata("other-channel", 0),
+            "wrong-guild": {**_metadata("signup-channel", 0), "guild_id": "other"},
+            "post": _metadata("signup-channel", 0),
+        }
+        for failure, announcement in product(
+            invalid_metadata, destination_pairs("announcement-channel")
+        ):
+            with self.subTest(failure=failure, announcement=announcement):
+                event = self.make_event(
+                    discord_post_signups=True,
+                    discord_post_signups_channel_id="signup-channel",
+                    discord_announcement=announcement[0],
+                    discord_announcement_channel_id=announcement[1] or "",
+                )
+                metadata = {"signup-channel": invalid_metadata[failure]}
+                mock_req.reset_mock()
+                mock_req.side_effect = _discord_api(
+                    metadata, failing_posts=frozenset({"signup-channel"})
+                )
+                with patch("events.tasks.build_announcement_notice") as notice:
+                    send_event_announcement(event.pk)
+                has_announcement = bool(announcement[0] and announcement[1])
+                expected = [("GET", _url("signup-channel"))]
+                if failure == "post":
+                    expected.append(("POST", _url("signup-channel", "/messages")))
+                if has_announcement:
+                    expected.append(("POST", _url("announcement-channel", "/messages")))
+                self.assertEqual(_calls(mock_req), expected)
+                notice.assert_not_called()
+                if has_announcement:
+                    self.assertEqual(
+                        mock_req.call_args.kwargs["json"],
+                        {
+                            "embeds": SIGNUP_BUILD["embeds"],
+                            "components": SIGNUP_BUILD["components"],
+                        },
+                    )
+                    row = DiscordEventMsgSignup.objects.get(event=event)
+                    self.assertEqual(
+                        (row.channel_id, row.thread_id, row.message_id, row.has_posted),
+                        ("announcement-channel", None, "signup-message", True),
+                    )
+                else:
+                    self.assertFalse(
+                        DiscordEventMsgSignup.objects.filter(event=event).exists()
+                    )
+                self.assertEqual(
+                    DiscordMessageLog.objects.filter(
+                        source="event_announcement", source_id=event.pk, success=True
+                    ).count(),
+                    int(has_announcement),
+                )
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_lookup_failure_does_not_claim_primary(self, mock_req: MagicMock) -> None:
+        event = self.make_event(
+            discord_post_signups=True,
+            discord_post_signups_channel_id="signup-channel",
+        )
+        wrong_guild = {"id": "signup-channel", "guild_id": "other", "type": 0}
+        mock_req.side_effect = _discord_api({"signup-channel": wrong_guild})
+        with patch(
+            "events.tasks.sync_send_embed_with_components",
+            wraps=sync_send_embed_with_components,
+        ) as send:
+            result = send_event_announcement(event.pk)
+        send.assert_not_called()
+        self.assertEqual(result, f"Signup post for event {event.pk}: no send result")
+        self.assertFalse(
+            DiscordMessageLog.objects.filter(
+                source="event_announcement", source_id=event.pk
+            ).exists()
+        )
+        self.assertFalse(DiscordEventMsgSignup.objects.filter(event=event).exists())
+
+        mock_req.reset_mock()
+        mock_req.side_effect = _discord_api(
+            {"signup-channel": _metadata("signup-channel", 0)}
+        )
+        send_event_announcement(event.pk)
+        self.assertEqual(
+            _calls(mock_req, "POST"), [("POST", _url("signup-channel", "/messages"))]
+        )
+        self.assertTrue(DiscordEventMsgSignup.objects.get(event=event).has_posted)
 
     def test_signup_only_falsey_send_has_no_fallback_or_notice(self) -> None:
         for announcement in destination_pairs("announcement-channel")[:-1]:
@@ -203,6 +431,7 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
                     discord_announcement_channel_id=announcement[1] or "",
                 )
                 with (
+                    patch("events.tasks.resolve_signup_channel_type", return_value=0),
                     patch(
                         "events.tasks.sync_send_embed_with_components",
                         return_value=None,
@@ -234,6 +463,7 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
             discord_announcement_channel_id="announcement-channel",
         )
         with (
+            patch("events.tasks.resolve_signup_channel_type", return_value=15),
             patch(
                 "events.tasks.sync_send_embed_with_components",
                 side_effect=[None, {"id": "fallback-message"}],
@@ -260,63 +490,183 @@ class SendEventAnnouncementTaskTest(_DiscordTaskTestCase):
     def test_signup_only_second_invocation_does_not_duplicate(
         self, mock_req: MagicMock
     ) -> None:
-        event = self.make_event(
-            discord_post_signups=True,
-            discord_post_signups_channel_id="signup-channel",
-            discord_announcement=False,
-            discord_announcement_channel_id="announcement-channel",
-        )
-        mock_req.return_value = _ok_response({"id": "signup-message"})
-        send_event_announcement(event.pk)
-        send_event_announcement(event.pk)
-        mock_req.assert_called_once()
-        self.assertEqual(
-            DiscordMessageLog.objects.filter(
-                source="event_announcement", source_id=event.pk, success=True
-            ).count(),
-            1,
-        )
-        self.assertFalse(
-            DiscordMessageLog.objects.filter(
-                source="event_notice", source_id=event.pk
-            ).exists()
-        )
-        self.assertTrue(DiscordEventMsgSignup.objects.get(event=event).has_posted)
+        for announcement in (False, True):
+            with self.subTest(announcement=announcement):
+                event = self.make_event(
+                    discord_post_signups=True,
+                    discord_post_signups_channel_id="signup-channel",
+                    discord_announcement=announcement,
+                    discord_announcement_channel_id="announcement-channel",
+                )
+                mock_req.reset_mock()
+                mock_req.side_effect = _discord_api(
+                    {"signup-channel": _metadata("signup-channel", 0)}
+                )
+                send_event_announcement(event.pk)
+                send_event_announcement(event.pk)
+                expected = [("POST", _url("signup-channel", "/messages"))]
+                if announcement:
+                    expected.append(("POST", _url("announcement-channel", "/messages")))
+                self.assertEqual(_calls(mock_req, "POST"), expected)
+                self.assertEqual(
+                    DiscordMessageLog.objects.filter(
+                        source="event_announcement", source_id=event.pk, success=True
+                    ).count(),
+                    1,
+                )
+                self.assertEqual(
+                    DiscordMessageLog.objects.filter(
+                        source="event_notice", source_id=event.pk
+                    ).count(),
+                    int(announcement),
+                )
+                self.assertTrue(
+                    DiscordEventMsgSignup.objects.get(event=event).has_posted
+                )
 
-
-class SendSignupUpdateTaskTest(_DiscordTaskTestCase):
     @patch("discordbot.utils._rate_limited_request")
-    def test_signup_only_create_then_update_uses_persisted_destination(
+    def test_held_primary_lease_does_not_post_fallback(
         self, mock_req: MagicMock
     ) -> None:
         event = self.make_event(
             discord_post_signups=True,
             discord_post_signups_channel_id="signup-channel",
-            discord_announcement=False,
+            discord_announcement=True,
             discord_announcement_channel_id="announcement-channel",
         )
-        mock_req.return_value = _ok_response({"id": "signup-message"})
-        send_event_announcement(event.pk)
-        self.assertTrue(
-            DiscordEventMsgSignup.objects.filter(event=event, has_posted=True).exists()
+        DiscordMessageLog.objects.create(
+            source="event_announcement",
+            source_id=event.pk,
+            channel_id="signup-channel",
+            embed_data={},
+            success=None,
+            claimed_at=timezone.now(),
         )
+        mock_req.side_effect = _discord_api(
+            {"signup-channel": _metadata("signup-channel", 0)}
+        )
+        send_event_announcement(event.pk)
+        self.assertEqual(_calls(mock_req, "POST"), [])
+        self.assertFalse(DiscordEventMsgSignup.objects.filter(event=event).exists())
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_text_repost_clears_stale_thread_id(self, mock_req: MagicMock) -> None:
+        event = self.make_event(
+            discord_post_signups=True,
+            discord_post_signups_channel_id="signup-channel",
+        )
+        DiscordEventMsgSignup.objects.create(
+            event=event,
+            channel_id="signup-channel",
+            thread_id="old-thread",
+            message_id="old-message",
+            channel_type="forum",
+            has_posted=False,
+        )
+        mock_req.side_effect = _discord_api(
+            {"signup-channel": _metadata("signup-channel", 0)}
+        )
+        send_event_announcement(event.pk)
         row = DiscordEventMsgSignup.objects.get(event=event)
         self.assertEqual(
-            (row.channel_id, row.message_id, row.channel_type),
-            ("signup-channel", "signup-message", "text"),
+            (row.channel_id, row.thread_id, row.message_id, row.channel_type),
+            ("signup-channel", None, "signup-message", "text"),
         )
-        event.discord_post_signups_channel_id = "changed-channel"
-        event.save()
+        self.assertEqual(
+            DiscordEvent.objects.get(event=event).signup_message_id, row.pk
+        )
         mock_req.reset_mock()
         send_signup_update(event.pk)
-        mock_req.assert_called_once()
         self.assertEqual(
-            mock_req.call_args.args,
-            (
-                "PATCH",
-                f"{DISCORD_API_BASE}/channels/signup-channel/messages/signup-message",
-            ),
+            _calls(mock_req),
+            [("PATCH", _url("signup-channel", "/messages/signup-message"))],
         )
+
+
+class SendSignupUpdateTaskTest(_GuildDiscordTaskTestCase):
+    @patch("discordbot.utils._rate_limited_request")
+    def test_deleted_primary_signup_is_recreated(self, mock_req: MagicMock) -> None:
+        for kind in (0, 5, 15):
+            with self.subTest(kind=kind):
+                event = self.make_event(
+                    discord_post_signups=True,
+                    discord_post_signups_channel_id="signup-channel",
+                )
+                dispatch = _discord_api(
+                    {"signup-channel": _metadata("signup-channel", kind)}
+                )
+                mock_req.side_effect = dispatch
+                send_event_announcement(event.pk)
+                row = DiscordEventMsgSignup.objects.get(event=event)
+                self.assertTrue(row.has_posted)
+
+                response = _error_response(404)
+                response._content = b'{"message": "Unknown Message", "code": 10008}'
+                mock_req.reset_mock()
+                mock_req.side_effect = None
+                mock_req.return_value = response
+                result = send_signup_update(event.pk)
+                parent = "signup-thread" if kind == 15 else "signup-channel"
+                self.assertEqual(
+                    _calls(mock_req),
+                    [("PATCH", _url(parent, "/messages/signup-message"))],
+                )
+                self.assertIn("Recovered", result)
+                row.refresh_from_db()
+                self.assertFalse(row.has_posted)
+                self.assertFalse(
+                    DiscordMessageLog.objects.filter(
+                        source="event_announcement", source_id=event.pk, success=True
+                    ).exists()
+                )
+
+                mock_req.reset_mock()
+                mock_req.side_effect = dispatch
+                send_event_announcement(event.pk)
+                suffix = "/threads" if kind == 15 else "/messages"
+                self.assertEqual(
+                    _calls(mock_req),
+                    [
+                        ("GET", _url("signup-channel")),
+                        ("POST", _url("signup-channel", suffix)),
+                    ],
+                )
+                row.refresh_from_db()
+                self.assertTrue(row.has_posted)
+                self.assertEqual(row.message_id, "signup-message")
+                self.assertEqual(row.thread_id, "signup-thread" if kind == 15 else None)
+                self.assertEqual(row.channel_type, "forum" if kind == 15 else "text")
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_signup_only_create_then_update_uses_persisted_destination(
+        self, mock_req: MagicMock
+    ) -> None:
+        for kind in (0, 5):
+            with self.subTest(kind=kind):
+                event = self.make_event(
+                    discord_post_signups=True,
+                    discord_post_signups_channel_id="signup-channel",
+                    discord_announcement=False,
+                    discord_announcement_channel_id="announcement-channel",
+                )
+                mock_req.reset_mock()
+                mock_req.side_effect = _discord_api(
+                    {"signup-channel": _metadata("signup-channel", kind)}
+                )
+                send_event_announcement(event.pk)
+                row = DiscordEventMsgSignup.objects.get(event=event, has_posted=True)
+                self.assertEqual(
+                    (row.channel_id, row.thread_id, row.message_id, row.channel_type),
+                    ("signup-channel", None, "signup-message", "text"),
+                )
+                event.discord_post_signups_channel_id = "changed-channel"
+                event.save()
+                mock_req.reset_mock()
+                send_signup_update(event.pk)
+                self.assertEqual(
+                    _calls(mock_req),
+                    [("PATCH", _url("signup-channel", "/messages/signup-message"))],
+                )
 
     @patch("discordbot.utils._rate_limited_request")
     def test_signup_only_forum_create_then_update_uses_thread(
@@ -328,30 +678,26 @@ class SendSignupUpdateTaskTest(_DiscordTaskTestCase):
             discord_announcement=True,
             discord_announcement_channel_id="",
         )
-        mock_req.return_value = _ok_response(
-            {"id": "signup-thread", "message": {"id": "forum-message"}}
+        mock_req.side_effect = _discord_api(
+            {"signup-forum": _metadata("signup-forum", 15)}
         )
         send_event_announcement(event.pk)
-        mock_req.assert_called_once()
         self.assertEqual(
-            mock_req.call_args.args,
-            ("POST", f"{DISCORD_API_BASE}/channels/signup-forum/threads"),
+            _calls(mock_req),
+            [("GET", _url("signup-forum")), ("POST", _url("signup-forum", "/threads"))],
         )
         row = DiscordEventMsgSignup.objects.get(event=event)
         self.assertEqual(
             (row.channel_id, row.thread_id, row.message_id, row.channel_type),
-            ("signup-forum", "signup-thread", "forum-message", "forum"),
+            ("signup-forum", "signup-thread", "signup-message", "forum"),
         )
+        event.discord_post_signups_channel_id = "changed-channel"
+        event.save()
         mock_req.reset_mock()
-        mock_req.return_value = _ok_response({"id": "forum-message"})
         send_signup_update(event.pk)
-        mock_req.assert_called_once()
         self.assertEqual(
-            mock_req.call_args.args,
-            (
-                "PATCH",
-                f"{DISCORD_API_BASE}/channels/signup-thread/messages/forum-message",
-            ),
+            _calls(mock_req),
+            [("PATCH", _url("signup-thread", "/messages/signup-message"))],
         )
 
     @patch("discordbot.utils._rate_limited_request")
@@ -369,15 +715,9 @@ class SendSignupUpdateTaskTest(_DiscordTaskTestCase):
         self.event.discord_announcement_channel_id = "1482767177063858216"
         self.event.save()
 
-        # First create the announcement
-
         send_event_announcement(self.event.pk)
-
-        # Then update it
-
         send_signup_update(self.event.pk)
 
-        # PATCH must have been called and the URL must reference the message id.
         patch_calls = [
             c for c in mock_req.call_args_list if c.args and c.args[0] == "PATCH"
         ]
@@ -402,7 +742,6 @@ class SendEventAnnouncementComponentsTest(_DiscordTaskTestCase):
 
         send_event_announcement(self.event.pk)
 
-        # Find the POST call to the messages endpoint
         post_calls = [
             c for c in mock_req.call_args_list if c.args and c.args[0] == "POST"
         ]
@@ -471,7 +810,6 @@ class SendSignupUpdateOrphanedMessageRecoveryTest(_DiscordTaskTestCase):
         self.event.discord_announcement_channel_id = "1482767177063858216"
         self.event.save()
 
-        # Phase 1: create the original post. POST returns 201.
         mock_req.return_value = _ok_response({"id": "ghost_msg"})
         send_event_announcement(self.event.pk)
 
@@ -520,6 +858,20 @@ class SendSignupUpdateOrphanedMessageRecoveryTest(_DiscordTaskTestCase):
                 success=True,
             ).exists(),
             "DiscordMessageLog.success must flip to False so existing_logs dedup unblocks",
+        )
+        self.assertEqual(_calls(mock_req, "DELETE"), [])
+
+        mock_req.reset_mock()
+        mock_req.side_effect = _discord_api({})
+        send_event_announcement(self.event.pk)
+        self.assertEqual(
+            _calls(mock_req),
+            [("POST", _url("1482767177063858216", "/messages"))],
+        )
+        row = DiscordEventMsgSignup.objects.get(event_id=self.event.pk)
+        self.assertEqual(
+            (row.has_posted, row.message_id, row.thread_id),
+            (True, "signup-message", None),
         )
 
 

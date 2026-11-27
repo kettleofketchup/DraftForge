@@ -28,6 +28,7 @@ from discordbot.models import (
     DiscordMessageLog,
 )
 from discordbot.payload_schema import DiscordMessage
+from discordbot.tests.ledger_bridge import ledger_bridge
 from events.constants import (
     EventState,
     RepeatFrequency,
@@ -187,6 +188,20 @@ class _PreviewTestCase(_DiscordTaskTestCase):
                 captured.edits.append(body)
             return _ok_response({"id": "m1"})
 
+        def fake_dm_request(method: str, url: str, **kwargs: Any) -> MagicMock:
+            if url.endswith("/messages"):
+                body = dict(kwargs["json"])
+                self.assertRegex(body.pop("nonce"), r"^dm\d+$")
+                self.assertIs(body.pop("enforce_nonce"), True)
+                kwargs["json"] = body
+            fake_request(method, url, **kwargs)
+            response_id = (
+                "800000"
+                if url.endswith("/users/@me/channels")
+                else str(900000 + len(captured.messages))
+            )
+            return _ok_response({"id": response_id})
+
         def fake_post(url: str, **kwargs: Any) -> MagicMock:
             captured.scheduled_create.append(kwargs["json"])
             return MagicMock(
@@ -199,10 +214,19 @@ class _PreviewTestCase(_DiscordTaskTestCase):
 
         with ExitStack() as stack:
             stack.enter_context(override_settings(TEST=False))
+            stack.enter_context(ledger_bridge())
+            stack.enter_context(
+                patch(
+                    "discordbot.dm._rate_limited_request", side_effect=fake_dm_request
+                )
+            )
             stack.enter_context(
                 patch(
                     "discordbot.utils._rate_limited_request", side_effect=fake_request
                 )
+            )
+            stack.enter_context(
+                patch("events.tasks.resolve_signup_channel_type", return_value=15)
             )
             stack.enter_context(patch("events.tasks.req.post", side_effect=fake_post))
             stack.enter_context(patch("events.tasks.req.patch", side_effect=fake_patch))

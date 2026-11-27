@@ -20,16 +20,17 @@ EXPECTED_RANKS: dict[str, int] = {
     "7005": 6,
     "7008": 7,
 }
+# Org MMR plus the best adjustment; players without org MMR stay at 0.
 EXPECTED_LEAGUE_MMR: dict[int, int] = {
-    7000: 4200,
-    7001: 3900,
-    7002: 3500,
-    7003: 3400,
+    7000: 4386,
+    7001: 3968,
+    7002: 3536,
+    7003: 3436,
     7004: 0,
     7005: 0,
     7006: 0,
     7007: 0,
-    7008: 0,
+    7008: 2775,
     7009: 0,
 }
 
