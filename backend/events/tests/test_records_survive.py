@@ -293,6 +293,18 @@ class CancellationRecordsTest(EventTestCase):
             ).exists()
         )
 
+    def test_stale_signup_open_object_cannot_recancel_cancelled_event(self) -> None:
+        event = self.make_event()
+        self._signup(event)
+        stale = Event.objects.get(pk=event.pk)
+        Event.objects.filter(pk=event.pk).update(state=EventState.CANCELLED)
+        with self.assertRaises(ValueError):
+            cancel_event(stale, actor=self.admin)
+        self.assertEqual(self._entries(event), [])
+        self.assertEqual(
+            Event.objects.nocache().get(pk=event.pk).state, EventState.CANCELLED
+        )
+
     def test_repeat_cancel_has_no_new_entries(self) -> None:
         event = self.make_event()
         self._signup(event)
@@ -619,6 +631,20 @@ class RecordDeletionAPITest(EventTestCase):
         teardown_event(event, actor=self.admin, confirm_signup_records=True)
         self.assertFalse(Event.objects.nocache().filter(pk=event_id).exists())
         self.assertEqual(self._snapshot(event_id), before)
+
+    def test_guard_reads_new_ledger_entry_despite_cached_event(self) -> None:
+        event = self._recorded_event()
+        stale = Event.objects.get(pk=event.pk)
+        record_signup_change(
+            event=event,
+            subject=self.user,
+            actor=SignupActor.system(),
+            action=SignupAction.SIGNED_UP,
+        )
+        with self.assertRaises(SignupRecordsConflict) as raised:
+            teardown_event(stale, actor=self.admin)
+        self.assertEqual(raised.exception.count, 4)
+        self.assertTrue(Event.objects.nocache().filter(pk=event.pk).exists())
 
     def test_empty_event_service_teardown_keeps_ordinary_access(self) -> None:
         event = self.make_event()

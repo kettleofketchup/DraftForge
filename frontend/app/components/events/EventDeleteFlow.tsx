@@ -62,8 +62,16 @@ export function EventDeleteFlow({
   const pendingConflict = useRef<number | null>(null);
   const inFlight = useRef(false);
   const generation = useRef(0);
+  const displayedEventId = useRef(event.id);
   const busy = isPending || cancelling || deleting;
   const cancellable = isEventCancellable(event);
+
+  useEffect(() => {
+    if (displayedEventId.current !== event.id) {
+      displayedEventId.current = event.id;
+      onOpenChange(false);
+    }
+  }, [event.id, onOpenChange]);
 
   useEffect(() => {
     generation.current += 1;

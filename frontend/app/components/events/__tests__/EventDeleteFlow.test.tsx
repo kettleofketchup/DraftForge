@@ -241,3 +241,29 @@ it('ignores a previous event deletion result after navigation to another event',
   );
   expect(props.onDeleted).not.toHaveBeenCalled();
 });
+
+it('closes the flow rather than opening deletion for a different event', async () => {
+  const onOpenChange = vi.fn();
+  const props = {
+    event: fixture,
+    open: true,
+    onOpenChange,
+    isOrganizationAdmin: true,
+    isPending: false,
+    onDelete: vi.fn().mockResolvedValue(undefined),
+    onCancel: vi.fn().mockResolvedValue(undefined),
+    onDeleted: vi.fn(),
+  };
+  const view = render(
+    <TooltipProvider>
+      <EventDeleteFlow {...props} />
+    </TooltipProvider>,
+  );
+  expect(onOpenChange).not.toHaveBeenCalled();
+  view.rerender(
+    <TooltipProvider>
+      <EventDeleteFlow {...props} event={{ ...fixture, id: 52 }} />
+    </TooltipProvider>,
+  );
+  await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+});
