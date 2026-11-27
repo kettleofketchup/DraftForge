@@ -109,6 +109,18 @@ afterEach(() => {
 it('batches every visible operation, renders diagnostics and never blocks saving', async () => {
   mount();
   await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+  for (const kind of [
+    'scheduled_event',
+    'scheduled_event_sync',
+    'signup_post',
+    'announcement_notice',
+    'attendance_reminder',
+    'profile_reminder',
+    'new_event_post',
+    'start_mention',
+    'signup_reminder',
+  ])
+    expect(screen.getByTestId(`discord-preview-${kind}`)).toBeInTheDocument();
   for (const key of [
     'signup_fallback',
     'announcement',

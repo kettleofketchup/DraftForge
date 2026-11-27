@@ -1,0 +1,109 @@
+{
+  "banner": {
+    "unsaved": "Sin guardar: esta vista previa usa los valores del formulario."
+  },
+  "button": {
+    "aria": "Vista previa: {{title}}",
+    "label": "Vista previa"
+  },
+  "component": {
+    "select_placeholder": "Haz una selección"
+  },
+  "destination": {
+    "channel": "Se publica en {{channel}}.",
+    "dm": "Se envía por mensaje directo.",
+    "fallback": "Si falla, se publica en {{channel}}.",
+    "forum_thread": "Se publica en {{channel}} como un hilo nuevo \"{{thread}}\".",
+    "no_channel": "No se ha seleccionado ningún canal.",
+    "reply": "Responde a la publicación de inscripción en {{channel}}.",
+    "reply_unknown": "Responde a la publicación de inscripción.",
+    "scheduled_event": "Aparece en la pestaña Eventos del servidor.",
+    "unset": "Ningún canal seleccionado"
+  },
+  "dialog": {
+    "close": "Cerrar",
+    "description": "Así se verá en Discord.",
+    "loading": "Cargando vista previa"
+  },
+  "error": {
+    "generic": "No se pudo cargar la vista previa.",
+    "retry": "Reintentar"
+  },
+  "gate": {
+    "already_sent": "Ya se envió para este evento.",
+    "no_channel": "No se envía: no hay ningún canal seleccionado.",
+    "no_discord_server": "No se envía: esta organización no tiene servidor de Discord vinculado.",
+    "no_recipients": "Ahora no se mencionaría a nadie; no se envía nada.",
+    "no_scheduled_event_yet": "No se envía: el evento programado de Discord aún no se creó.",
+    "no_signup_channel": "No se envía: no hay canal de inscripción seleccionado.",
+    "no_signup_post_yet": "No se envía: la publicación de inscripción aún no existe.",
+    "not_a_series": "No se envía: solo los eventos de una serie tienen suscriptores.",
+    "occurrence_collision": "No se crea: esta hora coincide con una fecha programada de la serie.",
+    "series_ended": "No se envía: la serie terminó.",
+    "series_paused": "No se envía: la serie está en pausa.",
+    "start_in_past": "No se envía: la hora de inicio ya pasó.",
+    "state_not_open_or_roll_call": "No se envía ahora: solo se envía con inscripciones abiertas o durante el pase de lista.",
+    "state_not_signups_open": "Aún no se envía: se publica cuando abren las inscripciones.",
+    "toggle_off": "Desactivado: no se envía nada hasta que lo actives",
+    "would_send": "Listo: se envía a la hora programada."
+  },
+  "kind": {
+    "announcement_notice": "Anuncio previo",
+    "attendance_reminder": "Recordatorio de asistencia",
+    "new_event_post": "Publicación de nuevo evento",
+    "profile_reminder": "Recordatorio de perfil",
+    "scheduled_event": "Evento programado de Discord",
+    "scheduled_event_sync": "Evento programado sincronizado",
+    "signup_post": "Publicación de inscripción",
+    "signup_reminder": "MD de recordatorio de inscripción",
+    "start_mention": "Mención de inicio"
+  },
+  "markdown": {
+    "spoiler": "Spoiler"
+  },
+  "mention": {
+    "unknown_channel": "#canal:{{id}}",
+    "unknown_role": "@rol:{{id}}",
+    "unknown_user": "@usuario:{{id}}"
+  },
+  "message": {
+    "app_tag": "APP",
+    "bot_name": "DraftForge",
+    "reply_label": "Publicación de inscripción"
+  },
+  "missing": {
+    "name": "Nombre",
+    "schedule": "Horario",
+    "scheduled_at": "Fecha y hora"
+  },
+  "note": {
+    "dm_per_subscriber": "Se envía por mensaje directo a cada suscriptor de la serie que no se inscribió.",
+    "edits_refresh_embed_only": "Los cambios de inscripción posteriores solo actualizan el embed y los botones.",
+    "existing_event_still_posts": "La serie no crea eventos nuevos, pero su próximo evento existente sí publica.",
+    "fallback_drops_role_mentions": "Si falla la publicación en el canal de inscripción, se publica en el canal de anuncios sin mencionar roles.",
+    "fallback_replaces_notice": "Sin publicación de inscripción, esta va al canal de anuncios y este anuncio no se envía.",
+    "next_event_already_open_not_updated": "El próximo evento ya tiene inscripciones abiertas, así que no cambia.",
+    "notice_falls_back_if_signup_post_fails": "Si falla la publicación de inscripción, se publica aquí en lugar de este anuncio.",
+    "shown_as_posted_when_signups_open": "Se muestra como se publicará al abrir las inscripciones.",
+    "signup_link_points_to_post": "El enlace \"Sign up here!\" abre la publicación de inscripción, que se crea justo antes de este aviso.",
+    "signup_post_in_signup_channel": "La publicación de inscripción va al canal de inscripción.",
+    "sync_keeps_created_name_and_time": "Sincronizar inscripciones solo cambia la descripción. Discord conserva el nombre y los horarios con los que se creó el evento programado, que se muestran aquí.",
+    "sync_overwrites_description": "Sincronizar inscripciones reemplaza la descripción del evento de Discord con este texto.",
+    "unsaved_links": "Sin guardar: el enlace del evento abre la lista de eventos hasta que guardes."
+  },
+  "scheduled_event": {
+    "ends": "Termina",
+    "location": "Ubicación",
+    "starts": "Empieza"
+  },
+  "start_mention": {
+    "header_label": "Encabezado usado al mencionar miembros"
+  },
+  "status": {
+    "needs_input": "Completa estos campos para ver una vista previa: {{fields}}",
+    "unavailable": "Las vistas previas están disponibles al crear o editar un evento, que usa estos valores."
+  },
+  "variant": {
+    "current_post": "La publicación existente, como se actualiza ahora"
+  }
+}

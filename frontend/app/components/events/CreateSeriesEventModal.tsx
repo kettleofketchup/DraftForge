@@ -248,6 +248,10 @@ export function CreateSeriesEventModal({
               isRepeater
               showNotifyNewEvents={false}
               organizationId={repeater.organization}
+              previewContext={{
+                type: 'series_one_off',
+                repeaterId: repeater.id,
+              }}
             />
           ),
         },
