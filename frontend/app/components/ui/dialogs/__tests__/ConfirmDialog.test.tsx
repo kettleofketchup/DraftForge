@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { Input } from '~/components/ui/input';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { DeleteDialog } from '../DeleteDialog';
 
 // NOTE: This file uses @testing-library/react instead of the project's
 // usual react-dom/server + renderToStaticMarkup convention (see
@@ -83,6 +86,156 @@ describe('ConfirmDialog additive props', () => {
       { wrapper: Wrapper },
     );
     expect(screen.getByTestId('cd-confirm')).toBeDisabled();
+  });
+});
+
+describe('ConfirmDialog keyboard activation', () => {
+  it.each(['Cancel', 'Keep'])(
+    'Enter activates focused %s without confirming',
+    async (cancelLabel) => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      const onOpenChange = vi.fn();
+      render(
+        <ConfirmDialog
+          open
+          title="Confirm?"
+          description="Details"
+          onConfirm={onConfirm}
+          onOpenChange={onOpenChange}
+          cancelLabel={cancelLabel}
+          cancelTestId="cancel"
+          confirmTestId="confirm"
+          contentTestId="content"
+        />,
+        { wrapper: Wrapper },
+      );
+      screen.getByTestId('cancel').focus();
+      expect(screen.getByTestId('cancel')).toHaveFocus();
+      await user.keyboard('{Enter}');
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+      expect(onConfirm).not.toHaveBeenCalled();
+    },
+  );
+
+  it('Enter activates focused Confirm exactly once', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        title="Confirm?"
+        description="Details"
+        onConfirm={onConfirm}
+        onOpenChange={() => {}}
+        confirmTestId="confirm"
+      />,
+      { wrapper: Wrapper },
+    );
+    screen.getByTestId('confirm').focus();
+    await user.keyboard('{Enter}');
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])(
+    'content shortcuts respect confirmDisabled=%s',
+    async (confirmDisabled) => {
+      const user = userEvent.setup();
+      const onConfirm = vi.fn();
+      const onOpenChange = vi.fn();
+      render(
+        <ConfirmDialog
+          open
+          title="Confirm?"
+          description="Details"
+          onConfirm={onConfirm}
+          onOpenChange={onOpenChange}
+          confirmDisabled={confirmDisabled}
+          contentTestId="content"
+        />,
+        { wrapper: Wrapper },
+      );
+      screen.getByTestId('content').focus();
+      await user.keyboard('{Enter}');
+      expect(onConfirm).toHaveBeenCalledTimes(confirmDisabled ? 0 : 1);
+      onOpenChange.mockClear();
+      await user.keyboard('{Backspace}');
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    },
+  );
+
+  it('does not intercept typing inside an input', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        title="Confirm?"
+        description="Details"
+        onConfirm={onConfirm}
+        onOpenChange={onOpenChange}
+        bodyContent={<Input data-testid="input" />}
+      />,
+      { wrapper: Wrapper },
+    );
+    await user.click(screen.getByTestId('input'));
+    await user.keyboard('x{Enter}{Backspace}');
+    expect(screen.getByTestId('input')).toHaveValue('');
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores shortcuts while submitting', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <ConfirmDialog
+        open
+        isLoading
+        title="Confirm?"
+        description="Details"
+        onConfirm={onConfirm}
+        onOpenChange={onOpenChange}
+        contentTestId="content"
+        cancelTestId="cancel"
+        confirmTestId="confirm"
+      />,
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId('cancel')).toBeDisabled();
+    expect(screen.getByTestId('confirm')).toBeDisabled();
+    screen.getByTestId('content').focus();
+    await user.keyboard('{Enter}{Backspace}');
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('Cancel in DeleteDialog stays safe after its typed confirmation matches', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <DeleteDialog
+        open
+        entityKind="Event"
+        entityName="Example"
+        onConfirm={onConfirm}
+        onOpenChange={onOpenChange}
+        inputTestId="input"
+        cancelTestId="cancel"
+        confirmTestId="confirm"
+      />,
+      { wrapper: Wrapper },
+    );
+    await user.type(screen.getByTestId('input'), 'Example');
+    expect(screen.getByTestId('confirm')).toBeEnabled();
+    screen.getByTestId('cancel').focus();
+    expect(screen.getByTestId('cancel')).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });
 
