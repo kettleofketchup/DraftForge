@@ -1,5 +1,7 @@
 import copy
+import time
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, NoReturn
 
 import nh3
@@ -7,7 +9,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models, router, transaction
-from django.db.models import F
+from django.db.models import Count, F
 from django.db.models.expressions import DatabaseDefault
 from django.db.models.functions import Now
 from django.utils import timezone as tz
@@ -977,6 +979,18 @@ def _ledger_blocked(
     )
 
 
+PURGE_BATCH_SIZE: int = 500
+PURGE_CHUNK_SIZE: int = 500
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerPurgeOutcome:
+    count: int
+    events: int
+    batches: int
+    complete: bool
+
+
 class SignupLedgerEntryQuerySet(models.QuerySet):
     def delete(self) -> tuple[int, dict[str, int]]:
         _ledger_blocked(None, "queryset_delete", [])
@@ -986,12 +1000,58 @@ class SignupLedgerEntryQuerySet(models.QuerySet):
             _ledger_blocked(None, "queryset_update", sorted(kwargs))
         return super().update(**kwargs)
 
-    def purge(self) -> int:
-        count, _ = models.QuerySet.delete(self)
-        log.info(
-            "signup_ledger_purged", system="events", subsystem="ledger", count=count
+    def purge(
+        self,
+        *,
+        organization_id: int | None = None,
+        batch_size: int = PURGE_BATCH_SIZE,
+        deadline: float | None = None,
+        extra_log: dict[str, Any] | None = None,
+    ) -> LedgerPurgeOutcome:
+        sizes = (
+            self.order_by()
+            .values("event_id")
+            .annotate(n=Count("pk"))
+            .order_by("event_id")
+            .values_list("event_id", "n")
         )
-        return count
+        batches: list[list[int]] = []
+        rows = 0
+        for event_id, n in sizes:
+            if not batches or (rows + n > batch_size and batches[-1]):
+                batches.append([])
+                rows = 0
+            batches[-1].append(event_id)
+            rows += n
+
+        count = events = done = 0
+        complete = True
+        for batch in batches:
+            if deadline is not None and time.monotonic() >= deadline:
+                complete = False
+                break
+            with transaction.atomic():
+                for start in range(0, len(batch), PURGE_CHUNK_SIZE):
+                    chunk = batch[start : start + PURGE_CHUNK_SIZE]
+                    deleted, _ = models.QuerySet.delete(self.filter(event_id__in=chunk))
+                    count += deleted
+            events += len(batch)
+            done += 1
+
+        log.info(
+            "signup_records_purged",
+            system="events",
+            subsystem="ledger",
+            organization_id=organization_id,
+            count=count,
+            events=events,
+            batches=done,
+            complete=complete,
+            **(extra_log or {}),
+        )
+        return LedgerPurgeOutcome(
+            count=count, events=events, batches=done, complete=complete
+        )
 
 
 class SignupLedgerEntry(models.Model):
@@ -1068,6 +1128,7 @@ class SignupLedgerEntry(models.Model):
             models.Index(
                 fields=["organization", "occurred_at"], name="ledger_org_occurred_idx"
             ),
+            models.Index(fields=["organization", "event"], name="ledger_org_event_idx"),
             models.Index(fields=["correlation_id"], name="ledger_correlation_idx"),
         ]
 

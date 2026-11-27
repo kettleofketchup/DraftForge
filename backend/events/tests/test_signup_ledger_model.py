@@ -140,12 +140,12 @@ class AppendOnlyTest(SignupLedgerModelTestCase):
         a = self._entry()
         b = self._entry()
         with capture_logs() as logs:
-            count = SignupLedgerEntry.objects.filter(pk__in=[a.pk, b.pk]).purge()
-        self.assertEqual(count, 2)
+            outcome = SignupLedgerEntry.objects.filter(pk__in=[a.pk, b.pk]).purge()
+        self.assertEqual(outcome.count, 2)
         self.assertEqual(
             list(SignupLedgerEntry.objects.values_list("pk", flat=True)), [keep.pk]
         )
-        purged = [e for e in logs if e["event"] == "signup_ledger_purged"]
+        purged = [e for e in logs if e["event"] == "signup_records_purged"]
         self.assertEqual(len(purged), 1, logs)
         self.assertEqual(purged[0]["system"], "events")
         self.assertEqual(purged[0]["subsystem"], "ledger")
