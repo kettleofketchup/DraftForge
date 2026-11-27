@@ -50,6 +50,7 @@ from events.eligibility import (
 )
 from events.ledger import (
     SignupActor,
+    latest_restorable_withdrawal,
     record_signup_change,
     require_staff_reason,
     snapshot,
@@ -58,6 +59,7 @@ from events.line import (
     forfeits_on_withdraw,
     restamp_to_back,
     restamps_on_switch,
+    restore_place,
     start_first_fields,
     waitlist_rank,
 )
@@ -841,6 +843,7 @@ def _record_leaf(
     reason: str = "",
     rules_overridden: Sequence[str] = (),
     correlation_id: str = "",
+    caused_by: SignupLedgerEntry | None = None,
 ) -> SignupLedgerEntry:
     return record_signup_change(
         event=event,
@@ -852,6 +855,7 @@ def _record_leaf(
         after=after or snapshot(signup, extra=extra),
         reason=reason,
         rules_overridden=rules_overridden,
+        caused_by=caused_by,
         correlation_id=correlation_id,
     )
 
@@ -1351,6 +1355,100 @@ def _record_reinstated(
         reason=reason,
         correlation_id=f"rc{check.pk}:reinstate" if check is not None else "",
     )
+
+
+VOID_NOT_REMOVED_MESSAGE = "Only withdrawn or rejected signups can be voided."
+VOID_NO_HISTORY_MESSAGE = "This withdrawal has no recorded place to restore."
+VOIDABLE_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.CANCELLED, SignupStatus.REJECTED}
+)
+VOIDABLE_EVENT_STATES: frozenset[str] = frozenset(
+    {EventState.SIGNUPS_OPEN, EventState.ROLL_CALL}
+)
+
+
+def _voided_extra(voided: SignupLedgerEntry) -> dict[str, Any]:
+    carried = {
+        key: value
+        for key, value in ((voided.before or {}).get("extra") or {}).items()
+        if key != "staff_power"
+    }
+    return {**carried, "voided_entry_id": voided.pk}
+
+
+@transaction.atomic
+def void_withdrawal(
+    signup: EventSignup,
+    *,
+    actor: SignupActor,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> EventSignup:
+    """Restore a removed signup to the exact place its latest withdrawal,
+    decline or rejection took it from."""
+    locked = lock_event(signup.event)
+    signup.refresh_from_db(
+        from_queryset=EventSignup.objects.select_for_update()
+        .nocache()
+        .select_related("event", "user__base_profile")
+    )
+    if locked.state not in VOIDABLE_EVENT_STATES:
+        raise ValueError(NOT_ACCEPTING_MESSAGE)
+    if signup.status not in VOIDABLE_STATUSES:
+        raise ValueError(VOID_NOT_REMOVED_MESSAGE)
+    voided = latest_restorable_withdrawal(signup)
+    if voided is None:
+        raise ValueError(VOID_NO_HISTORY_MESSAGE)
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.VOIDED_WITHDRAWAL, reason=reason
+    )
+    before = _ranked_snapshot(signup)
+    snap = SignupSnapshot.model_validate(voided.before)
+    overridden: list[str] = []
+
+    restore_place(signup, snap)
+    signup.waitlist_position = (
+        _next_waitlist_position(locked)
+        if signup.status == SignupStatus.WAITLISTED
+        else None
+    )
+    signup.save(update_fields=["waitlist_position", "updated_at"])
+
+    void_entry = _record_leaf(
+        signup,
+        event=locked,
+        actor=actor,
+        action=SignupAction.VOIDED_WITHDRAWAL,
+        before=before,
+        after=snapshot(
+            signup,
+            extra=_voided_extra(voided),
+            waitlist_rank=waitlist_rank(signup),
+        ),
+        reason=reason,
+        rules_overridden=overridden,
+        caused_by=voided,
+    )
+    promoted = _promote_from_waitlist(locked, cause=void_entry)
+    if any(p.pk == signup.pk for p in promoted):
+        _reread_signup(signup)
+    invalidate_after_commit(signup, locked)
+    transaction.on_commit(lambda: notify_signup_changed(locked))
+    signup_id, event_id, voided_id = signup.pk, locked.pk, voided.pk
+    restored_status = str(snap.status)
+    transaction.on_commit(
+        lambda: log.info(
+            "signup_withdrawal_voided",
+            system="events",
+            subsystem="void",
+            signup_id=signup_id,
+            event_id=event_id,
+            voided_entry_id=voided_id,
+            restored_status=restored_status,
+            overridden=overridden,
+        )
+    )
+    return signup
 
 
 # ---------------------------------------------------------------------------
