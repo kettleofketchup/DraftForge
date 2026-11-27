@@ -18,6 +18,21 @@ class OrgApiToken(models.Model):
         on_delete=models.CASCADE,
         related_name="org_api_tokens",
     )
+    connection = models.ForeignKey(
+        "org.OrgApiConnection",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="tokens",
+    )
+    legacy_credential = models.BooleanField(default=False)
+    issued_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     name = models.CharField(max_length=64)
     prefix = models.CharField(max_length=16, unique=True)
     secret_hash = models.CharField(max_length=64)
@@ -39,6 +54,13 @@ class OrgApiToken(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["organization", "user"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connection"],
+                condition=models.Q(revoked_at__isnull=True, legacy_credential=False),
+                name="org_api_one_current_credential",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.prefix}) @ org {self.organization_id}"

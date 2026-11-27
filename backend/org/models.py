@@ -4,6 +4,18 @@ from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
 from common.game import GameType
+from org.models_api_connections import (
+    OrgApiConnection,  # noqa: F401
+    OrgApiMmrDelivery,  # noqa: F401
+    OrgApiMmrPullTarget,  # noqa: F401
+    OrgApiPromotionAdoption,  # noqa: F401
+    OrgApiPromotionBinding,  # noqa: F401
+    OrgApiPromotionEventBinding,  # noqa: F401
+    OrgApiRunCheckpoint,  # noqa: F401
+    OrgApiSyncRun,  # noqa: F401
+    OrgMmrRevisionCounter,  # noqa: F401
+    OrgMmrSyncState,  # noqa: F401
+)
 from org.models_api_tokens import (
     OrgApiLimits,  # noqa: F401
     OrgApiToken,  # noqa: F401
