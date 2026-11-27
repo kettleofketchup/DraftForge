@@ -4,16 +4,20 @@ from datetime import date
 from typing import Any, ClassVar
 from unittest.mock import MagicMock, patch
 
-from django.core.cache import cache
 from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import CustomUser
 from discordbot import activity_fake
 from discordbot.activity import discord_json
+from discordbot.activity_intent import intent_key
 from discordbot.models import DraftActivityChannel
 from discordbot.tests.activity_helpers import ClearIntentsMixin
+from discordbot.utils import redis_client
 from draft.models import DraftTeam, HeroDraft
+from tests.data.tournaments import ACTIVITY_BRACKET_CONFIG
+from tests.populate.utils import flush_redis_cache
+from tests.test_discord_activity import discord_activity_setup
 from tournament.models import Game, Team, Tournament
 
 DISCORD_ID = "424242424242"
@@ -32,8 +36,8 @@ def _upstream_response() -> MagicMock:
 class FakeCleanupMixin:
     def setUp(self) -> None:
         super().setUp()  # type: ignore[misc]
-        cache.delete(activity_fake._instance_key(INSTANCE_ID))
-        self.addCleanup(cache.delete, activity_fake._instance_key(INSTANCE_ID))  # type: ignore[attr-defined]
+        activity_fake.forget_instance(INSTANCE_ID)
+        self.addCleanup(activity_fake.forget_instance, INSTANCE_ID)  # type: ignore[attr-defined]
 
 
 @override_settings(TEST=False, SOCIAL_AUTH_DISCORD_KEY=None)
@@ -45,7 +49,8 @@ class ActivityFakeInertTests(FakeCleanupMixin, TestCase):
 
     def test_register_instance_stores_nothing(self) -> None:
         activity_fake.register_instance(INSTANCE_ID, "1", "2", [DISCORD_ID])
-        self.assertIsNone(cache.get(activity_fake._instance_key(INSTANCE_ID)))
+        with override_settings(TEST=True, RELEASE=False):
+            self.assertIsNone(activity_fake.answer("GET", INSTANCE_PATH, {}))
 
     def test_client_id_is_the_configured_value(self) -> None:
         self.assertIsNone(activity_fake.client_id())
@@ -169,5 +174,81 @@ class ActivityFakeSessionTests(ClearIntentsMixin, FakeCleanupMixin, TestCase):
         self.assertEqual(response.data["tournament_id"], self.tournament.pk)
         self.assertEqual(response.data["scope"], "tournament")
         self.assertEqual(response.data["user"]["pk"], self.user.pk)
+        request.assert_not_called()
+        bot_request.assert_not_called()
+
+    @patch("discordbot.activity.requests.request")
+    @patch("discordbot.activity._rate_limited_request")
+    def test_unregistered_fake_instance_fails_without_reaching_discord(
+        self, bot_request: MagicMock, request: MagicMock
+    ) -> None:
+        response = APIClient().post(
+            "/api/discord/activity/session/",
+            {
+                "code": activity_fake.fake_code(DISCORD_ID),
+                "instance_id": "e2e-unregistered",
+                "mode": "first",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403, response.content)
+        request.assert_not_called()
+        bot_request.assert_not_called()
+
+
+@override_settings(
+    TEST=True,
+    RELEASE=False,
+    SOCIAL_AUTH_DISCORD_KEY=None,
+    DISCORD_ACTIVITY_ENABLED=True,
+)
+class ActivitySetupThenResetTests(TestCase):
+    """Playwright workers share one backend: another spec's reset can land mid-launch."""
+
+    def setUp(self) -> None:
+        captain = CustomUser.objects.create_user(
+            username="activity-captain", discordId=DISCORD_ID
+        )
+        rival = CustomUser.objects.create_user(username="activity-rival")
+        tournament = Tournament.objects.create(
+            name=ACTIVITY_BRACKET_CONFIG.name, date_played=date.today()
+        )
+        Game.objects.create(
+            tournament=tournament,
+            status="pending",
+            radiant_team=Team.objects.create(
+                name="R", tournament=tournament, captain=captain
+            ),
+            dire_team=Team.objects.create(
+                name="D", tournament=tournament, captain=rival
+            ),
+        )
+        self.addCleanup(redis_client.delete, intent_key(DISCORD_ID))
+
+    @patch("discordbot.activity.requests.request")
+    @patch("discordbot.activity._rate_limited_request")
+    def test_session_verifies_after_a_reset_flushes_the_cache(
+        self, bot_request: MagicMock, request: MagicMock
+    ) -> None:
+        with patch("tests.test_discord_activity.isTestEnvironment", return_value=True):
+            setup = discord_activity_setup(
+                APIRequestFactory().post("/api/tests/discord-activity/setup/")
+            )
+        self.assertEqual(setup.status_code, 200, setup.data)
+        self.addCleanup(activity_fake.forget_instance, setup.data["instance_id"])
+
+        flush_redis_cache()
+
+        response = APIClient().post(
+            "/api/discord/activity/session/",
+            {
+                "code": setup.data["code"],
+                "instance_id": setup.data["instance_id"],
+                "mode": "first",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["user"]["pk"], setup.data["user_id"])
         request.assert_not_called()
         bot_request.assert_not_called()

@@ -43,7 +43,7 @@ the admin types the value.
 | Tournament pages, players tab, team cards, team totals, drafts, captain succession | The tournament's game |
 | Event page, roll call, signup approval | The event's game |
 | Organization Users tab, user card on the org page, player modal opened from the org page | Every game, each on its own line |
-| League pages and league snapshots (`LeagueUser.mmr`, league rating base MMR, match snapshots) | Always Dota 2 |
+| League pages and league MMR (`LeagueUser.mmr`, league rating base MMR, match snapshots) | Always Dota 2 |
 | Anything with no game | Dota 2 |
 
 A Deadlock tournament therefore balances teams, orders shuffle drafts and picks a new
@@ -51,9 +51,13 @@ captain by Deadlock org MMR. Dota tournaments behave exactly as before.
 
 ### Limitations
 
-- **Leagues are Dota only.** A league has no game, so league MMR snapshots are seeded
-  from the Dota 2 org MMR. The tournament CSV import refuses the `league` MMR target for
-  a non-Dota tournament.
+- **Leagues are Dota only.** A league has no game, so league MMR is the Dota 2 org
+  MMR plus the member's best league performance adjustment (`mmr_adjustment` from
+  league stats). It is seeded that way when a member joins a league and recomputed
+  for Unverified league MMRs whenever the org MMR or the adjustment changes. Official
+  league MMRs stay pinned, a member without an org MMR keeps their league MMR, and a
+  CSV import with the `league` MMR target writes the staff-entered value as is. The
+  tournament CSV import refuses the `league` MMR target for a non-Dota tournament.
 - **Deadlock tournaments come from events.** The tournament create form always makes a
   Dota 2 tournament (`game_type` is read-only there). Create a Deadlock event and start
   its tournament from the event.

@@ -11,8 +11,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventRepeaterType } from '~/components/api/api';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
+import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 
 // Mutation seam: the PATCH body is the assertion target.
+vi.mock('~/components/organization/hooks/useOrganization', () => ({
+  useOrganization: () => ({ organization: null }),
+}));
+
 const mutateAsync = vi.fn().mockResolvedValue({});
 vi.mock('~/hooks/useEvent', () => ({
   useUpdateEventRepeaterMutation: () => ({ mutateAsync, isPending: false }),
@@ -80,9 +85,11 @@ globalThis.ResizeObserver ??=
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
-    <I18nextProvider i18n={createI18nInstance('en')}>
-      <TooltipProvider>{children}</TooltipProvider>
-    </I18nextProvider>
+    <TestQueryClientProvider>
+      <I18nextProvider i18n={createI18nInstance('en')}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </I18nextProvider>
+    </TestQueryClientProvider>
   );
 }
 

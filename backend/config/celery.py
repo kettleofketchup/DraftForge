@@ -31,7 +31,6 @@ def init_worker_telemetry(**kwargs: object) -> None:
     init_telemetry()
 
 
-# Beat schedule for periodic tasks
 _beat_schedule = {
     "sync-league-matches-every-minute": {
         "task": "steam.tasks.sync_all_steam_leagues_task",
@@ -73,15 +72,18 @@ _beat_schedule = {
         "task": "user.tasks.avatar_refresh.refresh_avatars_batched",
         "schedule": crontab(hour=4, minute=15),  # 15 min after the daily sweep
     },
+    "purge-mmr-screenshots-nightly": {
+        "task": "org.tasks.purge_expired_mmr_screenshots",
+        "schedule": crontab(hour=3, minute=30),
+    },
     "sync-active-org-discord-names": {
         "task": "user.tasks.discord_name_sync.sync_active_org_discord_names",
         "schedule": 1800.0,
     },
 }
 
-# Event-related tasks that write frequently to the DB.
-# Disabled in test environment to prevent SQLite lock contention
-# with Playwright E2E tests (celery worker is a separate process).
+# Event tasks write frequently but via the internal HTTP API (no direct DB
+# access), so they also run alongside Playwright E2E tests.
 _event_tasks = {
     "generate-upcoming-events-hourly": {
         "task": "events.tasks.generate_upcoming_events",
@@ -105,8 +107,6 @@ _event_tasks = {
     },
 }
 
-# Event tasks now write via internal HTTP API (no direct DB access),
-# so they're safe to run alongside tests. Re-enable in all environments.
 _beat_schedule.update(_event_tasks)
 
 app.conf.beat_schedule = _beat_schedule

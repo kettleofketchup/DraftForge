@@ -17,7 +17,7 @@ from django.contrib.sessions.backends.base import SessionBase
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
 from django.db import OperationalError, transaction
-from django.test import TransactionTestCase, override_settings
+from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from django.urls import path, re_path
 from django.utils import timezone
 from opentelemetry import trace
@@ -170,7 +170,8 @@ class ChatConsumerFixture(TransactionTestCase):
         comm.scope["user"] = user
         if session is not None:
             comm.scope["session"] = session
-        connected, _ = await comm.connect()
+        # Match the activity handshake budget; timeout still fails without retry.
+        connected, _ = await comm.connect(timeout=5)
         self.assertTrue(connected)
         self.comms.append(comm)
         initial = await read_until_type(comm, "initial_state")
@@ -222,6 +223,52 @@ class ChatConsumerFixture(TransactionTestCase):
     @staticmethod
     def bodies(history: dict[str, Any]) -> list[str]:
         return [m["body"] for m in history["messages"]]
+
+
+class ChatConnectDeadlineTest(SimpleTestCase):
+    def setUp(self) -> None:
+        self.fixture: ChatConsumerFixture = ChatConsumerFixture()
+        self.fixture.draft = HeroDraft(pk=1)
+        self.fixture.comms = []
+        self.comm: mock.MagicMock = mock.create_autospec(
+            WebsocketCommunicator, instance=True
+        )
+        self.comm.scope = {}
+        patcher = mock.patch(
+            __name__ + ".WebsocketCommunicator", return_value=self.comm
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def test_helper_allows_bounded_preaccept_work(self) -> None:
+        async def connect(timeout: float = 1) -> tuple[bool, None]:
+            # Model two seconds of preaccept work without waiting on wall time.
+            if timeout < 2:
+                raise TimeoutError("preaccept work exceeded the connect deadline")
+            self.assertEqual(timeout, 5)
+            return True, None
+
+        self.comm.connect.side_effect = connect
+        initial = {"type": "initial_state"}
+        history = {"type": "chat_history"}
+        with mock.patch(__name__ + ".read_until_type", side_effect=[initial, history]):
+            result = await self.fixture.connect_with_frames(AnonymousUser())
+        self.assertEqual(result, (self.comm, initial, history))
+        self.comm.connect.assert_awaited_once()
+
+    async def test_helper_does_not_retry_or_hide_a_connect_timeout(self) -> None:
+        self.comm.connect.side_effect = TimeoutError("hung handshake")
+        with self.assertRaisesRegex(TimeoutError, "hung handshake"):
+            await self.fixture.connect_with_frames(AnonymousUser())
+        self.comm.connect.assert_awaited_once()
+        self.assertEqual(self.fixture.comms, [])
+
+    async def test_helper_does_not_turn_rejection_into_acceptance(self) -> None:
+        self.comm.connect.return_value = False, 4403
+        with self.assertRaises(AssertionError):
+            await self.fixture.connect_with_frames(AnonymousUser())
+        self.comm.connect.assert_awaited_once()
+        self.assertEqual(self.fixture.comms, [])
 
 
 class ChatHistoryOnConnectTest(ChatConsumerFixture):

@@ -12,6 +12,7 @@ import { I18nextProvider } from 'react-i18next';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { createI18nInstance } from '~/i18n/config';
+import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 import type { EventType } from '../schemas';
 
 // Mutation seam: the PATCH body is the assertion target.
@@ -87,9 +88,11 @@ globalThis.ResizeObserver ??=
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return (
-    <I18nextProvider i18n={createI18nInstance('en')}>
-      <TooltipProvider>{children}</TooltipProvider>
-    </I18nextProvider>
+    <TestQueryClientProvider>
+      <I18nextProvider i18n={createI18nInstance('en')}>
+        <TooltipProvider>{children}</TooltipProvider>
+      </I18nextProvider>
+    </TestQueryClientProvider>
   );
 }
 

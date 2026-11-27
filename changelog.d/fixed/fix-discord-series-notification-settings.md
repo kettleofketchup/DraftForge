@@ -1,1 +1,0 @@
-- Series new-event posts are no longer suppressed when the pre-day announcement is off; they still need an announcement channel, and existing series with *Post new events* on and a channel set will start posting. The setting's description no longer promises DMs or cancellation messages.

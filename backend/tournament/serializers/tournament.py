@@ -4,6 +4,7 @@ from rest_framework import serializers
 from app.models import CustomUser, GameType
 from app.permissions import request_user
 from draft.models import DraftOptions
+from league.mmr_sync import league_mmr_seeds
 from league.models import League, LeagueUser
 from league.permissions import check_lobby_steam_league_id
 from league.serializers import LeagueMinimalSerializer, LeaguesSerializer
@@ -86,7 +87,7 @@ def _is_pre_draft_team(team: Team) -> bool:
     )
 
 
-def _delete_pre_draft_captain_teams(
+def delete_pre_draft_captain_teams(
     tournament: Tournament, removed_user_ids: set[int]
 ) -> None:
     """Delete pre-draft teams of removed captains; the member-removal signal handles the rest."""
@@ -282,7 +283,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                 added_users = new_users - current_users
 
                 if removed_users:
-                    _delete_pre_draft_captain_teams(
+                    delete_pre_draft_captain_teams(
                         instance, {u.pk for u in removed_users}
                     )
 
@@ -323,14 +324,16 @@ class TournamentSerializer(serializers.ModelSerializer):
                         )
 
                         # Create missing LeagueUsers in bulk
-                        league_mmrs = org_mmr_map(
-                            org.pk,
-                            [
-                                u.pk
-                                for u in added_users
-                                if u.pk not in existing_league_users
-                            ],
-                            LEAGUE_GAME,
+                        league_mmrs = league_mmr_seeds(
+                            org_mmr_map(
+                                org.pk,
+                                [
+                                    u.pk
+                                    for u in added_users
+                                    if u.pk not in existing_league_users
+                                ],
+                                LEAGUE_GAME,
+                            )
                         )
                         new_league_users = []
                         for user in added_users:

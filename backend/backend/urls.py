@@ -94,6 +94,7 @@ from tournament.views.internal import (
     get_tournament_for_task,
     get_tournament_participants,
 )
+from tournament.views.member_removal import remove_tournament_member
 from tournament.views.members import add_tournament_member
 from tournament.views.team import TeamCreateView, TeamView
 from tournament.views.tournament import (
@@ -401,6 +402,11 @@ urlpatterns = [
         add_tournament_member,
         name="add_tournament_member",
     ),
+    path(
+        "api/tournaments/<int:tournament_id>/members/<int:user_id>/",
+        remove_tournament_member,
+        name="remove_tournament_member",
+    ),
     # SSR endpoints — lightweight public data for meta tags and skeletons
     path(
         "api/tournaments/<int:pk>/ssr/",
@@ -558,6 +564,10 @@ if isTestEnvironment():
 
 urlpatterns += [
     path("api/internal/ops-notices/", include("opsnotices.internal_urls")),
+]
+
+urlpatterns += [
+    path("api/internal/mmr-requests/", include("org.mmr_requests.internal_urls")),
 ]
 
 urlpatterns += [path("", include("opsnotices.urls"))]

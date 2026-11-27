@@ -107,6 +107,8 @@ The Zod binding is generated from `backend/app/steam_verification_schemas.py` wi
 | PUT | `/api/tournaments/{id}/` | Update tournament |
 | DELETE | `/api/tournaments/{id}/` | Delete tournament |
 | GET | `/api/tournaments-list/` | Lightweight tournament list (the `/tournaments` page) |
+| POST | `/api/tournaments/{id}/members/` | Add one player (`user_id` or a Discord member) |
+| DELETE | `/api/tournaments/{id}/members/{user_id}/` | Remove one player and leave the rest. `404` `not_a_member` if they aren't in the tournament. Use this rather than a `PATCH` of the whole `user_ids` list, which drops players other admins added meanwhile |
 
 ### Tournament List
 
@@ -506,6 +508,37 @@ the game and lists it in `skipped_roster_conflicts` (`game_id`, `match_id`, `tea
 `user_ids`); `POST /api/steam/auto-link/` skips it and counts it in
 `skipped_roster_conflict_count`. Both leave the game unchanged and log
 `game_link_skipped_roster_conflict`.
+
+### Saving a bracket
+
+`POST /api/bracket/tournaments/{tid}/save/` refuses with `400` and changes nothing when a
+match's `radiantTeam` or `direTeam` is not a team of that tournament:
+
+```json
+{
+  "code": "team_not_in_tournament",
+  "error": "Bracket references teams that are not in this tournament",
+  "team_ids": [87]
+}
+```
+
+### Stale bracket saves
+
+`GET /api/bracket/tournaments/{tid}/` returns a `version` alongside `matches`. It covers
+the fields Save writes (teams, results, status, links, Swiss records), not lobby or
+draft state. Send it back as `version` with `POST /api/bracket/tournaments/{tid}/save/`.
+If any of those fields changed since, for example another admin set a result, Save
+changes nothing and returns `409`:
+
+```json
+{
+  "code": "bracket_stale",
+  "error": "The bracket changed since you loaded it. Reload to see the latest results.",
+  "details": {"current_version": "…"}
+}
+```
+
+A successful Save returns the new `version`. A Save without `version` is not checked.
 
 ## Games
 

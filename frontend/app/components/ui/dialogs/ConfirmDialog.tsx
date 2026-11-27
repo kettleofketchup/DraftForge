@@ -24,29 +24,19 @@ import {
 import { cn } from '~/lib/utils';
 
 export interface ConfirmDialogProps {
-  /** Whether the dialog is open */
   open: boolean;
-  /** Callback when open state changes */
   onOpenChange: (open: boolean) => void;
-  /** Dialog title */
   title: string;
   /** Dialog description (string or React node — use a node for richer recaps like UserStrip + details) */
   description: React.ReactNode;
-  /** Confirm button label */
   confirmLabel?: string;
-  /** Cancel button label */
   cancelLabel?: string;
-  /** Visual variant - affects styling */
   variant?: 'default' | 'destructive' | 'warning';
   /** Cancel button variant - overrides default variant-based logic */
   cancelVariant?: CancelButtonVariant;
-  /** Whether the action is in progress */
   isLoading?: boolean;
-  /** Callback when confirm is clicked */
   onConfirm: () => void | Promise<void>;
-  /** data-testid for confirm button */
   confirmTestId?: string;
-  /** data-testid for cancel button */
   cancelTestId?: string;
   /** data-testid for the AlertDialogContent root */
   contentTestId?: string;
@@ -54,15 +44,12 @@ export interface ConfirmDialogProps {
   titleTestId?: string;
   /** data-testid for the AlertDialogDescription */
   descriptionTestId?: string;
-  /** Optional content rendered between header and footer as a sibling grid row.
-   *  When omitted, NO wrapper element is emitted (the 13 existing call sites
-   *  see identical layout). */
+  /** Optional sibling grid row between header and footer; no wrapper when omitted. */
   bodyContent?: React.ReactNode;
   /** When true, the confirm button is rendered disabled regardless of isLoading. */
   confirmDisabled?: boolean;
 }
 
-// Content background styling per variant
 const contentVariantStyles = {
   default: `bg-success-surface ${brandSuccessBg}`,
   destructive: `bg-background ${brandDestructiveBg} border-destructive/50`,
@@ -79,7 +66,6 @@ const descriptionVariantStyles = {
   warning: brandReadableWarning,
 };
 
-// Map dialog variant to button variants
 const confirmButtonVariantMap: Record<string, ConfirmButtonVariant> = {
   default: 'default',
   destructive: 'destructive',
@@ -173,9 +159,9 @@ export const ConfirmDialog = React.forwardRef<
       onOpenChange(false);
     };
 
-    // Enter → confirm, Backspace → cancel. Escape is already handled by Radix.
-    // We skip the keys when an editable element has focus so users can still
-    // type in inputs nested inside `description`.
+    // Enter confirms unless a button, link, or role="button" has focus;
+    // Backspace cancels. Radix handles Escape. Editable elements are skipped
+    // so users can type in inputs nested inside `description`.
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
       // A closing dialog keeps focus during its exit animation; ignore its keys.
       if (!open || event.defaultPrevented || isLoading) return;
@@ -189,6 +175,7 @@ export const ConfirmDialog = React.forwardRef<
       if (isEditable) return;
 
       if (event.key === 'Enter') {
+        if (target?.closest('button, a[href], [role="button"]')) return;
         event.preventDefault();
         void handleConfirm();
       } else if (event.key === 'Backspace') {
