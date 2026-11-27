@@ -4,14 +4,20 @@ Playwright cannot reach Discord, so on a TEST stack the three server-side
 calls behind ``activity_session`` are answered here instead: the OAuth code
 exchange, ``/users/@me`` and the activity-instance lookup. Every entry point
 is inert unless ``settings.TEST`` is on and ``settings.RELEASE`` is off.
+
+Registered instances live in the bot Redis DB under a namespaced key, not the
+Django cache: reset endpoints flush every cache key while other specs run.
 """
 
+import json
 import re
-from typing import Any
+from typing import Any, cast
 
+import requests
 from django.conf import settings
-from django.core.cache import cache
 
+from app.redis_keys import namespaced_key
+from discordbot.utils import redis_client
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -31,8 +37,12 @@ def active() -> bool:
     )
 
 
+class FakeInstanceMissing(requests.RequestException):
+    """A fake instance ID with no registration; Discord would not know it either."""
+
+
 def _instance_key(instance_id: str) -> str:
-    return f"activity_fake_instance:{instance_id}"
+    return namespaced_key(f"activity_fake_instance:{instance_id}")
 
 
 def fake_code(discord_id: str) -> str:
@@ -52,18 +62,20 @@ def register_instance(
 ) -> None:
     if not active():
         return
-    cache.set(
+    redis_client.set(
         _instance_key(instance_id),
-        {
-            "id": instance_id,
-            "users": [str(u) for u in users],
-            "location": {
-                "kind": "gc",
-                "guild_id": str(guild_id),
-                "channel_id": str(channel_id),
-            },
-        },
-        INSTANCE_TTL_S,
+        json.dumps(
+            {
+                "id": instance_id,
+                "users": [str(u) for u in users],
+                "location": {
+                    "kind": "gc",
+                    "guild_id": str(guild_id),
+                    "channel_id": str(channel_id),
+                },
+            }
+        ),
+        ex=INSTANCE_TTL_S,
     )
     log.info(
         "activity_fake_instance_registered",
@@ -96,5 +108,24 @@ def answer(method: str, path: str, kwargs: dict[str, Any]) -> dict[str, Any] | N
         return None if discord_id is None else {"id": discord_id}
     match = _INSTANCE_PATH.match(path)
     if method == "GET" and match:
-        return cache.get(_instance_key(match.group(1)))
+        return _registered_instance(match.group(1))
     return None
+
+
+def forget_instance(instance_id: str) -> None:
+    redis_client.delete(_instance_key(instance_id))
+
+
+def _registered_instance(instance_id: str) -> dict[str, Any] | None:
+    raw = redis_client.get(_instance_key(instance_id))
+    if raw is not None:
+        return cast(dict[str, Any], json.loads(cast(bytes, raw)))
+    if not instance_id.startswith(FAKE_PREFIX):
+        return None
+    log.warning(
+        "activity_fake_instance_missing",
+        system="discord",
+        subsystem="activity",
+        instance_id=instance_id,
+    )
+    raise FakeInstanceMissing(instance_id)
