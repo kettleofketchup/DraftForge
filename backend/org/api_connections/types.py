@@ -14,6 +14,23 @@ class CredentialField(ConfigRecord):
     key: Annotated[str, Field(min_length=1, max_length=128)]
 
 
+class SafeHttpRequest(ConfigRecord):
+    url: str = Field(repr=False)
+    method: Literal["GET", "POST"] = "GET"
+    query: dict[str, JsonValue] = Field(default_factory=dict, repr=False)
+    body: dict[str, JsonValue] | None = Field(default=None, repr=False)
+    auth: Literal["none", "bearer", "api_key_header", "api_key_field"] = "none"
+    credential: str | None = Field(default=None, repr=False)
+    credential_origin: str | None = Field(default=None, repr=False)
+    credential_field: CredentialField | None = None
+
+
+class SafeHttpResponse(ConfigRecord):
+    status: int
+    data: JsonValue = Field(repr=False)
+    bytes_received: int
+
+
 class ResponseMapping(ConfigRecord):
     list_path: str = ""
     player_id_path: str = "id"
