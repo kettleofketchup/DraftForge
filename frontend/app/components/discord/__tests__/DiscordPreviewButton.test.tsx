@@ -384,6 +384,25 @@ describe('DiscordPreviewButton: deferred navigation', () => {
     },
   );
 
+  it.each(['Close', 'Escape'])(
+    'normal %s returns focus to the preview trigger',
+    async (method) => {
+      wrap(navigationPreview(vi.fn()));
+      const trigger = screen.getByRole('button', {
+        name: /preview signup post/i,
+      });
+      trigger.focus();
+      openButton();
+      await screen.findByRole('button', { name: 'Go to setting' });
+      if (method === 'Close') closeDialog();
+      else fireEvent.keyDown(document, { key: 'Escape' });
+      await waitFor(() =>
+        expect(screen.queryByTestId('discord-preview-dialog')).toBeNull(),
+      );
+      expect(trigger).toHaveFocus();
+    },
+  );
+
   it('does not reuse a pending callback on reopen', async () => {
     const navigate = vi.fn();
     wrap(navigationPreview(navigate));

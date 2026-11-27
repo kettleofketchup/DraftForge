@@ -117,6 +117,7 @@ export function DiscordPreviewButton<T>({
   const [open, setOpen] = useState(false);
   const [openCount, setOpenCount] = useState(0);
   const pendingNavigation = useRef<(() => void) | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(
     () => () => {
@@ -144,6 +145,7 @@ export function DiscordPreviewButton<T>({
     <SecondaryButton
       size="sm"
       {...buttonProps}
+      ref={triggerRef}
       data-testid={testId}
       aria-label={ariaLabel ?? t('button.aria', { title })}
       disabled={disabled}
@@ -181,10 +183,9 @@ export function DiscordPreviewButton<T>({
         onCloseAutoFocus={(event) => {
           const navigate = pendingNavigation.current;
           pendingNavigation.current = null;
-          if (navigate) {
-            event.preventDefault();
-            navigate();
-          }
+          event.preventDefault();
+          if (navigate) navigate();
+          else triggerRef.current?.focus();
         }}
         title={title}
         description={description ?? t('dialog.description')}

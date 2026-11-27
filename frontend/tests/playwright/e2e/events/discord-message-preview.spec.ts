@@ -315,4 +315,74 @@ test.describe('Discord message preview @cicd', () => {
     expect(await persistedSeries(context, series.id)).toEqual(before);
     expect(writes).toEqual([]);
   });
+
+  test('later preview dismissal does not repeat prerequisite navigation', async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(90_000);
+    const eventInfo = await getEventsTestData(context);
+    await loginAdmin(context);
+    const series = await createPreviewSeries(context, eventInfo);
+    const before = await persistedSeries(context, series.id);
+    const writes: string[] = [];
+    page.on('request', (req: Request) => {
+      const { pathname } = new URL(req.url());
+      if (
+        req.method() !== 'GET' &&
+        pathname.startsWith('/api/events/') &&
+        pathname !== PREVIEW_PATH &&
+        !pathname.endsWith('/permission-checks/')
+      ) {
+        writes.push(`${req.method()} ${pathname}`);
+      }
+    });
+
+    await visitAndWaitForHydration(page, `/event-series/${series.id}`);
+    await page.getByTestId('edit-series-btn').click();
+    const modal = page.getByTestId('edit-series-modal');
+    await page.getByTestId('edit-series-frequency-select').click();
+    await page.getByTestId('edit-series-frequency-option-weekly').click();
+    await expect(page.getByTestId('edit-series-day-select')).toContainText(
+      'Select day',
+    );
+    const discordTab = page.getByTestId('edit-series-tab-discord');
+    await discordTab.click();
+    await page.getByTestId('discord-discord_create_event').check();
+
+    const { dialog } = await openNeedsInputPreview(page, 'scheduled_event');
+    await dialog.getByTestId('discord-preview-missing-schedule').focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByTestId('discord-preview-dialog')).toHaveCount(0);
+    await expect(modal).toBeVisible();
+    await expect(page.getByTestId('edit-series-tab-event')).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(
+      page.getByTestId('edit-series-frequency-select'),
+    ).toBeFocused();
+
+    await discordTab.click();
+    const previewTrigger = page.getByTestId('discord-preview-scheduled_event');
+    for (const dismissal of ['Escape', 'Close']) {
+      const reopened = await openNeedsInputPreview(page, 'scheduled_event');
+      if (dismissal === 'Escape') {
+        await page.keyboard.press('Escape');
+      } else {
+        await reopened.dialog.getByTestId('dialog-close-button').click();
+      }
+      await expect(page.getByTestId('discord-preview-dialog')).toHaveCount(0);
+      await expect(modal).toBeVisible();
+      await expect(discordTab).toHaveAttribute('aria-selected', 'true');
+      await expect(previewTrigger).toBeVisible();
+      await expect(previewTrigger).toBeFocused();
+      expect(writes).toEqual([]);
+    }
+
+    await page.getByTestId('modal-cancel-button').click();
+    await expect(modal).toHaveCount(0);
+    expect(await persistedSeries(context, series.id)).toEqual(before);
+    expect(writes).toEqual([]);
+  });
 });
