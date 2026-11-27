@@ -175,22 +175,93 @@ class TieRollHoldAfterTimeoutTests(NoTickThreadTestCase):
         self.assertFalse(nxt.was_tie)
         self.assertLess(nxt.started_at, before + SLACK)
 
-    def test_timeout_cannot_fire_during_hold(self):
+    def _held_skip(self, prefix: str) -> tuple[TimedDraftFixture, datetime]:
         fx = TimedDraftFixture(
             style="shuffle",
             captain_mmrs=TIED_AFTER_SKIP,
             grace_time_ms=1000,
             reserve_time_ms=1000,
-            prefix="nofire",
+            prefix=prefix,
         )
         _started(fx)
         rnd = fx.round(1)
         rnd.timed_out_at = timezone.now()
         rnd.save(update_fields=["timed_out_at"])
-        with self.captureOnCommitCallbacks(execute=True):
-            skip_turn(fx.draft, rnd)
-        # grace + reserve (2 s) is shorter than the hold, yet the clock has not started.
-        self.assertIsNone(teamdraft_tick.read_timeout_candidate(fx.draft.pk))
+        skipped_at = timezone.now()
+        with patch("draft.services.team_timeout.timezone.now", return_value=skipped_at):
+            with self.captureOnCommitCallbacks(execute=True):
+                skip_turn(fx.draft, rnd)
+        return fx, skipped_at
+
+    def _candidate_at(
+        self, fx: TimedDraftFixture, now: datetime
+    ) -> tuple[int, datetime] | None:
+        with patch("draft.tasks.team_tick.timezone.now", return_value=now):
+            return teamdraft_tick.read_timeout_candidate(fx.draft.pk)
+
+    def test_timeout_cannot_fire_during_hold(self) -> None:
+        fx, skipped_at = self._held_skip("nofire")
+        rnd = fx.round(1)
+        self.assertTrue(rnd.was_tie)
+        self.assertEqual(rnd.started_at, skipped_at + HOLD)
+        for offset in (timedelta(seconds=2), HOLD - timedelta(milliseconds=1), HOLD):
+            with self.subTest(offset=offset):
+                self.assertIsNone(self._candidate_at(fx, skipped_at + offset))
+                with patch(
+                    "draft.tasks.team_tick.timezone.now",
+                    return_value=skipped_at + offset,
+                ):
+                    self.assertIsNone(teamdraft_tick._check_timeout_sync(fx.draft.pk))
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.skip_count, 1)
+        self.assertIsNone(rnd.timed_out_at)
+        self.assertEqual(fx.team_of(rnd.captain).draft_reserve_ms, 1000)
+        self.assertFalse(fx.events("pick_timed_out").exists())
+
+    def test_locked_timeout_recheck_preserves_the_hold_and_budget(self) -> None:
+        fx, skipped_at = self._held_skip("locked")
+        rnd = fx.round(1)
+        for offset in (
+            HOLD - timedelta(milliseconds=1),
+            HOLD + timedelta(milliseconds=1999),
+        ):
+            with self.subTest(offset=offset):
+                with (
+                    patch(
+                        "draft.tasks.team_tick.timezone.now",
+                        return_value=skipped_at + offset,
+                    ),
+                    patch(
+                        "draft.tasks.team_tick.read_timeout_candidate",
+                        return_value=(rnd.pk, rnd.started_at),
+                    ),
+                ):
+                    self.assertIsNone(teamdraft_tick._check_timeout_sync(fx.draft.pk))
+        rnd.refresh_from_db()
+        self.assertEqual(rnd.skip_count, 1)
+        self.assertIsNone(rnd.timed_out_at)
+        self.assertEqual(fx.team_of(rnd.captain).draft_reserve_ms, 1000)
+        self.assertFalse(fx.events("pick_timed_out").exists())
+
+    def test_timeout_fires_once_grace_and_reserve_run_out_after_the_hold(self) -> None:
+        fx, skipped_at = self._held_skip("fire")
+        rnd = fx.round(1)
+        captain = rnd.captain
+        deadline = skipped_at + HOLD + timedelta(milliseconds=2000)
+        self.assertIsNone(self._candidate_at(fx, deadline - timedelta(milliseconds=1)))
+        self.assertEqual(
+            self._candidate_at(fx, deadline),
+            (rnd.pk, skipped_at + HOLD),
+        )
+        with patch("draft.tasks.team_tick.timezone.now", return_value=deadline):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertIsNotNone(teamdraft_tick._check_timeout_sync(fx.draft.pk))
+        timed_out = fx.events("pick_timed_out").get()
+        self.assertEqual(timed_out.payload["captain_id"], captain.pk)
+        self.assertEqual(timed_out.payload["elapsed_ms"], 2000)
+        self.assertEqual(timed_out.payload["reserve_used_ms"], 1000)
+        self.assertEqual(fx.team_of(captain).draft_reserve_ms, 0)
+        self.assertEqual(fx.round(1).skip_count, 2)
 
 
 class TieRollHoldPauseTests(NoTickThreadTestCase):

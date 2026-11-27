@@ -32,7 +32,7 @@ import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { BracketEdge } from './edges/BracketEdge';
-import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
+import type { MatchNodeType } from './hooks/useElkLayout';
 import { MatchStatsModal } from './modals/MatchStatsModal';
 import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -60,12 +60,11 @@ interface BracketViewProps {
   header?: ReactNode;
 }
 
-// Layout constants
 const BRACKET_SECTION_GAP = 180;
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 120;
 const NODE_VERTICAL_GAP = 30; // Minimum gap between nodes
-const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
+const ROUND_HORIZONTAL_GAP = 180;
 
 /**
  * Create edges only when winner is set and winning team appears in target match
@@ -163,7 +162,6 @@ function BracketFlowInner({
     serverChanged,
   } = useBracketQuery(tournamentId);
 
-  const { getLayoutedElements } = useElkLayout();
   const { setViewport, getViewport, fitView } = useReactFlow();
 
   // Expose fitView for Playwright testing
@@ -185,11 +183,9 @@ function BracketFlowInner({
   nodesRef.current = nodes;
   const [layoutKey, setLayoutKey] = useState<string | null>(null);
 
-  // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const selectedMatch = matches.find((m) => m.id === selectedMatchId) ?? null;
 
-  // Track the draftId to auto-open from deep link
   const [initialDraftId, setInitialDraftId] = useState<number | null>(null);
 
   // Hero draft modal state, independent of the match modal
@@ -233,7 +229,6 @@ function BracketFlowInner({
       let matchToOpen: BracketMatch | undefined;
 
       if (!isNaN(numericId)) {
-        // Numeric ID - look up by gameId (backend ID)
         matchToOpen = matches.find((m) => m.gameId === numericId);
       }
       if (!matchToOpen) {
@@ -411,7 +406,6 @@ function BracketFlowInner({
         return match && match.nextMatchId?.startsWith('gf-');
       });
 
-      // Position grand finals aligned with winners final (in winners section, above divider)
       const grandFinalsY = winnersFinal ? winnersFinal.position.y : 0;
 
       const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map(
@@ -426,16 +420,6 @@ function BracketFlowInner({
         }),
       );
 
-      const allMatchNodes = [
-        ...layoutedWinners,
-        ...offsetLosers,
-        ...grandFinalsNodes,
-      ];
-      const minX = Math.min(...allMatchNodes.map((n) => n.position.x), 0);
-      const maxX = Math.max(
-        ...allMatchNodes.map((n) => n.position.x + NODE_WIDTH),
-        0,
-      );
       const dividerWidth = 5000; // Very wide to span entire viewport
 
       // Create divider node between winners and losers (behind other nodes)
@@ -482,9 +466,9 @@ function BracketFlowInner({
     };
 
     layoutBracket();
-  }, [matches, getLayoutedElements, setNodes, setEdges]);
+  }, [matches, setNodes, setEdges]);
 
-  // Left-align viewport after layout is complete
+  // After layout: fit the whole bracket when embedded, otherwise left-align it
   useEffect(() => {
     if (layoutKey) {
       // Small delay to ensure ReactFlow has rendered
@@ -511,7 +495,7 @@ function BracketFlowInner({
         const zoom = Math.min(0.9, Math.max(0.4, verticalZoom));
 
         // Position: left-aligned with small padding, vertically centered
-        const xOffset = 40; // Left padding
+        const xOffset = 40;
         const yOffset = (containerHeight - contentHeight * zoom) / 2;
 
         setViewport({
@@ -685,7 +669,6 @@ function BracketFlowInner({
           }
           setHeroDraftId(draftId);
           setShowHeroDraftModal(true);
-          // Close match modal when opening hero draft
           setSelectedMatchId(null);
           setInitialDraftId(null);
         }}

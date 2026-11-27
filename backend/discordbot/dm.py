@@ -16,6 +16,7 @@ from django.conf import settings
 from discordbot.dm_ledger import PERMANENT_DM_ERROR_CODES, ErrorClass
 from discordbot.internal_client.dm_ledger import claim_dm, finalize_dm, mark_dm_sending
 from discordbot.models import DMKind, DMStatus, DMSubject
+from discordbot.payloads import build_dm_payload
 from discordbot.schemas import DMClaimBody, DMFinalizeBody
 from discordbot.utils import (
     DISCORD_API_BASE,
@@ -136,13 +137,7 @@ def _build_payload(req: DMRequest, ledger_id: int) -> JSONDict:
     is_v2 = bool(req.flags and req.flags & V2_FLAG)
     if is_v2 and (req.content or req.embed):
         raise _PayloadError("v2_with_content")
-    payload: JSONDict = {}
-    if req.content:
-        payload["content"] = req.content
-    if req.embed:
-        payload["embeds"] = [req.embed]
-    if req.components:
-        payload["components"] = req.components
+    payload = build_dm_payload(req.content, req.embed, req.components)
     if not payload:
         raise _PayloadError("empty_payload")
     if req.flags is not None:

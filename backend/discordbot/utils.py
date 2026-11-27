@@ -20,6 +20,7 @@ from .embeds import (
     results_posted_embed,
     tournament_created_embed,
 )
+from .payloads import build_channel_message_payload
 from .services.discord_members import DISCORD_HTTP_TIMEOUT_S
 
 if TYPE_CHECKING:
@@ -425,29 +426,18 @@ def sync_send_embed_with_components_no_log(
     Returns (response_data, status_code) on success; raises RequestException
     on Discord error so caller can finalize with success=False.
     """
-    embeds = embed if isinstance(embed, list) else [embed]
-    message_content: JSONDict = {"embeds": embeds}
-    if components:
-        message_content["components"] = components
-    if content:
-        message_content["content"] = content
-    if allowed_mentions:
-        message_content["allowed_mentions"] = allowed_mentions
-    if message_reference:
-        message_content["message_reference"] = message_reference
-
-    # Build payload — forum thread wraps message in a "message" key
-    if forum_thread_name:
-        url = f"{DISCORD_API_BASE}/channels/{channel_id}/threads"
-        payload = {
-            "name": forum_thread_name[:100],
-            "message": message_content,
-        }
-    else:
-        url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
-        payload = message_content
-
-    response = _rate_limited_request("POST", url, json=payload, headers=_get_headers())
+    wire = build_channel_message_payload(
+        embed,
+        components=components,
+        content=content,
+        allowed_mentions=allowed_mentions,
+        message_reference=message_reference,
+        forum_thread_name=forum_thread_name,
+    )
+    url = f"{DISCORD_API_BASE}/channels/{channel_id}/{wire['path_kind']}"
+    response = _rate_limited_request(
+        "POST", url, json=wire["body"], headers=_get_headers()
+    )
     response_data = response.json()
     response.raise_for_status()
     return response_data, response.status_code

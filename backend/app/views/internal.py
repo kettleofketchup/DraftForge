@@ -13,7 +13,6 @@ from datetime import timedelta
 from typing import Any
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import (
@@ -40,6 +39,7 @@ from discordbot.models import (
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import EventState
+from events.discord.state import load_discord_event_state, message_log_exists
 from events.ledger import SignupActor
 from events.models import Event, EventRepeater, RepeaterSubscription
 from events.ready_check import READY_CHECK_HELD_MESSAGE, transition_with_ready_check
@@ -214,12 +214,7 @@ def check_message_log_exists(request: Request) -> Response:
             {"error": "source and source_id required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    exists = (
-        DiscordMessageLog.objects.filter(source=source, source_id=source_id)
-        .filter(Q(success__isnull=True) | Q(success=True))
-        .exists()
-    )
-    return Response({"exists": exists})
+    return Response({"exists": message_log_exists(source, source_id)})
 
 
 @api_view(["GET"])
@@ -274,45 +269,8 @@ def search_message_logs(request: Request) -> Response:
 def get_discord_event_state(request: Request, event_id: int) -> Response:
     """Get DiscordEvent + related records for an event (celery reads)."""
 
-    result = {
-        "has_discord_event": False,
-        "scheduled_event_id": None,
-        "signup_posted": False,
-        "fired_actions": [],
-        "has_dms": False,
-    }
-
-    try:
-        de = DiscordEvent.objects.get(event_id=event_id)
-        result["has_discord_event"] = True
-        result["discord_event_pk"] = de.pk
-        result["scheduled_event_id"] = de.scheduled_event_id or None
-
-        result["fired_actions"] = list(
-            DiscordEventLog.objects.filter(discord_event=de, success=True).values_list(
-                "action", flat=True
-            )
-        )
-
-        result["has_dms"] = DiscordEventDM.objects.filter(discord_event=de).exists()
-    except DiscordEvent.DoesNotExist:
-        pass
-
-    signup_msg = DiscordEventMsgSignup.objects.filter(
-        event_id=event_id, has_posted=True
-    ).first()
-    result["signup_posted"] = signup_msg is not None
-    if signup_msg:
-        result["signup_message_id"] = signup_msg.message_id
-        result["signup_channel_id"] = signup_msg.channel_id
-        result["signup_thread_id"] = signup_msg.thread_id
-        # "text" | "forum" — drives explicit edit routing in
-        # events.tasks._send_signup_update_impl. Legacy rows may have ""
-        # (unset); workers fall back to a thread_id-vs-channel_id heuristic
-        # in that case and emit a `legacy_channel_type` warning.
-        result["signup_channel_type"] = signup_msg.channel_type or None
-
-    return Response(result)
+    state = load_discord_event_state(event_id)
+    return Response(state.model_dump(mode="json", exclude_unset=True))
 
 
 @api_view(["GET"])
