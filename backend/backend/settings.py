@@ -42,6 +42,7 @@ log = logging.getLogger(__name__)
 load_dotenv()
 SOCIAL_AUTH_DISCORD_KEY = os.environ.get("client_id")
 SOCIAL_AUTH_DISCORD_SECRET = os.environ.get("discord_secret")
+SOCIAL_AUTH_DISCORD_SCOPE = ["guilds"]
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 DISCORD_GUILD_ID = 734185035623825559
 DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
