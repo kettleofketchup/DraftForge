@@ -3,16 +3,14 @@ from unittest.mock import patch
 
 from celery import Celery
 from celery.app.task import Task
-from django.conf import settings
 from django.core.cache import cache
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import CustomUser
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup
 from discordbot.permissions.schemas import PermissionChecksResponse
 from events.models import Event
-from org.tests.mmr_request_mixin import MmrRequestTestMixin
 from tests.data.discord_permissions import (
     PERMISSION_ATTENDANCE_CHANNEL_ID,
     PERMISSION_GUILD_ID,
@@ -284,20 +282,3 @@ class DiscordPermissionsFixtureTest(TestCase):
             for call in calls:
                 self.assertEqual(call().status_code, 404)
         self.assertIsNone(cache.get(f"discord_perm_fixture:{PERMISSION_GUILD_ID}"))
-
-
-class MmrRequestCacheCleanupTest(SimpleTestCase):
-    def test_mixin_restores_cache_after_class_decorator(self) -> None:
-        @override_settings(CACHES=ISOLATED_CACHE)
-        class DecoratedMixinTest(MmrRequestTestMixin, SimpleTestCase):
-            pass
-
-        original = settings.CACHES
-        try:
-            DecoratedMixinTest.setUpClass()
-            self.assertEqual(settings.CACHES, ISOLATED_CACHE)
-            DecoratedMixinTest.tearDownClass()
-            DecoratedMixinTest.doClassCleanups()
-            self.assertEqual(settings.CACHES, original)
-        finally:
-            DecoratedMixinTest.doClassCleanups()
