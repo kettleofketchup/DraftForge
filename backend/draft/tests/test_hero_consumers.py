@@ -44,7 +44,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        # Create users for captains
         self.captain1 = User.objects.create_user(
             username="captain1",
             password="testpass123",
@@ -58,7 +57,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             password="testpass123",
         )
 
-        # Create tournament and teams
         self.tournament = Tournament.objects.create(
             name="Test Tournament",
             date_played=date.today(),
@@ -74,20 +72,17 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             captain=self.captain2,
         )
 
-        # Create game
         self.game = Game.objects.create(
             tournament=self.tournament,
             radiant_team=self.team1,
             dire_team=self.team2,
         )
 
-        # Create hero draft
         self.draft = HeroDraft.objects.create(
             game=self.game,
             state="waiting_for_captains",
         )
 
-        # Create draft teams
         self.draft_team1 = DraftTeam.objects.create(
             draft=self.draft,
             tournament_team=self.team1,
@@ -119,7 +114,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Should receive initial state
         response = await communicator.receive_json_from()
         self.assertEqual(response["type"], "initial_state")
         self.assertIn("draft_state", response)
@@ -138,7 +132,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         communicator.scope["user"] = self.spectator
 
         connected, close_code = await communicator.connect()
-        # Connection should be rejected
         self.assertFalse(connected)
 
     async def test_captain_marked_connected_on_connect(self):
@@ -152,11 +145,9 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
         await communicator.receive_json_from()
         await self._await_captain_connected(communicator)
 
-        # Check captain is marked connected
         @database_sync_to_async
         def check_connected():
             self.draft_team1.refresh_from_db()
@@ -178,13 +169,10 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
         await communicator.receive_json_from()
 
-        # Disconnect
         await communicator.disconnect()
 
-        # Check captain is marked disconnected
         @database_sync_to_async
         def check_disconnected():
             self.draft_team1.refresh_from_db()
@@ -199,7 +187,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
     ):
         """Test draft is paused when captain disconnects during drafting."""
 
-        # Set draft to drafting state
         @database_sync_to_async
         def set_drafting():
             self.draft.state = "drafting"
@@ -218,13 +205,10 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
 
-        # Receive initial state
         await communicator.receive_json_from()
 
-        # Disconnect
         await communicator.disconnect()
 
-        # Check draft is paused
         @database_sync_to_async
         def check_paused():
             self.draft.refresh_from_db()
@@ -236,7 +220,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
     async def test_spectator_does_not_affect_captain_status(self):
         """Test spectator connect/disconnect doesn't affect captain status."""
-        # First connect captain
         captain_communicator = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -246,7 +229,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await captain_communicator.receive_json_from()
         await self._await_captain_connected(captain_communicator)
 
-        # Connect spectator
         spectator_communicator = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -255,10 +237,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await spectator_communicator.connect()
         await spectator_communicator.receive_json_from()
 
-        # Disconnect spectator
         await spectator_communicator.disconnect()
 
-        # Captain should still be connected
         @database_sync_to_async
         def check_captain_connected():
             self.draft_team1.refresh_from_db()
@@ -282,7 +262,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await read_until_type(communicator, "chat_history")
 
-        # Send event through channel layer
         channel_layer = get_channel_layer()
         await channel_layer.group_send(
             f"herodraft_{self.draft.id}",
@@ -316,7 +295,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await read_until_type(communicator, "chat_history")
 
-        # Send tick through channel layer
         channel_layer = get_channel_layer()
         await channel_layer.group_send(
             f"herodraft_{self.draft.id}",
@@ -352,7 +330,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         mock_now.return_value = pause_reference_at
         mock_start_tick.return_value = True
 
-        # Set up draft in drafting state with both captains connected
         original_started_at = timezone.now() - timedelta(seconds=10)
 
         @database_sync_to_async
@@ -363,7 +340,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             self.draft_team1.save()
             self.draft_team2.is_connected = True
             self.draft_team2.save()
-            # Create an active round with started_at 10 seconds ago
             return HeroDraftRound.objects.create(
                 draft=self.draft,
                 draft_team=self.draft_team1,
@@ -375,7 +351,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         active_round = await setup_drafting_state()
 
-        # Connect captain1
         captain1_communicator = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -386,7 +361,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await captain1_communicator.receive_json_from()  # initial state
         await self._await_captain_connected(captain1_communicator)
 
-        # Connect captain2
         captain2_communicator = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -400,7 +374,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Disconnect captain1 - this should trigger pause
         await captain1_communicator.disconnect()
 
-        # Verify draft is paused and paused_at is set
         @database_sync_to_async
         def check_paused():
             self.draft.refresh_from_db()
@@ -410,7 +383,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         self.assertEqual(state, HeroDraftState.PAUSED)
         self.assertIsNotNone(paused_at)
 
-        # Drain any messages from captain2's communicator
         try:
             while True:
                 await asyncio.wait_for(
@@ -431,7 +403,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         resume_at = pause_reference_at + timedelta(seconds=7)
         mock_now.return_value = resume_at
 
-        # Verify captain2 is still connected before captain1 reconnects
         @database_sync_to_async
         def check_captain2_connected():
             self.draft_team2.refresh_from_db()
@@ -454,7 +425,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await captain1_reconnect.receive_json_from()
         await self._await_captain_connected(captain1_reconnect)
 
-        # Verify captain1 is connected but state is still PAUSED
         @database_sync_to_async
         def check_still_paused():
             with transaction.atomic():
@@ -497,7 +467,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
                         active_round.started_at += total_adjustment
                         active_round.save(update_fields=["started_at"])
 
-                # Enter RESUMING state with 3-second countdown
                 self.draft.state = HeroDraftState.RESUMING
                 self.draft.resuming_until = timezone.now() + timedelta(seconds=3)
                 self.draft.paused_at = None
@@ -505,7 +474,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await manual_resume()
 
-        # Simulate countdown completion
         @database_sync_to_async
         def complete_countdown():
             with transaction.atomic():
@@ -536,7 +504,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         )
         self.assertEqual(new_started_at, expected_started_at)
 
-        # Clean up
         await captain1_reconnect.disconnect()
         await captain2_communicator.disconnect()
 
@@ -550,7 +517,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         """
         mock_start_tick.return_value = True
 
-        # Set up draft in RESUMING state
         @database_sync_to_async
         def setup_resuming_state():
             with transaction.atomic():
@@ -564,7 +530,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await setup_resuming_state()
 
-        # Connect captain1
         communicator = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -574,10 +539,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         self.assertTrue(connected)
         await communicator.receive_json_from()  # initial state
 
-        # Disconnect captain1 during RESUMING
         await communicator.disconnect()
 
-        # Verify draft is still RESUMING (not PAUSED)
         @database_sync_to_async
         def check_still_resuming():
             with transaction.atomic():
@@ -647,7 +610,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await set_drafting()
 
-        # Connect both captains
         captain1_comm = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -708,7 +670,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await set_drafting()
 
-        # First connection for captain1
         first_comm = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -728,7 +689,6 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await second_comm.receive_json_from()
         await self._await_captain_connected(second_comm)
 
-        # Draft should still be DRAFTING (kicked connection should not trigger pause)
         @database_sync_to_async
         def check_still_drafting():
             with transaction.atomic():
