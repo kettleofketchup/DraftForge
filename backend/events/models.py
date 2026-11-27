@@ -454,6 +454,11 @@ class DotaLobbyConfigMixin(models.Model):
         abstract = True
 
 
+def normalize_event_fields(obj: "Event | EventRepeater") -> None:
+    if obj.description:
+        obj.description = nh3.clean(obj.description)
+
+
 class EventRepeater(
     TournamentTemplateMixin,
     EventConfigMixin,
@@ -500,8 +505,7 @@ class EventRepeater(
         return f"{self.name} ({self.frequency})"
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        if self.description:
-            self.description = nh3.clean(self.description)
+        normalize_event_fields(self)
         super().save(*args, **kwargs)
 
 
@@ -598,8 +602,7 @@ class Event(
             raise ValidationError({"ends_at": "End time must be after the start time."})
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        if self.description:
-            self.description = nh3.clean(self.description)
+        normalize_event_fields(self)
         if (
             self.dota_lobby_password_mode == lobby_passwords.PasswordMode.RANDOM
             and not self.dota_lobby_password

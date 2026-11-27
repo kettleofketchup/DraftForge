@@ -6,6 +6,7 @@ from cacheops import cached_as
 from celery import current_app
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
@@ -19,7 +20,7 @@ from django.db.models import (
     QuerySet,
 )
 from django.db.models.functions import Abs, Coalesce, Now
-from django.http import QueryDict
+from django.http import Http404, QueryDict
 from django.utils import timezone
 from django.utils import timezone as tz
 from pydantic import ValidationError as PydanticValidationError
@@ -60,13 +61,16 @@ from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import ActorRole, Commitment, EventState, SignupAction
-from events.discord import (
+from events.discord import notify_create_discord_event, notify_signup_changed
+from events.discord.channels import (
     attendance_reminder_channel,
-    notify_create_discord_event,
-    notify_signup_changed,
     profile_reminder_channel,
 )
+from events.discord.gates import initial_state_for_new_event
 from events.discord.permissions import preview_event_checks, saved_event_checks
+from events.discord.preview import PreviewInputError, build_discord_preview
+from events.discord.preview_schema import DiscordPreviewRequest
+from events.discord.state import signup_list_queryset
 from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
@@ -137,6 +141,7 @@ from events.serializers import (
     VoicePresenceOverrideInputSerializer,
 )
 from events.services import (
+    REPEATER_SCHEDULE_FIELDS,
     OccurrenceCollision,
     apply_signup_input,
     approve_signup,
@@ -578,28 +583,15 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(repeater)
 
     def perform_update(self, serializer: EventRepeaterSerializer) -> None:
-        # Snapshot schedule fields before save so we can detect a change
-        # and tell sync_future_events to realign occurrences. Without this,
-        # editing day_of_week leaves stale UPCOMING rows on the old day
-        # while generate_events_for_repeater creates new rows on the new
-        # day — admins see duplicates. is_active is in the tuple so a plain
-        # PATCH that unpauses a series realigns exactly like the reactivate
-        # button does.
-        schedule_fields = (
-            "day_of_week",
-            "time_of_day",
-            "timezone",
-            "starts_at",
-            "frequency",
-            "is_active",
-        )
+        # A schedule change realigns occurrences; is_active is included so an
+        # unpausing PATCH realigns like the reactivate button.
         before = {
             f: getattr(serializer.instance, f)
-            for f in (*schedule_fields, *SIGNUP_OPEN_POLICY_FIELDS)
+            for f in (*REPEATER_SCHEDULE_FIELDS, *SIGNUP_OPEN_POLICY_FIELDS)
         }
         repeater = serializer.save()
         schedule_changed = any(
-            before[f] != getattr(repeater, f) for f in schedule_fields
+            before[f] != getattr(repeater, f) for f in REPEATER_SCHEDULE_FIELDS
         )
         policy_changed = any(
             before[f] != getattr(repeater, f) for f in SIGNUP_OPEN_POLICY_FIELDS
@@ -686,7 +678,10 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         except OccurrenceCollision as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
 
-        if data.get("open_signups"):
+        if (
+            initial_state_for_new_event(bool(data.get("open_signups")))
+            == EventState.SIGNUPS_OPEN
+        ):
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
@@ -974,7 +969,8 @@ class EventViewSet(viewsets.ModelViewSet):
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
-        if self.request.query_params.get("open_signups") == "true":
+        open_signups = self.request.query_params.get("open_signups") == "true"
+        if initial_state_for_new_event(open_signups) == EventState.SIGNUPS_OPEN:
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
@@ -1051,6 +1047,49 @@ class EventViewSet(viewsets.ModelViewSet):
         if hasattr(self, "_cascade_warning") and self._cascade_warning:
             response.data["_warning"] = self._cascade_warning
         return response
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="discord-preview",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def discord_preview(self, request: Request) -> Response:
+        """What a Discord post would contain for the given form values; sends nothing."""
+        try:
+            body = DiscordPreviewRequest.model_validate(request.data)
+        except PydanticValidationError as exc:
+            return Response(
+                {
+                    "error": "Invalid preview request.",
+                    "detail": exc.errors(
+                        include_url=False, include_context=False, include_input=False
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            preview = build_discord_preview(
+                body.kind,
+                body.context,
+                body.values,
+                request.user,
+                open_signups=body.open_signups,
+            )
+        except ValidationError as exc:
+            detail = exc.detail
+            fields = detail if isinstance(detail, dict) else {"detail": detail}
+            return Response(
+                {"error": "Some preview values are invalid.", **fields},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PreviewInputError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoPermissionDenied as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except Http404 as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        return Response(preview.model_dump(mode="json"))
 
     def check_object_permissions(self, request: Request, obj: Event) -> None:
         super().check_object_permissions(request, obj)
@@ -1784,23 +1823,9 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self) -> QuerySet[EventSignup]:
-        # EventSignupSerializer's `username` (display name) reads
-        # user.nickname, and it ships user.avatar — both resolve through the
-        # CustomUser @property to base_profile. Without user__base_profile this
-        # is N+1 cold-cache on busy events.
-        qs = with_user_profiles(
-            EventSignup.objects.select_related(
-                "event__tournament__league__organization", "event_team"
-            ),
-            "user",
-            steam_verified_org=True,
+        return signup_list_queryset(
+            self.request.query_params.get("event"), for_list=self.action == "list"
         )
-        event_id = self.request.query_params.get("event")
-        if event_id:
-            qs = qs.filter(event_id=event_id)
-        if self.action == "list":
-            qs = qs.annotate_line_rank()
-        return qs
 
     @action(detail=True, methods=["post"])
     def approve(self, request: Request, pk: str | None = None) -> Response:

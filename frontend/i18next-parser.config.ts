@@ -6,6 +6,8 @@ const config: UserConfig = {
     'app/components/navbar/**/*.{ts,tsx}',
     'app/components/lobby/**/*.{ts,tsx}',
     'app/pages/changelog/**/*.{ts,tsx}',
+    'app/components/discord/**/*.{ts,tsx}',
+    'app/features/event-discord-preview/**/*.{ts,tsx}',
   ],
   output: 'app/i18n/locales/$LOCALE/$NAMESPACE.json',
   defaultNamespace: 'navbar',

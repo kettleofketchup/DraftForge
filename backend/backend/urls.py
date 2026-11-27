@@ -95,6 +95,7 @@ from tournament.views.internal import (
     get_tournament_for_task,
     get_tournament_participants,
 )
+from tournament.views.member_removal import remove_tournament_member
 from tournament.views.members import add_tournament_member
 from tournament.views.team import TeamCreateView, TeamView
 from tournament.views.tournament import (
@@ -402,6 +403,11 @@ urlpatterns = [
         "api/tournaments/<int:tournament_id>/members/",
         add_tournament_member,
         name="add_tournament_member",
+    ),
+    path(
+        "api/tournaments/<int:tournament_id>/members/<int:user_id>/",
+        remove_tournament_member,
+        name="remove_tournament_member",
     ),
     # SSR endpoints — lightweight public data for meta tags and skeletons
     path(

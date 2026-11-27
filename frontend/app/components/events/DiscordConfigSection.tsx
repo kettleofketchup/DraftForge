@@ -33,6 +33,11 @@ import {
   SETTINGS_OPERATIONS,
   settingsDescriptors,
 } from '~/features/discord-permissions/descriptors';
+import {
+  EventDiscordPreviewButton,
+  type DiscordPreviewContext,
+  type PreviewKind,
+} from '~/features/event-discord-preview';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
 import { fallbackChannelUsers } from './fallbackChannelUsers';
@@ -109,12 +114,14 @@ function CheckboxField({
   label,
   description,
   diagnostic,
+  action,
 }: {
   control: Control<DiscordFields>;
   name: DiscordFieldName;
   label: string;
   description: string;
   diagnostic?: ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <FormField
@@ -131,13 +138,14 @@ function CheckboxField({
               className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
             />
           </FormControl>
-          <div>
+          <div className="min-w-0 flex-1">
             <FormLabel className="text-sm font-medium cursor-pointer">
               {label}
             </FormLabel>
             <FormDescription>{description}</FormDescription>
             {diagnostic}
           </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
         </FormItem>
       )}
     />
@@ -266,6 +274,8 @@ export interface DiscordConfigSectionProps<
    *  `isRepeater`; a one-off event inherits the series' setting instead of
    *  exposing its own toggle. */
   showNotifyNewEvents?: boolean;
+  /** What the Preview buttons build from; absent for org defaults. */
+  previewContext?: DiscordPreviewContext;
   /** Shows the signup-reminder DM. Defaults to `isRepeater`; org defaults
    *  pass it to edit the value new series inherit. */
   showSignupReminder?: boolean;
@@ -306,6 +316,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
   isRepeater,
   organizationId,
   showNotifyNewEvents = isRepeater,
+  previewContext,
   showSignupReminder = isRepeater,
 }: DiscordConfigSectionProps<T> & { permissionQuery?: PermissionQuery }) {
   // T extends DiscordFields by the generic constraint, so narrowing to
@@ -426,6 +437,13 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
     announcementChannelId,
   });
   const prerequisiteMessage = startMentionPrerequisiteMessage(prerequisite);
+  const preview = (kind: PreviewKind) => (
+    <EventDiscordPreviewButton
+      kind={kind}
+      organizationId={organizationId}
+      context={previewContext}
+    />
+  );
 
   return (
     <div className="space-y-4">
@@ -444,6 +462,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             diagnostic={diagnostic('scheduled_event_create')}
             label="Create Discord scheduled event"
             description="Automatically creates a scheduled event in your Discord server"
+            action={preview('scheduled_event')}
           />
           {createEvent && (
             <div className="space-y-3 ml-7">
@@ -453,6 +472,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
                 diagnostic={diagnostic('scheduled_event_update')}
                 label="Synchronize signups"
                 description="Keep website and Discord event signups in sync"
+                action={preview('scheduled_event_sync')}
               />
               <CheckboxField
                 control={control}
@@ -539,6 +559,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             diagnostic={!values.discord_post_signups && signupDiagnostic}
             label="Post event signup embed"
             description="Post an embed to a channel where users can react to sign up"
+            action={preview('signup_post')}
           />
           {postSignups && (
             <div className="ml-7 space-y-3">
@@ -585,6 +606,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             diagnostic={diagnostic('start_mention')}
             label="Mention signed-up members before start"
             description="Reply to the signup post with an @mention of every signed-up member shortly before the event starts"
+            action={preview('start_mention')}
           />
           {startMention && (
             <>
@@ -662,6 +684,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             diagnostic={diagnostic('announcement')}
             label="Pre-day announcement"
             description="Post an announcement in a channel before the event"
+            action={preview('announcement_notice')}
           />
           {announcement && (
             <div className="ml-7 space-y-3">
@@ -729,6 +752,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             }
             label="Post attendance reminder in Discord"
             description={ATTENDANCE_REMINDER_DESCRIPTION}
+            action={preview('attendance_reminder')}
           />
           {confirmAttendance && (
             <>
@@ -762,6 +786,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             }
             label="Profile update reminder"
             description={PROFILE_REMINDER_DESCRIPTION}
+            action={preview('profile_reminder')}
           />
           {profileReminder && (
             <>
@@ -797,6 +822,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
               }
               label="Post new events"
               description={NEW_EVENTS_DESCRIPTION}
+              action={preview('new_event_post')}
             />
             {notifyNewEvents && (
               <div className="ml-7">
@@ -846,6 +872,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
                   : `${SIGNUP_REMINDER_LABEL} (default for new series)`
               }
               description={signupReminderMeta.description ?? ''}
+              action={preview('signup_reminder')}
             />
             <p
               className="ml-7 text-sm text-muted-foreground"

@@ -329,6 +329,9 @@ export function EditEventModal({
               isRepeater={event?.event_repeater != null}
               showNotifyNewEvents={false}
               organizationId={event?.organization ?? 0}
+              previewContext={
+                event ? { type: 'event', eventId: event.id } : undefined
+              }
             />
           ),
         },
