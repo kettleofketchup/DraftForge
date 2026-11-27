@@ -73,13 +73,12 @@ function formatRelativeTime(dateStr: string): string {
   return `${prefix}${days}d ${hours % 24}h${suffix}`;
 }
 
-const isRepostTask = (task: TaskEntry) =>
-  task.status === 'fired' &&
-  (task.task === 'signup_post' || task.task === 'announcement');
+const isSignupPostTask = (task: TaskEntry) =>
+  task.task === 'signup_post' || task.task === 'announcement';
 
 export function fireConfirmDescription(task: TaskEntry): string {
-  if (isRepostTask(task)) {
-    return `This will clear the existing post tracking and create a fresh "${task.label}" in Discord. Use this if the original message was deleted or you want to push an updated version.`;
+  if (isSignupPostTask(task)) {
+    return 'This queues a fresh post. An earlier post may already exist.';
   }
   if (task.task === 'start_mention') {
     return 'This will @mention every signed-up member in replies to the signup post right now. It can only be sent once per event.';
@@ -109,7 +108,7 @@ export function TaskScheduleSection({
     mutationFn: (taskName: string) =>
       api.post(`/events/${eventId}/task-schedule/${taskName}/fire/`),
     onSuccess: (_data, taskName) => {
-      toast.success(`Task "${taskName}" fired`);
+      toast.success(`Task "${taskName}" queued`);
       queryClient.invalidateQueries({
         queryKey: ['event-task-schedule', eventId],
       });
@@ -120,7 +119,7 @@ export function TaskScheduleSection({
       if (err?.response?.status === 409) {
         toast.warning(msg);
       } else {
-        toast.error(`Failed to fire "${taskName}": ${msg}`);
+        toast.error(`Failed to queue "${taskName}": ${msg}`);
       }
     },
   });
@@ -272,7 +271,7 @@ export function TaskScheduleSection({
                       onClick={() => setConfirmTask(task)}
                       disabled={fireMutation.isPending}
                       title={
-                        isRepostTask(task)
+                        isSignupPostTask(task)
                           ? `Repost ${task.label}`
                           : `Fire ${task.label} now`
                       }
@@ -292,13 +291,15 @@ export function TaskScheduleSection({
         open={!!confirmTask}
         onOpenChange={(open) => !open && setConfirmTask(null)}
         title={
-          confirmTask && isRepostTask(confirmTask)
+          confirmTask && isSignupPostTask(confirmTask)
             ? `Repost ${confirmTask.label}?`
             : `Fire ${confirmTask?.label}?`
         }
         description={confirmTask ? fireConfirmDescription(confirmTask) : ''}
         confirmLabel={
-          confirmTask && isRepostTask(confirmTask) ? 'Repost' : 'Fire Now'
+          confirmTask && isSignupPostTask(confirmTask)
+            ? 'Queue repost'
+            : 'Fire Now'
         }
         variant="default"
         onConfirm={() => {
