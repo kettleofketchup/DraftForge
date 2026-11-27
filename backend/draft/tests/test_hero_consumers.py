@@ -3,7 +3,7 @@
 import asyncio
 import json
 from datetime import date, datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
@@ -343,9 +343,13 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         await communicator.disconnect()
 
     @patch("draft.tasks.draft_tick.start_tick_broadcaster")
-    async def test_pause_resume_timing_adjustment(self, mock_start_tick):
-        """Test that pause/resume adjusts round started_at correctly."""
-        # Mock tick broadcaster to avoid SQLite locking issues in tests
+    @patch("django.utils.timezone.now")
+    async def test_pause_resume_timing_adjustment(
+        self, mock_now: Mock, mock_start_tick: Mock
+    ) -> None:
+        """Pause and countdown must not consume the active round's time."""
+        pause_reference_at = datetime.fromisoformat("2026-01-01T12:00:00+00:00")
+        mock_now.return_value = pause_reference_at
         mock_start_tick.return_value = True
 
         # Set up draft in drafting state with both captains connected
@@ -415,14 +419,17 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         except asyncio.TimeoutError:
             pass
 
-        # Simulate 2 seconds passing by adjusting paused_at backwards
+        simulated_paused_at = pause_reference_at - timedelta(seconds=2)
+
         @database_sync_to_async
-        def simulate_pause_duration():
+        def simulate_pause_duration() -> None:
             self.draft.refresh_from_db()
-            self.draft.paused_at = timezone.now() - timedelta(seconds=2)
+            self.draft.paused_at = simulated_paused_at
             self.draft.save()
 
         await simulate_pause_duration()
+        resume_at = pause_reference_at + timedelta(seconds=7)
+        mock_now.return_value = resume_at
 
         # Verify captain2 is still connected before captain1 reconnects
         @database_sync_to_async
@@ -510,10 +517,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await complete_countdown()
 
-        # Verify timing adjustment: started_at should be moved forward by ~5 seconds
-        # (2s pause duration + 3s countdown)
         @database_sync_to_async
-        def check_timing_adjustment():
+        def check_timing_adjustment() -> tuple[str, datetime]:
             self.draft.refresh_from_db()
             active_round.refresh_from_db()
             return (
@@ -524,16 +529,12 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         state, new_started_at = await check_timing_adjustment()
         self.assertEqual(state, HeroDraftState.DRAFTING)
 
-        # Calculate expected adjustment: original + 5 seconds (2s pause + 3s countdown)
-        expected_started_at = original_started_at + timedelta(seconds=5)
-        time_difference = abs((new_started_at - expected_started_at).total_seconds())
-
-        # Allow 1 second tolerance for timing variations
-        self.assertLess(
-            time_difference,
-            1.0,
-            f"started_at adjustment incorrect. Expected ~{expected_started_at}, got {new_started_at}",
+        expected_started_at = (
+            original_started_at
+            + (resume_at - simulated_paused_at)
+            + timedelta(seconds=3)
         )
+        self.assertEqual(new_started_at, expected_started_at)
 
         # Clean up
         await captain1_reconnect.disconnect()
