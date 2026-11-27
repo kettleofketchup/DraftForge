@@ -61,9 +61,22 @@ test.describe('Discord message preview @cicd', () => {
       await context.request.get(`${API_URL}/events/${eventInfo.pk}/`)
     ).json();
 
+    const historyUrl = `${API_URL}/events/${eventInfo.pk}/discord/`;
+    const historyBefore = await context.request.get(historyUrl);
+    expect([200, 404]).toContain(historyBefore.status());
+    const history = await historyBefore.json();
+
     const writes: string[] = [];
+    const permissionChecks: Request[] = [];
     page.on('request', (req: Request) => {
       const url = new URL(req.url());
+      if (
+        req.method() === 'POST' &&
+        url.pathname === `/api/events/${eventInfo.pk}/permission-checks/`
+      ) {
+        permissionChecks.push(req);
+        return;
+      }
       if (
         req.method() !== 'GET' &&
         url.pathname.startsWith('/api/events/') &&
@@ -134,6 +147,10 @@ test.describe('Discord message preview @cicd', () => {
     ).json();
     expect(after.discord_event_title).toBe(before.discord_event_title);
     expect(after.discord_create_event).toBe(before.discord_create_event);
+    const historyAfter = await context.request.get(historyUrl);
+    expect(historyAfter.status()).toBe(historyBefore.status());
+    expect(await historyAfter.json()).toEqual(history);
+    expect(permissionChecks.length).toBeGreaterThan(0);
     expect(writes).toEqual([]);
   });
 });
