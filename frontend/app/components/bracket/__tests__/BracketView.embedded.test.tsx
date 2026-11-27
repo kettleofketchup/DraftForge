@@ -89,6 +89,7 @@ vi.mock('~/hooks/useCanManageTournament', () => ({
   useCanManageCurrentTournament: () => true,
 }));
 vi.mock('~/hooks/useBracket', () => ({
+  MATCH_RESULT_MUTATION_KEY: ['bracket-match-result'],
   useBracketQuery: () => ({ isLoading: false, data: { matches: [] } }),
   usePersistMatchResult: () => ({ isPending: false, mutate: vi.fn() }),
 }));

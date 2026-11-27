@@ -1,6 +1,7 @@
 import { Info } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { usePreviewOptions } from '~/components/discord/timestamps';
 import { GAME_LABEL, toGameType } from '~/components/game/constants';
 import { Alert, AlertDescription, AlertTitle } from '~/components/ui/alert';
 import { Badge } from '~/components/ui/badge';
@@ -23,7 +24,6 @@ import {
   relativeFromIso,
   reportPromoError,
   undoToastDescription,
-  usePreviewOptions,
 } from './feedback';
 import { parseMmrBound, validateMmrRange } from './mmrFilter';
 import type { ComposeMode } from './promotionColumns';
