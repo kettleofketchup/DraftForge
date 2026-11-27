@@ -381,11 +381,7 @@ class SendSignupUpdateTaskTest(_DiscordTaskTestCase):
         self.event.discord_announcement_channel_id = "1482767177063858216"
         self.event.save()
 
-        # First create the announcement
-
         send_event_announcement(self.event.pk)
-
-        # Then update it
 
         send_signup_update(self.event.pk)
 
@@ -474,8 +470,7 @@ class SendSignupUpdateEditsMessageTest(_DiscordTaskTestCase):
 class SendSignupUpdateOrphanedMessageRecoveryTest(_DiscordTaskTestCase):
     """When Discord reports the target message no longer exists (404 + 10008),
     send_signup_update must clear the dedup state so the next sync recreates
-    the post. Prior to this fix the bot would silently retry edits forever on
-    a ghost message and never re-post.
+    the post.
     """
 
     @patch("discordbot.utils._rate_limited_request")
@@ -542,10 +537,8 @@ class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
 
     The production code only writes a ``signup_reminder`` ``DiscordMessageLog``
     when ``send_subscriber_notifications`` actually attempts (or sends) a DM.
-    That requires a repeater + a subscriber with a Discord ID. Older versions
-    of these tests skipped the repeater entirely, so they could never produce
-    the log they were asserting on. We add a repeater + subscriber and stub
-    ``sync_send_dm`` so the reminder pipeline runs without hitting Discord.
+    That requires a repeater + a subscriber with a Discord ID, so tests add
+    both and stub ``sync_send_dm`` so the pipeline runs without hitting Discord.
     """
 
     def _arm_signup_reminder(self) -> None:

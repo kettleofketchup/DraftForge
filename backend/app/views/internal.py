@@ -588,16 +588,16 @@ SIGNUP_MSG_UPDATE_FIELDS = {
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def clear_event_signup_state(request: Request) -> Response:
-    """Reset the signup-post dedup state so the next sync (or manual re-fire)
-    recreates the post.
+    """Reset the signup-post dedup state so the next sync recreates the post.
 
     Flips:
       - DiscordEventMsgSignup.has_posted=False (clears `events_with_signup_post`)
       - DiscordMessageLog.success=False for source=event_announcement+source_id=event_id
         (clears `existing_logs` dedup)
 
-    Called by send_signup_update on MessageDeletedError with
-    ``expected_message_id`` (auto-recovery for externally deleted posts).
+    With ``expected_message_id`` (send_signup_update's MessageDeletedError
+    recovery), clears only while that message is still the current signup post
+    and no delivery is in flight, and starts a new delivery generation.
     """
 
     err = _validate_required(request.data, ["event_id"])
