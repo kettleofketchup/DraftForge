@@ -244,7 +244,7 @@ class SignupDeliveryStateTest(TestCase):
                     )
                 )
 
-    def test_fallback_sending_requires_known_failed_previous_log(self) -> None:
+    def test_fallback_sending_transition_requires_failed_previous_log(self) -> None:
         decision = begin_signup_attempt(self.event.pk)
         primary = create_log(self.event.pk)
         self.assertTrue(
@@ -252,6 +252,15 @@ class SignupDeliveryStateTest(TestCase):
         )
         self.assertFalse(
             mark_signup_sending(self.event.pk, 0, decision.attempt_token, primary.pk)
+        )
+        primary.success = True
+        primary.save()
+        self.assertFalse(
+            mark_signup_sending(self.event.pk, 0, decision.attempt_token, primary.pk)
+        )
+        self.assertEqual(
+            SignupPostDeliveryState.objects.get(event=self.event).active_log_id,
+            primary.pk,
         )
         primary.success = False
         primary.save()
@@ -275,6 +284,39 @@ class SignupDeliveryStateTest(TestCase):
         self.assertFalse(
             mark_signup_sending(self.event.pk, 0, decision.attempt_token, fallback.pk)
         )
+
+    def test_stale_active_is_not_forever_load_shed(self) -> None:
+        later = self.now + timedelta(minutes=6)
+        for status in (SignupDeliveryStatus.RESERVED, SignupDeliveryStatus.SENDING):
+            with self.subTest(status=status):
+                event = create_event()
+                first = begin_signup_attempt(event.pk, now=self.now)
+                if status == SignupDeliveryStatus.SENDING:
+                    log = create_log(event.pk)
+                    self.assertTrue(
+                        mark_signup_sending(event.pk, 0, first.attempt_token, log.pk)
+                    )
+                    log.delete()
+                self.assertEqual(
+                    delivery.blocked_signup_event_ids([event.pk], now=later), []
+                )
+                with patch("requests.request") as request:
+                    recovered = begin_signup_attempt(event.pk, now=later)
+                request.assert_not_called()
+                state = SignupPostDeliveryState.objects.get(event=event)
+                if status == SignupDeliveryStatus.RESERVED:
+                    self.assertEqual(recovered.outcome, BeginOutcome.RESERVED)
+                    self.assertEqual(recovered.attempt, 2)
+                    self.assertNotEqual(recovered.attempt_token, first.attempt_token)
+                else:
+                    self.assertEqual(recovered.outcome, BeginOutcome.UNCERTAIN)
+                    self.assertEqual(state.state, SignupDeliveryStatus.UNCERTAIN)
+                    self.assertEqual(state.attempts, 1)
+                    self.assertEqual(state.attempt_token, first.attempt_token)
+                    self.assertEqual(
+                        delivery.blocked_signup_event_ids([event.pk], now=later),
+                        [event.pk],
+                    )
 
     def test_model_not_cacheops_cached(self) -> None:
         self.assertNotIn("discordbot.signuppostdeliverystate", settings.CACHEOPS)
