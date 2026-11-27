@@ -61,6 +61,8 @@ SERIES_CONFIG: dict[str, Any] = {
     "start_cull_enabled": True,
     "start_cull_minutes_after": 3,
     "post_cull_fill_mode": "voice_arrival",
+    "line_withdraw_forfeits": False,
+    "line_switch_restamps": False,
     "allow_active_mmr": False,
     "allow_previous_rank": False,
     "allow_battlecup_rating": False,
