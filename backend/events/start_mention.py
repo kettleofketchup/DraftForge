@@ -2,9 +2,13 @@
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from events.constants import SEAT_HOLDING_STATUSES, Commitment, StartMentionScope
 from events.schemas import EventSignupSchema
+
+if TYPE_CHECKING:
+    from events.discord.embeds import EmbedEvent
 
 MAX_MENTIONS_PER_MESSAGE = 80
 MAX_CONTENT_CHARS = 2000
@@ -86,3 +90,40 @@ def chunk_mentions(
 def _chunk(prefix: str, ids: list[str]) -> MentionChunk:
     content = prefix + " ".join(f"<@{i}>" for i in ids)
     return MentionChunk(content=content, user_ids=list(ids))
+
+
+@dataclass(frozen=True)
+class StartMentionPreview:
+    header: str
+    chunks: list[MentionChunk]
+    mentioned: int
+    skipped_no_discord_id: int
+
+
+def build_start_mention_header(event: "EmbedEvent") -> str:
+    title = (event.discord_event_title or event.name)[:100]
+    return f"{title} starts <t:{int(event.scheduled_at.timestamp())}:R>."
+
+
+def build_start_mention_messages(
+    event: "EmbedEvent", signups: Sequence[EventSignupSchema]
+) -> StartMentionPreview:
+    recipients = start_mention_recipients(signups, event.discord_start_mention_scope)
+    header = build_start_mention_header(event)
+    return StartMentionPreview(
+        header=header,
+        chunks=chunk_mentions(recipients.discord_ids, header),
+        mentioned=len(recipients.discord_ids),
+        skipped_no_discord_id=recipients.skipped_no_discord_id,
+    )
+
+
+def start_mention_payload(chunk: MentionChunk, reply_to: str | None) -> dict[str, Any]:
+    return {
+        "content": chunk.content,
+        "embeds": [],
+        "allowed_mentions": {"users": chunk.user_ids},
+        "message_reference": (
+            {"message_id": reply_to, "fail_if_not_exists": False} if reply_to else None
+        ),
+    }

@@ -68,7 +68,35 @@ export function sortDefs(defs) {
   return order;
 }
 
+const UNION_SIBLINGS = new Set([
+  'oneOf',
+  'discriminator',
+  'title',
+  'description',
+]);
+
+// pydantic's Field(discriminator=...) emits oneOf + discriminator; the
+// library would turn that into an untyped z.any().superRefine().
+function discriminatedUnion(schema) {
+  const prop = schema.discriminator?.propertyName;
+  if (typeof prop !== 'string' || !Array.isArray(schema.oneOf)) {
+    throw new Error('oneOf without a discriminator propertyName');
+  }
+  const extra = Object.keys(schema).filter((k) => !UNION_SIBLINGS.has(k));
+  if (extra.length) {
+    throw new Error(`oneOf with sibling keywords ${extra.join(', ')}`);
+  }
+  const members = schema.oneOf.map((member) => {
+    if (!member || typeof member !== 'object' || !('$ref' in member)) {
+      throw new Error('discriminated oneOf members must be $refs');
+    }
+    return parserOverride(member);
+  });
+  return `z.discriminatedUnion(${JSON.stringify(prop)}, [${members.join(', ')}])`;
+}
+
 function parserOverride(schema) {
+  if ('oneOf' in schema) return discriminatedUnion(schema);
   if (!('$ref' in schema)) return undefined;
   const extra = Object.keys(schema).filter((k) => !REF_SIBLINGS.has(k));
   if (extra.length) {

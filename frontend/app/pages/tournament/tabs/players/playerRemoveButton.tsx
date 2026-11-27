@@ -3,16 +3,16 @@ import type { FormEvent } from 'react';
 import React, { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
-import { updateTournament } from '~/components/api/api';
+import { removeTournamentMember } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types';
 import { TrashIconButton } from '~/components/ui/buttons';
 import { DisplayName } from '~/components/user/avatar';
+import type { UserType } from '~/components/user/types';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('playerRemoveButton');
-
-import type { UserType } from '~/components/user/types';
 
 interface PropsRemoveButton {
   user: UserType;
@@ -24,27 +24,26 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
   disabled,
 }) => {
   const tournament = useUserStore(useShallow((state) => state.tournament));
+  const setTournament = useUserStore((state) => state.setTournament);
   const queryClient = useQueryClient();
 
   const removeUser = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (tournament.pk == null) {
-        log.error('Tournament primary key is missing');
+      const tournamentPk = tournament.pk;
+      const userPk = user.pk;
+      if (tournamentPk == null || userPk == null) {
+        log.error('Tournament or user primary key is missing');
         return;
       }
 
       log.debug(`Removing user: ${user.username}`);
-      const updatedUserIds = tournament.users
-        ?.filter((u) => u.username !== user.username)
-        .map((u) => u.pk)
-        .filter((pk): pk is number => pk !== undefined);
 
       // Optimistic update — remove user from React Query cache immediately
       // Cache may hold PK-only users (numbers) from slim serializer
       queryClient.setQueryData<TournamentType>(
-        ['tournament', tournament.pk],
+        ['tournament', tournamentPk],
         (old) =>
           old
             ? {
@@ -59,23 +58,33 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
             : old,
       );
 
-      toast.promise(
-        updateTournament(tournament.pk, { user_ids: updatedUserIds ?? [] }),
-        {
-          loading: `Removing ${DisplayName(user)}...`,
-          success: () => `${DisplayName(user)} has been removed`,
-          error: (err: unknown) => {
-            log.error('Failed to remove user', err);
-            // Revert optimistic update on failure
-            queryClient.invalidateQueries({
-              queryKey: ['tournament', tournament.pk],
-            });
-            return `Failed to remove ${DisplayName(user)}`;
-          },
+      const removal = removeTournamentMember(tournamentPk, userPk).then(
+        (raw) => {
+          setTournament(
+            hydrateTournament(
+              raw as TournamentType & { _users?: Record<number, unknown> },
+            ) as TournamentType,
+          );
+          queryClient.invalidateQueries({
+            queryKey: ['tournament', tournamentPk],
+          });
         },
       );
+
+      toast.promise(removal, {
+        loading: `Removing ${DisplayName(user)}...`,
+        success: () => `${DisplayName(user)} has been removed`,
+        error: (err: unknown) => {
+          log.error('Failed to remove user', err);
+          // Revert optimistic update on failure
+          queryClient.invalidateQueries({
+            queryKey: ['tournament', tournamentPk],
+          });
+          return `Failed to remove ${DisplayName(user)}`;
+        },
+      });
     },
-    [tournament, user, queryClient],
+    [tournament.pk, user, queryClient, setTournament],
   );
 
   return (

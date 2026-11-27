@@ -119,6 +119,8 @@ Each post that sends a channel message has its own channel field:
 | Profile reminder | `discord_profile_reminder_channel_id` | Announcement channel |
 | New-event post | `discord_new_event_channel_id` | Announcement channel, whether or not the pre-day announcement is on |
 
+The signup destination receives a regular message in a text or announcement channel, or an event-titled post in a forum channel.
+
 The start mention has no channel: it replies to the signup post. Existing events and series have the three new fields blank, so they keep posting where they did before. An optional picker shows *Use announcement channel (#name)* while it is blank, has a clear button to go back to blank, and warns when neither it nor the announcement channel is set. The announcement channel picker sits in the pre-day announcement card while that post is on; otherwise it is shown at the end of the channel posts whenever a post with no channel of its own would fall back to it.
 
 The Discord section of the event, series and organization defaults forms is split into three groups:
@@ -126,6 +128,8 @@ The Discord section of the event, series and organization defaults forms is spli
 - **Server event**: the Discord scheduled event, its title and description, signup syncing and marking signups as interested.
 - **Channel posts**: the signup post, start mention, pre-day announcement, attendance reminder, profile reminder and (series only) new-event post. Every post except the start mention has its own channel picker.
 - **Direct messages**: the signup reminder DM to series subscribers. Single events show "Direct messages are set on recurring series." instead; in the organization defaults it is the default for new series.
+
+Each message toggle has a **Preview** button that shows exactly what Discord will receive for the values in the form, without sending or saving anything. See [Discord Message Preview](events/discord-message-preview.md).
 
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
 

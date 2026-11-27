@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 
 import { Form } from '~/components/ui/form';
+import { TestQueryClientProvider } from '~/test/TestQueryClientProvider';
 import { DiscordConfigSection } from '../DiscordConfigSection';
 import { DISCORD_CONFIG_DEFAULTS, type discordConfigSchema } from '../schemas';
 import {
@@ -60,13 +61,15 @@ function Harness({ initial }: { initial: Partial<Fields> }) {
     defaultValues: { ...DISCORD_CONFIG_DEFAULTS, ...initial },
   });
   return (
-    <Form {...form}>
-      <DiscordConfigSection
-        control={form.control}
-        isRepeater={false}
-        organizationId={1}
-      />
-    </Form>
+    <TestQueryClientProvider>
+      <Form {...form}>
+        <DiscordConfigSection
+          control={form.control}
+          isRepeater={false}
+          organizationId={1}
+        />
+      </Form>
+    </TestQueryClientProvider>
   );
 }
 
