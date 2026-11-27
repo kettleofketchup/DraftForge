@@ -1,6 +1,7 @@
 import shlex
 import subprocess
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,9 @@ class RecordedRun:
         self.argvs: list[list[str]] = []
         self.kws: list[dict[str, object]] = []
 
-    def __call__(self, argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+    def __call__(
+        self, argv: list[str], **kw: object
+    ) -> subprocess.CompletedProcess[str]:
         self.argvs.append(list(argv))
         self.kws.append(kw)
         return subprocess.CompletedProcess(argv, 0)
@@ -54,6 +57,40 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> RecordedRun:
     rec = RecordedRun()
     monkeypatch.setattr(scripts.compose.subprocess, "run", rec)
     return rec
+
+
+def test_playwright_lock_is_shared_by_slot_not_worktree(
+    slotless: tuple[Path, FakeHost],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("DF_SLOT", "3")
+    env = slots.ensure_slot()
+    env = replace(env, registry=tmp_path / "registry")
+    monkeypatch.setattr(scripts.compose, "read_slot", lambda: env)
+    first = scripts.compose.playwright_lock_path()
+    env = replace(env, worktree=tmp_path / "another-checkout")
+    assert scripts.compose.playwright_lock_path() == first
+    assert first.parent.is_dir()
+    env = replace(env, slot=4, project="df-s4")
+    assert scripts.compose.playwright_lock_path() != first
+
+
+@pytest.mark.parametrize("container", [False, True])
+def test_playwright_lock_path_ci(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    container: bool,
+) -> None:
+    _ci(monkeypatch)
+    monkeypatch.setattr(scripts.compose, "in_container", lambda: container)
+    monkeypatch.setattr(scripts.compose.tempfile, "gettempdir", lambda: str(tmp_path))
+    path = scripts.compose.playwright_lock_path()
+    assert path.name == "playwright-df.lock"
+    assert path.parent.parent == tmp_path
+    assert main(["lock-path"]) == 0
+    assert capsys.readouterr().out.strip() == str(path)
 
 
 def test_playwright_env_ci(monkeypatch: pytest.MonkeyPatch) -> None:

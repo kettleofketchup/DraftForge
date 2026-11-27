@@ -18,6 +18,9 @@ run *args:
     cd {{quote(root)}}
     pw_env=$({{quote(python)}} -m scripts.compose env)
     eval "$pw_env"
+    lock_path=$({{quote(python)}} -m scripts.compose lock-path)
+    exec 9>"$lock_path"
+    flock 9
     {{quote(python)}} -m scripts.compose flush-redis
     # Locally each run gets its own results dir, so a second run cannot wipe
     # the first one's output; CI keeps the flat test-results/ its uploads read.
@@ -30,7 +33,8 @@ run *args:
     fi
     cd frontend
     if [[ "${DF_PW_CONTAINER-}" != 1 ]]; then
-        exec {{quote(root / "scripts/test-limits.sh")}} wrap npx playwright test "$@"
+        {{quote(root / "scripts/test-limits.sh")}} wrap npx playwright test "$@"
+        exit $?
     fi
     # Mounted at the same path so report and annotation paths match the checkout;
     # frontend/node_modules must resolve inside the image (CI links it to /app/node_modules).
@@ -43,7 +47,7 @@ run *args:
     done
     {{quote(root / "scripts/test-limits.sh")}} apply
     cgroup=$({{quote(root / "scripts/test-limits.sh")}} cgroup)
-    exec docker run --rm --network host --ipc host --entrypoint "" ${cgroup:+--cgroup-parent "$cgroup"} \
+    docker run --rm --network host --ipc host --entrypoint "" ${cgroup:+--cgroup-parent "$cgroup"} \
         --user "$(id -u):$(id -g)" -e HOME=/tmp "${env_args[@]}" \
         -v "$PWD:$PWD" -w "$PWD" {{quote(pw_image)}} \
         node_modules/.bin/playwright test "$@"

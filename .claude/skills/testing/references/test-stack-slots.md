@@ -22,6 +22,11 @@ not be your worktree. Never hardcode `https://localhost`: Playwright code import
 `BASE_URL` / `API_URL` from `fixtures/base-url.ts`, and shell commands use the URL
 `just test::slot` prints.
 
+Playwright recipes serialize independent invocations targeting the same slot before
+flushing Redis or resetting fixtures. The slot's shared registry lock stays held
+through browser exit and cleanup; different slots can still run in parallel. Use
+`just test::pw::*`, not raw Playwright invocations, to retain this protection.
+
 ## Commands
 
 | Command | Notes |

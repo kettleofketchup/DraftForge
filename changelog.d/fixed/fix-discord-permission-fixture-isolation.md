@@ -1,0 +1,1 @@
+- Serialize Playwright invocations targeting the same test stack so permission badge fixtures cannot overwrite an active run's events or scenarios.

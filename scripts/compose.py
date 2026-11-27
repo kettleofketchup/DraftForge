@@ -13,6 +13,7 @@ import shlex
 import socket
 import subprocess
 import sys
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -46,6 +47,17 @@ def base_url() -> str:
     return playwright_env()["DF_BASE_URL"]
 
 
+def playwright_lock_path() -> Path:
+    directory = Path(tempfile.gettempdir()) / f"draftforge-playwright-{os.getuid()}"
+    project = "df"
+    if not in_container():
+        slot = read_slot()
+        directory = slot.registry or directory
+        project = slot.project
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / f"playwright-{project}.lock"
+
+
 def flush_test_redis() -> None:
     print("Flushing Redis cache...")
     if in_container():
@@ -76,12 +88,14 @@ def _flush_redis_service(host: str = "redis", port: int = 6379) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m scripts.compose")
-    parser.add_argument("cmd", choices=["env", "flush-redis"])
+    parser.add_argument("cmd", choices=["env", "lock-path", "flush-redis"])
     ns = parser.parse_args(argv)
     try:
         if ns.cmd == "env":
             for key, value in playwright_env().items():
                 print(f"export {key}={shlex.quote(value)}")
+        elif ns.cmd == "lock-path":
+            print(playwright_lock_path())
         else:
             flush_test_redis()
     except SlotError as exc:

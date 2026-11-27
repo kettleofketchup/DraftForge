@@ -5,9 +5,11 @@ vars and argv, so these check what each recipe hands to the slot helper,
 manage.py and Playwright, including shell quoting, without containers.
 """
 
+import fcntl
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,6 +44,9 @@ if [[ "${{1-}} ${{2-}} ${{3-}}" == "-m scripts.compose env" ]]; then
     echo "export DF_BASE_URL='https://localhost:13443'"
     echo "export DF_BASE_URL_SOURCE=runner"
 fi
+if [[ "${{1-}} ${{2-}} ${{3-}}" == "-m scripts.compose lock-path" ]]; then
+    echo "${{DF_FAKE_LOCK_PATH}}"
+fi
 if [[ " $* " == *" compose --stack dev ps backend "* ]]; then
     # The backend reports running from the (DF_FAKE_PS_FAILS+1)th ps on.
     n=$(( $(cat "{log}.ps" 2>/dev/null || echo 0) + 1 ))
@@ -62,6 +67,18 @@ fi
 if [[ "${{1-}} ${{2-}}" == "-m scripts.slots" && " $* " == *" ensure "* && -n "${{DF_FAKE_ENSURE_FAIL-}}" ]]; then
     echo "all 10 slots are held" >&2
     exit 1
+fi
+if [[ -n "${{DF_FAKE_PROBE_PYTHON-}}" && "$(basename "$0")" != python ]]; then
+    "${{DF_FAKE_PROBE_PYTHON}}" -c '
+import fcntl, sys
+with open(sys.argv[1], "w") as lock:
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit(0)
+    sys.exit("browser ran without owning the test stack lock")
+' "${{DF_FAKE_LOCK_PATH}}" || exit 1
+    exit "${{DF_FAKE_BROWSER_EXIT:-0}}"
 fi
 exit "${{DF_FAKE_EXIT:-0}}"
 """
@@ -152,6 +169,7 @@ def run(tmp_path: Path) -> Runner:
         "DF_SLOT_FILE": str(tmp_path / "env.slot"),
         "DF_BACKEND_ENV_FILE": str(tmp_path / "backend.env"),
         "DF_PW_RESULTS_DIR": str(tmp_path / "test-results"),
+        "DF_FAKE_LOCK_PATH": str(tmp_path / "playwright.lock"),
         "DF_TEST_LIMITS": "0",
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
     }
@@ -170,6 +188,32 @@ def run(tmp_path: Path) -> Runner:
     ):
         env.pop(key, None)
     return Runner(log, env)
+
+
+def test_playwright_run_waits_before_flushing_shared_fixture(run: Runner) -> None:
+    assert JUST is not None
+    lock_path = Path(run.env["DF_FAKE_LOCK_PATH"])
+    run.log.write_bytes(b"")
+    with lock_path.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        process = subprocess.Popen(
+            [JUST, "--justfile", str(ROOT / "justfile"), "test::pw::run", "--list"],
+            cwd=ROOT,
+            env=run.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            with pytest.raises(subprocess.TimeoutExpired):
+                process.communicate(timeout=1)
+            assert not any("flush-redis" in call.argv for call in run.calls())
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            stdout, stderr = process.communicate(timeout=15)
+    assert process.returncode == 0, stdout + stderr
+    assert any("flush-redis" in call.argv for call in run.calls())
+    assert any(call.tool == "npx" for call in run.calls())
 
 
 SHELL_CMDS = [
@@ -593,11 +637,31 @@ def test_python_cli_recipes(
     assert call.cwd == ROOT and call.argv == tail
 
 
+@pytest.mark.parametrize("container", [False, True])
+@pytest.mark.parametrize("browser_exit", [0, 7])
+def test_playwright_holds_lock_until_browser_exit(
+    run: Runner, tmp_path: Path, container: bool, browser_exit: int
+) -> None:
+    if container:
+        _docker_stub(tmp_path)
+    result = run(
+        "test::pw::run",
+        "--list",
+        DF_PW_CONTAINER="1" if container else "0",
+        DF_FAKE_PROBE_PYTHON=sys.executable,
+        DF_FAKE_BROWSER_EXIT=str(browser_exit),
+    )
+    assert result.returncode == browser_exit, result.stderr
+    with Path(run.env["DF_FAKE_LOCK_PATH"]).open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
 def test_playwright_runs_in_frontend_with_the_slot_url(run: Runner) -> None:
     result = run("test::pw::cicd-chromium", "--shard=1/4")
     assert result.returncode == 0, result.stderr
-    env_call, flush_call, npx = run.calls()
+    env_call, lock_call, flush_call, npx = run.calls()
     assert env_call.argv == ["-m", "scripts.compose", "env"]
+    assert lock_call.argv == ["-m", "scripts.compose", "lock-path"]
     assert flush_call.argv == ["-m", "scripts.compose", "flush-redis"]
     assert npx.tool == "npx" and npx.cwd == ROOT / "frontend"
     assert npx.base_url == "https://localhost:13443"
@@ -625,8 +689,9 @@ def test_playwright_runs_in_the_runner_image(run: Runner, tmp_path: Path) -> Non
     _docker_stub(tmp_path)
     result = run("test::pw::cicd-chromium", "--shard=1/4", DF_PW_CONTAINER="1")
     assert result.returncode == 0, result.stderr
-    env_call, flush_call, docker = run.calls()
+    env_call, lock_call, flush_call, docker = run.calls()
     assert env_call.argv == ["-m", "scripts.compose", "env"]
+    assert lock_call.argv == ["-m", "scripts.compose", "lock-path"]
     assert flush_call.argv == ["-m", "scripts.compose", "flush-redis"]
     frontend = str(ROOT / "frontend")
     assert docker.tool == "docker" and docker.cwd == ROOT / "frontend"
