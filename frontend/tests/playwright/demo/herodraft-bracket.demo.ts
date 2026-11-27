@@ -992,7 +992,10 @@ test.describe('HeroDraft with Bracket Demo', () => {
       by: 'cap' | 1 | 2;
       say?: string;
       suggest?: [SuggestKind, string];
-      /** Captain clicks the newest suggestion chip for this hero. */
+      /**
+       * Captain clicks the newest suggestion chip for this hero; on their
+       * turn the confirm dialog it opens is cancelled, so nothing is drafted.
+       */
       select?: [SuggestKind, string];
     }
     const SCRIPT: Record<number, Partial<Record<Side, Beat[]>>> = {
