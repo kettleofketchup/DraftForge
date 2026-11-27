@@ -449,12 +449,20 @@ def _current_signup_message_ids(event_id: int) -> set[str]:
     if linked is not None:
         message_id, has_posted = linked
         return {message_id} if has_posted and message_id else set()
-    posted = list(
-        DiscordEventMsgSignup.objects.nocache()
-        .filter(event_id=event_id, has_posted=True)
-        .values_list("message_id", flat=True)[:2]
+    signups = DiscordEventMsgSignup.objects.nocache().filter(event_id=event_id)
+    if signups.exists():
+        posted = list(
+            signups.filter(has_posted=True).values_list("message_id", flat=True)[:2]
+        )
+        return {posted[0]} if len(posted) == 1 and posted[0] else set()
+    logged = list(
+        _owned_logs(event_id)
+        .filter(success=True)
+        .order_by()
+        .values_list("discord_message_id", flat=True)
+        .distinct()[:2]
     )
-    return {posted[0]} if len(posted) == 1 and posted[0] else set()
+    return {logged[0]} if len(logged) == 1 and logged[0] else set()
 
 
 def clear_signup_state_for_deleted_message(event_id: int, message_id: str) -> bool:

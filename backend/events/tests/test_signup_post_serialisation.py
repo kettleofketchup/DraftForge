@@ -19,6 +19,7 @@ from discordbot.models import (
     SignupDeliveryStatus,
     SignupPostDeliveryState,
 )
+from discordbot.signup_delivery import BeginOutcome, begin_signup_attempt
 from discordbot.utils import MessageDeletedError
 from events import signup_post_lock
 from events.constants import SignupStatus
@@ -420,6 +421,118 @@ class SignupPostSerialisationTest(DiscordTestMixin, EventTestCase):
         events = [entry["event"] for entry in logs]
         self.assertNotIn("signup_message_orphaned_recovered", events)
         self.assertIn("signup_message_orphan_not_current", events)
+
+    def _legacy_post(self, message_id: str) -> DiscordMessageLog:
+        self.enterContext(
+            patch("events.tasks.get_discord_event_state", return_value=None)
+        )
+        return DiscordMessageLog.objects.create(
+            source="event_announcement",
+            source_id=self.pk,
+            success=True,
+            channel_id=CURRENT_CHANNEL,
+            discord_message_id=message_id,
+            embed_data={},
+        )
+
+    def test_legacy_log_only_message_404_resets(self) -> None:
+        self._legacy_post(CURRENT_MESSAGE)
+        self.edit.side_effect = MessageDeletedError(CURRENT_CHANNEL, CURRENT_MESSAGE)
+
+        result = send_signup_update(self.pk)
+
+        self.assertIn("Recovered", result)
+        self.assertEqual(self._successful_logs(), 0)
+        self.assertFalse(
+            DiscordEventMsgSignup.objects.filter(event=self.post_event).exists()
+        )
+        state = SignupPostDeliveryState.objects.get(event=self.post_event)
+        self.assertEqual(
+            (state.generation, state.attempts, state.state),
+            (1, 0, SignupDeliveryStatus.READY),
+        )
+        self.assertEqual(begin_signup_attempt(self.pk).outcome, BeginOutcome.RESERVED)
+
+    def test_stale_legacy_log_404_preserves_replacement(self) -> None:
+        legacy = self._legacy_post(STALE_MESSAGE)
+
+        def replace_then_report_deleted(**kwargs: object) -> None:
+            legacy.success = False
+            legacy.save(update_fields=["success"])
+            self._current_post(CURRENT_MESSAGE)
+            raise MessageDeletedError(CURRENT_CHANNEL, STALE_MESSAGE)
+
+        self.edit.side_effect = replace_then_report_deleted
+
+        result = send_signup_update(self.pk)
+
+        self.assertIn("Skipped: deleted message is not the current", result)
+        legacy.refresh_from_db()
+        self.assertFalse(legacy.success)
+        self.assertTrue(self._posted())
+        self.assertEqual(self._successful_logs(), 1)
+        state = SignupPostDeliveryState.objects.get(event=self.post_event)
+        self.assertEqual(
+            (state.generation, state.state), (2, SignupDeliveryStatus.DELIVERED)
+        )
+
+    def test_stale_log_only_identity_404_preserves_replacement(self) -> None:
+        legacy = self._legacy_post(STALE_MESSAGE)
+
+        def replace_then_report_deleted(**kwargs: object) -> None:
+            legacy.discord_message_id = CURRENT_MESSAGE
+            legacy.save(update_fields=["discord_message_id"])
+            raise MessageDeletedError(CURRENT_CHANNEL, STALE_MESSAGE)
+
+        self.edit.side_effect = replace_then_report_deleted
+
+        result = send_signup_update(self.pk)
+
+        self.assertIn("Skipped: deleted message is not the current", result)
+        legacy.refresh_from_db()
+        self.assertTrue(legacy.success)
+        self.assertEqual(legacy.discord_message_id, CURRENT_MESSAGE)
+        self.assertEqual(self._successful_logs(), 1)
+        self.assertFalse(
+            SignupPostDeliveryState.objects.filter(event=self.post_event).exists()
+        )
+
+    def test_legacy_log_404_cannot_override_unposted_signup_row(self) -> None:
+        self._legacy_post(STALE_MESSAGE)
+        DiscordEventMsgSignup.objects.create(
+            event=self.post_event,
+            channel_id=CURRENT_CHANNEL,
+            message_id=CURRENT_MESSAGE,
+            has_posted=False,
+        )
+        self.edit.side_effect = MessageDeletedError(CURRENT_CHANNEL, STALE_MESSAGE)
+
+        result = send_signup_update(self.pk)
+
+        self.assertIn("Skipped: deleted message is not the current", result)
+        self.assertEqual(self._successful_logs(), 1)
+        self.assertFalse(
+            SignupPostDeliveryState.objects.filter(event=self.post_event).exists()
+        )
+
+    def test_legacy_log_404_cannot_clear_active_attempt(self) -> None:
+        self._legacy_post(CURRENT_MESSAGE)
+        SignupPostDeliveryState.objects.create(
+            event=self.post_event,
+            generation=2,
+            attempts=1,
+            state=SignupDeliveryStatus.SENDING,
+        )
+        self.edit.side_effect = MessageDeletedError(CURRENT_CHANNEL, CURRENT_MESSAGE)
+
+        result = send_signup_update(self.pk)
+
+        self.assertIn("Skipped: deleted message is not the current", result)
+        self.assertEqual(self._successful_logs(), 1)
+        state = SignupPostDeliveryState.objects.get(event=self.post_event)
+        self.assertEqual(
+            (state.generation, state.state), (2, SignupDeliveryStatus.SENDING)
+        )
 
     def test_recovery_unavailable_retries_without_claiming_recovered(self) -> None:
         self._current_post(CURRENT_MESSAGE)
