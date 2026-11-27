@@ -1,11 +1,9 @@
-import { Check, CircleHelp, Clock, TriangleAlert, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
+import { Check, CircleHelp, Clock, Info, TriangleAlert, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { badgeVariants } from '~/components/ui/badge';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '~/components/ui/popover';
+import { DiscordIcon } from '~/components/ui/icons';
+import { Popover, PopoverTrigger } from '~/components/ui/popover';
 import { cn } from '~/lib/utils';
 import { VERIFICATION_LIMITATION } from './copy';
 import { PermissionDetails } from './PermissionDetails';
@@ -90,17 +88,32 @@ const icons = {
 export function DiscordPermissionBadge({
   operationLabel,
   result,
+  checks,
   state,
   disabled = false,
   'data-testid': testId,
 }: {
   operationLabel: string;
   result: PermissionCheckResult | undefined;
+  checks?: readonly {
+    operationLabel: string;
+    result: PermissionCheckResult | undefined;
+  }[];
   state: PermissionQuery['state'];
   disabled?: boolean;
   'data-testid'?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const restoreTrigger = useRef(false);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
+    null,
+  );
+  const attachTrigger = useCallback((node: HTMLButtonElement | null) => {
+    trigger.current = node;
+    // Keep pointer scrolling inside the enclosing dialog's scroll lock.
+    setPortalContainer(node?.closest<HTMLElement>('[role="dialog"]') ?? null);
+  }, []);
   const intent = useRef({
     pinned: false,
     hovered: false,
@@ -133,7 +146,10 @@ export function DiscordPermissionBadge({
     if (pointerType === 'touch') return;
     intent.current.hovered = true;
     cancelClose();
-    if (!intent.current.dismissed) setOpen(true);
+    if (!intent.current.dismissed) {
+      if (!open) restoreTrigger.current = false;
+      setOpen(true);
+    }
   };
   const hoverLeave = (pointerType: string) => {
     if (pointerType === 'touch') return;
@@ -142,12 +158,21 @@ export function DiscordPermissionBadge({
     closeAfterLeave();
   };
   const now = new Date();
-  const view = badgeView(result, state, now, disabled);
+  const entries = checks ?? [{ operationLabel, result }];
+  const views = entries.map((entry) => badgeView(entry.result, state, now));
+  const aggregate =
+    views.find((item) => item.tone === 'error') ??
+    views.find((item) => item.tone !== 'success') ??
+    views[0] ??
+    badgeView(undefined, state, now);
+  const view: BadgeView = disabled
+    ? { ...aggregate, tone: 'neutral', icon: 'help' }
+    : aggregate;
   const Icon = icons[view.icon];
   const visibleResult =
     state === 'ready' || state === 'idle' ? result : undefined;
-  const destination = visibleResult?.destination;
-  const accessibleName = `${operationLabel}: ${view.label}${destination?.name ? ` in #${destination.name}` : destination?.channel_id ? ` in channel ${destination.channel_id}` : ''}`;
+  const destination = checks ? undefined : visibleResult?.destination;
+  const accessibleName = `Discord ${operationLabel}: ${view.label}${destination?.name ? ` in #${destination.name}` : destination?.channel_id ? ` in channel ${destination.channel_id}` : ''}`;
   return (
     <Popover
       open={open}
@@ -161,6 +186,7 @@ export function DiscordPermissionBadge({
       }}
     >
       <PopoverTrigger
+        ref={attachTrigger}
         type="button"
         className={cn(
           badgeVariants({ variant: 'outline' }),
@@ -176,7 +202,10 @@ export function DiscordPermissionBadge({
         onFocus={() => {
           intent.current.focused = true;
           cancelClose();
-          if (!intent.current.dismissed) setOpen(true);
+          if (!intent.current.dismissed) {
+            if (!open) restoreTrigger.current = false;
+            setOpen(true);
+          }
         }}
         onBlur={(event) => {
           if (panel.current?.contains(event.relatedTarget)) return;
@@ -188,55 +217,101 @@ export function DiscordPermissionBadge({
           event.preventDefault();
           cancelClose();
           const pinned = !intent.current.pinned;
+          restoreTrigger.current = !pinned;
           intent.current.pinned = pinned;
           intent.current.dismissed = !pinned;
           setOpen(pinned);
           if (pinned) panel.current?.focus();
         }}
       >
-        <Icon aria-hidden="true" />
+        <DiscordIcon
+          aria-hidden="true"
+          data-testid="discord-permission-discord-icon"
+        />
+        {view.tone !== 'success' && <Icon aria-hidden="true" />}
         {view.label}
+        <Info
+          aria-hidden="true"
+          data-testid="discord-permission-info-icon"
+          className="opacity-70"
+        />
       </PopoverTrigger>
-      <PopoverContent
-        ref={panel}
-        className="max-h-96 w-80 max-w-[calc(100vw-2rem)] overflow-y-auto"
-        aria-label={`${operationLabel} permission details`}
-        onOpenAutoFocus={(event) => {
-          if (!intent.current.pinned) event.preventDefault();
-        }}
-        onCloseAutoFocus={(event) => {
-          if (!intent.current.focused) event.preventDefault();
-        }}
-        onPointerEnter={(event) => hoverEnter(event.pointerType)}
-        onPointerLeave={(event) => hoverLeave(event.pointerType)}
-        onFocusCapture={() => {
-          intent.current.focused = true;
-          cancelClose();
-        }}
-        onBlurCapture={(event) => {
-          if (event.currentTarget.contains(event.relatedTarget)) return;
-          intent.current.focused = false;
-          closeAfterLeave();
-        }}
-      >
-        {disabled && (
-          <p className="mb-3 text-sm text-muted-foreground">
-            This option is disabled. The check is diagnostic only.
-          </p>
-        )}
-        {visibleResult ? (
-          <PermissionDetails
-            result={visibleResult}
-            operationLabel={operationLabel}
-            historical={isExpired(visibleResult, now)}
-          />
-        ) : (
-          <div className="flex flex-col gap-2 text-sm">
-            <p>{view.label}</p>
-            <p>{VERIFICATION_LIMITATION}</p>
+      <PopoverPrimitive.Portal container={portalContainer}>
+        <PopoverPrimitive.Content
+          ref={panel}
+          className="bg-popover text-popover-foreground z-50 rounded-md border p-4 shadow-md outline-hidden w-80 max-w-[calc(100vw-2rem)] max-h-[min(24rem,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain touch-pan-y"
+          collisionPadding={16}
+          collisionBoundary={portalContainer ?? undefined}
+          tabIndex={0}
+          aria-label={`${operationLabel} permission details`}
+          onOpenAutoFocus={(event) => {
+            if (!intent.current.pinned) event.preventDefault();
+          }}
+          onEscapeKeyDown={() => {
+            restoreTrigger.current = true;
+          }}
+          onPointerDownOutside={() => {
+            restoreTrigger.current = false;
+          }}
+          onCloseAutoFocus={(event) => {
+            if (restoreTrigger.current) {
+              event.preventDefault();
+              trigger.current?.focus({ preventScroll: true });
+            } else if (!intent.current.focused) event.preventDefault();
+          }}
+          onPointerEnter={(event) => hoverEnter(event.pointerType)}
+          onPointerLeave={(event) => hoverLeave(event.pointerType)}
+          onFocusCapture={() => {
+            intent.current.focused = true;
+            cancelClose();
+          }}
+          onBlurCapture={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget)) return;
+            intent.current.focused = false;
+            closeAfterLeave();
+          }}
+        >
+          {disabled && (
+            <p className="mb-3 text-sm text-muted-foreground">
+              This option is disabled. The check is diagnostic only.
+            </p>
+          )}
+          <div className="space-y-4">
+            {entries.map((entry, index) => {
+              const visible =
+                state === 'ready' || state === 'idle'
+                  ? entry.result
+                  : undefined;
+              const status = badgeView(
+                entry.result,
+                state,
+                now,
+                disabled,
+              ).label;
+              return visible ? (
+                <PermissionDetails
+                  key={entry.operationLabel}
+                  result={visible}
+                  operationLabel={entry.operationLabel}
+                  statusLabel={status}
+                  historical={isExpired(visible, now)}
+                />
+              ) : (
+                <section
+                  key={entry.operationLabel}
+                  className="flex flex-col gap-2 text-sm"
+                >
+                  <h3 className="font-semibold">
+                    {entry.operationLabel} permissions
+                  </h3>
+                  <p>{views[index]?.label ?? view.label}</p>
+                  <p>{VERIFICATION_LIMITATION}</p>
+                </section>
+              );
+            })}
           </div>
-        )}
-      </PopoverContent>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
     </Popover>
   );
 }

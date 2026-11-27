@@ -122,7 +122,7 @@ it('batches every visible operation, renders diagnostics and never blocks saving
   ])
     expect(screen.getByTestId(`discord-preview-${kind}`)).toBeInTheDocument();
   for (const key of [
-    'signup_fallback',
+    'signup_post',
     'announcement',
     'attendance_reminder',
     'profile_reminder',
@@ -270,4 +270,44 @@ it('keeps disabled operations neutral even when their effective permissions veri
   expect(
     screen.getByTestId('discord-permission-badge-attendance_reminder'),
   ).not.toHaveClass('text-success');
+});
+
+it('groups primary and fallback checks under one signup badge without hiding fallback failures', async () => {
+  post.mockImplementation(async (_path, body) => ({
+    data: {
+      guild_id: '900000000000000001',
+      checks: body.checks.map((d: { key: string; action: string }) => ({
+        ...fixture.checks[0],
+        ...d,
+        status:
+          d.key === 'signup_fallback' ? 'missing_permissions' : 'verified',
+        missing: d.key === 'signup_fallback' ? ['EMBED_LINKS'] : [],
+        checked_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 60000).toISOString(),
+      })),
+    },
+  }));
+  mount();
+  act(() =>
+    form.setValue('discord_post_signups_channel_id', '900000000000000007'),
+  );
+  await waitFor(() =>
+    expect(
+      post.mock.calls.some(([, body]) =>
+        body.checks.some((d: { key: string }) => d.key === 'signup_post'),
+      ),
+    ).toBe(true),
+  );
+  const trigger = screen.getByTestId('discord-permission-badge-signup_post');
+  await waitFor(() => expect(trigger).toHaveTextContent('Missing permissions'));
+  expect(
+    screen.queryByTestId('discord-permission-badge-signup_fallback'),
+  ).toBeNull();
+  fireEvent.click(trigger);
+  expect(
+    screen.getByRole('heading', { name: 'Primary signup permissions' }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', { name: 'Announcement fallback permissions' }),
+  ).toBeInTheDocument();
 });

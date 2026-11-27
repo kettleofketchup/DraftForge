@@ -129,7 +129,7 @@ it('has an operation and destination name and does not submit a surrounding form
     </form>,
   );
   const trigger = screen.getByRole('button', {
-    name: 'Announcement: Permissions verified in #event-updates',
+    name: 'Discord Announcement: Permissions verified in #event-updates',
   });
   expect(trigger.getAttribute('type')).toBe('button');
   fireEvent.click(trigger);
@@ -329,4 +329,120 @@ it('ignores touch hover, opens on tap and dismisses on outside interaction', asy
   await act(async () => {});
   fireEvent.pointerDown(document.body);
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+it('identifies Discord and exposes one decorative Info affordance', () => {
+  const trigger = mountBadge();
+  expect(
+    trigger.querySelector('[data-testid="discord-permission-discord-icon"]'),
+  ).toHaveAttribute('aria-hidden', 'true');
+  expect(
+    trigger.querySelector('[data-testid="discord-permission-info-icon"]'),
+  ).toHaveAttribute('aria-hidden', 'true');
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+});
+it.each([
+  'missing_permissions',
+  'unknown',
+  'unconfigured',
+  'unsupported',
+] as const)(
+  'does not hide a %s fallback behind a verified primary',
+  (status) => {
+    render(
+      <DiscordPermissionBadge
+        operationLabel="Signup post"
+        result={result()}
+        checks={[
+          {
+            operationLabel: 'Primary signup',
+            result: result({ key: 'signup_post' }),
+          },
+          {
+            operationLabel: 'Announcement fallback',
+            result: result({ key: 'signup_fallback', status }),
+          },
+        ]}
+        state="ready"
+      />,
+    );
+    const trigger = screen.getByRole('button');
+    expect(trigger).not.toHaveClass('text-success');
+    fireEvent.click(trigger);
+    expect(
+      screen.getByRole('heading', { name: 'Primary signup permissions' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', {
+        name: 'Announcement fallback permissions',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  },
+);
+it('keeps a grouped expired or disabled result neutral', () => {
+  const checks = [
+    { operationLabel: 'Primary signup', result: result() },
+    {
+      operationLabel: 'Announcement fallback',
+      result: result({ expired: true }),
+    },
+  ];
+  const view = render(
+    <DiscordPermissionBadge
+      operationLabel="Signup post"
+      result={result()}
+      checks={checks}
+      state="ready"
+    />,
+  );
+  expect(screen.getByRole('button')).toHaveTextContent('Check expired');
+  expect(screen.getByRole('button')).not.toHaveClass('text-success');
+  view.rerender(
+    <DiscordPermissionBadge
+      operationLabel="Signup post"
+      result={result()}
+      checks={[checks[0]]}
+      state="ready"
+      disabled
+    />,
+  );
+  expect(screen.getByRole('button')).not.toHaveClass('text-success');
+});
+it('bounds and focuses its scrollable details within available viewport space', () => {
+  fireEvent.click(mountBadge());
+  const panel = screen.getByRole('dialog');
+  expect(panel.className).toContain('--radix-popover-content-available-height');
+  expect(panel).toHaveClass(
+    'overflow-y-auto',
+    'overscroll-contain',
+    'touch-pan-y',
+  );
+  expect(panel).toHaveAttribute('tabindex', '0');
+});
+
+it('keeps the details portal inside an enclosing dialog scroll lock', () => {
+  render(
+    <div role="dialog" aria-label="Settings">
+      <DiscordPermissionBadge
+        operationLabel="Announcement"
+        result={result()}
+        state="ready"
+      />
+    </div>,
+  );
+  fireEvent.click(screen.getByRole('button'));
+  expect(screen.getByRole('dialog', { name: 'Settings' })).toContainElement(
+    screen.getByRole('dialog', { name: 'Announcement permission details' }),
+  );
+});
+
+it('restores the badge on Escape even when touch scrolling has blurred the panel', async () => {
+  const trigger = mountBadge();
+  fireEvent.click(trigger);
+  const panel = screen.getByRole('dialog');
+  fireEvent.blur(panel, { relatedTarget: null });
+  fireEvent.keyDown(panel, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(trigger).toHaveFocus();
 });

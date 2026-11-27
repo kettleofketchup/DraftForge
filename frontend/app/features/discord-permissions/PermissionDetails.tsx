@@ -10,10 +10,12 @@ import type { PermissionCheckResult } from './schemas';
 export function PermissionDetails({
   result,
   operationLabel,
+  statusLabel,
   historical = false,
 }: {
   result: PermissionCheckResult;
   operationLabel: string;
+  statusLabel?: string;
   historical?: boolean;
 }) {
   const alternatives =
@@ -38,6 +40,7 @@ export function PermissionDetails({
       data-testid={`discord-permission-details-${result.key}`}
     >
       <h3 className="font-semibold">{operationLabel} permissions</h3>
+      {statusLabel && <p>Status: {statusLabel}</p>}
       <p>Action: {permissionLabel(result.action)}</p>
       <p>
         Destination:{' '}

@@ -29,7 +29,7 @@ Only a current `verified` result is green. History labels such as **Posted** des
 - **Guild**: scheduled-event operations check server-level permissions, not the announcement channel.
 - **Recipient**: DM delivery depends on the recipient and cannot be established by server permission bits.
 
-Signup primary and announcement fallback have separate badges. A working fallback does not make an unsupported or inaccessible primary green. For example, an attendance reminder configured for **attendance-updates** is checked there, even when the announcement badge for **event-updates** is green. Clearing the attendance channel previews **event-updates (fallback)** without saving the form.
+Signup settings show one Discord badge with an Info icon. Its details list the primary signup and announcement fallback checks separately. The badge is green only when every applicable check is current and verified; a working destination cannot hide a missing, unknown, expired or unsupported result at the other destination. Details scroll within the available viewport, including on small screens. For example, an attendance reminder configured for **attendance-updates** is checked there, even when the announcement badge for **event-updates** is green. Clearing the attendance channel previews **event-updates (fallback)** without saving the form.
 
 Unsaved form edits are checked against the draft settings. Creation forms, series and organization defaults use organization previews; an existing event uses event-scoped previews. Discord State checks saved settings and historical references even when no Discord history exists yet.
 

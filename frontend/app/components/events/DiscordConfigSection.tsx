@@ -328,10 +328,9 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
     showNotifyNewEvents,
     showSignupReminder,
   });
-  const diagnostic = (key: string) => {
+  const resultFor = (key: string): PermissionCheckResult | undefined => {
     const descriptor = descriptors.find((d) => d.key === key);
-    if (!descriptor || !canCheckPermissions) return null;
-    const operation = SETTINGS_OPERATIONS[key];
+    if (!descriptor) return undefined;
     const noServer: PermissionCheckResult = {
       ...descriptor,
       status: 'unconfigured',
@@ -358,22 +357,35 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
       retry_after_seconds: null,
       refresh_state: null,
     };
+    return permissionScope ? permissionQuery?.results.get(key) : noServer;
+  };
+  const diagnostic = (key: string, relatedKeys: string[] = []) => {
+    const keys = [key, ...relatedKeys].filter((candidate) =>
+      descriptors.some((d) => d.key === candidate),
+    );
+    if (!canCheckPermissions || !keys.length) return null;
+    const operation = SETTINGS_OPERATIONS[key];
+    const checks = keys.map((candidate) => ({
+      operationLabel:
+        candidate === 'signup_post'
+          ? 'Primary signup'
+          : candidate === 'signup_fallback'
+            ? 'Announcement fallback'
+            : SETTINGS_OPERATIONS[candidate].label,
+      result: resultFor(candidate),
+    }));
     return (
       <DiscordPermissionBadge
         operationLabel={operation.label}
-        result={permissionScope ? permissionQuery?.results.get(key) : noServer}
+        result={checks[0]?.result}
+        checks={relatedKeys.length ? checks : undefined}
         state={permissionQuery?.state ?? 'idle'}
         disabled={!values[operation.field]}
         data-testid={`discord-permission-badge-${key}`}
       />
     );
   };
-  const signupDiagnostic = (
-    <>
-      {diagnostic('signup_post')}
-      {diagnostic('signup_fallback')}
-    </>
-  );
+  const signupDiagnostic = diagnostic('signup_post', ['signup_fallback']);
 
   const [
     createEvent,

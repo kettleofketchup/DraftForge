@@ -330,4 +330,127 @@ test.describe('Discord permission badges @cicd', () => {
     await page.mouse.click(5, 100);
     await expect(details).toBeHidden();
   });
+  test('one Discord signup badge keeps both destinations and scrolls details in a short viewport', async ({
+    page,
+  }) => {
+    await page.route(
+      `**/api/discord/organizations/${data.org_pk}/channels/**`,
+      (route) =>
+        route.fulfill({
+          json: {
+            channels: [
+              {
+                id: data.channel_ids.attendance,
+                name: 'attendance',
+                type: 0,
+                type_label: 'Text',
+              },
+              {
+                id: data.channel_ids.announcement,
+                name: 'announcements',
+                type: 0,
+                type_label: 'Text',
+              },
+            ],
+          },
+        }),
+    );
+    const modal = await edit(page, data.fresh_event_pk);
+    await page.getByTestId('discord-discord_post_signups').check();
+    await page.getByTestId('discord-signup-channel-select').click();
+    await page.keyboard.press('Home');
+    await page.keyboard.press('Enter');
+    const trigger = badge(modal, 'signup_post');
+    await expect(trigger).toContainText('Missing permissions');
+    await expect(badge(modal, 'signup_fallback')).toHaveCount(0);
+    await expect(
+      trigger.getByTestId('discord-permission-discord-icon'),
+    ).toBeVisible();
+    await expect(
+      trigger.getByTestId('discord-permission-info-icon'),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 500 });
+    await trigger.click();
+    const panel = page.getByRole('dialog', {
+      name: 'Signup post permission details',
+    });
+    await expect(
+      panel.getByRole('heading', { name: 'Primary signup permissions' }),
+    ).toHaveCount(1);
+    await expect(
+      panel.getByRole('heading', { name: 'Announcement fallback permissions' }),
+    ).toHaveCount(1);
+    await expect(
+      panel.getByTestId('discord-permission-details-signup_post'),
+    ).toContainText('Status: Missing permissions');
+    await expect(
+      panel.getByTestId('discord-permission-details-signup_fallback'),
+    ).toContainText('Status: Permissions verified');
+    const bounds = await panel.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.y).toBeGreaterThanOrEqual(15);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(485);
+    expect(
+      await panel.evaluate((el) => el.scrollHeight > el.clientHeight),
+    ).toBe(true);
+    const background = await modal.evaluate((el) =>
+      Array.from(
+        el.querySelectorAll('[data-radix-scroll-area-viewport]'),
+        (v) => v.scrollTop,
+      ),
+    );
+    await panel.hover();
+    await page.mouse.wheel(0, 350);
+    await expect
+      .poll(() => panel.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    expect(
+      await modal.evaluate((el) =>
+        Array.from(
+          el.querySelectorAll('[data-radix-scroll-area-viewport]'),
+          (v) => v.scrollTop,
+        ),
+      ),
+    ).toEqual(background);
+    await panel.focus();
+    await page.keyboard.press('End');
+    await expect(panel.locator('p').last()).toBeInViewport();
+    await page.keyboard.press('Home');
+    await expect.poll(() => panel.evaluate((el) => el.scrollTop)).toBe(0);
+    const session = await page.context().newCDPSession(page);
+    await session.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+    const x = bounds!.x + bounds!.width / 2;
+    const y = bounds!.y + bounds!.height - 20;
+    const distance = Math.min(120, bounds!.height - 40);
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x, y }],
+    });
+    for (let step = 1; step <= 8; step++) {
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          ),
+      );
+      await session.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x, y: y - (distance * step) / 8 }],
+      });
+    }
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await expect
+      .poll(() => panel.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    await session.send('Emulation.setTouchEmulationEnabled', {
+      enabled: false,
+    });
+    await session.detach();
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
 });
