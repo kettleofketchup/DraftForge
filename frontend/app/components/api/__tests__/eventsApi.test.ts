@@ -1,11 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+const { get, post, remove } = vi.hoisted(() => ({
+  get: vi.fn(),
+  post: vi.fn(),
+  remove: vi.fn(),
+}));
 
-vi.mock('~/components/api/axios', () => ({ default: { get } }));
+vi.mock('~/components/api/axios', () => ({
+  default: { get, post, delete: remove },
+}));
 
-import { getEvent, getEvents } from '../eventsAPI';
+import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
+
+import {
+  cancelEvent,
+  deleteEvent,
+  EventSignupRecordsConflict,
+  getEvent,
+  getEvents,
+} from '../eventsAPI';
 
 const staffUser = {
   pk: 7,
@@ -142,7 +156,27 @@ const detail = {
 
 beforeEach(() => {
   get.mockReset();
+  post.mockReset();
+  remove.mockReset();
 });
+
+function httpError(status: number, data: unknown): AxiosError {
+  const headers = new AxiosHeaders();
+  const response: AxiosResponse = {
+    status,
+    statusText: String(status),
+    data,
+    headers,
+    config: { headers },
+  };
+  return new AxiosError(
+    `Request failed with status code ${status}`,
+    'ERR_BAD_REQUEST',
+    { headers },
+    undefined,
+    response,
+  );
+}
 
 describe('getEvents', () => {
   it('parses the slim list payload', async () => {
@@ -199,5 +233,78 @@ describe('getEvent', () => {
     const { helpers: _h, ...missing } = detail;
     get.mockResolvedValue({ data: missing });
     await expect(getEvent(12)).rejects.toBeInstanceOf(ZodError);
+  });
+});
+
+describe('deleteEvent', () => {
+  it('sends an unconfirmed DELETE by default and for false', async () => {
+    remove.mockResolvedValue({ status: 204, data: undefined });
+    await expect(deleteEvent(41)).resolves.toBeUndefined();
+    await expect(deleteEvent(41, { confirm: false })).resolves.toBeUndefined();
+    expect(remove.mock.calls).toEqual([['/events/41/'], ['/events/41/']]);
+  });
+
+  it('sends confirm=true only for an explicit confirmation', async () => {
+    remove.mockResolvedValue({ status: 204, data: undefined });
+    await deleteEvent(41, { confirm: true });
+    expect(remove).toHaveBeenCalledExactlyOnceWith('/events/41/', {
+      params: { confirm: 'true' },
+    });
+  });
+
+  it('turns the signup-record 409 into a typed conflict without retrying', async () => {
+    remove.mockRejectedValue(
+      httpError(409, { error: 'has_signup_records', count: 24 }),
+    );
+    const error = await deleteEvent(41).catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(EventSignupRecordsConflict);
+    expect((error as EventSignupRecordsConflict).count).toBe(24);
+    expect(remove).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['missing count', { error: 'has_signup_records' }],
+    ['negative count', { error: 'has_signup_records', count: -1 }],
+    ['fractional count', { error: 'has_signup_records', count: 1.5 }],
+    ['string count', { error: 'has_signup_records', count: '3' }],
+    ['different error', { error: 'other', count: 3 }],
+  ])(
+    'keeps a malformed 409 (%s) as an ordinary error',
+    async (_label, body) => {
+      const failure = httpError(409, body);
+      remove.mockRejectedValue(failure);
+      await expect(deleteEvent(41)).rejects.toBe(failure);
+      expect(remove).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('keeps a non-409 response with conflict-shaped data as ordinary', async () => {
+    const failure = httpError(403, { error: 'has_signup_records', count: 3 });
+    remove.mockRejectedValue(failure);
+    await expect(deleteEvent(41, { confirm: true })).rejects.toBe(failure);
+  });
+});
+
+describe('cancelEvent', () => {
+  it('posts an empty body for legacy callers and parses the event', async () => {
+    post.mockResolvedValue({ data: { ...detail, state: 'cancelled' } });
+    await expect(cancelEvent(12)).resolves.toMatchObject({
+      id: 12,
+      state: 'cancelled',
+    });
+    expect(post).toHaveBeenCalledExactlyOnceWith('/events/12/cancel/', {});
+  });
+
+  it('sends a supplied reason', async () => {
+    post.mockResolvedValue({ data: { ...detail, state: 'cancelled' } });
+    await cancelEvent(12, { reason: 'Schedule changed' });
+    expect(post).toHaveBeenCalledExactlyOnceWith('/events/12/cancel/', {
+      reason: 'Schedule changed',
+    });
+  });
+
+  it('rejects a malformed cancellation response', async () => {
+    post.mockResolvedValue({ data: { ...detail, state: 'archived' } });
+    await expect(cancelEvent(12)).rejects.toBeInstanceOf(ZodError);
   });
 });
