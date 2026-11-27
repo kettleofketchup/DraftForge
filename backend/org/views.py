@@ -33,6 +33,7 @@ from org.accounts import (
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.api_connections.lifecycle import handle_credential_owner_loss
 from org.integration import points as promotion_points
 from org.integration.lifecycle import reconcile_promotion_identity
 from org.mmr import merge_org_mmrs
@@ -247,6 +248,7 @@ class ClaimRequestViewSet(
         - All foreign key references
         - Then deletes target_user
         """
+        handle_credential_owner_loss(target_user)
         stub_steam_id = target_user.steam_account_id
         # Both Discord IDs, before anything is merged, for the promotion
         # points settled once the sends have moved.

@@ -20,12 +20,16 @@ class Operation(StrEnum):
     MMR_READ = "mmr:read"
     MMR_WRITE = "mmr:write"
     PROMOTION_IMPORT = "promotion:import"
+    PROMOTION_READ = "promotion:read"
+    PROMOTION_WRITE = "promotion:write"
 
 
 _ENTITLEMENTS: dict[Operation, FeatureKey] = {
     Operation.MMR_READ: FeatureKey.MMR_SYNC,
     Operation.MMR_WRITE: FeatureKey.MMR_SYNC,
     Operation.PROMOTION_IMPORT: FeatureKey.PROMOTION,
+    Operation.PROMOTION_READ: FeatureKey.PROMOTION,
+    Operation.PROMOTION_WRITE: FeatureKey.PROMOTION,
 }
 
 

@@ -21,6 +21,7 @@ from org.standing import api as standing
 
 from .models import (
     MmrChangeRequest,
+    OrgApiConnection,
     OrgApiLimits,
     OrgApiToken,
     OrgApiTokenUsage,
@@ -254,7 +255,7 @@ class OrgSettingsAdmin(admin.ModelAdmin):
 
 
 @admin.register(OrgApiToken)
-class OrgApiTokenAdmin(admin.ModelAdmin):
+class OrgApiTokenAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "prefix",
@@ -267,7 +268,8 @@ class OrgApiTokenAdmin(admin.ModelAdmin):
     list_filter = ("revoked_at",)
     raw_id_fields = ["organization", "user", "revoked_by"]
     search_fields = ["name", "prefix", "organization__name", "user__username"]
-    readonly_fields = ("prefix", "secret_hash", "created_at", "last_used_at")
+    exclude = ("secret_hash",)
+    readonly_fields = ("prefix", "created_at", "last_used_at")
 
 
 @admin.register(OrgApiTokenUsage)
@@ -299,3 +301,9 @@ class OrgApiLimitsAdmin(admin.ModelAdmin):
     list_display = ("organization", "per_minute", "per_day", "updated_at", "updated_by")
     raw_id_fields = ["organization", "updated_by"]
     search_fields = ["organization__name"]
+
+
+@admin.register(OrgApiConnection)
+class OrgApiConnectionAdmin(ReadOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ("name", "organization", "enabled", "archived_at")
+    exclude = ("outbound_credential_ciphertext", "outbound_credential_key_id")

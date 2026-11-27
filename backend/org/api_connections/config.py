@@ -105,6 +105,16 @@ def apply_config_patch(
                 outbound_credential_set_at=timezone.now(),
             )
         if config.outbound_auth != "none":
+            if any(
+                (
+                    config.mmr_push_enabled,
+                    config.mmr_pull_enabled,
+                    config.promotion_push_enabled,
+                )
+            ) and not (
+                replacement or (current.outbound_credential_ciphertext and not clear)
+            ):
+                raise ConnectionConfigError("credential_required")
             updates["outbound_authorizer"] = None
         elif any(
             (

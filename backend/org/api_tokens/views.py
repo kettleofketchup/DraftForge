@@ -121,10 +121,12 @@ def org_api_tokens(request: Request, org_id: int) -> Response:
     issued = issue_token(
         org, request.user, serializer.validated_data["name"], operations=operations
     )
-    return Response(
+    response = Response(
         {**_token_row(issued.token), "token": issued.raw},
         status=status.HTTP_201_CREATED,
     )
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @api_view(["DELETE"])
@@ -176,8 +178,25 @@ def org_api_usage(request: Request, org_id: int) -> Response:
             }
         )
     limits = limits_for(org.pk)
+    connection_usage: dict[str, Any] = {}
+    if request.query_params.get("by_connection") == "true":
+        totals = (
+            qs.filter(token__connection__isnull=False)
+            .values("token__connection_id")
+            .annotate(requests=Sum("request_count"), throttled=Sum("throttled_count"))
+            .order_by("token__connection_id")
+        )
+        connection_usage["connections"] = [
+            {
+                "connection_id": row["token__connection_id"],
+                "requests": row["requests"],
+                "throttled": row["throttled"],
+            }
+            for row in totals
+        ]
     return Response(
         {
+            **connection_usage,
             "since": since.isoformat(),
             "days": days,
             "limits": {"per_minute": limits.per_minute, "per_day": limits.per_day},

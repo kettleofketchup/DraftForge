@@ -183,6 +183,9 @@ class ConnectionBackfillMigrationTest(MigratorTestCase):
         )
 
     def test_backfilled_tokens_still_authenticate_and_import(self) -> None:
+        self._migrator.apply_tested_migration(
+            ("org", "0035_api_connection_key_version")
+        )
         cache.clear()
         url = f"/api/organizations/{self.org}/integration/v1/contact-receipts/"
         Organization = self.new_state.apps.get_model("org", "Organization")

@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from app.models import CustomUser
 from org.api_tokens.operations import default_operations, parse_operations
-from org.models import Organization, OrgApiToken, OrgLog
+from org.models import Organization, OrgApiConnection, OrgApiToken, OrgLog
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -56,7 +56,18 @@ def issue_token(
     prefix = _new_prefix()
     secret = secrets.token_urlsafe(SECRET_BYTES)
     with transaction.atomic():
+        connection = OrgApiConnection.objects.create(
+            organization=org,
+            name=name,
+            created_by=user,
+            updated_by=user,
+            enabled=True,
+            inbound_enabled=True,
+            operations=granted,
+        )
         token = OrgApiToken.objects.create(
+            connection=connection,
+            issued_by=user,
             organization=org,
             user=user,
             name=name,

@@ -242,6 +242,10 @@ urlpatterns = [
         name="org-features",
     ),
     path(
+        "api/organizations/<int:org_id>/api-connections/",
+        include("org.api_connections.urls"),
+    ),
+    path(
         "api/organizations/<int:org_id>/api-tokens/",
         org_api_tokens,
         name="org-api-tokens",

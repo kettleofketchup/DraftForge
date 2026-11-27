@@ -566,16 +566,21 @@ class ImportTests(_ImportBase):
         )
         self.assertEqual(resp.status_code, 404)
 
-    def test_promotion_read_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unknown operation"):
-            issue_token(self.org, self.admin, "old", operations=["promotion:read"])
+    def test_promotion_read_is_explicitly_issuable_but_cannot_import(self) -> None:
         self.client.force_authenticate(self.admin)
         resp = self.client.post(
             f"/api/organizations/{self.org.pk}/api-tokens/",
-            {"name": "old", "operations": ["promotion:read"]},
+            {"name": "Reader", "operations": ["promotion:read"]},
             format="json",
         )
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["operations"], ["promotion:read"])
+        denied = self.bearer(resp.data["token"]).post(
+            f"/api/organizations/{self.org.pk}/integration/v1/contact-receipts/",
+            {},
+            format="json",
+        )
+        self.assertError(denied, 403, "operation_not_granted")
 
 
 class AssociationRescanTests(_ImportBase):

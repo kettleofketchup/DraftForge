@@ -23,6 +23,7 @@ from events.eligibility import (
     admin_precheck_steam_account_id,
     friend_id_error_status,
 )
+from org.api_connections.lifecycle import handle_credential_owner_loss
 from org.membership import member_organization_ids
 from org.models import OrgUser
 from org.permissions import has_org_staff_access
@@ -159,6 +160,7 @@ class UserView(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance: CustomUser) -> None:
         with transaction.atomic():
+            handle_credential_owner_loss(instance)
             release_earning_sends(instance)
             standing.on_user_deleted(instance, actor=self.request.user)
             instance.delete()

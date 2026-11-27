@@ -74,9 +74,15 @@ class ConnectionConfig(ConfigRecord):
     mmr_push_enabled: bool = False
     mmr_pull_enabled: bool = False
     promotion_push_enabled: bool = False
-    operations: list[Literal["mmr:read", "mmr:write", "promotion:import"]] = Field(
-        default_factory=list
-    )
+    operations: list[
+        Literal[
+            "mmr:read",
+            "mmr:write",
+            "promotion:import",
+            "promotion:read",
+            "promotion:write",
+        ]
+    ] = Field(default_factory=list)
     outbound_base_url: Annotated[str, Field(max_length=2048)] = ""
     outbound_auth: Literal["none", "bearer", "api_key_header", "api_key_field"] = "none"
     mmr_push_config: MmrPushConfig = Field(default_factory=MmrPushConfig)

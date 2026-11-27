@@ -56,6 +56,7 @@ class OrgApiConnection(models.Model):
     promotion_push_enabled = models.BooleanField(default=False)
     operations = models.JSONField(default=list, blank=True)
     config_version = models.PositiveBigIntegerField(default=1)
+    key_version = models.PositiveBigIntegerField(default=1)
     legacy_backfilled = models.BooleanField(default=False)
     legacy_multi_credential = models.BooleanField(default=False)
     outbound_base_url = models.URLField(max_length=2048, blank=True, default="")

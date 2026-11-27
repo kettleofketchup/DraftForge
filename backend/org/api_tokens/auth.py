@@ -34,6 +34,14 @@ class OrgApiTokenAuthentication(BaseAuthentication):
                 token_id=token.pk if token else None,
             )
             raise AuthenticationFailed("Invalid or revoked token.")
+        if token.connection_id is not None:
+            connection = token.connection
+            if (
+                connection.archived_at
+                or not connection.enabled
+                or not connection.inbound_enabled
+            ):
+                raise AuthenticationFailed("Connection is disabled.")
         if not token.user.is_active:
             raise AuthenticationFailed("Token owner is inactive.")
         return token.user, token
@@ -52,7 +60,10 @@ def operation_not_granted() -> PermissionDenied:
 
 
 def gate_token_request(
-    request: Request, org_id: int, *, operation: Operation = Operation.MMR_READ
+    request: Request,
+    org_id: int,
+    *,
+    operation: Operation | tuple[Operation, ...] = Operation.MMR_READ,
 ) -> Organization:
     """Authorize one app-token request for ``operation`` on ``org_id``.
 
@@ -65,7 +76,20 @@ def gate_token_request(
         raise AuthenticationFailed("An org API token is required.")
     if token.organization_id != org_id:
         raise NotFound()
-    if not token.grants(operation):
+    alternatives = operation if isinstance(operation, tuple) else (operation,)
+    granted = next(
+        (
+            candidate
+            for candidate in alternatives
+            if token.grants(candidate)
+            and (
+                token.connection_id is None
+                or str(candidate) in token.connection.operations
+            )
+        ),
+        None,
+    )
+    if granted is None:
         log.info(
             "org_api_operation_denied",
             system="org",
@@ -76,7 +100,7 @@ def gate_token_request(
         )
         raise operation_not_granted()
     org = token.organization
-    require_feature(org, entitlement_for(operation))
+    require_feature(org, entitlement_for(granted))
     if not has_org_admin_access(token.user, org):
         raise not_permitted()
     check_and_record(token)

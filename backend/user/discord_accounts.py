@@ -36,6 +36,7 @@ from org.accounts import (
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.api_connections.lifecycle import handle_credential_owner_loss
 from org.integration import points as promotion_points
 from org.integration.lifecycle import reconcile_promotion_identity
 from org.mmr import merge_org_mmrs
@@ -183,6 +184,7 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     # (some relations moved, both accounts still alive). (select_for_update is
     # a no-op on this project's SQLite, so atomicity is what guards us here.)
     with transaction.atomic():
+        handle_credential_owner_loss(drop)
         keep_org_users = {
             ou.organization_id: ou for ou in OrgUser.objects.filter(user=keep)
         }
