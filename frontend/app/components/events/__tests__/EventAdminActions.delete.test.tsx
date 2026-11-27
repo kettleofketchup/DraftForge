@@ -64,7 +64,7 @@ describe('EventAdminActions deletion', () => {
       button: 0,
       ctrlKey: false,
     });
-    fireEvent.click(await screen.findByRole('menuitem', { name: /Delete/ }));
+    fireEvent.click(await screen.findByTestId('event-mobile-delete'));
     expect(
       await screen.findByTestId('event-delete-initial-confirm'),
     ).toBeInTheDocument();

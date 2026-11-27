@@ -49,11 +49,7 @@ async function openDeletion(page: Page, id: number, mobile = false) {
   await visitAndWaitForHydration(page, `/events/${id}`);
   if (mobile) {
     await page.getByTestId('event-admin-actions-mobile').click();
-    await page
-      .getByTestId('event-admin-actions-mobile-menu')
-      .locator('[role="menuitem"]')
-      .filter({ hasText: /^Delete$/ })
-      .click();
+    await page.getByTestId('event-mobile-delete').click();
   } else {
     await page.getByTestId('event-delete-btn').click();
   }

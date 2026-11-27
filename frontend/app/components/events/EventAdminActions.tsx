@@ -79,8 +79,7 @@ export function EventAdminActions({
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const isCancellable = isEventCancellable(event);
 
-  // Mobile dropdown actions — NO data-testid here (would collide with desktop).
-  // Tests reach mobile actions via the parent `event-admin-actions-mobile`.
+  // Mobile action IDs must stay distinct from the desktop IDs.
   const dropdownActions: BrandDropdownAction[] = [
     {
       key: 'edit',
@@ -162,6 +161,7 @@ export function EventAdminActions({
       key: 'delete',
       icon: <Trash2 className="h-4 w-4 mr-1.5" />,
       label: 'Delete',
+      'data-testid': 'event-mobile-delete',
       onClick: () => setShowDeleteConfirm(true),
       variant: 'destructive',
       disabled: actions.deleteEvent.isPending,
