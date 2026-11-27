@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -266,4 +272,37 @@ it('closes the flow rather than opening deletion for a different event', async (
     </TooltipProvider>,
   );
   await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+});
+
+it('does not let a previous event request close the newly opened flow', async () => {
+  let resolve!: () => void;
+  const pending = new Promise<void>((done) => {
+    resolve = done;
+  });
+  const onOpenChange = vi.fn();
+  const props = {
+    event: fixture,
+    open: true,
+    onOpenChange,
+    isOrganizationAdmin: true,
+    isPending: false,
+    onDelete: vi.fn().mockReturnValue(pending),
+    onCancel: vi.fn().mockResolvedValue(undefined),
+    onDeleted: vi.fn(),
+  };
+  const view = render(
+    <TooltipProvider>
+      <EventDeleteFlow {...props} />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByTestId('event-delete-initial-confirm'));
+  view.rerender(
+    <TooltipProvider>
+      <EventDeleteFlow {...props} event={{ ...fixture, id: 52 }} />
+    </TooltipProvider>,
+  );
+  onOpenChange.mockClear();
+  await act(async () => resolve());
+  expect(onOpenChange).not.toHaveBeenCalled();
+  expect(props.onDeleted).not.toHaveBeenCalled();
 });

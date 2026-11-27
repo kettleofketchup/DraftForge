@@ -122,12 +122,14 @@ export function EventDeleteFlow({
   };
 
   const closeAll = () => {
+    if (displayedEventId.current !== event.id) return;
     pendingConflict.current = null;
     setRecordCount(null);
     onOpenChange(false);
   };
 
   const handleFirstOpenChange = (next: boolean) => {
+    if (displayedEventId.current !== event.id) return;
     onOpenChange(next);
     if (!next && pendingConflict.current !== null) {
       setRecordCount(pendingConflict.current);
