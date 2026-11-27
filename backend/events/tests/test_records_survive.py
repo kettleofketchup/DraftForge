@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from discordbot.models import DiscordEvent
 from events.constants import (
@@ -20,6 +21,136 @@ from events.reopen import reopen_event
 from events.services import cancel_event, create_tournament_for_event
 from events.tests.base import EventTestCase
 from tournament.models import Tournament
+
+
+class CancellationAPITest(EventTestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        for target in (
+            "events.services.notify_signup_changed",
+            "events.discord.dispatch.notify_signup_changed",
+        ):
+            patcher = patch(target)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _event_with_signup(self, **overrides: Any) -> Event:
+        event = self.make_event(**overrides)
+        EventSignup.objects.create(
+            event=event, user=self.user, status=SignupStatus.APPROVED
+        )
+        return event
+
+    def _assert_cancelled(self, event: Event, reason: str, data: Any = None) -> None:
+        response = self.client.post(
+            f"/api/events/{event.pk}/cancel/", data, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.data["id"], event.pk)
+        self.assertEqual(response.data["state"], EventState.CANCELLED)
+        self.assertTrue(response.data["user_can_manage"])
+        self.assertEqual(response.data["signup_count"], 1)
+        event.refresh_from_db()
+        self.assertEqual(event.state, EventState.CANCELLED)
+        entry = SignupLedgerEntry.objects.get(
+            event=event, action=SignupAction.EVENT_CANCELLED
+        )
+        self.assertEqual(entry.reason, reason)
+        self.assertEqual(entry.actor_user_id, self.admin.pk)
+
+    def test_empty_legacy_request(self) -> None:
+        for payload in (None, {}, {"reason": ""}):
+            with self.subTest(payload=payload):
+                self._assert_cancelled(self._event_with_signup(), "", payload)
+
+    def test_reason_round_trips(self) -> None:
+        for reason in ("  Schedule changed\n  ", "x" * 2000):
+            with self.subTest(length=len(reason)):
+                self._assert_cancelled(
+                    self._event_with_signup(), reason, {"reason": reason}
+                )
+
+    def test_invalid_reason_has_no_effects(self) -> None:
+        for reason in (None, 42, 1.5, True, [], {}, "x" * 2001):
+            with self.subTest(reason=reason):
+                event = self._event_with_signup()
+                original_event = Event.objects.filter(pk=event.pk).values().get()
+                original_signups = list(
+                    EventSignup.objects.filter(event=event).values()
+                )
+                original_entries = list(
+                    SignupLedgerEntry.objects.filter(event=event).values()
+                )
+                response = self.client.post(
+                    f"/api/events/{event.pk}/cancel/",
+                    {"reason": reason},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertIn("reason", response.data)
+                self.assertEqual(
+                    Event.objects.nocache().filter(pk=event.pk).values().get(),
+                    original_event,
+                )
+                self.assertEqual(
+                    list(EventSignup.objects.nocache().filter(event=event).values()),
+                    original_signups,
+                )
+                self.assertEqual(
+                    list(SignupLedgerEntry.objects.filter(event=event).values()),
+                    original_entries,
+                )
+
+    def test_cancel_permission_and_state_matrix(self) -> None:
+        org_staff = self.make_user()
+        self.org.staff.add(org_staff)
+        host = self.make_user()
+        helper = self.make_user()
+        member = self.make_user()
+        for actor, permitted in (
+            (self.admin, True),
+            (org_staff, True),
+            (self.league_staff, True),
+            (member, False),
+            (host, False),
+            (helper, False),
+            (None, False),
+        ):
+            for state in EventState:
+                with self.subTest(actor=actor, state=state):
+                    event = self._event_with_signup(
+                        state=state, tournament_league=self.league, host=host
+                    )
+                    event.helpers.add(helper)
+                    self.client.force_authenticate(actor)
+                    response = self.client.post(
+                        f"/api/events/{event.pk}/cancel/",
+                        {"reason": "Schedule changed"},
+                        format="json",
+                    )
+                    cancellable = state in {
+                        EventState.UPCOMING,
+                        EventState.SIGNUPS_OPEN,
+                        EventState.ROLL_CALL,
+                    }
+                    expected = (
+                        200 if permitted and cancellable else 400 if permitted else 403
+                    )
+                    self.assertEqual(response.status_code, expected, response.content)
+                    event.refresh_from_db()
+                    entries = SignupLedgerEntry.objects.filter(
+                        event=event, action=SignupAction.EVENT_CANCELLED
+                    )
+                    if expected == 200:
+                        self.assertEqual(event.state, EventState.CANCELLED)
+                        self.assertEqual(entries.get().actor_user_id, actor.pk)
+                        self.assertEqual(entries.get().reason, "Schedule changed")
+                    else:
+                        self.assertEqual(event.state, state)
+                        self.assertFalse(entries.exists())
+                        if expected == 400:
+                            self.assertIn("error", response.data)
 
 
 class CancellationRecordsTest(EventTestCase):

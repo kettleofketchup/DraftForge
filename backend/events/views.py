@@ -111,6 +111,7 @@ from events.reopen import ReopenNotPermitted
 from events.roster import RosterSyncResult
 from events.schemas import SignupInputPatch
 from events.serializers import (
+    CancelEventSerializer,
     EventRepeaterSerializer,
     EventRepeaterSlimSerializer,
     EventSerializer,
@@ -1590,8 +1591,12 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        serializer = CancelEventSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         try:
-            cancel_event(event, actor=request.user)
+            cancel_event(
+                event, actor=request.user, reason=serializer.validated_data["reason"]
+            )
             qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)

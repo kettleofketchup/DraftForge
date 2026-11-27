@@ -91,6 +91,23 @@ TIMER_FIELD_KWARGS = {
 SIGNUPS_OPEN_HOURS_KWARGS = {"max_value": MAX_SIGNUPS_OPEN_HOURS_BEFORE}
 
 
+class _CancellationReasonField(serializers.CharField):
+    def to_internal_value(self, data: Any) -> str:
+        if not isinstance(data, str):
+            self.fail("invalid")
+        return super().to_internal_value(data)
+
+
+class CancelEventSerializer(serializers.Serializer):
+    reason = _CancellationReasonField(
+        required=False,
+        default="",
+        allow_blank=True,
+        max_length=2000,
+        trim_whitespace=False,
+    )
+
+
 class LobbySteamLeagueMixin:
     """Gate a changed lobby_steam_league_id; ``source`` holds the current or
     inherited values (instance, or the series for a one-off)."""
