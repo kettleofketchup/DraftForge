@@ -151,6 +151,18 @@ export async function addTournamentMember(
   return response.data.tournament;
 }
 
+/** Remove one member, leaving any added or removed by others meanwhile. */
+export async function removeTournamentMember(
+  tournamentId: number,
+  userId: number,
+): Promise<TournamentType> {
+  const response = await axios.delete<{
+    status: string;
+    tournament: TournamentType;
+  }>(`/tournaments/${tournamentId}/members/${userId}/`);
+  return response.data.tournament;
+}
+
 export type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
 
 export async function fetchDiscordTournamentLogs(

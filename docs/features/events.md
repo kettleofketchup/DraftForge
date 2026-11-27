@@ -129,6 +129,8 @@ The Discord section of the event, series and organization defaults forms is spli
 - **Channel posts**: the signup post, start mention, pre-day announcement, attendance reminder, profile reminder and (series only) new-event post. Every post except the start mention has its own channel picker.
 - **Direct messages**: the signup reminder DM to series subscribers. Single events show "Direct messages are set on recurring series." instead; in the organization defaults it is the default for new series.
 
+Each message toggle has a **Preview** button that shows exactly what Discord will receive for the values in the form, without sending or saving anything. See [Discord Message Preview](events/discord-message-preview.md).
+
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
 
 ### RSVP & Signups

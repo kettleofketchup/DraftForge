@@ -3,6 +3,7 @@ import { Copy, ExternalLink, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
+import { DiscordMessagePreview } from '~/components/discord';
 import {
   BrandSelect,
   BrandSelectContent,
@@ -21,16 +22,16 @@ import {
 } from '~/components/ui/form';
 import { Textarea } from '~/components/ui/textarea';
 import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
-import { formatDiscordTimestamps } from './discordPreview';
+import { useUserStore } from '~/store/userStore';
 import {
   describeExternalWriteback,
   reportPromoError,
   undoToastDescription,
-  usePreviewOptions,
 } from './feedback';
 import type { ComposeMode } from './promotionColumns';
 import { useRenderPromo, useSendPromo, useUndoPromoSend } from './queries';
@@ -100,7 +101,7 @@ export function ComposePanel({
     templates[0]?.id ?? null,
   );
   const [sent, setSent] = useState<PromoSendResult | null>(null);
-  const previewOptions = usePreviewOptions();
+  const currentUser = useUserStore((state) => state.currentUser);
 
   useEffect(() => {
     if (templateId == null || !templates.some((t) => t.id === templateId)) {
@@ -129,10 +130,7 @@ export function ComposePanel({
   }, [renderedText, templateId, candidate.user_pk, form]);
 
   const text = useWatch({ control: form.control, name: 'text' }) ?? '';
-  const preview = useMemo(
-    () => formatDiscordTimestamps(text, previewOptions),
-    [text, previewOptions],
-  );
+  const previewMessages = useMemo(() => [{ content: text }], [text]);
   const overLimit = text.length > DISCORD_DM_LIMIT;
   const canSubmit =
     promoSendSchema.safeParse({ text }).success &&
@@ -349,11 +347,26 @@ export function ComposePanel({
             <span className="text-sm font-medium">
               How it will look in Discord
             </span>
-            <div
-              className="min-h-16 whitespace-pre-wrap break-words rounded-md border border-border bg-base-800/60 p-3 text-sm"
-              data-testid="promo-discord-preview"
-            >
-              {preview}
+            <div data-testid="promo-discord-preview">
+              <DiscordMessagePreview
+                className="min-h-16"
+                messages={previewMessages}
+                author={
+                  currentUser?.pk
+                    ? {
+                        name: DisplayName(currentUser),
+                        avatar: (
+                          <UserAvatar
+                            user={currentUser}
+                            size="lg"
+                            data-testid="promo-sender-avatar"
+                          />
+                        ),
+                        bot: false,
+                      }
+                    : undefined
+                }
+              />
             </div>
           </div>
 

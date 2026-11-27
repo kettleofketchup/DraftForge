@@ -1,11 +1,9 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { extractApiError } from '~/lib/apiError';
-import type { getLogger } from '~/lib/logger';
 import {
   formatDiscordTimestamps,
   type DiscordPreviewOptions,
-} from './discordPreview';
+} from '~/components/discord/timestamps';
+import { extractApiError } from '~/lib/apiError';
+import type { getLogger } from '~/lib/logger';
 import type {
   ExternalWriteback,
   ExternalWritebackState,
@@ -58,13 +56,6 @@ export function undoToastDescription(
   const state = describeExternalWriteback(result.writeback);
   if (!syncConfigured || state == null) return undefined;
   return `Undo removes it from DraftForge only. ${state}`;
-}
-
-export function usePreviewOptions(): DiscordPreviewOptions {
-  const { i18n } = useTranslation();
-  const locale = i18n?.resolvedLanguage ?? 'en';
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return useMemo(() => ({ locale, timeZone }), [locale, timeZone]);
 }
 
 export function relativeFromIso(
