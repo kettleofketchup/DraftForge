@@ -19,6 +19,7 @@ from rest_framework.response import Response
 
 from app.models import CustomUser
 from common.game import GameType
+from org.api_connections.mutations import MmrMutationContext
 from org.api_tokens.auth import OrgApiTokenAuthentication, gate_token_request
 from org.api_tokens.operations import (
     Operation,
@@ -270,5 +271,8 @@ def org_mmr_sync(request: Request, org_id: int) -> Response:
         data["entries"],
         game_type=int(data["game_type"]),
         mark_verified=data["mark_verified"],
+        sync_context=MmrMutationContext(
+            origin_connection_id=request.auth.connection_id
+        ),
     )
     return Response(result.as_dict())

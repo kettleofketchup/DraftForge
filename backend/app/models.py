@@ -13,7 +13,12 @@ from app.cache_utils import invalidate_after_commit
 from common.game import GameType  # noqa: F401
 from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
-from user.models import BaseUserProfile, DotaUserProfile, PositionsModel
+from user.models import (
+    BaseUserProfile,
+    DotaUserProfile,
+    PositionsModel,
+    track_user_identity,
+)
 
 User = settings.AUTH_USER_MODEL
 
@@ -87,6 +92,7 @@ class CustomUser(AbstractUser):
     )
 
     _steam_snapshot: dict[str, Any]
+    _identity_snapshot: dict[str, Any]
 
     @property
     def steam_account_verified(self) -> bool:
@@ -116,6 +122,11 @@ class CustomUser(AbstractUser):
             for a in cls._STEAM_SNAPSHOT_ATTNAMES
             if a in instance.__dict__
         }
+        instance._identity_snapshot = {
+            name: instance.__dict__[name]
+            for name in ("steam_account_id", "steamid", "discordId")
+            if name in instance.__dict__
+        }
         return instance
 
     def refresh_from_db(
@@ -126,6 +137,10 @@ class CustomUser(AbstractUser):
     ) -> None:
         fields = list(fields) if fields is not None else None
         super().refresh_from_db(using=using, fields=fields, from_queryset=from_queryset)
+        identity = self.__dict__.setdefault("_identity_snapshot", {})
+        for name in ("steam_account_id", "steamid", "discordId"):
+            if name in self.__dict__ and (fields is None or name in fields):
+                identity[name] = self.__dict__[name]
         snapshot = self.__dict__.setdefault("_steam_snapshot", {})
         for attname in self._STEAM_SNAPSHOT_ATTNAMES:
             if attname not in self.__dict__:
@@ -201,6 +216,12 @@ class CustomUser(AbstractUser):
         if final_changed or any(touched.values()):
             return
         excluded = set(self.STEAM_VERIFICATION_FIELDS)
+        identity_snapshot = self.__dict__.get("_identity_snapshot", {})
+        if (
+            "discordId" in identity_snapshot
+            and self.discordId == identity_snapshot["discordId"]
+        ):
+            excluded.add("discordId")
         if (
             self.steam_account_id == loaded_id
             and self.steamid == loaded_steamid
@@ -470,6 +491,10 @@ class CustomUser(AbstractUser):
             return False
 
     def save(self, *args: object, **kwargs: object) -> None:
+        with track_user_identity(self, kwargs):
+            self._save_profile(*args, **kwargs)
+
+    def _save_profile(self, *args: object, **kwargs: object) -> None:
         """Keep steam ids in sync, auto-create BaseUserProfile (which in turn
         auto-creates the game profiles + default positions), invalidate
         cacheops, and flush pending nickname/avatar/positions/mmr values
@@ -482,6 +507,13 @@ class CustomUser(AbstractUser):
         self._sync_steam_ids_and_verification(kwargs)
 
         super().save(*args, **kwargs)
+        snapshot = self.__dict__.setdefault("_identity_snapshot", {})
+        update_fields = kwargs.get("update_fields")
+        for name in ("steam_account_id", "steamid", "discordId"):
+            if name in self.__dict__ and (
+                update_fields is None or name in update_fields
+            ):
+                snapshot[name] = self.__dict__[name]
         self._take_steam_snapshot()
         # Cacheops auto-fires invalidation for `self` via post_save signal
         # (model is registered with ops="all"). No explicit call needed.

@@ -1,12 +1,13 @@
 from collections.abc import Callable
 
-from django.db.models import Model
+from django.db.models import Model, Q
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from discordbot.models import DiscordEventDM
 from league.mmr import merge_league_users
 from league.models import LeagueUser
+from org.api_connections.mutations import lock_memberships
 from org.models import (
     OrgFeature,
     OrgUser,
@@ -16,6 +17,17 @@ from org.models import (
 )
 
 Discard = Callable[[Model], None]
+
+
+def lock_account_memberships(users: list[CustomUser]) -> None:
+    ids = [user.pk for user in users]
+    member_ids = list(
+        OrgUser.objects.nocache()
+        .filter(Q(user_id__in=ids) | Q(game_mmrs__verified_by_id__in=ids))
+        .values_list("pk", flat=True)
+        .distinct()
+    )
+    lock_memberships(member_ids)
 
 
 def repoint_org_attribution(drop: CustomUser, keep: CustomUser) -> int:

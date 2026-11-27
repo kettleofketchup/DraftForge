@@ -33,9 +33,11 @@ from league.mmr import merge_user_league_memberships
 from league.models import LeagueUser
 from org.accounts import (
     delete_counts,
+    lock_account_memberships,
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.api_connections.identity import batch_identity_changes
 from org.api_connections.lifecycle import handle_credential_owner_loss
 from org.integration import points as promotion_points
 from org.integration.lifecycle import reconcile_promotion_identity
@@ -183,7 +185,8 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     # All-or-nothing: a failure mid-loop must not leave a half-merged state
     # (some relations moved, both accounts still alive). (select_for_update is
     # a no-op on this project's SQLite, so atomicity is what guards us here.)
-    with transaction.atomic():
+    with transaction.atomic(), batch_identity_changes():
+        lock_account_memberships([drop, keep])
         handle_credential_owner_loss(drop)
         keep_org_users = {
             ou.organization_id: ou for ou in OrgUser.objects.filter(user=keep)

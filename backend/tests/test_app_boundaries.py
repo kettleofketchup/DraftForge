@@ -1165,7 +1165,14 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
             frozenset({"Organization"}), "home_stats cross-domain aggregate"
         ),
         "app/admin.py": BackEdge(
-            frozenset({"api", "release_earning_sends", "handle_credential_owner_loss"}),
+            frozenset(
+                {
+                    "api",
+                    "release_earning_sends",
+                    "handle_credential_owner_loss",
+                    "lock_account_memberships",
+                }
+            ),
             "CustomUser admin delete checks standing blockers, releases promo "
             "earning sends, revokes connection authority and records standing on user deletion",
         ),
@@ -1183,8 +1190,15 @@ ALLOWED_BACK_EDGES: dict[str, dict[str, BackEdge]] = {
     },
     "user": {
         "app/models.py": BackEdge(
-            frozenset({"BaseUserProfile", "DotaUserProfile", "PositionsModel"}),
-            "CustomUser profile accessors",
+            frozenset(
+                {
+                    "BaseUserProfile",
+                    "DotaUserProfile",
+                    "PositionsModel",
+                    "track_user_identity",
+                }
+            ),
+            "CustomUser profile accessors and MODEL_APPS-safe identity mutation hook",
         ),
     },
     "tournament": {

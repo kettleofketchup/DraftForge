@@ -278,9 +278,9 @@ class MergeOrgMmrsTest(OrgMmrHelperBase):
         merge_org_mmrs(loser, keeper)
         self.assertEqual(rows(keeper), {DOTA: 4000, DL: 900})
 
-    def test_merge_without_loser_rows_is_one_query(self) -> None:
+    def test_merge_without_loser_rows_only_locks_and_reads(self) -> None:
         OrgUserGameMmr.objects.create(org_user=self.ou, game_type=DOTA, mmr=4000)
-        with self.assertNumQueries(1), capture_logs() as logs:
+        with self.assertNumQueries(4), capture_logs() as logs:
             merge_org_mmrs(self.ou_other, self.ou)
         self.assertEqual(events_named(logs, "org_mmr_merged"), [])
         self.assertEqual(rows(self.ou), {DOTA: 4000})

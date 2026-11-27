@@ -30,9 +30,11 @@ from league.models import LeagueLog, LeagueUser
 from league.models_rating import LeagueMatchParticipant, LeagueRating
 from org.accounts import (
     delete_counts,
+    lock_account_memberships,
     merge_member_dependents,
     repoint_org_attribution,
 )
+from org.api_connections.identity import batch_identity_changes
 from org.api_connections.lifecycle import handle_credential_owner_loss
 from org.integration import points as promotion_points
 from org.integration.lifecycle import reconcile_promotion_identity
@@ -237,6 +239,7 @@ class ClaimRequestViewSet(
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    @batch_identity_changes()
     def _merge_profiles(
         self, claimer: CustomUser, target_user: CustomUser, *, actor: SignupActor
     ) -> None:
@@ -248,6 +251,7 @@ class ClaimRequestViewSet(
         - All foreign key references
         - Then deletes target_user
         """
+        lock_account_memberships([target_user, claimer])
         handle_credential_owner_loss(target_user)
         stub_steam_id = target_user.steam_account_id
         # Both Discord IDs, before anything is merged, for the promotion

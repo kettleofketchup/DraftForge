@@ -71,14 +71,15 @@ STAFF_PUT_OPEN_QUERIES = 22
 # run requester, adoption actor, token issuer), and three membership cascades
 # (delivery SELECT, pull-target DELETE, sync-state DELETE). Admin confirmation
 # adds three ledger SELECTs; admin deletion includes that confirmation cost.
-MERGE_DISCORD_QUERIES = 243
-MERGE_CLAIM_QUERIES = 220
-DELETE_API_QUERIES = 135
-DELETE_ADMIN_QUERIES = 191
+# MMR locks add 10/15 to Discord/claim merges and two to account deletion.
+MERGE_DISCORD_QUERIES = 253
+MERGE_CLAIM_QUERIES = 235
+DELETE_API_QUERIES = 137
+DELETE_ADMIN_QUERIES = 193
 DELETE_ADMIN_CONFIRM_QUERIES = 58
 PROMO_SEND_QUERIES = 30
 PROMO_UNDO_QUERIES = 13
-PROMO_RELEASE_QUERIES = 149
+PROMO_RELEASE_QUERIES = 151
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8

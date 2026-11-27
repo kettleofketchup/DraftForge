@@ -7,6 +7,7 @@ from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils.text import capfirst
 
+from org.accounts import lock_account_memberships
 from org.api_connections.lifecycle import handle_credential_owner_loss
 from org.promotion.services import release_earning_sends
 from org.standing import api as standing
@@ -51,6 +52,7 @@ class CustomUserAdmin(admin.ModelAdmin):
 
     def delete_model(self, request: HttpRequest, obj: CustomUser) -> None:
         with transaction.atomic():
+            lock_account_memberships([obj])
             handle_credential_owner_loss(obj)
             release_earning_sends(obj)
             standing.on_user_deleted(obj, actor=request.user)
@@ -60,6 +62,7 @@ class CustomUserAdmin(admin.ModelAdmin):
         self, request: HttpRequest, queryset: QuerySet[CustomUser]
     ) -> None:
         with transaction.atomic():
+            lock_account_memberships(list(queryset))
             for user in queryset:
                 handle_credential_owner_loss(user)
                 release_earning_sends(user)
