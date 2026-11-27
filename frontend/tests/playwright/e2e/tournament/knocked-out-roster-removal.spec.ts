@@ -47,8 +47,10 @@ async function removePlayer(page: Page, username: string): Promise<void> {
   await button.scrollIntoViewIfNeeded();
   const patched = page.waitForResponse(
     (r) =>
-      r.request().method() === 'PATCH' &&
-      new URL(r.url()).pathname === `/api/tournaments/${tournament.pk}/`,
+      r.request().method() === 'DELETE' &&
+      new URL(r.url()).pathname.startsWith(
+        `/api/tournaments/${tournament.pk}/members/`,
+      ),
   );
   await button.click();
   expect((await patched).status()).toBe(200);

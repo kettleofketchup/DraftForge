@@ -20,7 +20,13 @@ import {
   putApiLimits,
   revokeApiToken,
 } from '../api';
-import { ApiLimitsFormSchema, CreateTokenFormSchema } from '../schemas';
+import {
+  ApiLimitsFormSchema,
+  CreateTokenFormSchema,
+  DEFAULT_TOKEN_OPERATIONS,
+  operationLabel,
+  TOKEN_OPERATIONS,
+} from '../schemas';
 import { apiToken, apiUsage, createdApiToken } from './fixtures';
 
 beforeEach(() => {
@@ -51,18 +57,48 @@ describe('api-tokens api', () => {
     await expect(listApiTokens(7)).rejects.toBeInstanceOf(ZodError);
   });
 
-  it('creates a token and keeps the raw secret', async () => {
+  it('creates a token with its operations and keeps the raw secret', async () => {
     post.mockResolvedValue({ data: createdApiToken() });
-    const created = await createApiToken(7, 'MMR bot');
+    const created = await createApiToken(7, {
+      name: 'MMR bot',
+      operations: ['mmr:read', 'mmr:write'],
+    });
     expect(created.token).toBe('dfk_abcd1234_secretsecret');
     expect(post).toHaveBeenCalledWith('/organizations/7/api-tokens/', {
       name: 'MMR bot',
+      operations: ['mmr:read', 'mmr:write'],
     });
+  });
+
+  it('sends promotion-only operations unchanged', async () => {
+    post.mockResolvedValue({
+      data: createdApiToken({
+        operations: ['promotion:import'],
+      }),
+    });
+    const created = await createApiToken(7, {
+      name: 'Contact log adaptor',
+      operations: ['promotion:import'],
+    });
+    expect(created.operations).toEqual(['promotion:import']);
+    expect(post).toHaveBeenCalledWith('/organizations/7/api-tokens/', {
+      name: 'Contact log adaptor',
+      operations: ['promotion:import'],
+    });
+  });
+
+  it('reads a token that predates operation grants as the MMR pair', async () => {
+    const { operations: _omit, ...legacy } = apiToken();
+    get.mockResolvedValue({ data: [legacy] });
+    const [row] = await listApiTokens(7);
+    expect(row.operations).toEqual(['mmr:read', 'mmr:write']);
   });
 
   it('rejects a create response without the secret', async () => {
     post.mockResolvedValue({ data: apiToken() });
-    await expect(createApiToken(7, 'x')).rejects.toBeInstanceOf(ZodError);
+    await expect(
+      createApiToken(7, { name: 'x', operations: ['mmr:read'] }),
+    ).rejects.toBeInstanceOf(ZodError);
   });
 
   it('revokes a token', async () => {
@@ -100,15 +136,49 @@ describe('api-tokens api', () => {
 
 describe('form schemas', () => {
   it('trims and bounds the token name', () => {
-    expect(CreateTokenFormSchema.parse({ name: '  bot  ' })).toEqual({
-      name: 'bot',
-    });
-    expect(CreateTokenFormSchema.safeParse({ name: '   ' }).success).toBe(
-      false,
-    );
+    const operations = ['mmr:read'];
     expect(
-      CreateTokenFormSchema.safeParse({ name: 'x'.repeat(65) }).success,
+      CreateTokenFormSchema.parse({ name: '  bot  ', operations }),
+    ).toEqual({ name: 'bot', operations });
+    expect(
+      CreateTokenFormSchema.safeParse({ name: '   ', operations }).success,
     ).toBe(false);
+    expect(
+      CreateTokenFormSchema.safeParse({ name: 'x'.repeat(65), operations })
+        .success,
+    ).toBe(false);
+  });
+
+  it('needs at least one known operation', () => {
+    expect(
+      CreateTokenFormSchema.safeParse({ name: 'bot', operations: [] }).success,
+    ).toBe(false);
+    expect(
+      CreateTokenFormSchema.safeParse({ name: 'bot', operations: ['root'] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('defaults new tokens to the MMR pair only', () => {
+    expect(DEFAULT_TOKEN_OPERATIONS).toEqual(['mmr:read', 'mmr:write']);
+    expect(TOKEN_OPERATIONS.map((op) => op.value)).toEqual([
+      'mmr:read',
+      'mmr:write',
+      'promotion:import',
+    ]);
+  });
+
+  it('describes the import grant as recording contacts and promotion points', () => {
+    const importOp = TOKEN_OPERATIONS.find(
+      (op) => op.value === 'promotion:import',
+    );
+    expect(importOp?.label).toBe(
+      'Import external contact history and promotion points',
+    );
+    expect(importOp?.description).toBe(
+      'Records external contacts and awards and voids promotion points.',
+    );
+    expect(operationLabel('promotion:read')).toBe('promotion:read');
   });
 
   it('matches the backend limit ranges', () => {

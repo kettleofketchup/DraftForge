@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import { usePreviewOptions } from '~/components/discord/timestamps';
 import { GAME_LABEL, toGameType } from '~/components/game/constants';
 import { SecondaryButton } from '~/components/ui/buttons';
 import type { OrgFeatureAccess } from '~/features/org-features';
@@ -8,13 +9,14 @@ import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { CandidateList } from './CandidateList';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import { reportPromoError } from './feedback';
 import { candidateRowId, type ComposeMode } from './promotionColumns';
 import {
   PromotionMessageDialog,
   type PromotionComposer,
 } from './PromotionMessageDialog';
 import {
+  useCandidates,
   usePromoEvents,
   usePromoTemplates,
   useResolveDiscordMember,
@@ -72,12 +74,59 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const contextToken = useRef(0);
   const resolve = useResolveDiscordMember(orgId, access, eventId ?? 0);
 
+  // The same query CandidateList renders, so this adds no request.
+  const candidates = useCandidates(orgId, access, eventId, filters);
+  const filtersKey = JSON.stringify(filters);
+  const [picked, setPicked] = useState<{
+    key: string;
+    at: number;
+    sent: boolean;
+  } | null>(null);
+
   const closeComposer = useCallback((): void => {
     contextToken.current += 1;
     setComposer(null);
     setJustSent(null);
     setPendingRowId(null);
+    setPicked(null);
   }, []);
+
+  // An open composer goes stale when list data fetched after the pick shows
+  // a recorded external contact, under any filters, or when the list it was
+  // opened from, with messaged players hidden, no longer lists the player.
+  // Other filters can leave a row out for unrelated reasons, so only the
+  // pick's own filters count a missing row. Once the dialog has marked a send,
+  // a missing row is its own send (or the list catching up after its undo).
+  const { data: rows, dataUpdatedAt, isPlaceholderData } = candidates;
+  const candidatePk = composer?.candidate.user_pk ?? null;
+  const candidateDiscordId = composer?.candidate.discordId ?? null;
+  useEffect(() => {
+    if (candidatePk == null || justSent != null || picked == null) return;
+    if (!rows || isPlaceholderData || dataUpdatedAt <= picked.at) return;
+    // A Discord member resolved to an account may still be listed by Discord ID.
+    const row = rows.rows.find(
+      (r) =>
+        r.user_pk === candidatePk ||
+        (candidateDiscordId != null && r.discordId === candidateDiscordId),
+    );
+    const hidden =
+      row == null &&
+      picked.key === filtersKey &&
+      filters.hideMessaged &&
+      !picked.sent;
+    if (row?.external_contact || hidden) closeComposer();
+  }, [
+    candidatePk,
+    candidateDiscordId,
+    justSent,
+    picked,
+    rows,
+    dataUpdatedAt,
+    isPlaceholderData,
+    filtersKey,
+    filters.hideMessaged,
+    closeComposer,
+  ]);
 
   const resetEvent = useCallback(
     (id: number | null): void => {
@@ -107,16 +156,28 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
   const onSent = useCallback((send: PromoSendResult | null) => {
     setJustSent(send?.id ?? null);
   }, []);
+  // Set before the request: the send's own list refetch can land first.
+  const onSending = useCallback(() => {
+    setPicked((p) => (p ? { ...p, sent: true } : p));
+  }, []);
+  // A failed send recorded nothing, so a missing row is staleness again.
+  const onSendFailed = useCallback(() => {
+    setPicked((p) => (p ? { ...p, sent: false } : p));
+  }, []);
+  const syncConfigured = candidates.data?.contact_sync.configured ?? false;
 
   const resolveMutate = resolve.mutate;
   const onCompose = useCallback(
     (row: CandidateRow, mode: ComposeMode): void => {
+      if (row.external_contact) return;
       contextToken.current += 1;
       const token = contextToken.current;
       setJustSent(null);
+      const pick = { key: filtersKey, at: dataUpdatedAt, sent: false };
       if (isLinked(row)) {
         setPendingRowId(null);
         setComposer({ candidate: row, mode });
+        setPicked(pick);
         return;
       }
       if (!row.discordId || eventId == null) return;
@@ -130,7 +191,16 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
             return;
           }
           setPendingRowId(null);
-          if (isLinked(resolved)) setComposer({ candidate: resolved, mode });
+          if (resolved.external_contact) {
+            toast.info(
+              'A contact with this player is already recorded externally',
+            );
+            return;
+          }
+          if (isLinked(resolved)) {
+            setComposer({ candidate: resolved, mode });
+            setPicked(pick);
+          }
         },
         onError: (err) => {
           if (token !== contextToken.current) return;
@@ -145,7 +215,7 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
         },
       });
     },
-    [eventId, orgId, resolveMutate],
+    [eventId, orgId, resolveMutate, filtersKey, dataUpdatedAt],
   );
 
   const selectedEvent = events.data?.find((e) => e.id === eventId) ?? null;
@@ -234,6 +304,9 @@ export function PromotionDashboard({ orgId, access }: PromotionDashboardProps) {
             gameLabel={gameLabel}
             onClose={closeComposer}
             onSent={onSent}
+            onSending={onSending}
+            onSendFailed={onSendFailed}
+            syncConfigured={syncConfigured}
           />
         </>
       )}

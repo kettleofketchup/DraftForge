@@ -44,8 +44,8 @@ export function useCanManageLeadership(
   return leadershipAccess(useOrgFeatureAccess(org)).canManage;
 }
 
-export function useCanUseMmrSync(org: OrganizationType | undefined): boolean {
-  return useOrgFeatureAccess(org).canUseMmrSync;
+export function useCanUseApiTokens(org: OrganizationType | undefined): boolean {
+  return useOrgFeatureAccess(org).canUseApiTokens;
 }
 
 export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
@@ -86,9 +86,18 @@ export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
     id: 'api-access',
     label: 'API access',
     icon: KeyRound,
-    keywords: ['api', 'token', 'mmr', 'sync', 'rate limit'],
+    keywords: [
+      'api',
+      'token',
+      'mmr',
+      'sync',
+      'rate limit',
+      'promotion',
+      'adaptor',
+      'contact',
+    ],
     group: 'Organization',
     useSection: useApiAccessSection,
-    useVisible: useCanUseMmrSync,
+    useVisible: useCanUseApiTokens,
   },
 ];

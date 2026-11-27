@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
@@ -20,6 +25,57 @@ import {
 } from '~/store/bracketStore';
 
 const log = getLogger('bracket:save');
+
+function storeFromResponse(data: BracketResponseDTO) {
+  const apiMatches = data.matches as unknown as BracketMatchDTO[];
+  return {
+    matches: apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches)),
+    baseVersion: data.version ?? null,
+    isDirty: false,
+    hasStructuralEdits: false,
+  };
+}
+
+/** Discards local bracket edits and loads the server's current bracket. */
+export async function reloadBracket(
+  queryClient: QueryClient,
+  tournamentId: number,
+): Promise<void> {
+  const data = await queryClient.fetchQuery({
+    queryKey: ['bracket', tournamentId],
+    queryFn: () => loadBracketAPI(tournamentId),
+    staleTime: 0,
+  });
+  if (!isBracketStoreFor(tournamentId)) return;
+  useBracketStore.setState({
+    ...storeFromResponse(data),
+    isVirtual: data.matches.length === 0,
+  });
+  log.info('bracket_reloaded', { tournamentId });
+}
+
+/**
+ * Settles one advance-winner write. Once none are left in flight and there
+ * are no structural edits, the bracket is refetched before the store is
+ * marked clean, so a refetch never lands on top of a newer local result.
+ */
+async function settleResultWrite(
+  queryClient: QueryClient,
+  tournamentId: number | undefined,
+): Promise<boolean> {
+  if (!isBracketStoreFor(tournamentId)) {
+    await queryClient.invalidateQueries({
+      queryKey: ['bracket', tournamentId],
+    });
+    return false;
+  }
+  if (useBracketStore.getState().endResultWrite() > 0) return false;
+  await queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
+  if (!isBracketStoreFor(tournamentId)) return false;
+  const { pendingResultWrites, hasStructuralEdits } =
+    useBracketStore.getState();
+  return pendingResultWrites === 0 && !hasStructuralEdits;
+}
 
 /**
  * Fetches bracket data via TanStack Query and seeds the Zustand bracketStore.
@@ -70,6 +126,10 @@ export function useBracketQuery(tournamentId: number | null) {
       return;
     }
     setServerChanged(false);
+    useBracketStore.setState({
+      baseVersion: query.data.version ?? null,
+      hasStructuralEdits: false,
+    });
 
     // Handle empty bracket — use getState() to avoid subscribing to matches
     if (apiMatches.length === 0) {
@@ -115,24 +175,31 @@ interface MatchResultVars {
   winner: 'radiant' | 'dire' | null;
 }
 
+export const MATCH_RESULT_MUTATION_KEY = ['bracket-match-result'];
+
 /**
  * Persists a single match result via advance_winner (issue #466). The caller
- * applies the change to the store first; on success the server's bracket
- * replaces it, on failure the last fetched bracket is restored.
+ * applies the change to the store first. Writes may overlap (issue #963): the
+ * store stays dirty until the last one settles, then takes the server bracket.
  */
 export function usePersistMatchResult(tournamentId: number | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: MATCH_RESULT_MUTATION_KEY,
     mutationFn: ({ gameId, winner }: MatchResultVars) =>
       advanceWinnerAPI(gameId, winner),
-    onSuccess: (_data, { gameId, winner }) => {
+    onMutate: () => {
       if (isBracketStoreFor(tournamentId)) {
+        useBracketStore.getState().beginResultWrite();
+      }
+    },
+    onSuccess: async (_data, { gameId, winner }) => {
+      log.info('bracket_match_result_saved', { tournamentId, gameId, winner });
+      if (await settleResultWrite(queryClient, tournamentId)) {
         useBracketStore.setState({ isDirty: false });
       }
-      queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
-      log.info('bracket_match_result_saved', { tournamentId, gameId, winner });
     },
-    onError: (error, { gameId, winner }) => {
+    onError: async (error, { gameId, winner }) => {
       const { message, code, details } = parseBracketError(error);
       log.error('bracket_match_result_failed', {
         tournamentId,
@@ -143,18 +210,16 @@ export function usePersistMatchResult(tournamentId: number | undefined) {
         details,
       });
       toast.error(`Failed to save match result: ${message}`);
+      if (!(await settleResultWrite(queryClient, tournamentId))) return;
       const cached = queryClient.getQueryData<BracketResponseDTO>([
         'bracket',
         tournamentId,
       ]);
-      if (cached && isBracketStoreFor(tournamentId)) {
-        const apiMatches = cached.matches as unknown as BracketMatchDTO[];
-        useBracketStore.setState({
-          matches: apiMatches.map((m) => mapApiMatchToMatch(m, apiMatches)),
-          isDirty: false,
-        });
+      if (cached) {
+        useBracketStore.setState(storeFromResponse(cached));
+      } else {
+        useBracketStore.setState({ isDirty: false });
       }
-      queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
     },
   });
 }
@@ -169,7 +234,11 @@ export function useSaveBracket(tournamentId: number) {
       if (!isBracketStoreFor(tournamentId)) {
         throw new Error('This bracket belongs to another tournament');
       }
-      return saveBracketAPI(tournamentId, matches);
+      return saveBracketAPI(
+        tournamentId,
+        matches,
+        useBracketStore.getState().baseVersion,
+      );
     },
     onSuccess: (data) => {
       if (!isBracketStoreFor(tournamentId)) {
@@ -179,15 +248,9 @@ export function useSaveBracket(tournamentId: number) {
         return;
       }
       // Update Zustand store with saved matches (they now have backend PKs)
-      const apiMatches = data.matches as unknown as BracketMatchDTO[];
-      const savedMatches = apiMatches.map((m) =>
-        mapApiMatchToMatch(m, apiMatches),
-      );
-      useBracketStore.setState({
-        matches: savedMatches,
-        isDirty: false,
-        isVirtual: false,
-      });
+      const saved = storeFromResponse(data);
+      const savedMatches = saved.matches;
+      useBracketStore.setState({ ...saved, isVirtual: false });
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
       log.info('bracket_saved', {
         tournamentId,
@@ -203,6 +266,26 @@ export function useSaveBracket(tournamentId: number) {
         code,
         details,
       });
+      if (code === 'bracket_stale') {
+        toast.error(message, {
+          id: `bracket-stale-${tournamentId}`,
+          duration: Infinity,
+          description: 'Your unsaved edits are kept until you reload.',
+          action: {
+            label: 'Reload bracket',
+            onClick: () => {
+              reloadBracket(queryClient, tournamentId).catch((err: unknown) => {
+                log.error('bracket_reload_failed', {
+                  tournamentId,
+                  ...parseBracketError(err),
+                });
+                toast.error('Failed to reload the bracket');
+              });
+            },
+          },
+        });
+        return;
+      }
       toast.error(`Failed to save bracket: ${message}`);
     },
   });

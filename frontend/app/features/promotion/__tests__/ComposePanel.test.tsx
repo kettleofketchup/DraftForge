@@ -1,15 +1,39 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import type { UserType } from '~/components/user/types';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { makeOrgFeatureAccess } from '~/features/org-features/__tests__/makeOrgFeatureAccess';
 import { createI18nInstance } from '~/i18n/config';
+import { useUserStore } from '~/store/userStore';
 import { renderPromo, sendPromo } from '../api';
 import { ComposePanel } from '../ComposePanel';
-import type { LinkedCandidate, PromoEvent, PromoTemplate } from '../schemas';
+import type {
+  ExternalWriteback,
+  LinkedCandidate,
+  PromoEvent,
+  PromoSendResult,
+  PromoTemplate,
+} from '../schemas';
+import { EXTERNAL_CONTACT } from './fixtures';
 
 vi.mock('../api', () => ({
   renderPromo: vi.fn(),
@@ -49,6 +73,8 @@ const candidate: LinkedCandidate = {
   mmr: 3200,
   recent_count: 2,
   last_messaged: null,
+  contact_recorded: false,
+  external_contact: null,
   earning_send_exists: false,
   signed_up: false,
 };
@@ -74,17 +100,38 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-function renderPanel(panelAccess: OrgFeatureAccess = access): void {
+interface PanelOptions {
+  syncConfigured?: boolean;
+  onStale?: () => void;
+  target?: LinkedCandidate;
+}
+
+function renderPanel(
+  panelAccess: OrgFeatureAccess = access,
+  { syncConfigured, onStale, target = candidate }: PanelOptions = {},
+): void {
   render(
     <ComposePanel
       orgId={1}
       access={panelAccess}
       event={event}
-      candidate={candidate}
+      candidate={target}
       templates={templates}
+      syncConfigured={syncConfigured}
+      onStale={onStale}
     />,
     { wrapper: Wrapper },
   );
+}
+
+function sendResult(state: ExternalWriteback['state']): PromoSendResult {
+  return {
+    id: 77,
+    earns_points: true,
+    points_awarded: 1,
+    sent_at: '2026-11-14T00:00:00Z',
+    writeback: { state, reason: null, delivery_id: 'd-77' },
+  };
 }
 
 async function loadedText(): Promise<HTMLTextAreaElement> {
@@ -94,6 +141,17 @@ async function loadedText(): Promise<HTMLTextAreaElement> {
   await waitFor(() => expect(box.value).toBe(RENDERED));
   return box;
 }
+
+const sender = {
+  pk: 5,
+  username: 'organizer',
+  nickname: 'Org Lead',
+  avatarUrl: null,
+} as UserType;
+
+beforeEach(() => {
+  useUserStore.setState({ currentUser: sender });
+});
 
 afterEach(() => {
   vi.mocked(renderPromo).mockReset();
@@ -116,6 +174,24 @@ describe('ComposePanel', () => {
     const preview = screen.getByTestId('promo-discord-preview');
     expect(preview.textContent).toContain('Hey Ana, Friday Inhouse is');
     expect(preview.textContent).not.toContain('<t:');
+    expect(preview.querySelectorAll('time')).toHaveLength(2);
+  });
+
+  it('previews as the organizer sending from their own account', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    renderPanel();
+    await loadedText();
+    const preview = screen.getByTestId('promo-discord-preview');
+    const header = within(preview).getByTestId('discord-message-author');
+    expect(header).toHaveTextContent('Org Lead');
+    expect(header).not.toHaveTextContent('APP');
+    expect(
+      within(preview).getByTestId('promo-sender-avatar'),
+    ).toBeInTheDocument();
   });
 
   it('turns the character counter into a warning over 2000', async () => {
@@ -159,12 +235,7 @@ describe('ComposePanel', () => {
       warnings: [],
       will_earn: true,
     });
-    vi.mocked(sendPromo).mockResolvedValue({
-      id: 77,
-      earns_points: true,
-      points_awarded: 1,
-      sent_at: '2026-11-14T00:00:00Z',
-    });
+    vi.mocked(sendPromo).mockResolvedValue(sendResult('pending'));
     renderPanel();
     await loadedText();
     fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
@@ -197,6 +268,46 @@ describe('ComposePanel', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('shows only the earned outcome after a send, not the refreshed no-points note', async () => {
+    // The send invalidates the render, which now says a repeat would not earn.
+    vi.mocked(renderPromo)
+      .mockResolvedValueOnce({ text: RENDERED, warnings: [], will_earn: true })
+      .mockResolvedValue({ text: RENDERED, warnings: [], will_earn: false });
+    vi.mocked(sendPromo).mockResolvedValue(sendResult('pending'));
+    renderPanel();
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    expect(await screen.findByTestId('promo-earned-hint')).toHaveTextContent(
+      'You earned 1 point.',
+    );
+    await waitFor(() =>
+      expect(vi.mocked(renderPromo).mock.calls.length).toBeGreaterThan(1),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.queryByTestId('promo-no-points-note')).toBeNull();
+    expect(screen.queryByTestId('promo-earn-points-note')).toBeNull();
+  });
+
+  it('pluralizes points earned above one', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    vi.mocked(sendPromo).mockResolvedValue({
+      ...sendResult('pending'),
+      points_awarded: 3,
+    });
+    renderPanel();
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    expect(await screen.findByTestId('promo-earned-hint')).toHaveTextContent(
+      'You earned 3 points.',
+    );
+  });
+
   it('links to the recipient Discord profile', async () => {
     vi.mocked(renderPromo).mockResolvedValue({
       text: RENDERED,
@@ -209,5 +320,99 @@ describe('ComposePanel', () => {
       'href',
       'https://discord.com/users/1234',
     );
+  });
+});
+
+describe('ComposePanel external writeback feedback', () => {
+  async function sendWith(
+    state: ExternalWriteback['state'],
+    syncConfigured: boolean,
+  ): Promise<void> {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    vi.mocked(sendPromo).mockResolvedValue(sendResult(state));
+    renderPanel(access, { syncConfigured });
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    await screen.findByTestId('promo-sent-banner');
+  }
+
+  it.each([
+    ['pending', /Waiting to be recorded externally/],
+    ['paused', /External recording is paused/],
+    [
+      'reconciliation_required',
+      /needs review before it can be recorded externally/,
+    ],
+    ['retry', /will try recording it externally again/],
+  ] as const)(
+    'reports a %s writeback separately from the recorded send, never as synced',
+    async (state, text) => {
+      await sendWith(state, true);
+      expect(screen.getByTestId('promo-sent-banner')).toHaveTextContent(
+        'Sent to',
+      );
+      const note = screen.getByTestId('promo-external-writeback');
+      expect(note).toHaveAttribute('data-state', state);
+      expect(note).toHaveTextContent(text);
+      expect(note).not.toHaveTextContent(/synced/i);
+      expect(note).not.toHaveTextContent(/^Recorded externally/);
+    },
+  );
+
+  it('reports a positive external receipt as recorded externally', async () => {
+    await sendWith('applied', true);
+    expect(screen.getByTestId('promo-external-writeback')).toHaveTextContent(
+      'Recorded externally',
+    );
+  });
+
+  it('shows no writeback line for an org without the integration', async () => {
+    await sendWith('pending', false);
+    expect(screen.queryByTestId('promo-external-writeback')).toBeNull();
+  });
+
+  it('disables Mark sent for a recipient whose contact is already recorded externally', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    renderPanel(access, {
+      target: {
+        ...candidate,
+        contact_recorded: true,
+        external_contact: EXTERNAL_CONTACT,
+      },
+    });
+    await loadedText();
+    expect(screen.getByTestId('promo-mark-sent-btn')).toBeDisabled();
+    expect(screen.getByTestId('promo-copy-btn')).toBeEnabled();
+  });
+
+  it('drops the recipient when the server says the contact was already recorded', async () => {
+    vi.mocked(renderPromo).mockResolvedValue({
+      text: RENDERED,
+      warnings: [],
+      will_earn: true,
+    });
+    vi.mocked(sendPromo).mockRejectedValue({
+      response: {
+        status: 409,
+        data: {
+          code: 'contact_already_recorded',
+          detail: 'a contact with this player is already recorded externally',
+        },
+      },
+    });
+    const onStale = vi.fn();
+    renderPanel(access, { syncConfigured: true, onStale });
+    await loadedText();
+    fireEvent.click(screen.getByTestId('promo-mark-sent-btn'));
+    await waitFor(() => expect(onStale).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('promo-sent-banner')).toBeNull();
   });
 });

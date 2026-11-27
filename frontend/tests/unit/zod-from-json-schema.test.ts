@@ -94,6 +94,51 @@ describe('renderModule', () => {
     expect(() => renderModule(bundle(external))).toThrow(/unsupported \$ref/);
     const dangling = { ...ROOT, properties: { item: ref('Gone') } };
     expect(() => renderModule(bundle(dangling))).toThrow(/unknown \$ref Gone/);
+    const plainOneOf = {
+      ...ROOT,
+      properties: { item: { oneOf: [ref('Item'), ref('Kind')] } },
+    };
+    expect(() => renderModule(bundle(plainOneOf))).toThrow(/discriminator/);
+    const inlineMember = {
+      ...ROOT,
+      properties: {
+        item: {
+          oneOf: [ref('Item'), { type: 'object' }],
+          discriminator: { propertyName: 'kind' },
+        },
+      },
+    };
+    expect(() => renderModule(bundle(inlineMember))).toThrow(/\$refs/);
+  });
+
+  it('renders a discriminated oneOf as a typed z.discriminatedUnion', () => {
+    const tagged = (tag: string) => ({
+      type: 'object',
+      required: ['type'],
+      properties: { type: { const: tag, type: 'string' } },
+    });
+    const text = renderModule(
+      bundle({
+        title: 'Root',
+        type: 'object',
+        required: ['item'],
+        properties: {
+          item: {
+            oneOf: [ref('A'), ref('B')],
+            discriminator: {
+              propertyName: 'type',
+              mapping: { a: '#/$defs/A', b: '#/$defs/B' },
+            },
+            title: 'Item',
+          },
+        },
+        $defs: { A: tagged('a'), B: tagged('b') },
+      }),
+    );
+    expect(text).toContain(
+      '"item": z.discriminatedUnion("type", [ASchema, BSchema])',
+    );
+    expect(text).not.toContain('superRefine');
   });
 });
 

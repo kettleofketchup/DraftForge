@@ -27,6 +27,24 @@ def apply_signup_open_policy(event: Event, now: datetime) -> None:
     event.signups_open_at = compute_signups_open_at(event, event.scheduled_at, now)
 
 
+def signup_policy_snapshot(event: Event) -> dict[str, object]:
+    return {f: getattr(event, f) for f in (*SIGNUP_OPEN_POLICY_FIELDS, "scheduled_at")}
+
+
+def reapply_signup_open_policy_if_changed(
+    event: Event, before: dict[str, object], now: datetime
+) -> bool:
+    """Recompute after an edit; a manual event keeps a hand-set time on reschedule."""
+    policy_changed = any(
+        before[f] != getattr(event, f) for f in SIGNUP_OPEN_POLICY_FIELDS
+    )
+    moved = before["scheduled_at"] != event.scheduled_at
+    if policy_changed or (moved and event.signup_open_mode != SignupOpenMode.MANUAL):
+        apply_signup_open_policy(event, now)
+        return True
+    return False
+
+
 def policy_from_explicit_open_at(
     scheduled_at: datetime, signups_open_at: datetime | None
 ) -> dict[str, object]:

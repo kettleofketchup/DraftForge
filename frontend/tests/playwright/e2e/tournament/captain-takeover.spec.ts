@@ -6,6 +6,7 @@
  * - TM Alpha: 5 members, captain alpha_1
  * - TM Bravo: 5 members (captain bravo_1) plus stand-in bravo_standin
  * - TM Delta: 5 members, captain delta_1, placement 4 (eliminated)
+ * - A completed snake team draft: each team picked its four non-captain members
  *
  * Serial: the repeat takeover replaces the captain the first case brought in.
  */
@@ -13,10 +14,12 @@
 import type { Locator, Page } from '@playwright/test';
 import {
   expect,
+  openDraftModal,
   resetTournamentByKey,
   test,
   type TournamentData,
 } from '../../fixtures';
+import { API_URL } from '../../fixtures/base-url';
 
 const KEY = 'captain_takeover';
 const PREFIX = 'tm_fixture_';
@@ -26,7 +29,13 @@ const BRAVO_MEMBER = `${PREFIX}bravo_2`;
 const ALPHA_MEMBER = `${PREFIX}alpha_2`;
 const REPLACE_CAPTAIN_URL = /\/api\/teams\/\d+\/replace-captain\//;
 
-let tournament: TournamentData;
+interface DraftRoundPayload {
+  pk: number;
+  choice: number | null;
+  team: { pk: number } | null;
+}
+
+let tournament: TournamentData & { draft: { pk: number } | null };
 
 function teamPk(name: string): number {
   const team = tournament.teams.find((t) => t.name === name);
@@ -116,7 +125,7 @@ test.describe('Captain takeover', () => {
     try {
       const reset = await resetTournamentByKey(ctx, KEY);
       if (!reset) throw new Error(`Could not reset ${KEY}`);
-      tournament = reset;
+      tournament = reset as typeof tournament;
     } finally {
       await ctx.close();
     }
@@ -175,6 +184,37 @@ test.describe('Captain takeover', () => {
     await expect(
       delta.locator('[data-testid^="team-member-row-"]'),
     ).toHaveCount(5);
+  });
+
+  test('@cicd draft picks stay with the taken-over team', async ({
+    page,
+    loginOrgStaff: login,
+  }) => {
+    const draftPk = tournament.draft?.pk;
+    if (!draftPk) throw new Error(`${KEY} reset has no team draft`);
+    await login();
+
+    const response = await page.request.get(`${API_URL}/drafts/${draftPk}/`);
+    expect(response.status()).toBe(200);
+    const { draft_rounds: rounds } = (await response.json()) as {
+      draft_rounds: DraftRoundPayload[];
+    };
+    const bravoPk = teamPk('TM Bravo');
+    const bravo = tournament.teams.find((t) => t.pk === bravoPk)!;
+    const bravoPicks = rounds.filter(
+      (r) => r.choice !== null && bravo.members.includes(r.choice),
+    );
+    // The board never reads round.team, so this is the regression guard.
+    expect(bravoPicks).toHaveLength(4);
+    for (const round of bravoPicks) expect(round.team?.pk).toBe(bravoPk);
+    expect(rounds.filter((r) => r.team === null)).toEqual([]);
+
+    await openDraftModal(page, tournament.pk);
+    const board = page.getByTestId('completed-team-draft-view');
+    await expect(board).toBeVisible();
+    const card = board.getByTestId(`completed-team-card-${bravoPk}`);
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(BRAVO_MEMBER);
   });
 
   test('@cicd a brought-in captain is replaced the same way', async ({

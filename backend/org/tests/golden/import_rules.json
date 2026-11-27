@@ -1,0 +1,439 @@
+{
+  "description": "Per-entry rules R1-R7 for contact log import entries, evaluated at now. accept is the server parser's verdict. adaptor_skip marks entries the server accepts but the adaptor skips under its stricter four-minute future bound.",
+  "now": "2026-11-25T10:00:00.000000Z",
+  "cases": [
+    {
+      "name": "valid_occasion_invite",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": true
+    },
+    {
+      "name": "valid_date_linked_general",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "2026-12-05T00:00:00.000000Z",
+        "forced": false
+      },
+      "accept": true
+    },
+    {
+      "name": "valid_null_promoter",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": null,
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": true
+    },
+    {
+      "name": "valid_forced_with_occasion",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": true
+      },
+      "accept": true
+    },
+    {
+      "name": "forced_with_event_date",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "2026-12-05T00:00:00.000000Z",
+        "forced": true
+      },
+      "accept": false
+    },
+    {
+      "name": "both_occasion_and_event_date",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": "2026-12-05T00:00:00.000000Z",
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "neither_occasion_nor_event_date",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": null,
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "contact_date_not_a_real_date",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-02-30",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "contact_date_wrong_shape",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24T00:00:00Z",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "recorded_at_inside_server_skew",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-25T10:04:59.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": true,
+      "adaptor_skip": true
+    },
+    {
+      "name": "recorded_at_beyond_server_skew",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-25T10:06:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "recorded_at_with_offset",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00+00:00",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "source_id_zero",
+      "entry": {
+        "source_contact_id": "0",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "source_id_leading_zero",
+      "entry": {
+        "source_contact_id": "01",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "source_id_negative",
+      "entry": {
+        "source_contact_id": "-1",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "source_id_above_int64",
+      "entry": {
+        "source_contact_id": "9223372036854775808",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "source_id_int64_max",
+      "entry": {
+        "source_contact_id": "9223372036854775807",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": true
+    },
+    {
+      "name": "target_id_not_numeric",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "abc",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "promoter_id_leading_zero",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "0123",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "occasion_id_zero",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "0",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "unknown_contact_method",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "EMAIL",
+        "contact_reason": "EVENT_INVITE",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "unknown_contact_reason",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "REMINDER",
+        "occasion_id": "77",
+        "event_date": null,
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "event_date_with_offset",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "2026-12-05T00:00:00+00:00",
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "event_date_date_only",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "2026-12-05",
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "event_date_year_zero",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "0000-12-05T00:00:00.000000Z",
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "recorded_at_year_zero",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "0000-01-01T00:00:00.000000Z",
+        "contact_date_ny": "2026-11-24",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "2026-12-05T00:00:00.000000Z",
+        "forced": false
+      },
+      "accept": false
+    },
+    {
+      "name": "contact_date_year_zero",
+      "entry": {
+        "source_contact_id": "1001",
+        "target_discord_id": "123456789012345678",
+        "promoter_discord_id": "123456789012345601",
+        "recorded_at": "2026-11-24T18:30:00.000000Z",
+        "contact_date_ny": "0000-01-01",
+        "contact_method": "DISCORD_DM",
+        "contact_reason": "GENERAL",
+        "occasion_id": null,
+        "event_date": "2026-12-05T00:00:00.000000Z",
+        "forced": false
+      },
+      "accept": false
+    }
+  ]
+}

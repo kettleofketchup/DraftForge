@@ -13,6 +13,8 @@ from events.models import Event
 from org.contributions.services import promo_points
 from org.feature_errors import not_permitted, require_org_staff, require_promoter
 from org.features import FeatureKey, org_has_feature
+from org.integration.contacts import contact_sync_status
+from org.integration.outbox import outbox_summary
 from org.mmr import game_for_event
 from org.models import Organization, PromoSend, PromoTemplate
 from org.permissions import has_org_staff_access
@@ -44,6 +46,7 @@ from org.promotion.serializers import (
 )
 from org.promotion.services import (
     PROMOTABLE_STATES,
+    ContactAlreadyRecorded,
     PromoSendError,
     can_undo,
     record_promo_send,
@@ -225,6 +228,7 @@ def promotion_candidates(request: Request, org_id: int, event_id: int) -> Respon
             "min_mmr": params.get("min_mmr"),
             "max_mmr": params.get("max_mmr"),
             "rows": rows,
+            "contact_sync": contact_sync_status(org, event),
         }
     )
 
@@ -320,6 +324,10 @@ def promotion_sends(request: Request, org_id: int, event_id: int) -> Response:
             template=template,
             text=data["text"],
         )
+    except ContactAlreadyRecorded as exc:
+        return Response(
+            {"code": exc.code, "detail": str(exc)}, status=status.HTTP_409_CONFLICT
+        )
     except PromoSendError as exc:
         raise ValidationError({exc.field: [str(exc)]}) from exc
     points = (
@@ -327,7 +335,10 @@ def promotion_sends(request: Request, org_id: int, event_id: int) -> Response:
         if send.earns_points and org_has_feature(org, FeatureKey.CONTRIBUTIONS)
         else None
     )
-    return Response(send_data(send, points), status=status.HTTP_201_CREATED)
+    return Response(
+        send_data(send, points, outbox_summary(send.pk, org.pk)),
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(["DELETE"])
@@ -341,5 +352,7 @@ def promotion_send(request: Request, org_id: int, send_pk: int) -> Response:
     )
     if not can_undo(request.user, send):
         raise not_permitted()
+    send_id = send.pk
     undo_promo_send(send, actor=request.user)
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    # Undo cannot unsend the DM: its outbox receipt stays and is reported.
+    return Response({"writeback": outbox_summary(send_id, org.pk)})

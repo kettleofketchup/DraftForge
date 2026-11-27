@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react';
+import type { DiscordPreviewOptions } from '~/components/discord/timestamps';
 import { DataTable, type DataTableSearch } from '~/components/ui/data-table';
-import type { DiscordPreviewOptions } from './discordPreview';
 import {
   DEFAULT_PROMOTION_COLUMNS,
   candidateRowId,

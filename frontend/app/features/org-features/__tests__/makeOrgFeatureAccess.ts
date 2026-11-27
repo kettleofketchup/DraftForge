@@ -18,6 +18,8 @@ export function makeOrgFeatureAccess(
     canManageConduct: false,
     mmrSyncEnabled: false,
     canUseMmrSync: false,
+    promotionEnabled: false,
+    canUseApiTokens: false,
     standingTracks: [],
     ...overrides,
   };

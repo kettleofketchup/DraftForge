@@ -30,6 +30,7 @@ from tournament.services.bracket_placement import (
     placement_for_game,
     tournament_bracket_placements,
 )
+from tournament.services.bracket_version import bracket_version
 from tournament.services.team_audit import log_snapshot_fields, write_team_log
 from tournament.services.team_management import live_conflicts, roster_conflict_body
 
@@ -90,7 +91,13 @@ def get_bracket(request: Request, tournament_id: int) -> Response:
         tournament_id=tournament_id,
         match_count=len(serializer.data),
     )
-    return Response({"tournamentId": tournament_id, "matches": serializer.data})
+    return Response(
+        {
+            "tournamentId": tournament_id,
+            "matches": serializer.data,
+            "version": bracket_version(games),
+        }
+    )
 
 
 @api_view(["POST"])
@@ -163,7 +170,9 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
     Requires league staff access to the tournament's league.
     """
     try:
-        tournament = Tournament.objects.get(pk=tournament_id)
+        tournament = (
+            Tournament.objects.nocache().select_for_update().get(pk=tournament_id)
+        )
     except Tournament.DoesNotExist:
         log.warning(
             "bracket_save_tournament_missing",
@@ -211,6 +220,37 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
                 "team_ids": foreign_team_ids,
             },
             status=status.HTTP_400_BAD_REQUEST,
+        )
+    client_version = serializer.validated_data.get("version")
+    current_version = bracket_version(
+        Game.objects.nocache().filter(tournament=tournament)
+    )
+    if client_version is not None and client_version != current_version:
+        log.warning(
+            "bracket_save_stale",
+            system="bracket",
+            subsystem="save",
+            tournament_id=tournament_id,
+            client_version=client_version,
+            current_version=current_version,
+        )
+        return Response(
+            {
+                "error": (
+                    "The bracket changed since you loaded it. "
+                    "Reload to see the latest results."
+                ),
+                "code": "bracket_stale",
+                "details": {"current_version": current_version},
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
+    if client_version is None:
+        log.info(
+            "bracket_save_unversioned",
+            system="bracket",
+            subsystem="save",
+            tournament_id=tournament_id,
         )
     placements_before = tournament_bracket_placements(tournament.pk)
 
@@ -367,7 +407,13 @@ def save_bracket(request: Request, tournament_id: int) -> Response:
     invalidate_after_commit(*saved_games, tournament)
     bracket_changed_on_commit(tournament.pk)
 
-    return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
+    return Response(
+        {
+            "tournamentId": tournament_id,
+            "matches": result_serializer.data,
+            "version": bracket_version(saved_games),
+        }
+    )
 
 
 def calculate_placement(game: Game) -> int | None:

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import TypedDict
 
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import Count, QuerySet, Sum
+from django.db.models import QuerySet, Sum
 from django.utils import timezone
 
 from app.models import CustomUser
@@ -106,7 +106,7 @@ def own_org_user(
 
 def own_totals(org_user: OrgUser, period: Period) -> tuple[int, int] | None:
     sums = member_entries(org_user, period).aggregate(
-        total=Sum("points"), entries=Count("pk")
+        total=Sum("points"), entries=ledger.live_entries()
     )
     if not sums["entries"]:
         return None
