@@ -17,7 +17,6 @@ import type {
 import {
   eventListItemSchema,
   eventResponseSchema,
-  eventSchema,
 } from '~/components/events/schemas';
 import {
   signupHistoryPageSchema,
@@ -177,7 +176,7 @@ export async function cancelEvent(
 ): Promise<EventType> {
   const body = options?.reason === undefined ? {} : { reason: options.reason };
   const { data } = await axios.post(`/events/${eventId}/cancel/`, body);
-  return eventSchema.parse(data);
+  return eventResponseSchema.parse(data);
 }
 
 export async function completeEvent(eventId: number): Promise<EventType> {

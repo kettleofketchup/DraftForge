@@ -286,6 +286,22 @@ describe('deleteEvent', () => {
 });
 
 describe('cancelEvent', () => {
+  it('accepts a persisted single event with a stored signup reminder', async () => {
+    post.mockResolvedValue({
+      data: {
+        ...detail,
+        state: 'cancelled',
+        event_repeater: null,
+        event_repeater_name: null,
+        discord_signup_reminder: true,
+      },
+    });
+    await expect(cancelEvent(12)).resolves.toMatchObject({
+      id: 12,
+      state: 'cancelled',
+    });
+  });
+
   it('posts an empty body for legacy callers and parses the event', async () => {
     post.mockResolvedValue({ data: { ...detail, state: 'cancelled' } });
     await expect(cancelEvent(12)).resolves.toMatchObject({

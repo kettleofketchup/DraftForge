@@ -201,34 +201,36 @@ export function EventDeleteFlow({
 
   return (
     <>
-      <ConfirmDialog
-        open={open && recordCount === null}
-        onOpenChange={handleFirstOpenChange}
-        title="Delete Event"
-        description={
-          <div className="space-y-2">
-            <div>Permanently delete “{event.name}”?</div>
-            <div>
-              Active sign-ups: {event.signup_count}. Historical signup records
-              are retained.
-            </div>
-            {cancellable && (
+      {recordCount === null && (
+        <ConfirmDialog
+          open={open && recordCount === null}
+          onOpenChange={handleFirstOpenChange}
+          title="Delete Event"
+          description={
+            <div className="space-y-2">
+              <div>Permanently delete “{event.name}”?</div>
               <div>
-                Cancel the event instead to keep its sign-ups and event page.
+                Active sign-ups: {event.signup_count}. Historical signup records
+                are retained.
               </div>
-            )}
-          </div>
-        }
-        bodyContent={cancelAlternative ?? undefined}
-        confirmLabel="Delete event"
-        cancelLabel="Keep event"
-        variant="destructive"
-        isLoading={busy}
-        onConfirm={deleteUnconfirmed}
-        contentTestId="event-delete-dialog"
-        confirmTestId="event-delete-initial-confirm"
-        cancelTestId="event-delete-keep"
-      />
+              {cancellable && (
+                <div>
+                  Cancel the event instead to keep its sign-ups and event page.
+                </div>
+              )}
+            </div>
+          }
+          bodyContent={cancelAlternative ?? undefined}
+          confirmLabel="Delete event"
+          cancelLabel="Keep event"
+          variant="destructive"
+          isLoading={busy}
+          onConfirm={deleteUnconfirmed}
+          contentTestId="event-delete-dialog"
+          confirmTestId="event-delete-initial-confirm"
+          cancelTestId="event-delete-keep"
+        />
+      )}
 
       {recordCount !== null && isOrganizationAdmin && (
         <DeleteDialog

@@ -513,6 +513,7 @@ export default function EventPage() {
               </span>
               <HighlightButton
                 size="sm"
+                data-testid="event-series-link"
                 onClick={() =>
                   navigate(`/event-series/${event.event_repeater}`)
                 }
