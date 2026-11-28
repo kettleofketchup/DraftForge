@@ -1,0 +1,1 @@
+- Stop info dialogs clipping the edges and focus rings of buttons inside them, such as the Discord preview's missing-field links.
