@@ -106,5 +106,10 @@
   },
   "variant": {
     "current_post": "The existing post, as it is updated now"
+  },
+  "leadership_review": {
+    "title": "Captain review DM",
+    "description": "A sample teammate review using your saved captain traits.",
+    "no_traits": "Enable and save at least one captain trait to preview the review DM."
   }
 }

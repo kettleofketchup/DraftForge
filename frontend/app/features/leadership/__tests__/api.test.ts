@@ -21,6 +21,7 @@ import {
   getMemberLeadership,
   getMyReviews,
   getPendingReviews,
+  getReviewDmPreview,
   getTraits,
   patchLeadershipSettings,
   putReview,
@@ -46,6 +47,29 @@ beforeEach(() => {
 });
 
 describe('leadership api', () => {
+  it('reads the org review DM preview and validates its Discord components', async () => {
+    const payload = {
+      messages: [
+        {
+          content: null,
+          embeds: [],
+          flags: 32768,
+          allowed_mentions: null,
+          components: [{ type: 10, content: 'Communication' }],
+        },
+      ],
+    };
+    get.mockResolvedValueOnce({ data: payload });
+    expect(await getReviewDmPreview(1)).toEqual(payload);
+    expect(get).toHaveBeenCalledWith(`${BASE}/review-dm-preview/`);
+    get.mockResolvedValueOnce({
+      data: {
+        messages: [{ ...payload.messages[0], components: [{ type: -1 }] }],
+      },
+    });
+    await expect(getReviewDmPreview(1)).rejects.toThrow(ZodError);
+  });
+
   it('gets a member', async () => {
     get.mockResolvedValue({ data: memberLeadership() });
     const result = await getMemberLeadership(1, 7);

@@ -230,6 +230,10 @@ With **Send review DMs** on, closing an event also DMs every teammate of each ca
 on Discord, so they can score their captain without opening the site. The captain is
 never DMed about their own review.
 
+In **Organization Settings → Leadership**, select **Preview** beside **Send review DMs**
+to see the message with your saved traits, even when sending is off. The preview uses
+a sample event and captain. Its score buttons are display-only.
+
 Each DM lists the active traits, one row of 1–5 buttons per trait:
 
 ```text

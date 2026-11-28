@@ -66,7 +66,12 @@ function DiscordButton({ button }: { button: ButtonInput }) {
     );
     if (!href)
       return (
-        <span data-style={5} aria-disabled="true" className={className}>
+        <span
+          role="link"
+          data-style={5}
+          aria-disabled="true"
+          className={className}
+        >
           {body}
           {icon}
         </span>

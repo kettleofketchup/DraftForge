@@ -459,6 +459,51 @@ test.describe('Org features: leadership @cicd', () => {
     await expect(page.getByTestId(`leadership-row-${released}`)).toBeVisible();
   });
 
+  test('admin previews the captain review DM while sending is off @cicd', async ({
+    page,
+    context,
+  }) => {
+    const pk = data.orgs.features.pk;
+    await loginOrgFeatures(context, 'admin');
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${pk}?settings=leadership`,
+    );
+
+    const sendDms = page.getByTestId('leadership-setting-review_dms_enabled');
+    await expect(sendDms).not.toBeChecked();
+    const previewResponse = page.waitForResponse(
+      (r) =>
+        r.request().method() === 'GET' &&
+        new URL(r.url()).pathname ===
+          `/api/organizations/${pk}/leadership/review-dm-preview/`,
+    );
+    await page.getByTestId('discord-preview-leadership-review').click();
+    const response = await previewResponse;
+    expect(response.status()).toBe(200);
+    const { messages } = await response.json();
+    expect(messages.length).toBeGreaterThan(0);
+
+    const dialog = page.getByRole('dialog', { name: 'Captain review DM' });
+    const cards = dialog.getByTestId('discord-message');
+    await expect(cards).toHaveCount(messages.length);
+    const first = cards.first();
+    await expect(first).toContainText('Sample Captain');
+    await expect(first).toContainText('Communication');
+    for (const score of ['1', '2', '3', '4', '5']) {
+      await expect(
+        first.getByRole('button', { name: score, exact: true }).first(),
+      ).toBeDisabled();
+    }
+    const siteAction = first.getByRole('link', { name: 'Review on site' });
+    await expect(siteAction).toBeVisible();
+    await expect(siteAction).toHaveAttribute('aria-disabled', 'true');
+    expect(await siteAction.getAttribute('href')).toBeNull();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(sendDms).not.toBeChecked();
+  });
+
   test('admin edits leadership settings and traits @cicd', async ({
     page,
     context,

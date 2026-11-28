@@ -14,6 +14,8 @@ describe('safeHref', () => {
     ['JavaScript:alert(1)'],
     ['data:text/html,<b>x</b>'],
     ['/relative'],
+    ['https://example.invalid/events/1?review=1'],
+    ['https://example.invalid./'],
     ['not a url'],
     [''],
     [undefined],

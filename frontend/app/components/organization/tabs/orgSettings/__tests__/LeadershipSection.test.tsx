@@ -7,8 +7,10 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
+import { I18nextProvider } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   afterEach,
@@ -31,10 +33,12 @@ import {
 } from '~/features/leadership/__tests__/fixtures';
 import {
   getLeadershipSettings,
+  getReviewDmPreview,
   getTraits,
   patchLeadershipSettings,
 } from '~/features/leadership/api';
 import type { LeadershipSettings } from '~/features/leadership/schemas';
+import { createI18nInstance } from '~/i18n/config';
 import { useUserStore } from '~/store/userStore';
 
 vi.mock('~/features/leadership/api', async () => {
@@ -44,6 +48,7 @@ vi.mock('~/features/leadership/api', async () => {
   return {
     ...actual,
     getLeadershipSettings: vi.fn(),
+    getReviewDmPreview: vi.fn(),
     patchLeadershipSettings: vi.fn(),
     getTraits: vi.fn(),
     putTraits: vi.fn(),
@@ -121,8 +126,11 @@ function Harness({ enabled }: { enabled: boolean }): ReactNode {
 
 function renderSection(enabled = true) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const i18n = createI18nInstance('en');
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    </I18nextProvider>
   );
   return render(<Harness enabled={enabled} />, { wrapper });
 }
@@ -160,6 +168,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.mocked(getLeadershipSettings).mockReset();
+  vi.mocked(getReviewDmPreview).mockReset();
   vi.mocked(patchLeadershipSettings).mockReset();
   vi.mocked(getTraits).mockReset();
   vi.mocked(fetchOrganization).mockReset();
@@ -202,6 +211,87 @@ describe('LeadershipSection', () => {
       screen.getByTestId('leadership-setting-half_life_days-default'),
     ).toBeInTheDocument();
     expect(unit.isDirty).toBe(false);
+  });
+
+  it('previews every DM part on demand with sending off and keeps scores inert', async () => {
+    vi.mocked(getReviewDmPreview).mockResolvedValue({
+      messages: ['Communication (Part 1 of 2)', 'Drafting (Part 2 of 2)'].map(
+        (content) => ({
+          content: null,
+          embeds: [],
+          flags: 32768,
+          allowed_mentions: null,
+          components: [
+            { type: 10, content },
+            {
+              type: 1,
+              components: [
+                {
+                  type: 2,
+                  style: 2,
+                  label: '5',
+                  custom_id: 'sample-score',
+                  emoji: null,
+                  disabled: false,
+                  url: null,
+                },
+                {
+                  type: 2,
+                  style: 5,
+                  label: 'Review on site',
+                  custom_id: null,
+                  emoji: null,
+                  disabled: false,
+                  url: 'https://example.invalid/events/1?review=1',
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    });
+    await loaded();
+    expect(getReviewDmPreview).not.toHaveBeenCalled();
+    expect(input('review_dms_enabled')).not.toBeChecked();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Preview Captain review DM' }),
+    );
+    const dialog = within(
+      await screen.findByRole('dialog', { name: 'Captain review DM' }),
+    );
+    expect(
+      await dialog.findByText('Communication (Part 1 of 2)'),
+    ).toBeVisible();
+    expect(dialog.getByText('Drafting (Part 2 of 2)')).toBeVisible();
+    expect(dialog.getAllByTestId('discord-message')).toHaveLength(2);
+    const score = dialog.getAllByRole('button', { name: '5' })[0];
+    expect(score).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(score);
+    for (const link of dialog.getAllByRole('link', {
+      name: 'Review on site',
+    })) {
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+      expect(link).not.toHaveAttribute('href');
+    }
+    expect(getReviewDmPreview).toHaveBeenCalledExactlyOnceWith(7);
+    expect(patchLeadershipSettings).not.toHaveBeenCalled();
+    expect(unit.isDirty).toBe(false);
+  });
+
+  it('explains how to preview a review DM when no traits are active', async () => {
+    vi.mocked(getReviewDmPreview).mockResolvedValue({ messages: [] });
+    await loaded();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Preview Captain review DM' }),
+    );
+    expect(
+      await screen.findByText(
+        'Enable and save at least one captain trait to preview the review DM.',
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByTestId('discord-message-preview'),
+    ).not.toBeInTheDocument();
   });
 
   it('refuses min reviewers below 2 before calling the API', async () => {
@@ -315,6 +405,10 @@ describe('LeadershipSection', () => {
     await act(async () => {});
     expect(getLeadershipSettings).not.toHaveBeenCalled();
     expect(getTraits).not.toHaveBeenCalled();
+    expect(getReviewDmPreview).not.toHaveBeenCalled();
+    expect(
+      screen.queryByTestId('discord-preview-leadership-review'),
+    ).not.toBeInTheDocument();
   });
 
   it('discard restores the loaded values', async () => {

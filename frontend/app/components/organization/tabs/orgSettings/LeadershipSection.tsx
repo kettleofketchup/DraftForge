@@ -7,7 +7,13 @@ import {
   type FieldErrors,
   type UseFormReturn,
 } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+
+import {
+  DiscordMessagePreview,
+  DiscordPreviewButton,
+} from '~/components/discord';
 
 import { useOrganization } from '~/components/organization/hooks/useOrganization';
 import { LeadershipTraitEditor } from '~/components/organization/tabs/orgSettings/LeadershipTraitEditor';
@@ -36,6 +42,7 @@ import {
   type LeadershipSettingsForm,
   type TraitForm,
 } from '~/features/leadership';
+import { getReviewDmPreview } from '~/features/leadership/api';
 import { refusalCode, refusalMessage } from '~/features/leadership/errors';
 import {
   leadershipSettingsFieldErrors,
@@ -47,7 +54,7 @@ import {
   toTraitPut,
   traitFieldErrors,
 } from '~/features/leadership/traitForm';
-import { useOrgFeatureAccess } from '~/features/org-features';
+import { leadershipKeys, useOrgFeatureAccess } from '~/features/org-features';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
 
@@ -243,6 +250,8 @@ export function useLeadershipSection(
       {settings && traits && hydrated && (
         <div className="mt-4 flex flex-col gap-6">
           <LeadershipSettingsFields
+            organizationId={organizationId}
+            viewerPk={access.viewerPk}
             form={form}
             settings={settings}
             releaseRefusal={releaseRefusal}
@@ -398,14 +407,19 @@ function ReleaseSettings({
 }
 
 function LeadershipSettingsFields({
+  organizationId,
+  viewerPk,
   form,
   settings,
   releaseRefusal,
 }: {
+  organizationId: number;
+  viewerPk: number | null;
   form: UseFormReturn<LeadershipSettingsForm>;
   settings: LeadershipSettings;
   releaseRefusal: string | null;
 }) {
+  const { t } = useTranslation('discordPreview');
   const shared = {
     control: form.control,
     setValue: form.setValue,
@@ -430,6 +444,30 @@ function LeadershipSettingsFields({
           label="Send review DMs"
           help="When a review window opens, each teammate gets a Discord DM with buttons to score their captain. Applies to windows opened after you turn it on. Re-closing an event doesn't send new DMs."
           defaultValue={settings.defaults.review_dms_enabled}
+          action={
+            <DiscordPreviewButton
+              data-testid="discord-preview-leadership-review"
+              title={t('leadership_review.title')}
+              description={t('leadership_review.description')}
+              queryKey={leadershipKeys.reviewDmPreview(
+                organizationId,
+                viewerPk,
+              )}
+              fetchPreview={() => getReviewDmPreview(organizationId)}
+              render={({ messages }) =>
+                messages.length ? (
+                  <DiscordMessagePreview
+                    messages={messages}
+                    author={{ name: t('message.bot_name'), bot: true }}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {t('leadership_review.no_traits')}
+                  </p>
+                )
+              }
+            />
+          }
         />
         {numberSettings(REVIEW_FIELDS)}
       </SettingsGroup>

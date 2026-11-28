@@ -106,6 +106,8 @@ export const leadershipKeys = {
     [...leadershipKeys.all(orgId, viewerPk), 'pending', eventId] as const,
   mine: (orgId: number, viewerPk: ViewerPk) =>
     [...leadershipKeys.all(orgId, viewerPk), 'mine'] as const,
+  reviewDmPreview: (orgId: number, viewerPk: ViewerPk) =>
+    [...leadershipKeys.all(orgId, viewerPk), 'review-dm-preview'] as const,
   eventReviews: (orgId: number, viewerPk: ViewerPk, eventId: number) =>
     [...leadershipKeys.all(orgId, viewerPk), 'event-reviews', eventId] as const,
   settings: (orgId: number, viewerPk: ViewerPk) =>
