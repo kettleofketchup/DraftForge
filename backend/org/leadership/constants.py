@@ -28,6 +28,7 @@ SETTINGS_DEFAULTS: Final[dict[str, int | float | bool | None]] = {
     "leaderboard_public": False,
     "require_staff_release": False,
     "auto_release_after_hours": None,
+    "captain_feedback_visible": True,
 }
 
 SETTINGS_RANGES: Final[dict[str, tuple[int | float, int | float]]] = {
@@ -45,7 +46,11 @@ SETTINGS_RANGES: Final[dict[str, tuple[int | float, int | float]]] = {
 EDITABLE_SETTINGS_FIELDS: Final[tuple[str, ...]] = tuple(SETTINGS_DEFAULTS)
 NULLABLE_SETTINGS: Final[frozenset[str]] = frozenset({"auto_release_after_hours"})
 BOOL_SETTINGS: Final[frozenset[str]] = frozenset(
-    {"leaderboard_public", "require_staff_release"}
+    {
+        "leaderboard_public",
+        "require_staff_release",
+        "captain_feedback_visible",
+    }
 )
 
 ReleaseState = Literal["voided", "open", "short", "pending", "released"]
