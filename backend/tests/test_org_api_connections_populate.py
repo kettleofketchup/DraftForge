@@ -9,7 +9,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from app.models import CustomUser
 from common.game import GameType
-from org.api_connections import orchestration, pull, push
+from org.api_connections import internal_views, pull
 from org.api_connections.runs import COUNTERS
 from org.api_connections.tls_adapter import SafeHttpError
 from org.api_connections.types import SafeHttpRequest
@@ -41,6 +41,8 @@ from tests.data.org_api_connections import (
     SEEDED_CONNECTION_NAME,
 )
 from tests.helpers.org_api_connections_transport import (
+    _SWEEP_TARGETS,
+    _TARGETS,
     FakeTransportUnavailable,
     drive_connection_work,
     fake_calls,
@@ -61,6 +63,7 @@ from tests.test_org_api_connections import (
     seed_org_api_promotion_backlog,
 )
 
+INTERNAL_TOKEN = "org-api-connections-fixture-internal"
 MAIN = API_CONNECTIONS_ORG.pk
 SECOND = API_CONNECTIONS_SECOND_ORG.pk
 PULL_CONFIG: dict[str, Any] = {
@@ -233,6 +236,46 @@ class OrgApiConnectionsDataTest(TestCase):
             {"run_id", "kind", "state", "error_code", *COUNTERS},
         )
 
+    @override_settings(INTERNAL_SERVICE_TOKEN=INTERNAL_TOKEN)
+    def test_sweep_claim_skips_fixture_orgs_while_fake_installed(self) -> None:
+        outbound = self.create(
+            name="Outbound",
+            enabled=True,
+            mmr_pull_enabled=True,
+            mmr_push_enabled=True,
+            outbound_base_url=FAKE_ORIGIN,
+            outbound_auth="bearer",
+            outbound_credential=FAKE_GOOD_CREDENTIAL,
+            mmr_pull_config=PULL_CONFIG,
+        )
+        pulled = self.client.post(
+            f"{self.url}{outbound['id']}/pull/", {}, format="json"
+        )
+        self.assertEqual(pulled.status_code, 202, pulled.data)
+        player = OrgUser.objects.nocache().get(
+            organization_id=MAIN, user_id=AC_PLAYER_TWO.pk
+        )
+        set_org_mmr(player, GameType.DOTA2, 2100, mark_verified=False)
+        delivery = OrgApiMmrDelivery.objects.get(connection_id=outbound["id"])
+        self.assertEqual(delivery.state, "pending")
+
+        sweep = APIClient().post(
+            "/api/internal/org-api-sync/claim/",
+            {},
+            format="json",
+            HTTP_X_INTERNAL_TOKEN=INTERNAL_TOKEN,
+        )
+        self.assertEqual(sweep.status_code, 200, sweep.data)
+        self.assertEqual(sweep.data["claims"], [])
+        self.assertIsNone(OrgApiSyncRun.objects.get(pk=pulled.data["id"]).lease_token)
+        delivery.refresh_from_db()
+        self.assertEqual((delivery.state, delivery.lease_token), ("pending", None))
+
+        driven = drive_connection_work([MAIN])
+        self.assertEqual(driven["runs"], {str(pulled.data["id"]): "succeeded"})
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.state, "applied")
+
     def test_fake_rejects_wrong_credential_and_pauses_push(self) -> None:
         outbound = self.create(
             name="Outbound",
@@ -273,12 +316,13 @@ class OrgApiConnectionsDataTest(TestCase):
 @override_settings(DEBUG=True)
 class FakeTransportGateTest(TestCase):
     def test_fake_transport_and_helpers_unavailable_outside_test(self) -> None:
-        originals = (
-            pull.request_json,
-            push.request_json,
-            orchestration.request_json,
-            orchestration.request_bytes,
-        )
+        def entry_points() -> tuple[object, ...]:
+            return (
+                *(getattr(module, name) for module, name in _TARGETS),
+                *(getattr(internal_views, name) for name in _SWEEP_TARGETS),
+            )
+
+        originals = entry_points()
         factory = APIRequestFactory()
         for overrides in ({"TEST": False}, {"RELEASE": True}, {"DEBUG": False}):
             with self.subTest(overrides=overrides), override_settings(**overrides):
@@ -308,13 +352,6 @@ class FakeTransportGateTest(TestCase):
                     "admin",
                 )
                 self.assertEqual(login.status_code, 404)
-        self.assertEqual(
-            originals,
-            (
-                pull.request_json,
-                push.request_json,
-                orchestration.request_json,
-                orchestration.request_bytes,
-            ),
-        )
+        self.assertEqual(originals, entry_points())
+        self.assertFalse(fake_transport_installed())
         self.assertFalse(OrgApiConnection.objects.filter(organization_id=MAIN).exists())

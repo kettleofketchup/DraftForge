@@ -1,11 +1,15 @@
 """Test-only fake outbound transport for the org API connection E2E fixtures.
 
-``install_fake_transport`` swaps the safe-transport entry points the pull,
-push, test and promotion callers imported for a fake that answers only the
-synthetic ``.test`` origins in tests.data.org_api_connections. Every other
-destination still goes through the real safe transport. It refuses to install
-outside the test environment, and nothing persisted on a connection selects
-it, so production cannot reach it through a request body or org config.
+This is process-local test patching. ``install_fake_transport`` swaps the
+safe-transport entry points the pull, push, test and promotion callers
+imported for a fake that answers only the synthetic ``.test`` origins in
+tests.data.org_api_connections. Every other destination still goes through
+the real safe transport. It also makes the internal sweep endpoints skip the
+fixture orgs, so only ``drive_connection_work`` steps their runs and
+deliveries and the beat sweep cannot race the spec's assertions. It refuses
+to install outside the test environment, and nothing persisted on a
+connection selects it, so production cannot reach it through a request body
+or org config.
 
 The fake keeps the real URL canonicalization and credential rendering: an
 unsafe URL or a credential bound to another origin fails exactly as it would
@@ -17,6 +21,7 @@ import hashlib
 import json
 import threading
 from collections.abc import Callable
+from functools import partial
 from types import ModuleType
 from typing import Any, Final
 from urllib.parse import urlsplit
@@ -27,7 +32,7 @@ from django.utils import timezone
 
 from common.game import GameType
 from common.utils import isTestEnvironment
-from org.api_connections import orchestration, pull, push
+from org.api_connections import internal_views, orchestration, pull, push
 from org.api_connections.crypto import canonical_origin
 from org.api_connections.orchestration import step_delivery, step_run
 from org.api_connections.push import acquire_delivery_lease
@@ -47,6 +52,7 @@ from org.models import (
     OrgUser,
 )
 from tests.data.org_api_connections import (
+    API_CONNECTIONS_ORGS,
     FAKE_GOOD_CREDENTIAL,
     FAKE_ORIGINS,
     FAKE_PULL_PATH,
@@ -62,6 +68,16 @@ _TARGETS: Final[tuple[tuple[ModuleType, str], ...]] = (
     (orchestration, "request_json"),
     (orchestration, "request_bytes"),
     (adaptor_client, "request_bytes"),
+)
+
+FIXTURE_ORG_IDS: Final[frozenset[int]] = frozenset(
+    org.pk for org in API_CONNECTIONS_ORGS if org.pk is not None
+)
+
+_SWEEP_TARGETS: Final[tuple[str, ...]] = (
+    "claim_work",
+    "promotion_due",
+    "step_promotion",
 )
 
 _FAKE_ORIGINS: Final[frozenset[str]] = frozenset(
@@ -155,6 +171,14 @@ def install_fake_transport() -> None:
                 continue
             _originals[(module.__name__, name)] = current
             setattr(module, name, _fake(current, raw=name == "request_bytes"))
+        for name in _SWEEP_TARGETS:
+            current = getattr(internal_views, name)
+            if getattr(current, "fake_transport", False):
+                continue
+            _originals[(internal_views.__name__, name)] = current
+            skipping = partial(current, skip_org_ids=FIXTURE_ORG_IDS)
+            skipping.fake_transport = True  # type: ignore[attr-defined]
+            setattr(internal_views, name, skipping)
         if not settings.ORG_API_CREDENTIAL_KEYS and _saved_key_ring is None:
             _saved_key_ring = settings.ORG_API_CREDENTIAL_KEYS
             settings.ORG_API_CREDENTIAL_KEYS = fixture_key_ring()
@@ -168,6 +192,10 @@ def uninstall_fake_transport() -> None:
             original = _originals.pop((module.__name__, name), None)
             if original is not None:
                 setattr(module, name, original)
+        for name in _SWEEP_TARGETS:
+            original = _originals.pop((internal_views.__name__, name), None)
+            if original is not None:
+                setattr(internal_views, name, original)
         if _saved_key_ring is not None:
             settings.ORG_API_CREDENTIAL_KEYS = _saved_key_ring
             _saved_key_ring = None
@@ -178,6 +206,9 @@ def fake_transport_installed() -> bool:
     return all(
         getattr(getattr(module, name), "fake_transport", False)
         for module, name in _TARGETS
+    ) and all(
+        getattr(getattr(internal_views, name), "fake_transport", False)
+        for name in _SWEEP_TARGETS
     )
 
 

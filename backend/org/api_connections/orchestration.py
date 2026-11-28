@@ -1,5 +1,5 @@
 import time
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
@@ -195,15 +195,21 @@ def create_test_run(
     return run
 
 
-def schedule_due_pulls(*, now: datetime, limit: int) -> int:
+def schedule_due_pulls(
+    *, now: datetime, limit: int, skip_org_ids: Collection[int] = ()
+) -> int:
     scheduled = 0
-    due = OrgApiConnection.objects.filter(
-        enabled=True,
-        mmr_pull_enabled=True,
-        archived_at__isnull=True,
-        interval_minutes__isnull=False,
-        next_due_at__lte=now,
-    ).order_by("next_due_at", "pk")[:limit]
+    due = (
+        OrgApiConnection.objects.filter(
+            enabled=True,
+            mmr_pull_enabled=True,
+            archived_at__isnull=True,
+            interval_minutes__isnull=False,
+            next_due_at__lte=now,
+        )
+        .exclude(organization_id__in=skip_org_ids)
+        .order_by("next_due_at", "pk")[:limit]
+    )
     for connection in due:
         assert connection.interval_minutes is not None
         following = now + timedelta(minutes=connection.interval_minutes)
@@ -270,11 +276,13 @@ def abandon_stale_runs(*, now: datetime, limit: int = PURGE_BATCH) -> int:
     return abandoned
 
 
-def claim_work(*, now: datetime, limit: int = 20) -> list[WorkClaim]:
+def claim_work(
+    *, now: datetime, limit: int = 20, skip_org_ids: Collection[int] = ()
+) -> list[WorkClaim]:
     abandon_stale_runs(now=now)
     if settings.ORG_API_SCHEDULED_PULLS:
         try:
-            schedule_due_pulls(now=now, limit=limit)
+            schedule_due_pulls(now=now, limit=limit, skip_org_ids=skip_org_ids)
         except Exception:
             log.exception(
                 "api_connection_schedule_sweep_failed",
@@ -284,6 +292,7 @@ def claim_work(*, now: datetime, limit: int = 20) -> list[WorkClaim]:
     claims: list[WorkClaim] = []
     run_ids = list(
         OrgApiSyncRun.objects.filter(state__in=ACTIVE_STATES)
+        .exclude(organization_id__in=skip_org_ids)
         .filter(Q(lease_token__isnull=True) | Q(lease_expires_at__lte=now))
         .order_by("created_at")
         .values_list("pk", flat=True)[:limit]
@@ -299,6 +308,7 @@ def claim_work(*, now: datetime, limit: int = 20) -> list[WorkClaim]:
             Q(state__in=(Delivery.PENDING, Delivery.RETRY), due_at__lte=now)
             | Q(state=Delivery.IN_FLIGHT, lease_expires_at__lte=now)
         )
+        .exclude(connection__organization_id__in=skip_org_ids)
         .order_by("due_at", "pk")
         .values_list("delivery_id", flat=True)[: limit * 2]
     )
@@ -353,12 +363,16 @@ def step_delivery(delivery_id: UUID, *, fence: UUID) -> StepResult:
     return replace(step_mmr_delivery(delivery_id, fence=following), fence=None)
 
 
-def _promotion_orgs(now: datetime) -> list[int]:
-    adopted = OrgApiPromotionAdoption.objects.filter(
-        connection__enabled=True,
-        connection__promotion_push_enabled=True,
-        connection__archived_at__isnull=True,
-    ).values_list("organization_id", flat=True)
+def _promotion_orgs(now: datetime, skip_org_ids: Collection[int] = ()) -> list[int]:
+    adopted = (
+        OrgApiPromotionAdoption.objects.filter(
+            connection__enabled=True,
+            connection__promotion_push_enabled=True,
+            connection__archived_at__isnull=True,
+        )
+        .exclude(organization_id__in=skip_org_ids)
+        .values_list("organization_id", flat=True)
+    )
     return [
         org_id
         for org_id in adopted
@@ -377,20 +391,24 @@ def _promotion_due_rows(now: datetime, org_ids: list[int]) -> bool:
     )
 
 
-def promotion_due(*, now: datetime) -> bool:
-    org_ids = _promotion_orgs(now)
+def promotion_due(*, now: datetime, skip_org_ids: Collection[int] = ()) -> bool:
+    org_ids = _promotion_orgs(now, skip_org_ids)
     return bool(org_ids) and _promotion_due_rows(now, org_ids)
 
 
-def step_promotion(*, now: datetime | None = None) -> StepResult:
+def step_promotion(
+    *, now: datetime | None = None, skip_org_ids: Collection[int] = ()
+) -> StepResult:
     now = now or timezone.now()
-    org_ids = _promotion_orgs(now)
+    org_ids = _promotion_orgs(now, skip_org_ids)
     if not org_ids or not _promotion_due_rows(now, org_ids):
         return StepResult("idle", False)
     report = dispatch_due(limit=1, organization_ids=org_ids)
     if not report.leased:
         return StepResult("idle", False)
-    return StepResult("dispatched", promotion_due(now=timezone.now()))
+    return StepResult(
+        "dispatched", promotion_due(now=timezone.now(), skip_org_ids=skip_org_ids)
+    )
 
 
 def _expired_runs(now: datetime) -> QuerySet[OrgApiSyncRun]:

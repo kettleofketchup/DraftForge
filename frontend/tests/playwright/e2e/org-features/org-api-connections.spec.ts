@@ -117,6 +117,56 @@ async function storageText(page: Page): Promise<string> {
   );
 }
 
+/** Client-side navigation: the router handles a popstate, the page never reloads. */
+async function spaNavigate(page: Page, path: string): Promise<void> {
+  await page.evaluate((to) => {
+    const state = (window.history.state ?? {}) as { idx?: number };
+    window.history.pushState(
+      { ...state, idx: (state.idx ?? 0) + 1, key: `spa-${Date.now()}` },
+      '',
+      to,
+    );
+    window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+  }, path);
+}
+
+/** Re-resolve the signed-in user in the running app, as its login check does. */
+async function refreshViewer(page: Page): Promise<number | null> {
+  return page.evaluate(async () => {
+    const path = '/app/store/userStore.ts';
+    const store = (await import(/* @vite-ignore */ path)) as {
+      useUserStore: {
+        getState: () => {
+          getCurrentUser: () => Promise<void>;
+          currentUser: { pk?: number } | null;
+        };
+      };
+    };
+    await store.useUserStore.getState().getCurrentUser();
+    return store.useUserStore.getState().currentUser?.pk ?? null;
+  });
+}
+
+async function markPageLoad(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __spaMarker?: boolean }).__spaMarker = true;
+  });
+}
+
+async function expectSamePageLoad(page: Page): Promise<void> {
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { __spaMarker?: boolean }).__spaMarker,
+    ),
+  ).toBe(true);
+}
+
+async function expectNoSecret(page: Page, tail: string): Promise<void> {
+  await expect(page.getByTestId('api-connection-key-secret')).toHaveCount(0);
+  expect(await page.content()).not.toContain(tail);
+  expect(await storageText(page)).not.toContain(tail);
+}
+
 test.describe('Org features: API connections @cicd', () => {
   test.beforeEach(async ({ request }) => {
     data = await resetOrgApiConnections(request);
@@ -701,6 +751,17 @@ test.describe('Org features: API connections @cicd', () => {
     await page.getByTestId('api-connection-base-url').fill(data.fake.origin);
     await page.getByTestId('api-connection-base-url').press('Enter');
     await expect(page.getByTestId('api-connection-dialog')).toBeVisible();
+
+    // Submitting the host org settings form never saves the open editor.
+    const hostForm = page.locator(
+      'form:has([data-testid="org-settings-api-access"])',
+    );
+    await expect(hostForm).toHaveCount(1);
+    await hostForm.evaluate((form: HTMLFormElement) => form.requestSubmit());
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('api-connection-dialog')).toBeVisible();
+    await expect(name).toHaveValue('Draft only');
+    expect(writes.filter((w) => w.includes('/api-connections'))).toEqual([]);
     await expect(page.getByTestId('api-connection-cancel')).toHaveText(
       'Cancel',
     );
@@ -761,27 +822,54 @@ test.describe('Org features: API connections @cicd', () => {
     const tail = token.split('_').slice(2).join('_');
     expect(await storageText(page)).not.toContain(tail);
 
-    // Org switch: the second org shows its own seeded connection, never the key.
-    await openApiAccess(page, data.orgs.second.pk);
+    await markPageLoad(page);
+
+    // Org switch inside the app: the second org shows its own seeded
+    // connection, never the key.
+    await spaNavigate(
+      page,
+      `/organizations/${data.orgs.second.pk}?settings=api-access`,
+    );
     await expect(
       page
         .getByTestId(`api-connection-status-${data.seeded_connection}`)
         .first(),
     ).toHaveText('Disabled');
+    await expectNoSecret(page, tail);
     await openConnection(page, data.seeded_connection);
     await tab(page, 'runs');
     await expect(page.getByTestId('api-connection-runs-table')).toContainText(
       'Succeeded',
     );
-    expect(await page.content()).not.toContain(tail);
+    await expectNoSecret(page, tail);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('api-connection-dialog')).toHaveCount(0);
 
-    // Viewer switch: another admin of the first org sees no trace of it.
+    // Back on the first org, rotating shows a fresh key.
+    await spaNavigate(
+      page,
+      `/organizations/${data.orgs.main.pk}?settings=api-access`,
+    );
+    await openConnection(page, row.id);
+    await tab(page, 'inbound');
+    await page.getByTestId('api-connection-key-rotate').click();
+    await page.getByTestId('api-connection-rotate-confirm').click();
+    await expect(secret).toHaveText(KEY_FORMAT);
+    const rotated = ((await secret.textContent()) ?? '')
+      .split('_')
+      .slice(2)
+      .join('_');
+    expect(rotated).not.toBe(tail);
+
+    // Viewer switch inside the app: another admin of the first org sees no
+    // trace of either key.
     await loginOrgApiConnections(context, 'admin_two');
-    await openApiAccess(page, data.orgs.main.pk);
+    expect(await refreshViewer(page)).toBe(data.users.admin_two.pk);
     await expect(
       page.getByTestId(`api-connection-status-${row.id}`).first(),
     ).toHaveText('Enabled');
-    expect(await page.content()).not.toContain(tail);
-    expect(await storageText(page)).not.toContain(tail);
+    await expectNoSecret(page, rotated);
+    await expectNoSecret(page, tail);
+    await expectSamePageLoad(page);
   });
 });
