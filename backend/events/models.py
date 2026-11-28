@@ -233,6 +233,11 @@ class EventConfigMixin(models.Model):
         db_default=StaffReasonPolicy.OPTIONAL,
         help_text="When staff must give a reason for a signup change.",
     )
+    allow_spot_transfer = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text="Members may give their place in line to another eligible member; if the recipient already holds a place, the two swap.",
+    )
     # Approval Requirements — which rank types are allowed
     allow_active_mmr = models.BooleanField(
         default=True,

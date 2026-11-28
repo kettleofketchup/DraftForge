@@ -246,6 +246,7 @@ class EventRepeaterSerializer(
             "line_withdraw_forfeits",
             "line_switch_restamps",
             "staff_reason_policy",
+            "allow_spot_transfer",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -693,6 +694,7 @@ class EventSerializer(
             "line_withdraw_forfeits",
             "line_switch_restamps",
             "staff_reason_policy",
+            "allow_spot_transfer",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -1417,6 +1419,7 @@ class OrgEventDefaultsSerializer(
             "line_withdraw_forfeits",
             "line_switch_restamps",
             "staff_reason_policy",
+            "allow_spot_transfer",
             # DiscordEventConfigMixin
             "discord_create_event",
             "discord_sync_signups",

@@ -147,3 +147,60 @@ class StaffReasonPolicySettingsTests(EventTestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("staff_reason_policy", resp.data)
+
+
+@patch("events.services.notify_create_discord_event", MagicMock())
+@patch("events.services.notify_new_event", MagicMock())
+class SpotTransferSettingTests(EventTestCase):
+    def setUp(self) -> None:
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.DAILY,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date() + timedelta(days=30),
+            created_by=self.admin,
+        )
+        self.defaults = OrgEventDefaults.objects.create(organization=self.org)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def assert_round_trip(
+        self, obj: Event | EventRepeater | OrgEventDefaults, url: str
+    ) -> None:
+        resp = self.client.patch(url, {"allow_spot_transfer": True}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIs(resp.data["allow_spot_transfer"], True)
+        obj.refresh_from_db()
+        self.assertIs(obj.allow_spot_transfer, True)
+
+    def test_defaults_false(self) -> None:
+        for obj in (self.make_event(), self.repeater, self.defaults):
+            obj.refresh_from_db()
+            self.assertIs(obj.allow_spot_transfer, False, type(obj).__name__)
+
+    def test_patch_round_trip_event(self) -> None:
+        self.assert_round_trip(self.event, f"/api/events/{self.event.pk}/")
+
+    def test_patch_round_trip_repeater(self) -> None:
+        self.assert_round_trip(
+            self.repeater, f"/api/events/repeaters/{self.repeater.pk}/"
+        )
+
+    def test_patch_round_trip_org_defaults(self) -> None:
+        self.assert_round_trip(
+            self.defaults, f"/api/events/defaults/{self.defaults.pk}/"
+        )
+
+    def test_member_patch_refused(self) -> None:
+        member = APIClient()
+        member.force_authenticate(self.make_user())
+        resp = member.patch(
+            f"/api/events/{self.event.pk}/",
+            {"allow_spot_transfer": True},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.event.refresh_from_db()
+        self.assertIs(self.event.allow_spot_transfer, False)

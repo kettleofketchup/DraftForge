@@ -167,3 +167,36 @@ class SyncFutureEventsLineRulesTest(_DiscordTaskTestCase):
         past.refresh_from_db()
         self.assertEqual(future.staff_reason_policy, StaffReasonPolicy.PLACEMENTS)
         self.assertEqual(past.staff_reason_policy, StaffReasonPolicy.OPTIONAL)
+
+    def test_allow_spot_transfer_cascades_to_future_events(self) -> None:
+        repeater = EventRepeater.objects.create(
+            organization=self.event.organization,
+            name="Transfer Repeater",
+            day_of_week=1,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date(),
+        )
+        future = Event.objects.create(
+            organization=self.event.organization,
+            event_repeater=repeater,
+            name="Transfer Future",
+            scheduled_at=tz.now() + timedelta(days=6),
+            state="upcoming",
+        )
+        past = Event.objects.create(
+            organization=self.event.organization,
+            event_repeater=repeater,
+            name="Transfer Past",
+            scheduled_at=tz.now() - timedelta(days=1),
+            state="completed",
+        )
+        repeater.allow_spot_transfer = True
+        repeater.save(update_fields=["allow_spot_transfer"])
+
+        sync_future_events(repeater)
+
+        future.refresh_from_db()
+        past.refresh_from_db()
+        self.assertIs(future.allow_spot_transfer, True)
+        self.assertIs(past.allow_spot_transfer, False)
