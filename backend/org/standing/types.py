@@ -72,6 +72,7 @@ class TrackInfo:
     board_open: bool
     can_manage: bool
     can_moderate: bool
+    own_private: bool = False
 
 
 RoleCheck = Callable[[], bool]
@@ -114,6 +115,7 @@ class TrackAccess:
     can_view_own: bool
     allowed: bool = True
     board_open: bool = True
+    own_private: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +136,7 @@ class Leaderboard:
     total: float | int | None
     own_row: LeaderboardRow | None
     rows_visible: bool
+    own_private: bool = False
 
 
 @runtime_checkable

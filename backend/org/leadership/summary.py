@@ -11,6 +11,7 @@ from org.leadership.queries import (
 from org.leadership.rating import display
 from org.leadership.settings import get_leadership_settings
 from org.leadership.traits import effective_traits
+from org.leadership.visibility import REVIEW_DERIVED_KINDS, own_feedback_hidden
 from org.models import OrgUser
 from org.models_leadership import CaptainTrait
 
@@ -41,6 +42,15 @@ def rating_data(
     }
 
 
+def hidden_rating_data(traits: list[CaptainTrait]) -> dict[str, Any]:
+    return {
+        "rating": None,
+        "status": "new",
+        "reviews": None,
+        "traits": [{**trait_data(t), "rating": None} for t in traits if t.active],
+    }
+
+
 def member_payload(
     org_user: OrgUser,
     *,
@@ -50,27 +60,38 @@ def member_payload(
     viewer_user_id: int | None,
     period_points: bool = False,
 ) -> dict[str, Any]:
-    staff = staff and org_user.user_id != viewer_user_id
+    own = org_user.user_id == viewer_user_id
+    staff = staff and not own
     org_id = org_user.organization_id
     settings = get_leadership_settings(org_id)
     traits = effective_traits(org_id)
-    rating = rating_board(
-        org_id,
+    hidden = own_feedback_hidden(settings, own=own)
+    if hidden:
+        rating_fields = hidden_rating_data(traits)
+    else:
+        rating = rating_board(
+            org_id,
+            now=now,
+            settings=settings,
+            traits=traits,
+            include_unreleased=staff,
+            captain_ids=[org_user.pk],
+        ).get(org_user.pk)
+        rating_fields = rating_data(rating, traits)
+    points = member_points(
+        org_user,
         now=now,
         settings=settings,
-        traits=traits,
         include_unreleased=staff,
-        captain_ids=[org_user.pk],
-    ).get(org_user.pk)
-    points = member_points(
-        org_user, now=now, settings=settings, include_unreleased=staff
+        exclude_kinds=REVIEW_DERIVED_KINDS if hidden else (),
     )
     payload: dict[str, Any] = {
         "member": member_summary(org_user),
-        **rating_data(rating, traits),
+        **rating_fields,
         "points": points if period_points else points["all_time"],
+        "feedback_private": hidden,
     }
-    if detail:
+    if detail and not hidden:
         payload["events"] = captain_events(
             org_user, now=now, settings=settings, traits=traits, staff=staff
         )
