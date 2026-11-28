@@ -2,8 +2,10 @@ Migrations wrap every existing org API token in a connection without changing it
 budgets or usage; promotion-import tokens in one org share one legacy promotion
 connection. No outbound work starts on upgrade.
 
-Outbound credentials need a server-only key ring. Add `ORG_API_CREDENTIAL_KEYS` to
-`backend/.env` (or a Helm `extraEnvSecrets` Secret), never to `docker/.env.*`:
+Outbound credentials need a key ring that only the backend process uses. Add
+`ORG_API_CREDENTIAL_KEYS` to `backend/.env` (or a Helm `extraEnvSecrets` Secret), never
+to `docker/.env.*`. Both locations also reach the Celery worker, beat and Discord bot
+containers, which receive the variable but never read it:
 
 ```bash
 python3 -c 'import base64, os; print(base64.b64encode(os.urandom(32)).decode())'

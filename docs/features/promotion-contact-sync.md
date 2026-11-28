@@ -57,11 +57,12 @@ promotion grants live on that one connection only (see
 contacts and award and void promotion points. Existing keys keep `promotion:import`;
 nothing widens it to read. `promotion:read` allows only the receipt history read
 (see [API](#api)). The adaptor uses one token for both jobs, so it also needs the MMR pair when it syncs MMRs;
-an adaptor that only imports contacts needs `promotion:import` alone. The API access
+a new key for an adaptor that only imports contacts needs `promotion:write` alone
+(existing keys with `promotion:import` keep working). The API connections
 section is shown to org admins when the MMR sync API or Promotion is unlocked, so a
 promotion-only token can be issued without the MMR sync API feature. The same request
 through the API is `POST /api/organizations/<id>/api-tokens/` with
-`{"name": "Contact log adaptor", "operations": ["promotion:import"]}`.
+`{"name": "Contact log adaptor", "operations": ["promotion:write"]}`.
 
 When several legacy credentials are migrated onto one connection, replacing them can
 consolidate their grants. Review and explicitly confirm the resulting grant list before
@@ -378,7 +379,7 @@ Turn the integration off; do not migrate back over retained data.
 
 1. Set `PROMOTION_ADAPTOR_ENABLED=false`, and for adopted orgs turn off promotion push
    on the connection. Rows stay as they are.
-2. Revoke the adaptor's `dfk_` token in API access, or clear `PROMOTION_SYNC_BINDINGS`.
+2. Revoke the adaptor's `dfk_` token in API connections, or clear `PROMOTION_SYNC_BINDINGS`.
    Imports stop and the Promotion tab returns to its local-only behaviour. Credits,
    voids and restores already written stay in the ledger.
 3. Receipts and outbox rows stay in the database as evidence.

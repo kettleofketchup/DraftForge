@@ -176,7 +176,7 @@ class ReleaseGateTests(PushBase):
         self.assertFalse(_keys(wire) & forbidden)
 
     @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
-    def test_production_config_never_exposes_key_ring_to_browser_or_light_tasks(
+    def test_light_worker_modules_and_task_payloads_never_carry_key_ring(
         self,
     ) -> None:
         celery_settings = (BACKEND_DIR / "config" / "settings_celery.py").read_text()

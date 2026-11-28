@@ -38,16 +38,24 @@ Credentials are encrypted with AES-GCM. The ciphertext is bound to the org, the
 connection, the credential type and the destination origin, so copying it to another
 connection or pointing the connection at another host makes it unreadable.
 
-**Where to put it.** It is a server secret. Only the Django backend reads it:
+**Where to put it.** It is a server secret, and only the Django backend process uses
+it:
 
-- Docker Compose release stack: add it to `backend/.env` on the host (that file is
-  mounted into the backend container). Never put it in `docker/.env.*`: those files are
-  committed and are also given to the frontend container.
+- Docker Compose release stack: add it to `backend/.env` on the host. Never put it in
+  `docker/.env.*`: those files are committed and are also given to the frontend
+  container.
 - Helm: add it to a Secret listed in `extraEnvSecrets`.
 
-The frontend, the Celery worker settings (`config.settings_celery`) and every task
-message are kept free of it; a release-gate test checks this. Task messages and
-internal API responses carry only run and delivery IDs and lease tokens.
+Neither location is backend-only. The release Compose file mounts `backend/.env` into
+the Celery worker, Celery beat and Discord bot containers too, and
+`config.settings_celery` loads it, so those processes have the variable in their
+environment. Helm adds every `extraEnvSecrets` Secret to every pod. They never read it:
+the light worker settings and the org API sync task and internal-client modules do not
+reference the key ring or the crypto module, and task messages and internal API
+responses carry only run and delivery IDs and lease tokens, never credentials or keys.
+A release-gate test checks those modules and payloads; it does not check container
+environments. Treat every container that receives `backend/.env` or the Secret as able
+to see the key ring.
 
 **Back it up.** Store the key ring with the database backup but separately from it. A
 database backup without its keys has unreadable outbound credentials; org admins would
@@ -196,9 +204,11 @@ Turn work off; do not reverse migrations once connections have written data.
 1. Set `ORG_API_SCHEDULED_PULLS=false` and restart the backend: no new scheduled pulls.
 2. Turn connections off. Org admins use the connection's **Enabled** switch (always
    available, even when rate limited). An operator can do it for every connection from
-   `python manage.py shell`, with the same audit entry the switch writes:
+   `python manage.py shell`, with the same locking and audit entries the switch writes:
 
     ```python
+    from django.db import transaction
+
     from app.models import CustomUser
     from org.api_connections.audit import audit_connection
     from org.api_connections.config import apply_config_patch
@@ -206,12 +216,21 @@ Turn work off; do not reverse migrations once connections have written data.
     from org.models import OrgApiConnection
 
     operator = CustomUser.objects.get(username="<superuser>")
-    for c in OrgApiConnection.objects.filter(enabled=True, archived_at__isnull=True):
-        c = apply_config_patch(c, actor=operator, patch={"enabled": False},
-                               expected_version=c.config_version)
-        invalidate_work(c)
-        audit_connection(c, actor=operator, action="disable_api_connection",
-                         fields=["enabled"])
+    ids = OrgApiConnection.objects.filter(
+        enabled=True, archived_at__isnull=True
+    ).values_list("pk", flat=True)
+    for pk in list(ids):
+        with transaction.atomic():
+            c = OrgApiConnection.objects.select_for_update().get(pk=pk)
+            if not c.enabled or c.archived_at is not None:
+                continue
+            c = apply_config_patch(c, actor=operator, patch={"enabled": False},
+                                   expected_version=c.config_version)
+            invalidate_work(c)
+            audit_connection(c, actor=operator, action="edit_api_connection",
+                             fields=["enabled"])
+            audit_connection(c, actor=operator, action="disable_api_connection",
+                             fields=["enabled"])
     ```
 
 3. Queued deliveries pause (`configuration_changed`) and are not sent; queued runs are
