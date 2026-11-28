@@ -26,6 +26,8 @@ const h = vi.hoisted(() => ({
   policy: 'optional' as StaffReasonPolicy,
   manage: true,
   status: 'rsvp',
+  allowTransfer: false,
+  state: 'signups_open',
   actions: Object.fromEntries(
     [
       'approve',
@@ -37,6 +39,7 @@ const h = vi.hoisted(() => ({
       'voidWithdrawal',
       'cancel',
       'adminAdd',
+      'transfer',
     ].map((name) => [
       name,
       { mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false },
@@ -52,7 +55,8 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => ({
   useEvent: () => ({
     data: {
       ...baseEvent,
-      state: 'signups_open',
+      state: h.state,
+      allow_spot_transfer: h.allowTransfer,
       user_can_manage: h.manage,
       staff_reason_policy: h.policy,
     },
@@ -114,6 +118,14 @@ vi.mock('~/features/promotion', () => ({
 }));
 vi.mock('~/hooks/useMemberAccess', () => ({
   useMemberAccess: () => ({ canView: false, settled: false }),
+}));
+vi.mock('~/hooks/useUserSearch', () => ({
+  useUserSearch: (query: string) => ({
+    term: query,
+    results: [],
+    status: 'idle',
+    error: null,
+  }),
 }));
 vi.mock('~/hooks/usePageNav', () => ({ usePageNav: () => undefined }));
 vi.mock('~/hooks/useResolvedUsers', () => ({
@@ -190,9 +202,11 @@ function renderPage() {
   const tab =
     h.status === 'waitlisted'
       ? 'waitlist'
-      : ['cancelled', 'rejected', 'dropped'].includes(h.status)
-        ? 'removed'
-        : 'signups';
+      : h.status === 'tentative'
+        ? 'tentative'
+        : ['cancelled', 'rejected', 'dropped'].includes(h.status)
+          ? 'removed'
+          : 'signups';
   render(
     <QueryClientProvider
       client={
@@ -273,6 +287,8 @@ beforeEach(() => {
   h.policy = 'optional';
   h.manage = true;
   h.status = 'rsvp';
+  h.allowTransfer = false;
+  h.state = 'signups_open';
   useUserStore.setState({
     currentUser: { pk: 1, username: 'viewer' } as UserType,
   } as never);
@@ -689,5 +705,76 @@ describe('event page void withdrawal', () => {
       ),
     );
     expect(h.toastError).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('event page staff spot transfer', () => {
+  it.each(['approved', 'rsvp', 'confirmed', 'waitlisted', 'tentative'])(
+    'shows Transfer on a %s row when the setting is on',
+    (status) => {
+      h.allowTransfer = true;
+      h.status = status;
+      renderPage();
+      expect(
+        within(screen.getByTestId('event-signup-row-101')).getByTestId(
+          'signup-transfer-btn',
+        ),
+      ).toHaveAccessibleName('Transfer place');
+    },
+  );
+
+  it('shows Transfer during roll call', () => {
+    h.allowTransfer = true;
+    h.state = 'roll_call';
+    h.status = 'approved';
+    renderPage();
+    expect(screen.getByTestId('signup-transfer-btn')).toBeTruthy();
+  });
+
+  it('hides Transfer when the setting is off', () => {
+    h.status = 'approved';
+    renderPage();
+    expect(screen.getByTestId('event-signup-row-101')).toBeTruthy();
+    expect(screen.queryByTestId('signup-transfer-btn')).toBeNull();
+  });
+
+  it.each(['cancelled', 'rejected', 'dropped'])(
+    'hides Transfer on a %s row',
+    (status) => {
+      h.allowTransfer = true;
+      h.status = status;
+      renderPage();
+      expect(screen.getByTestId('event-signup-row-101')).toBeTruthy();
+      expect(screen.queryByTestId('signup-transfer-btn')).toBeNull();
+    },
+  );
+
+  it.each(['draft', 'in_progress'])('hides Transfer in %s', (state) => {
+    h.allowTransfer = true;
+    h.state = state;
+    h.status = 'approved';
+    renderPage();
+    expect(screen.getByTestId('event-signup-row-101')).toBeTruthy();
+    expect(screen.queryByTestId('signup-transfer-btn')).toBeNull();
+  });
+
+  it('hides Transfer from members', () => {
+    h.allowTransfer = true;
+    h.manage = false;
+    h.status = 'approved';
+    renderPage();
+    expect(screen.queryByTestId('signup-transfer-btn')).toBeNull();
+  });
+
+  it('opens the dialog in staff mode', async () => {
+    h.allowTransfer = true;
+    h.status = 'approved';
+    renderPage();
+    fireEvent.click(screen.getByTestId('signup-transfer-btn'));
+    const dialog = await screen.findByTestId('transfer-spot-dialog');
+    expect(within(dialog).getByText('Transfer place')).toBeTruthy();
+    expect(
+      within(dialog).getByTestId('transfer-spot-current').textContent,
+    ).toContain("player's place");
   });
 });

@@ -1,4 +1,9 @@
-import { CheckCircle2, HelpCircle, XCircle } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  CheckCircle2,
+  HelpCircle,
+  XCircle,
+} from 'lucide-react';
 import {
   DestructiveButton,
   PrimaryButton,
@@ -7,6 +12,7 @@ import {
 import { EventStateBadge } from './EventStateBadge';
 import type { EventSignupType } from './schemas';
 import { SignupStatus } from './schemas';
+import { isRemovedSignup } from './signupPartitions';
 import { describeUnmet } from './unmetRequirements';
 
 export type SignupIntent = 'rsvp' | 'tentative';
@@ -17,8 +23,10 @@ export interface MySignupActionsProps {
   allowUserSignups: boolean;
   signupDisabled: boolean;
   cancelPending: boolean;
+  transferOpen: boolean;
   onSignup: (intent: SignupIntent) => void;
   onCancel: () => void;
+  onTransfer: () => void;
 }
 
 export function MySignupActions({
@@ -27,8 +35,10 @@ export function MySignupActions({
   allowUserSignups,
   signupDisabled,
   cancelPending,
+  transferOpen,
   onSignup,
   onCancel,
+  onTransfer,
 }: MySignupActionsProps) {
   if (mySignup?.status === SignupStatus.DROPPED) {
     return (
@@ -53,7 +63,28 @@ export function MySignupActions({
     </span>
   );
 
-  if (!signupsOpen) return pendingNotice || null;
+  const transferButton = transferOpen &&
+    mySignup &&
+    !isRemovedSignup(mySignup.status) && (
+      <SecondaryButton
+        size="sm"
+        onClick={onTransfer}
+        data-testid="event-transfer-spot-btn"
+      >
+        <ArrowLeftRight className="h-4 w-4 mr-1.5" />
+        Give my place
+      </SecondaryButton>
+    );
+
+  if (!signupsOpen) {
+    if (!pendingNotice && !transferButton) return null;
+    return (
+      <>
+        {pendingNotice}
+        {transferButton}
+      </>
+    );
+  }
 
   if (!mySignup && !allowUserSignups) {
     return (
@@ -105,6 +136,7 @@ export function MySignupActions({
             Sign Up
           </PrimaryButton>
         )}
+        {transferButton}
         <DestructiveButton
           size="sm"
           onClick={onCancel}
@@ -122,6 +154,7 @@ export function MySignupActions({
   return (
     <>
       {pendingNotice}
+      {transferButton}
       <DestructiveButton
         size="sm"
         onClick={onCancel}

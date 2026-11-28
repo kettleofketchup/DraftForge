@@ -18,8 +18,10 @@ function renderActions(
     allowUserSignups: true,
     signupDisabled: false,
     cancelPending: false,
+    transferOpen: false,
     onSignup: vi.fn(),
     onCancel: vi.fn(),
+    onTransfer: vi.fn(),
     ...overrides,
   };
   render(<MySignupActions {...props} />);
@@ -72,8 +74,10 @@ describe('MySignupActions', () => {
         allowUserSignups
         signupDisabled={false}
         cancelPending={false}
+        transferOpen={false}
         onSignup={vi.fn()}
         onCancel={vi.fn()}
+        onTransfer={vi.fn()}
       />,
     );
     expect(container.textContent).toBe('');
@@ -97,5 +101,59 @@ describe('MySignupActions', () => {
       'Pending approval',
     );
     expect(screen.getByTestId('event-cancel-rsvp-btn')).toBeTruthy();
+  });
+
+  describe('Give my place', () => {
+    it.each([
+      'approved',
+      'confirmed',
+      'rsvp',
+      'pending_approval',
+      'waitlisted',
+      'tentative',
+    ])('shows for a %s place when transfer is open', (status) => {
+      const props = renderActions(signup(status), { transferOpen: true });
+      const button = screen.getByTestId('event-transfer-spot-btn');
+      expect(button.textContent).toContain('Give my place');
+      fireEvent.click(button);
+      expect(props.onTransfer).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows during roll call while the other signup actions stay hidden', () => {
+      renderActions(signup('approved'), {
+        transferOpen: true,
+        signupsOpen: false,
+      });
+      expect(screen.getByTestId('event-transfer-spot-btn')).toBeTruthy();
+      expect(screen.queryByTestId('event-cancel-rsvp-btn')).toBeNull();
+      expect(screen.queryByTestId('event-signup-btn')).toBeNull();
+    });
+
+    it('keeps the pending note next to it during roll call', () => {
+      renderActions(signup('pending_approval'), {
+        transferOpen: true,
+        signupsOpen: false,
+      });
+      expect(screen.getByTestId('event-my-signup-pending')).toBeTruthy();
+      expect(screen.getByTestId('event-transfer-spot-btn')).toBeTruthy();
+    });
+
+    it('is hidden when transfer is not open', () => {
+      renderActions(signup('approved'));
+      expect(screen.queryByTestId('event-transfer-spot-btn')).toBeNull();
+    });
+
+    it.each(['cancelled', 'rejected', 'dropped'])(
+      'is hidden for a %s signup',
+      (status) => {
+        renderActions(signup(status), { transferOpen: true });
+        expect(screen.queryByTestId('event-transfer-spot-btn')).toBeNull();
+      },
+    );
+
+    it('is hidden without a signup', () => {
+      renderActions(undefined, { transferOpen: true });
+      expect(screen.queryByTestId('event-transfer-spot-btn')).toBeNull();
+    });
   });
 });

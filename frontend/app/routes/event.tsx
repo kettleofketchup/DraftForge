@@ -42,6 +42,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 import {
   ArrowDownToLine,
+  ArrowLeftRight,
   Bell,
   BellOff,
   Building2,
@@ -82,6 +83,7 @@ import {
 import { SignupInLineSince } from '~/components/events/SignupInLineSince';
 import { StaffReasonDialog } from '~/components/events/StaffReasonDialog';
 import { SubscriberList } from '~/components/events/SubscriberList';
+import { TransferSpotDialog } from '~/components/events/TransferSpotDialog';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import {
   eventTabOptions,
@@ -198,6 +200,10 @@ export default function EventPage() {
   const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [transferGiver, setTransferGiver] = useState<EventSignupType | null>(
+    null,
+  );
   const [showEditModal, setShowEditModal] = useState(false);
   const [signupModal, setSignupModal] = useState<{
     open: boolean;
@@ -414,6 +420,14 @@ export default function EventPage() {
     );
   }
 
+  const transferOpen =
+    !!event.allow_spot_transfer &&
+    (event.state === EventState.SIGNUPS_OPEN ||
+      event.state === EventState.ROLL_CALL);
+  const spotTransfer = transferOpen
+    ? { event, signups: signups ?? [] }
+    : undefined;
+
   const scheduledDate = new Date(event.scheduled_at);
   const formattedDate = scheduledDate.toLocaleDateString(undefined, {
     weekday: 'long',
@@ -529,7 +543,9 @@ export default function EventPage() {
         {/* Row 3: Admin button group (left) + Subscribe/RSVP (right) */}
         {(isAdmin ||
           canPromoteEvent(event, eventOrgAccess) ||
-          (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) ||
+          (currentUser &&
+            (event.state === EventState.SIGNUPS_OPEN || transferOpen) &&
+            signups) ||
           (currentUser && event.event_repeater)) && (
           <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             {/* Admin actions — left side */}
@@ -620,8 +636,14 @@ export default function EventPage() {
                   allowUserSignups={event.allow_user_signups}
                   signupDisabled={!profileLoaded || signupMutation.isPending}
                   cancelPending={signupActions.cancel.isPending}
+                  transferOpen={transferOpen}
                   onSignup={trySignup}
                   onCancel={() => setShowCancelRsvpConfirm(true)}
+                  onTransfer={() => {
+                    if (!mySignup) return;
+                    setTransferGiver(mySignup);
+                    setShowTransferDialog(true);
+                  }}
                 />
               )}
             </div>
@@ -695,6 +717,7 @@ export default function EventPage() {
           <TabsContent value="signups">
             <SignupsTab
               signups={activeSignups}
+              spotTransfer={spotTransfer}
               autoApprove={event.auto_approve}
               isAdmin={isAdmin}
               signupActions={signupActions}
@@ -714,6 +737,7 @@ export default function EventPage() {
           <TabsContent value="tentative">
             <SignupsTab
               signups={tentativeSignups}
+              spotTransfer={spotTransfer}
               isAdmin={isAdmin}
               signupActions={signupActions}
               organization={eventOrg}
@@ -729,6 +753,7 @@ export default function EventPage() {
           <TabsContent value="waitlist">
             <SignupsTab
               signups={waitlistedSignups}
+              spotTransfer={spotTransfer}
               isAdmin={isAdmin}
               signupActions={signupActions}
               organization={eventOrg}
@@ -814,6 +839,20 @@ export default function EventPage() {
         }}
         confirmTestId="event-rollcall-dialog-confirm"
       />
+
+      {transferGiver && (
+        <TransferSpotDialog
+          open={showTransferDialog}
+          onOpenChange={setShowTransferDialog}
+          signup={
+            signups?.find((s) => s.id === transferGiver.id) ?? transferGiver
+          }
+          event={event}
+          signups={signups ?? []}
+          mode="member"
+          transfer={signupActions.transfer}
+        />
+      )}
 
       <ConfirmDialog
         open={showCancelRsvpConfirm}
@@ -978,6 +1017,11 @@ function DetailsTab({
   );
 }
 
+interface SpotTransferContext {
+  event: EventType;
+  signups: EventSignupType[];
+}
+
 /** Signups tab showing participants and admin actions */
 function SignupsTab({
   signups,
@@ -994,8 +1038,10 @@ function SignupsTab({
   currentUserId,
   staffReasonPolicy,
   organization,
+  spotTransfer,
 }: {
   organization?: OrganizationType | null;
+  spotTransfer?: SpotTransferContext;
   currentUserId: number | undefined;
   staffReasonPolicy: StaffReasonPolicy | undefined;
   conductMemberFor?: ConductMemberLookup;
@@ -1021,11 +1067,16 @@ function SignupsTab({
     name: string;
   } | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
-  const { run, collect, dialogProps } = useStaffAction({
+  const staffAction = useStaffAction({
     policy: staffReasonPolicy,
     currentUserId,
   });
+  const { run, collect, dialogProps } = staffAction;
   const signupOverride = useSignupOverride(signupActions);
+  const [transferSignup, setTransferSignup] = useState<EventSignupType | null>(
+    null,
+  );
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const reasonMode = (
     action: Parameters<typeof staffReasonMode>[1],
     signup: EventSignupType | null,
@@ -1346,6 +1397,28 @@ function SignupsTab({
                   </TooltipContent>
                 </Tooltip>
               )}
+              {spotTransfer && !isRemovedSignup(signup.status) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton
+                      size="sm"
+                      aria-label="Transfer place"
+                      data-testid="signup-transfer-btn"
+                      onClick={() => {
+                        setTransferSignup(signup);
+                        setTransferDialogOpen(true);
+                      }}
+                      disabled={signupActions.transfer.isPending}
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Transfer</span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">
+                    Transfer place
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {onShowHistory && (
                 <SignupHistoryButton
                   user={historySubjectFor(signup, user)}
@@ -1553,6 +1626,23 @@ function SignupsTab({
           return success;
         }}
       />
+      {spotTransfer && transferSignup && (
+        <TransferSpotDialog
+          open={transferDialogOpen}
+          onOpenChange={setTransferDialogOpen}
+          signup={
+            spotTransfer.signups.find((s) => s.id === transferSignup.id) ??
+            transferSignup
+          }
+          event={spotTransfer.event}
+          signups={spotTransfer.signups}
+          mode={transferSignup.user === currentUserId ? 'member' : 'staff'}
+          orgId={spotTransfer.event.organization}
+          transfer={signupActions.transfer}
+          staffAction={staffAction}
+          signupOverride={signupOverride}
+        />
+      )}
       <StaffReasonDialog {...dialogProps} />
       <OverrideWarningDialog
         {...signupOverride.dialogProps}
