@@ -12,7 +12,7 @@ import discord
 from structlog.testing import capture_logs
 
 from discordbot import interaction_router
-from discordbot.custom_ids import PosSelectId
+from discordbot.custom_ids import LeadershipScoreId, PosSelectId
 
 MOD = "discordbot.interaction_router"
 BUTTONS = ("SignupButton", "TentativeButton", "DeclineButton", "NotifyButton")
@@ -47,6 +47,9 @@ class _Harness:
         )
         stack.enter_context(
             patch(f"{MOD}.iter_component_providers", return_value=[self.provider])
+        )
+        self.review = stack.enter_context(
+            patch(f"{MOD}.handle_review_click", new_callable=AsyncMock)
         )
         self.interaction = MagicMock()
         self.interaction.response.is_done = MagicMock(return_value=is_done)
@@ -98,6 +101,34 @@ class RouteComponentInteractionTests(IsolatedAsyncioTestCase):
             signup.return_value.callback.assert_awaited_once_with(h.interaction)
             h.interaction.response.send_message.assert_not_awaited()
 
+    async def test_lr_routes_to_leadership_handler(self) -> None:
+        with ExitStack() as stack:
+            h = _Harness(stack)
+            await interaction_router.route_component_interaction(
+                h.interaction, "lr:7:8:3"
+            )
+            h.review.assert_awaited_once_with(
+                h.interaction, LeadershipScoreId(snapshot_id=7, trait_id=8, score=3)
+            )
+            for button in h.buttons.values():
+                button.assert_not_called()
+            h.interaction.response.send_message.assert_not_awaited()
+
+    async def test_lr_bad_id_rejected(self) -> None:
+        for raw in ("lr:7:8:9", "lr:7:8", "lr:x:8:3"):
+            with self.subTest(raw=raw), ExitStack() as stack:
+                h = _Harness(stack)
+                with capture_logs() as logs:
+                    await interaction_router.route_component_interaction(
+                        h.interaction, raw
+                    )
+                failures = [e for e in logs if e["event"] == "custom_id_decode_failed"]
+                self.assertEqual(failures[0]["codec"], "LeadershipScoreId")
+                h.review.assert_not_awaited()
+                h.interaction.response.send_message.assert_awaited_once_with(
+                    STALE_MSG, ephemeral=True
+                )
+
     async def test_already_acknowledged_interaction_is_not_replied(self) -> None:
         with ExitStack() as stack:
             h = _Harness(stack, is_done=True)
@@ -146,6 +177,10 @@ class DMClickHookTests(IsolatedAsyncioTestCase):
 
     async def test_guild_click_does_not_record(self) -> None:
         record = await self._route(self._interaction(guild_id=9), "event_signup:5")
+        record.assert_not_called()
+
+    async def test_lr_click_not_recorded_by_hook(self) -> None:
+        record = await self._route(self._interaction(guild_id=None), "lr:1:2:3")
         record.assert_not_called()
 
     async def test_click_without_message_not_recorded(self) -> None:

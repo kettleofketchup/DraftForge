@@ -57,6 +57,7 @@ R4_EXEMPT: frozenset[str] = frozenset(
         "discordbot/internal_dm_views.py",
         "discordbot/internal_signup_views.py",
         "discordbot/internal_voice_views.py",
+        "discordbot/internal_leadership_views.py",
     }
 )
 R4_SAFE_RECEIVERS: frozenset[str] = frozenset({"followup", "response"})
@@ -71,7 +72,11 @@ R5_DM_MODULES: frozenset[str] = frozenset(
         "discordbot/internal_dm_views.py",
         "discordbot/schemas.py",
         "discordbot/models.py",
+        "org/leadership/review_dm.py",
         "discordbot/internal_client/dm_ledger.py",
+        "discordbot/internal_client/leadership_actions.py",
+        "discordbot/internal_leadership_views.py",
+        "discordbot/leadership_gateway.py",
     }
 )
 # Files that read DiscordMessageLog / signup-post ids, never DM ids. Add an
@@ -432,6 +437,7 @@ class RuleSelfTests(SimpleTestCase):
             _flags("def f(row):\n    return row.discord_channel_id\n", "org/x.py"),
         )
         self.assertNotIn("R5", _flags(source, LEDGER_MODULE))
+        self.assertNotIn("R5", _flags(source, "org/leadership/review_dm.py"))
         self.assertNotIn(
             "R5", _flags("def f(row, v):\n    row.discord_message_id = v\n", "org/x.py")
         )

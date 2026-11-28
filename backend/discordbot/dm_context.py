@@ -30,6 +30,13 @@ class SignupConfirmationContext(_Context):
     interaction_id: int | str
 
 
+class LeadershipReviewContext(_Context):
+    snapshot_id: int
+    part: int
+    parts: int
+    trait_ids: list[int]
+
+
 class EmptyContext(_Context):
     pass
 
@@ -44,6 +51,7 @@ CONTEXT_MODELS: dict[DMKind, type[BaseModel]] = {
     DMKind.TOURNAMENT_HERODRAFT_LINK: TournamentLinkContext,
     DMKind.LOBBY_INFO: LobbyInfoContext,
     DMKind.SIGNUP_CONFIRMATION: SignupConfirmationContext,
+    DMKind.LEADERSHIP_REVIEW: LeadershipReviewContext,
     DMKind.TEST_NOTIFICATION: EmptyContext,
 }
 

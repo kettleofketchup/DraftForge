@@ -1,7 +1,9 @@
 """Discord bot HTTP interaction endpoints."""
 
 import json
+from typing import Any
 
+from celery import Task
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
@@ -11,8 +13,10 @@ from kombu.exceptions import KombuError
 
 from discordbot import dm_ledger
 from discordbot.activity_ids import decode_draft_launch
+from discordbot.custom_ids import LEADERSHIP_REVIEW_PREFIX, LeadershipScoreId
+from discordbot.internal_client.leadership_actions import SAVE_FAILED
 from discordbot.models import DraftActivityChannel
-from discordbot.tasks import complete_activity_launch
+from discordbot.tasks import complete_activity_launch, complete_review_click
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -143,10 +147,68 @@ def handle_application_command(data: dict) -> JsonResponse:
 
 
 ACTIVITY_LAUNCH_TASK_EXPIRES_S = 14 * 60
+STALE_COMPONENT_MESSAGE = "❌ This menu is out of date."
+
+
+def _ephemeral(content: str) -> JsonResponse:
+    return JsonResponse({"type": 4, "data": {"flags": 64, "content": content}})
+
+
+def _enqueue_within_ack(task: Task, *, args: list[Any], argsrepr: str) -> None:
+    """Enqueue fast enough to answer within Discord's acknowledgement window."""
+    # A disconnected broker must not consume Discord's three-second
+    # acknowledgement window. Limit both Redis connect and I/O waits.
+    app = task.app
+    transport = dict(app.conf.broker_transport_options or {})
+    transport.update(socket_connect_timeout=0.5, socket_timeout=0.5)
+    with app.connection_for_write(
+        connect_timeout=0.5, transport_options=transport
+    ) as connection:
+        task.apply_async(
+            args=args,
+            argsrepr=argsrepr,
+            # Interaction tokens live 15 minutes; a busy or
+            # restarting worker must still answer within that window.
+            expires=ACTIVITY_LAUNCH_TASK_EXPIRES_S,
+            retry=False,
+            connection=connection,
+        )
+
+
+def _handle_review_click(data: dict, custom_id: str, user: dict) -> JsonResponse:
+    try:
+        score = LeadershipScoreId.decode(custom_id)
+    except ValueError:
+        return _ephemeral(STALE_COMPONENT_MESSAGE)
+    message = data.get("message") or {}
+    payload = {
+        "application_id": str(data.get("application_id", "")),
+        "interaction_token": str(data.get("token", "")),
+        "click": {
+            "discord_user_id": str(user.get("id", "")),
+            "discord_message_id": str(message.get("id", "")),
+            "discord_channel_id": str(
+                data.get("channel_id") or message.get("channel_id") or ""
+            ),
+            "interaction_id": str(data.get("id", "")),
+            "snapshot_id": score.snapshot_id,
+            "trait_id": score.trait_id,
+            "score": score.score,
+        },
+    }
+    try:
+        _enqueue_within_ack(
+            complete_review_click,
+            args=[payload],
+            argsrepr="[redacted leadership review click]",
+        )
+    except (KombuError, OSError):
+        return _ephemeral(SAVE_FAILED)
+    return JsonResponse({"type": 6})
 
 
 def _record_dm_click(data: dict, custom_id: str, user: dict) -> None:
-    if data.get("guild_id"):
+    if data.get("guild_id") or custom_id.startswith(LEADERSHIP_REVIEW_PREFIX):
         return
     message_id = str((data.get("message") or {}).get("id") or "")
     discord_user_id = str(user.get("id") or "")
@@ -179,6 +241,9 @@ def handle_message_component(data: dict) -> JsonResponse:
         discord_username=username,
     )
 
+    if LeadershipScoreId.matches(custom_id):
+        return _handle_review_click(data, custom_id, user)
+
     if custom_id.startswith("draft_activity:") and custom_id != "draft_activity:launch":
         draft = decode_draft_launch(custom_id)
         if draft is None:
@@ -205,29 +270,17 @@ def handle_message_component(data: dict) -> JsonResponse:
         # Discord's three-second deadline. Never log the interaction token.
 
         try:
-            # A disconnected broker must not consume Discord's three-second
-            # acknowledgement window. Limit both Redis connect and I/O waits.
-            app = complete_activity_launch.app
-            transport = dict(app.conf.broker_transport_options or {})
-            transport.update(socket_connect_timeout=0.5, socket_timeout=0.5)
-            with app.connection_for_write(
-                connect_timeout=0.5, transport_options=transport
-            ) as connection:
-                complete_activity_launch.apply_async(
-                    args=[
-                        str(data.get("application_id", "")),
-                        str(data.get("token", "")),
-                        str(user.get("id", "")),
-                        draft[0],
-                        draft[1],
-                    ],
-                    argsrepr="[redacted Discord Activity interaction]",
-                    # Interaction tokens live 15 minutes; a busy or
-                    # restarting worker must still answer within that window.
-                    expires=ACTIVITY_LAUNCH_TASK_EXPIRES_S,
-                    retry=False,
-                    connection=connection,
-                )
+            _enqueue_within_ack(
+                complete_activity_launch,
+                args=[
+                    str(data.get("application_id", "")),
+                    str(data.get("token", "")),
+                    str(user.get("id", "")),
+                    draft[0],
+                    draft[1],
+                ],
+                argsrepr="[redacted Discord Activity interaction]",
+            )
         except (KombuError, OSError):
             return JsonResponse(
                 {

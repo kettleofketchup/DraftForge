@@ -12,9 +12,11 @@ its tag prefixes from ``SIGNUP_TAG_PREFIXES`` below.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar, Self
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, PositiveInt, ValidationError
+
+LEADERSHIP_REVIEW_PREFIX = "lr:"
 
 
 class CustomId(BaseModel):
@@ -179,6 +181,33 @@ class ScreenshotFileId(_ScreenshotId):
 
 class ScreenshotUrlId(_ScreenshotId):
     PREFIX = "screenshot_url"
+
+
+class LeadershipScoreId(BaseModel):
+    """``lr:<snapshot_id>:<trait_id>:<score>``; the rater is never encoded."""
+
+    PREFIX: ClassVar[str] = "lr"
+    snapshot_id: PositiveInt
+    trait_id: PositiveInt
+    score: Annotated[int, Field(ge=1, le=5)]
+    model_config = {"frozen": True}
+
+    def encode(self) -> str:
+        return f"{self.PREFIX}:{self.snapshot_id}:{self.trait_id}:{self.score}"
+
+    @classmethod
+    def matches(cls, raw: str) -> bool:
+        return raw.startswith(LEADERSHIP_REVIEW_PREFIX)
+
+    @classmethod
+    def decode(cls, raw: str) -> Self:
+        try:
+            prefix, snapshot, trait, score = raw.split(":")
+            if prefix != cls.PREFIX:
+                raise ValueError(f"prefix mismatch: {raw!r}")
+            return cls(snapshot_id=int(snapshot), trait_id=int(trait), score=int(score))
+        except (ValueError, ValidationError) as exc:
+            raise ValueError(f"bad custom_id {raw!r} for {cls.__name__}") from exc
 
 
 # Registry for log_context tag derivation + tests.

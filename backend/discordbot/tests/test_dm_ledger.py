@@ -20,7 +20,8 @@ from discordbot.models import DiscordDM, DMKind, DMStatus, DMSubject
 from events.models import Event
 from league.models import League
 from lobby.models import GameLobby
-from org.models import Organization
+from org.models import Organization, OrgUser
+from org.models_leadership import EventCaptain
 from tournament.models import Tournament
 
 
@@ -38,6 +39,26 @@ def _req(
         claim_token=token,
         discord_user_id=discord_user_id,
         **extra,  # type: ignore[arg-type]
+    )
+
+
+def _leadership_req(
+    *, snapshot_id: int, discord_user_id: str, part: int, trait_ids: list[int]
+) -> DMClaim:
+    return DMClaim(
+        kind=DMKind.LEADERSHIP_REVIEW,
+        idempotency_key=f"leadership_review:snapshot:{snapshot_id}:rater:9:part:{part}",
+        claim_token=f"tok-{part}",
+        discord_user_id=discord_user_id,
+        subject_type=DMSubject.CAPTAIN_SNAPSHOT,
+        subject_id=snapshot_id,
+        context={
+            "snapshot_id": snapshot_id,
+            "part": part,
+            "parts": 2,
+            "trait_ids": trait_ids,
+        },
+        has_components=True,
     )
 
 
@@ -125,31 +146,22 @@ class ClaimTests(DMLedgerTestCase):
 
     def test_reclaim_refreshes_recipient_and_component_context(self) -> None:
         user = CustomUser.objects.create(username="relinked", discordId="1001")
-        first = self.claim(
-            _req(
-                "k-relink",
-                "tok-1",
-                context={"discord_event_id": 1},
-                has_components=True,
-            )
+        first_req = _leadership_req(
+            snapshot_id=7, discord_user_id="1001", part=1, trait_ids=[1, 2]
         )
+        first = self.claim(first_req)
         self.fail_delivery(first, "tok-1", "pre_send")
         user.discordId = "2002"
         user.save(update_fields=["discordId"])
-        second = self.claim(
-            _req(
-                "k-relink",
-                "tok-1",
-                discord_user_id="2002",
-                context={"discord_event_id": 2},
-                has_components=True,
-            )
+        second_req = _leadership_req(
+            snapshot_id=7, discord_user_id="2002", part=1, trait_ids=[3, 4]
         )
+        second = self.claim(second_req)
         self.assertTrue(second.granted)
         row = DiscordDM.objects.get(pk=second.id)
         self.assertEqual(row.discord_user_id, "2002")
         self.assertEqual(row.recipient_id, user.pk)
-        self.assertEqual(row.context["discord_event_id"], 2)
+        self.assertEqual(row.context["trait_ids"], [3, 4])
         dm_ledger.finalize(
             row.pk,
             DMFinal(status=DMStatus.SENT, discord_message_id="9001"),
@@ -351,6 +363,14 @@ class OrgResolutionTests(DMLedgerTestCase):
         event_lobby = GameLobby.objects.create(
             game=event_game, external_ref=f"game:{event_game.pk}"
         )
+        captain = OrgUser.objects.create(user=self.owner, organization=self.org)
+        snapshot = EventCaptain.objects.create(
+            event=event,
+            organization=self.org,
+            captain=captain,
+            team_name="Alpha",
+            window_closes_at=timezone.now() + timedelta(days=1),
+        )
         orphan = Tournament.objects.create(name="O", date_played=date.today())
         cases: list[tuple[DMSubject, int, int | None]] = [
             (DMSubject.EVENT, event.pk, self.other_org.pk),
@@ -359,6 +379,7 @@ class OrgResolutionTests(DMLedgerTestCase):
             (DMSubject.TOURNAMENT, orphan.pk, None),
             (DMSubject.GAME_LOBBY, league_lobby.pk, self.org.pk),
             (DMSubject.GAME_LOBBY, event_lobby.pk, self.other_org.pk),
+            (DMSubject.CAPTAIN_SNAPSHOT, snapshot.pk, self.org.pk),
             (DMSubject.EVENT, 987654, None),
         ]
         for subject_type, subject_id, expected in cases:
@@ -584,3 +605,182 @@ class ClickTests(DMLedgerTestCase):
         row = DiscordDM.objects.get(discord_message_id="m1")
         self.assertEqual(row.click_count, 0)
         self.assertIsNone(row.first_clicked_at)
+
+    def test_attach_on_click_fills_and_finalizes_pending(self) -> None:
+        result = self.claim(_req())
+        dm_ledger.mark_sending(result.id, claim_token="tok-a", now=self.now)
+        later = self.now + timedelta(minutes=2)
+        row = dm_ledger.attach_on_click(
+            result.id,
+            discord_user_id="1001",
+            discord_channel_id="c9",
+            discord_message_id="m9",
+            now=later,
+        )
+        self.assertEqual(row.status, DMStatus.SENT)
+        self.assertEqual(row.error, "finalized_by_click")
+        self.assertEqual(row.discord_channel_id, "c9")
+        self.assertEqual(row.discord_message_id, "m9")
+        self.assertEqual(row.sent_at, later)
+        self.assertEqual(row.finished_at, later)
+        row.refresh_from_db()
+        self.assertEqual(row.status, DMStatus.SENT)
+
+    def test_attach_on_click_same_message_noop(self) -> None:
+        sent = self._sent()
+        row = dm_ledger.attach_on_click(
+            sent.pk,
+            discord_user_id="1001",
+            discord_channel_id="c1",
+            discord_message_id="m1",
+            now=self.now + timedelta(minutes=2),
+        )
+        self.assertEqual(row.status, DMStatus.SENT)
+        self.assertEqual(row.error, "")
+        self.assertEqual(row.sent_at, self.now)
+
+    def test_attach_on_click_fills_unknown_without_status_change(self) -> None:
+        result = self.claim(_req())
+        dm_ledger.finalize(
+            result.id,
+            DMFinal(status=DMStatus.UNKNOWN),
+            claim_token="tok-a",
+            now=self.now,
+        )
+        row = dm_ledger.attach_on_click(
+            result.id,
+            discord_user_id="1001",
+            discord_channel_id="c9",
+            discord_message_id="m9",
+            now=self.now,
+        )
+        self.assertEqual(row.status, DMStatus.UNKNOWN)
+        self.assertEqual(row.discord_message_id, "m9")
+
+    def test_attach_on_click_refuses_other_message_id(self) -> None:
+        sent = self._sent()
+        with self.assertRaises(LedgerConflict):
+            dm_ledger.attach_on_click(
+                sent.pk,
+                discord_user_id="1001",
+                discord_channel_id="c1",
+                discord_message_id="m-other",
+                now=self.now,
+            )
+        self.assertEqual(DiscordDM.objects.get(pk=sent.pk).discord_message_id, "m1")
+
+    def test_attach_on_click_refuses_other_user(self) -> None:
+        result = self.claim(_req())
+        with self.assertRaises(LedgerConflict):
+            dm_ledger.attach_on_click(
+                result.id,
+                discord_user_id="2002",
+                discord_channel_id="c1",
+                discord_message_id="m1",
+                now=self.now,
+            )
+        self.assertEqual(DiscordDM.objects.get(pk=result.id).status, DMStatus.PENDING)
+
+    def test_attach_on_click_missing_row(self) -> None:
+        with self.assertRaises(LedgerNotFound):
+            dm_ledger.attach_on_click(
+                424242,
+                discord_user_id="1001",
+                discord_channel_id="c1",
+                discord_message_id="m1",
+                now=self.now,
+            )
+
+
+class LeadershipLookupTests(DMLedgerTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        part1 = self.claim(
+            _leadership_req(
+                snapshot_id=7, discord_user_id="1001", part=1, trait_ids=[1, 2]
+            )
+        )
+        part2 = self.claim(
+            _leadership_req(
+                snapshot_id=7, discord_user_id="1001", part=2, trait_ids=[3]
+            )
+        )
+        self.part1 = DiscordDM.objects.get(pk=part1.id)
+        self.part2 = DiscordDM.objects.get(pk=part2.id)
+        self.claim(
+            DMClaim(
+                kind=DMKind.LEADERSHIP_REVIEW,
+                idempotency_key="leadership_review:snapshot:7:rater:10:part:1",
+                claim_token="t",
+                discord_user_id="2002",
+                subject_type=DMSubject.CAPTAIN_SNAPSHOT,
+                subject_id=7,
+                context={
+                    "snapshot_id": 7,
+                    "part": 1,
+                    "parts": 1,
+                    "trait_ids": [1, 2, 3],
+                },
+            )
+        )
+
+    def test_find_leadership_row_by_trait(self) -> None:
+        find = dm_ledger.find_leadership_row
+        self.assertEqual(
+            find(snapshot_id=7, discord_user_id="1001", trait_id=2), self.part1
+        )
+        self.assertEqual(
+            find(snapshot_id=7, discord_user_id="1001", trait_id=3), self.part2
+        )
+        self.assertIsNone(find(snapshot_id=7, discord_user_id="1001", trait_id=4))
+        self.assertIsNone(find(snapshot_id=8, discord_user_id="1001", trait_id=1))
+        self.assertIsNone(find(snapshot_id=7, discord_user_id="3003", trait_id=1))
+        self.assertIsNone(find(snapshot_id=7, discord_user_id="", trait_id=1))
+
+    def test_leadership_trait_ids_union(self) -> None:
+        self.assertEqual(
+            dm_ledger.leadership_trait_ids(snapshot_id=7, discord_user_id="1001"),
+            {1, 2, 3},
+        )
+        self.assertEqual(
+            dm_ledger.leadership_trait_ids(snapshot_id=8, discord_user_id="1001"), set()
+        )
+
+    def test_scrub_rater_only_leadership_rows(self) -> None:
+        reminder = self.claim(_req("signup_reminder:event:1:user:1"))
+        for row in (self.part1, self.part2):
+            dm_ledger.finalize(
+                row.pk,
+                DMFinal(status=DMStatus.SENT, discord_message_id=f"m{row.pk}"),
+                claim_token=row.claim_token,
+                now=self.now,
+            )
+        dm_ledger.record_click(
+            discord_message_id=f"m{self.part1.pk}", discord_user_id="1001", now=self.now
+        )
+        scrubbed = dm_ledger.scrub_rater(discord_user_id="1001", now=self.now)
+        self.assertEqual(scrubbed, 2)
+        for original in (self.part1, self.part2):
+            row = DiscordDM.objects.get(pk=original.pk)
+            self.assertEqual(
+                row.idempotency_key, f"scrubbed:leadership_review:{original.pk}"
+            )
+            self.assertEqual(row.discord_user_id, "")
+            self.assertIsNone(row.first_clicked_at)
+            self.assertIsNone(row.last_clicked_at)
+        self.assertEqual(DiscordDM.objects.get(pk=self.part1.pk).click_count, 1)
+        other = DiscordDM.objects.get(pk=reminder.id)
+        self.assertEqual(other.idempotency_key, "signup_reminder:event:1:user:1")
+        self.assertEqual(other.discord_user_id, "1001")
+        rater_two = DiscordDM.objects.get(
+            idempotency_key="leadership_review:snapshot:7:rater:10:part:1"
+        )
+        self.assertEqual(rater_two.discord_user_id, "2002")
+        self.assertIsNone(
+            dm_ledger.find_leadership_row(
+                snapshot_id=7, discord_user_id="1001", trait_id=1
+            )
+        )
+
+    def test_scrub_rater_blank_id_noop(self) -> None:
+        self.assertEqual(dm_ledger.scrub_rater(discord_user_id="", now=self.now), 0)

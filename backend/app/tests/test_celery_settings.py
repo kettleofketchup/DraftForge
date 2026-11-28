@@ -121,6 +121,27 @@ class CelerySettingsBootTest(SimpleTestCase):
         )
         self.assertFalse(any(name.startswith(retired_prefixes) for name in registered))
 
+    def test_worker_registers_leadership_review_dm_task(self) -> None:
+        env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
+        code = (
+            "import json\n"
+            "from config.celery_light import app\n"
+            "app.loader.import_default_modules()\n"
+            "print(json.dumps(sorted(app.tasks)))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        registered = set(json.loads(result.stdout.strip().splitlines()[-1]))
+        self.assertIn("org.leadership.tasks.send_leadership_review_dms", registered)
+        self.assertIn("discordbot.tasks.complete_review_click", registered)
+
     def test_worker_registers_every_light_beat_task(self) -> None:
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
         code = (

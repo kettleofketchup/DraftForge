@@ -23,6 +23,15 @@ def signup_confirmation_key(*, interaction_id: int | str) -> str:
     return f"signup_confirmation:interaction:{interaction_id}"
 
 
+def leadership_review_key(
+    *, snapshot_id: int, rater_org_user_id: int, part: int
+) -> str:
+    return (
+        f"leadership_review:snapshot:{snapshot_id}"
+        f":rater:{rater_org_user_id}:part:{part}"
+    )
+
+
 def test_notification_key(*, event_pk: int, discord_id: str, request_id: str) -> str:
     return f"test_notification:event:{event_pk}:discord:{discord_id}:req:{request_id}"
 
@@ -36,5 +45,6 @@ KEY_BUILDERS: dict[DMKind, Callable[..., str]] = {
     DMKind.TOURNAMENT_HERODRAFT_LINK: tournament_herodraft_link_key,
     DMKind.LOBBY_INFO: lobby_info_key,
     DMKind.SIGNUP_CONFIRMATION: signup_confirmation_key,
+    DMKind.LEADERSHIP_REVIEW: leadership_review_key,
     DMKind.TEST_NOTIFICATION: test_notification_key,
 }

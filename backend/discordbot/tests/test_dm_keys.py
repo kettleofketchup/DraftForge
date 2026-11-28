@@ -1,8 +1,9 @@
 from django.test import SimpleTestCase
 
-from discordbot.dm_context import validate_context
+from discordbot.dm_context import LeadershipReviewContext, validate_context
 from discordbot.dm_keys import (
     KEY_BUILDERS,
+    leadership_review_key,
     lobby_info_key,
     signup_confirmation_key,
     signup_reminder_key,
@@ -46,6 +47,12 @@ class DMKeyTests(SimpleTestCase):
             "signup_confirmation:interaction:99",
         )
 
+    def test_leadership_review_key(self) -> None:
+        self.assertEqual(
+            leadership_review_key(snapshot_id=7, rater_org_user_id=9, part=2),
+            "leadership_review:snapshot:7:rater:9:part:2",
+        )
+
     def test_test_notification_key(self) -> None:
         self.assertEqual(
             build_test_notification_key(event_pk=1, discord_id="d", request_id="r"),
@@ -71,6 +78,16 @@ class DMContextTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             validate_context(DMKind.TEST_NOTIFICATION, {"body": "hi"})
 
+    def test_leadership_context_has_no_rater(self) -> None:
+        self.assertEqual(
+            set(LeadershipReviewContext.model_fields),
+            {"snapshot_id", "part", "parts", "trait_ids"},
+        )
+
+    def test_leadership_context_round_trip(self) -> None:
+        data = {"snapshot_id": 1, "part": 1, "parts": 2, "trait_ids": [3, 4]}
+        self.assertEqual(validate_context(DMKind.LEADERSHIP_REVIEW, data), data)
+
     def test_signup_confirmation_result_choices(self) -> None:
         ok = {"result": "tentative", "interaction_id": "5"}
         self.assertEqual(validate_context(DMKind.SIGNUP_CONFIRMATION, ok), ok)
@@ -88,3 +105,5 @@ class DMContextTests(SimpleTestCase):
         )
         with self.assertRaises(ValueError):
             validate_context(DMKind.SIGNUP_REMINDER, data, backfill=True)
+        with self.assertRaises(ValueError):
+            validate_context(DMKind.LEADERSHIP_REVIEW, data, backfill=True)

@@ -6,8 +6,8 @@ bot process posts to them through ``discordbot.internal_client.signup_actions``
 so the backend stays the sole DB writer (the bot's overlay-fs cannot see
 ORM writes made in the Daphne container).
 
-View bodies live in ``discordbot/internal_signup_views.py``,
-``discordbot/internal_voice_views.py`` and ``discordbot/internal_dm_views.py``; this file is
+View bodies live in ``discordbot/internal_signup_views.py``, ``discordbot/internal_voice_views.py``,
+``discordbot/internal_dm_views.py`` and ``discordbot/internal_leadership_views.py``; this file is
 only the URL table so the route layout matches the package that owns the
 endpoints.
 """
@@ -15,6 +15,7 @@ endpoints.
 from django.urls import URLPattern, path
 
 from . import internal_dm_views as _dm_views
+from . import internal_leadership_views as _leadership_views
 from . import internal_signup_views as _signup_views
 from . import internal_voice_views as _voice_views
 from .activity_launch import activity_launch, activity_notification_invite
@@ -143,4 +144,9 @@ urlpatterns: list[URLPattern] = [
         name="internal_dm_finalize",
     ),
     path("dms/click/", _dm_views.dm_click, name="internal_dm_click"),
+    path(
+        "leadership/review-click/",
+        _leadership_views.review_click,
+        name="internal_leadership_review_click",
+    ),
 ]

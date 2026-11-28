@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import MagicMock, patch
 
 from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext, override_settings
@@ -14,14 +15,19 @@ from org.feature_keys import FeatureKey
 from org.features import set_org_feature
 from org.leadership import lifecycle
 from org.models import ContributionEntry, ContributionPointValue, OrgUser
-from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
+from org.models_leadership import (
+    CaptainReview,
+    CaptainReviewDraft,
+    EventCaptain,
+    OrgLeadershipSettings,
+)
 from org.standing import api as standing
 from org.tests.leadership_base import LeadershipTestCase
 from tournament.models import Team
 from tournament.models.team_log import TeamLogVia
 from tournament.services.team_management import replace_captain
 
-SNAPSHOT_QUERIES = 18
+SNAPSHOT_QUERIES = 20
 
 
 def pool(snap: EventCaptain) -> set[int]:
@@ -251,6 +257,26 @@ class ReopenTest(LeadershipTestCase):
         self.assertFalse(EventCaptain.objects.filter(voided_at__isnull=True).exists())
         self.assertEqual(list(ContributionEntry.objects.all()), [host])
 
+    def test_void_event_deletes_drafts(self) -> None:
+        self.close()
+        other_event, other_tournament = self.make_event("Other Cup")
+        self.make_team("Gamma", self.cap_a, self.mates_a, tournament=other_tournament)
+        for user in [self.cap_a, *self.mates_a]:
+            self.admit(user, other_event)
+        self.close(other_event)
+        for snap in (self.snapshot(self.cap_a), self.snapshot(self.cap_b)):
+            mate = snap.teammates.order_by("pk")[0]
+            CaptainReviewDraft.objects.create(
+                event_captain=snap, rater=mate, scores={"1": 3}
+            )
+        other_snap = self.snapshot(self.cap_a, other_event)
+        kept = CaptainReviewDraft.objects.create(
+            event_captain=other_snap, rater=self.org_user(self.mates_a[0])
+        )
+        with transaction.atomic():
+            lifecycle.void_event(self.event, now=tz.now())
+        self.assertEqual(list(CaptainReviewDraft.objects.all()), [kept])
+
     def test_cancel_after_close_voids(self) -> None:
         self.close()
         self.review(self.mates_a[0], self.cap_a)
@@ -415,3 +441,93 @@ class DeleteTest(LeadershipTestCase):
         with transaction.atomic():
             standing.on_event_deleted(self.event, actor=None)
         self.assertFalse(ContributionEntry.objects.filter(track="leadership").exists())
+
+
+@patch("org.leadership.lifecycle.send_leadership_review_dms")
+class ReviewDMEnqueueTest(LeadershipTestCase):
+    def enable(self) -> None:
+        OrgLeadershipSettings.objects.update_or_create(
+            organization=self.org, defaults={"review_dms_enabled": True}
+        )
+
+    def reopen(self) -> None:
+        self.event.refresh_from_db()
+        reopen_event(self.event, actor=self.admin)
+        Event.objects.filter(pk=self.event.pk).update(state=EventState.IN_PROGRESS)
+        self.event.refresh_from_db()
+
+    def test_close_enqueues_on_commit_when_enabled(self, task: MagicMock) -> None:
+        self.enable()
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            self.close()
+        task.delay.assert_not_called()
+        for callback in callbacks:
+            callback()
+        ids = sorted(
+            EventCaptain.objects.filter(event=self.event).values_list("pk", flat=True)
+        )
+        task.delay.assert_called_once_with(self.event.pk, ids)
+
+    def test_snapshot_result_reports_created_ids(self, task: MagicMock) -> None:
+        result = self.run_snapshot()
+        ids = tuple(
+            sorted(
+                EventCaptain.objects.filter(event=self.event).values_list(
+                    "pk", flat=True
+                )
+            )
+        )
+        self.assertEqual(tuple(sorted(result.created_snapshot_ids)), ids)
+        self.assertEqual(self.run_snapshot().created_snapshot_ids, ())
+
+    def test_close_does_not_enqueue_when_disabled(self, task: MagicMock) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_reclose_does_not_enqueue(self, task: MagicMock) -> None:
+        self.enable()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_called_once()
+        task.delay.reset_mock()
+        self.reopen()
+        self.team_b.members.add(self.make_user("ld_late"))
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_reclose_with_replacement_captain_does_not_enqueue(
+        self, task: MagicMock
+    ) -> None:
+        self.enable()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.reset_mock()
+        self.reopen()
+        self.team_a.captain = self.mates_a[1]
+        self.team_a.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_first_close_with_leadership_disabled_cannot_send_on_reclose(
+        self, task: MagicMock
+    ) -> None:
+        self.enable()
+        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
+        self.close()
+        self.reopen()
+        self.unlock_leadership()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        task.delay.assert_not_called()
+
+    def test_enqueue_failure_is_logged_not_raised(self, task: MagicMock) -> None:
+        self.enable()
+        task.delay.side_effect = RuntimeError("broker down")
+        with capture_logs() as logs, self.captureOnCommitCallbacks(execute=True):
+            self.close()
+        self.assertIn(
+            "leadership_review_dms_enqueue_failed", [e["event"] for e in logs]
+        )

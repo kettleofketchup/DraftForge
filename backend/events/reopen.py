@@ -56,6 +56,7 @@ def reopen_event(event: Event, *, actor: CustomUser | None) -> ReopenResult:
             pk=event.pk, state=current
         ).update(
             state=REOPEN_TARGET,
+            leadership_review_dm_dispatch={},
             **standing.reopen_reset_fields(),
             updated_at=now,
         )
