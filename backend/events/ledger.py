@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F, OuterRef, QuerySet, Subquery
 from django.http import HttpRequest
@@ -12,9 +14,16 @@ from django.utils import timezone as tz
 from structlog.contextvars import get_contextvars
 
 from events.constants import ActorRole, SignupAction, SignupMeans
-from events.models import Event, EventSignup, ReadyCheck, SignupLedgerEntry
+from events.models import (
+    PURGE_BATCH_SIZE,
+    Event,
+    EventSignup,
+    ReadyCheck,
+    SignupLedgerEntry,
+)
 from events.permissions import has_event_staff_access
 from events.schemas import SignupSnapshot
+from org.models import OrgSettings
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -27,6 +36,7 @@ __all__ = [
     "RESOLVE_CHUNK_SIZE",
     "LedgerEvent",
     "RecordsWindow",
+    "SignupPurgeResult",
     "ActorRole",
     "SignupAction",
     "SignupActor",
@@ -34,6 +44,7 @@ __all__ = [
     "current_interaction_id",
     "event_snapshot",
     "parse_snapshot_time",
+    "purge_expired",
     "record_ready_check_transition",
     "record_signup_change",
     "resolve_ledger_events",
@@ -492,4 +503,89 @@ def resolve_ledger_events(
             )
             if window is None or window.admits(resolved):
                 result[pk] = resolved
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class SignupPurgeResult:
+    purged: int
+    organizations: int
+    events: int
+    skipped_unknown_end: int
+    per_org: dict[int, int]
+    more: bool
+
+
+def purge_expired(
+    *,
+    now: datetime | None = None,
+    batch_size: int = PURGE_BATCH_SIZE,
+    time_budget_s: float | None = None,
+) -> SignupPurgeResult:
+    now = now or tz.now()
+    budget = (
+        settings.SIGNUP_RECORDS_PURGE_BUDGET_S
+        if time_budget_s is None
+        else time_budget_s
+    )
+    deadline = time.monotonic() + budget
+    purged = events = skipped = 0
+    per_org: dict[int, int] = {}
+    more = False
+    retention = (
+        OrgSettings.objects.nocache()
+        .filter(signup_record_retention_days__isnull=False)
+        .order_by("organization_id")
+        .values_list("organization_id", "signup_record_retention_days")
+    )
+    for org_id, days in retention:
+        if time.monotonic() >= deadline:
+            more = True
+            break
+        cutoff = now - timedelta(days=days)
+        expired: list[int] = []
+        for event_id, resolved in resolve_ledger_events(org_id).items():
+            end = resolved.end
+            if end is None:
+                skipped += 1
+            elif end < cutoff:
+                expired.append(event_id)
+        if not expired:
+            continue
+        outcome = (
+            SignupLedgerEntry.objects.nocache()
+            .filter(organization_id=org_id)
+            .purge(
+                organization_id=org_id,
+                event_ids=expired,
+                batch_size=batch_size,
+                deadline=deadline,
+                extra_log={"retention_days": days},
+            )
+        )
+        per_org[org_id] = outcome.count
+        purged += outcome.count
+        events += outcome.events
+        if not outcome.complete:
+            more = True
+            break
+
+    result = SignupPurgeResult(
+        purged=purged,
+        organizations=len(per_org),
+        events=events,
+        skipped_unknown_end=skipped,
+        per_org=per_org,
+        more=more,
+    )
+    log.info(
+        "signup_records_purge_completed",
+        system="events",
+        subsystem="ledger",
+        purged=purged,
+        organizations=result.organizations,
+        events=events,
+        skipped_unknown_end=skipped,
+        more=more,
+    )
     return result

@@ -1,6 +1,6 @@
 import copy
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
@@ -1000,24 +1000,34 @@ class SignupLedgerEntryQuerySet(models.QuerySet):
             _ledger_blocked(None, "queryset_update", sorted(kwargs))
         return super().update(**kwargs)
 
+    def _event_sizes(
+        self, event_ids: Collection[int] | None
+    ) -> Iterable[tuple[int, int]]:
+        grouped = self.order_by().values("event_id").annotate(n=Count("pk"))
+        if event_ids is None:
+            yield from grouped.order_by("event_id").values_list("event_id", "n")
+            return
+        ids = sorted(set(event_ids))
+        size = PURGE_CHUNK_SIZE
+        for start in range(0, len(ids), size):
+            yield from (
+                grouped.filter(event_id__in=ids[start : start + size])
+                .order_by("event_id")
+                .values_list("event_id", "n")
+            )
+
     def purge(
         self,
         *,
         organization_id: int | None = None,
+        event_ids: Collection[int] | None = None,
         batch_size: int = PURGE_BATCH_SIZE,
         deadline: float | None = None,
         extra_log: dict[str, Any] | None = None,
     ) -> LedgerPurgeOutcome:
-        sizes = (
-            self.order_by()
-            .values("event_id")
-            .annotate(n=Count("pk"))
-            .order_by("event_id")
-            .values_list("event_id", "n")
-        )
         batches: list[list[int]] = []
         rows = 0
-        for event_id, n in sizes:
+        for event_id, n in self._event_sizes(event_ids):
             if not batches or (rows + n > batch_size and batches[-1]):
                 batches.append([])
                 rows = 0
