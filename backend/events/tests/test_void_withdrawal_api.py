@@ -25,8 +25,7 @@ from org.settings_constants import StaffOverridePolicy
 from org.settings_service import get_org_settings
 
 
-@patch("events.services.notify_signup_changed")
-class VoidWithdrawalApiTests(EventTestCase):
+class _VoidApiFixtures(EventTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.client = APIClient()
@@ -84,6 +83,18 @@ class VoidWithdrawalApiTests(EventTestCase):
         signup = self._join(event, self.user)
         return signup, self._withdraw(signup)
 
+    def _full_after_withdrawal(
+        self, **event_fields: object
+    ) -> tuple[EventSignup, SignupLedgerEntry]:
+        event = self.make_event(max_players=2, **event_fields)
+        self._join(event)
+        signup = self._join(event, self.user)
+        self._join(event)
+        return signup, self._withdraw(signup)
+
+
+@patch("events.services.notify_signup_changed")
+class VoidWithdrawalApiTests(_VoidApiFixtures):
     def test_member_gets_403(self, _notify: Any) -> None:
         signup, _withdrew = self._withdrawn()
 
@@ -150,15 +161,6 @@ class VoidWithdrawalApiTests(EventTestCase):
         self.assertEqual(response.data, {"error": "reason_required"})
         self.assertEqual(self._void_entries(signup), [])
 
-    def _full_after_withdrawal(
-        self, **event_fields: object
-    ) -> tuple[EventSignup, SignupLedgerEntry]:
-        event = self.make_event(max_players=2, **event_fields)
-        self._join(event)
-        signup = self._join(event, self.user)
-        self._join(event)
-        return signup, self._withdraw(signup)
-
     def test_override_reason_required_400(self, _notify: Any) -> None:
         signup, _withdrew = self._full_after_withdrawal(
             staff_reason_policy=StaffReasonPolicy.OPTIONAL
@@ -222,3 +224,59 @@ class VoidWithdrawalApiTests(EventTestCase):
         self.assertEqual(response.data["status"], snap.status)
         [entry] = self._void_entries(signup)
         self.assertEqual(entry.reason, "mistaken")
+
+
+@patch("events.services.notify_signup_changed")
+class ReinstateDelegationApiTests(_VoidApiFixtures):
+    def _actions(self, signup: EventSignup) -> list[str]:
+        return list(
+            SignupLedgerEntry.objects.filter(signup=signup)
+            .order_by("pk")
+            .values_list("action", flat=True)
+        )
+
+    def test_staff_reinstate_with_history_voids(self, _notify: Any) -> None:
+        signup, withdrew = self._withdrawn()
+
+        response = self._post(
+            signup, {}, as_user=self.admin, endpoint="event-signup-reinstate"
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        snap = SignupSnapshot.model_validate(withdrew.before)
+        self.assertEqual(response.data["status"], snap.status)
+        [entry] = self._void_entries(signup)
+        self.assertEqual(entry.caused_by_id, withdrew.pk)
+        self.assertEqual(self._row(signup).line_seq, snap.line_seq)
+
+    def test_staff_reinstate_full_event_never_409s(self, _notify: Any) -> None:
+        for policy in StaffOverridePolicy:
+            with self.subTest(policy=policy):
+                self._set_policy(policy)
+                signup, _withdrew = self._full_after_withdrawal()
+
+                response = self._post(
+                    signup,
+                    {"acknowledged_codes": ["over_capacity"], "reason": "x"},
+                    as_user=self.admin,
+                    endpoint="event-signup-reinstate",
+                )
+
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(response.data["status"], SignupStatus.WAITLISTED)
+                self.assertEqual(self._void_entries(signup), [])
+                self.assertEqual(self._actions(signup)[-1], SignupAction.REINSTATED)
+
+    def test_member_reinstate_never_delegates(self, _notify: Any) -> None:
+        signup, _withdrew = self._withdrawn()
+
+        response = self._post(
+            signup,
+            {"acknowledged_codes": ["over_capacity"]},
+            as_user=self.user,
+            endpoint="event-signup-reinstate",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self._void_entries(signup), [])
+        self.assertEqual(self._actions(signup)[-1], SignupAction.REINSTATED)

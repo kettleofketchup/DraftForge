@@ -1227,6 +1227,8 @@ def reinstate_signup(
                       can re-confirm without leaving the rollcall screen.
     DROPPED is reinstated like CANCELLED, by staff only; a DROPPED entry in
     the live ready check becomes EXCUSED.
+    Staff reinstate with withdrawal history delegates to ``void_withdrawal``
+    unless that would seat the member over capacity.
     """
     _reread_signup(signup)
     event = signup.event
@@ -1241,6 +1243,8 @@ def reinstate_signup(
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
+        if _delegates_to_void(signup, for_staff_placement=for_staff_placement):
+            return void_withdrawal(signup, actor=actor, reason=reason)
         reason = _require_reason(
             signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
         )
@@ -1284,6 +1288,8 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
+    if _delegates_to_void(signup, for_staff_placement=for_staff_placement):
+        return void_withdrawal(signup, actor=actor, reason=reason)
     reason = _require_reason(
         signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
     )
@@ -1430,6 +1436,16 @@ def _restored_eligibility(signup: EventSignup, event: Event) -> list[str]:
     return stamp_eligibility(
         signup, evaluate_signup(event, signup.user, for_staff_placement=True)
     )
+
+
+def _delegates_to_void(signup: EventSignup, *, for_staff_placement: bool) -> bool:
+    if not for_staff_placement:
+        return False
+    locked = lock_event(signup.event)
+    voided = latest_restorable_withdrawal(signup)
+    if voided is None:
+        return False
+    return not _void_violations(locked, SignupSnapshot.model_validate(voided.before))
 
 
 def _voided_extra(voided: SignupLedgerEntry) -> dict[str, Any]:

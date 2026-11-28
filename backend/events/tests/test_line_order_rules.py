@@ -7,6 +7,7 @@ from django.db.models.signals import post_delete
 from django.utils import timezone as tz
 from structlog.testing import capture_logs
 
+from events.capacity import count_seats
 from events.constants import (
     Commitment,
     EventState,
@@ -16,6 +17,7 @@ from events.constants import (
 )
 from events.models import Event, EventSignup, EventTeam, SignupLedgerEntry
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
+from events.schemas import SignupSnapshot
 from events.services import (
     _promote_from_waitlist,
     cancel_signup,
@@ -30,6 +32,9 @@ from events.services import (
 )
 from events.tests.base import EventTestCase
 from events.tests.test_signup_ledger_contract import LedgerContractMixin
+from org.models import OrgSettings
+from org.settings_constants import StaffOverridePolicy
+from org.settings_service import get_org_settings
 from org.standing.cache import StandingCache
 
 
@@ -722,6 +727,16 @@ class ReinstateLineTests(LedgerContractMixin, EventTestCase):
             log["reason"] for log in logs if log["event"] == "signup_line_restamped"
         ]
 
+    def _set_policy(self, policy: str) -> None:
+        row = get_org_settings(self.org)
+        OrgSettings.objects.filter(pk=row.pk).update(
+            staff_override_policy=policy,
+            staff_override_warning_codes=["over_capacity"],
+        )
+
+    def _removal(self, signup: EventSignup) -> SignupLedgerEntry:
+        return SignupLedgerEntry.objects.filter(signup=signup).latest("pk")
+
     def test_member_reinstate_obeys_forfeits(self, _notify: Any) -> None:
         for forfeits in (True, False):
             with self.subTest(line_withdraw_forfeits=forfeits):
@@ -787,6 +802,7 @@ class ReinstateLineTests(LedgerContractMixin, EventTestCase):
         self.assertEqual(self._restamp_reasons(logs), ["staff_reinstate"])
         entry = self._last_entry(event)
         self.assertEqual(entry.action, SignupAction.REINSTATED)
+        self.assertEqual(entry.rules_overridden, [])
         self.assertIsNone(entry.before["waitlist_position"])
         self.assertEqual(entry.after["waitlist_position"], 2)
 
@@ -810,6 +826,53 @@ class ReinstateLineTests(LedgerContractMixin, EventTestCase):
         self.assertEqual(row.line_seq, a.line_seq)
         self.assertEqual(row.signed_up_at, past)
         self.assertEqual(self._restamp_reasons(logs), [])
+        self.assertEqual(self._last_entry(event).action, SignupAction.VOIDED_WITHDRAWAL)
+
+    def test_staff_reinstate_with_history_full_event_never_over_seats(
+        self, _notify: Any
+    ) -> None:
+        for policy in StaffOverridePolicy:
+            with self.subTest(policy=policy):
+                self._set_policy(policy)
+                event = self.make_event(max_players=1, line_withdraw_forfeits=False)
+                a = process_rsvp(event, self.subject, actor=self.member_actor)
+                cancel_signup(a, actor=self.member_actor)
+                b = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+
+                reinstate_signup(self._row(a), actor=self.staff_actor, reason="x")
+
+                row = self._row(a)
+                self.assertEqual(row.status, SignupStatus.WAITLISTED)
+                self.assertGreater(row.line_seq, b.line_seq)
+                self.assertEqual(count_seats(event), 1)
+                entry = self._last_entry(event)
+                self.assertEqual(entry.action, SignupAction.REINSTATED)
+                self.assertEqual(entry.rules_overridden, [])
+
+    def test_staff_reinstate_with_history_waitlisted_restores_exactly(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event(max_players=1, line_withdraw_forfeits=False)
+        b = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        a = process_rsvp(event, self.subject, actor=self.member_actor)
+        later = process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        self.assertEqual(a.status, SignupStatus.WAITLISTED)
+        cancel_signup(self._row(a), actor=self.member_actor)
+        withdrew = self._removal(a)
+
+        reinstate_signup(self._row(a), actor=self.staff_actor)
+
+        row = self._row(a)
+        self.assertEqual(row.status, SignupStatus.WAITLISTED)
+        self.assertEqual(row.line_seq, a.line_seq)
+        entry = self._last_entry(event)
+        self.assertEqual(entry.action, SignupAction.VOIDED_WITHDRAWAL)
+        self.assertEqual(entry.caused_by_id, withdrew.pk)
+
+        cancel_signup(self._row(b), actor=self.staff_actor)
+
+        self.assertEqual(self._row(a).status, SignupStatus.APPROVED)
+        self.assertEqual(self._row(later).status, SignupStatus.WAITLISTED)
 
     def test_roll_call_reinstate_keeps_line_seq(self, _notify: Any) -> None:
         for remove in (cancel_signup, reject_signup):
@@ -819,6 +882,7 @@ class ReinstateLineTests(LedgerContractMixin, EventTestCase):
                 process_rsvp(event, self.make_user(), actor=self.staff_actor)
                 past = self._age(a)
                 remove(a, actor=self.staff_actor)
+                removal = SignupSnapshot.model_validate(self._removal(a).before)
                 Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
 
                 with (
@@ -828,13 +892,46 @@ class ReinstateLineTests(LedgerContractMixin, EventTestCase):
                     reinstate_signup(self._row(a), actor=self.staff_actor)
 
                 row = self._row(a)
-                self.assertEqual(row.status, SignupStatus.APPROVED)
+                self.assertEqual(row.status, removal.status)
                 self.assertEqual(row.line_seq, a.line_seq)
                 self.assertEqual(row.signed_up_at, past)
                 self.assertEqual(self._restamp_reasons(logs), [])
-                self.assertEqual(
-                    self._last_entry(event).action, SignupAction.REINSTATED
-                )
+                entry = self._last_entry(event)
+                self.assertEqual(entry.action, SignupAction.VOIDED_WITHDRAWAL)
+                self.assertEqual(entry.after["status"], removal.status)
+
+    def test_roll_call_reinstate_with_history_restores_tentative(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event()
+        a = create_tentative_signup(event, self.subject, actor=self.member_actor)
+        process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        cancel_signup(self._row(a), actor=self.member_actor)
+        Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+
+        reinstate_signup(self._row(a), actor=self.staff_actor)
+
+        row = self._row(a)
+        self.assertEqual(row.status, SignupStatus.TENTATIVE)
+        self.assertEqual(row.commitment, Commitment.MAYBE)
+        self.assertEqual(row.line_seq, a.line_seq)
+        self.assertEqual(self._last_entry(event).action, SignupAction.VOIDED_WITHDRAWAL)
+
+    def test_roll_call_reinstate_with_history_full_event_does_not_delegate(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event(max_players=1)
+        a = process_rsvp(event, self.subject, actor=self.member_actor)
+        cancel_signup(a, actor=self.member_actor)
+        process_rsvp(event, self.make_user(), actor=self.staff_actor)
+        Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+
+        reinstate_signup(self._row(a), actor=self.staff_actor)
+
+        self.assertEqual(self._row(a).status, SignupStatus.APPROVED)
+        entry = self._last_entry(event)
+        self.assertEqual(entry.action, SignupAction.REINSTATED)
+        self.assertEqual(entry.rules_overridden, [])
 
     def test_bare_decline_reinstate_always_back(self, _notify: Any) -> None:
         callers = (

@@ -255,7 +255,7 @@ class StaffSignupActionsReasonTest(StaffReasonPolicyTestBase):
         self.assertEqual(reinstated.status_code, 200, reinstated.content)
         entry = self.last_entry(signup)
         assert entry is not None
-        self.assertEqual(entry.action, SignupAction.REINSTATED)
+        self.assertEqual(entry.action, SignupAction.VOIDED_WITHDRAWAL)
         self.assertEqual(entry.actor_role, ActorRole.MEMBER)
         assert entry.after is not None
         self.assertIs(entry.after["extra"]["staff_power"], True)

@@ -12,6 +12,9 @@ Covers two distinct behaviors gated on event state:
 
   3. anything else — raise ValueError; reinstate is not allowed outside
                      the two states above.
+
+Staff reinstate of a row with withdrawal history delegates to
+`void_withdrawal` after these gates (see test_void_withdrawal).
 """
 
 from datetime import timedelta
@@ -21,9 +24,21 @@ from django.test import TestCase
 from django.utils import timezone as tz
 
 from app.models import CustomUser
-from events.constants import EventState, SignupStatus
-from events.models import Event, EventSignup
-from events.services import reinstate_signup
+from events.constants import (
+    ActorRole,
+    EventState,
+    SignupAction,
+    SignupMeans,
+    SignupStatus,
+)
+from events.ledger import SignupActor
+from events.models import Event, EventSignup, SignupLedgerEntry
+from events.services import (
+    cancel_signup,
+    process_rsvp,
+    reinstate_signup,
+    reject_signup,
+)
 from events.tests.actors import SYSTEM
 from org.models import Organization
 from user.models import PositionsModel
@@ -167,3 +182,59 @@ class ReinstateSignupTest(TestCase):
 
         with self.assertRaisesRegex(ValueError, "not accepting signups"):
             reinstate_signup(signup, actor=SYSTEM)
+
+    # ---- delegation to void_withdrawal ------------------------------------
+
+    def _actions(self, signup: EventSignup) -> list[str]:
+        return list(
+            SignupLedgerEntry.objects.filter(signup=signup)
+            .order_by("pk")
+            .values_list("action", flat=True)
+        )
+
+    @patch("events.services.notify_signup_changed")
+    def test_signups_open_rejected_with_history_reinstate_still_refused(
+        self, _notify: object
+    ) -> None:
+        event = self._make_event(state=EventState.SIGNUPS_OPEN, max_players=10)
+        signup = process_rsvp(event, self.user, actor=SYSTEM)
+        reject_signup(signup, actor=SYSTEM)
+        signup.refresh_from_db()
+
+        with self.assertRaisesRegex(
+            ValueError, "Only cancelled signups can be reinstated"
+        ):
+            reinstate_signup(signup, actor=SYSTEM)
+
+        self.assertNotIn(SignupAction.VOIDED_WITHDRAWAL, self._actions(signup))
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, SignupStatus.REJECTED)
+
+    @patch("events.services.notify_signup_changed")
+    def test_cancelled_with_history_delegates(self, _notify: object) -> None:
+        event = self._make_event(state=EventState.SIGNUPS_OPEN, max_players=10)
+        signup = process_rsvp(event, self.user, actor=SYSTEM)
+        status, seq = signup.status, signup.line_seq
+        cancel_signup(signup, actor=SYSTEM)
+        signup.refresh_from_db()
+
+        result = reinstate_signup(signup, actor=SYSTEM)
+
+        self.assertEqual(result.status, status)
+        self.assertEqual(result.line_seq, seq)
+        self.assertEqual(self._actions(signup)[-1], SignupAction.VOIDED_WITHDRAWAL)
+
+    @patch("events.services.notify_signup_changed")
+    def test_member_reinstate_never_delegates(self, _notify: object) -> None:
+        event = self._make_event(state=EventState.SIGNUPS_OPEN, max_players=10)
+        member = SignupActor(
+            user=self.user, role=ActorRole.MEMBER, means=SignupMeans.WEB
+        )
+        signup = process_rsvp(event, self.user, actor=member)
+        cancel_signup(signup, actor=member)
+        signup.refresh_from_db()
+
+        reinstate_signup(signup, actor=member, for_staff_placement=False)
+
+        self.assertEqual(self._actions(signup)[-1], SignupAction.REINSTATED)
+        self.assertNotIn(SignupAction.VOIDED_WITHDRAWAL, self._actions(signup))
