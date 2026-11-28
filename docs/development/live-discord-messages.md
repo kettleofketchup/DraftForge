@@ -35,7 +35,7 @@ The read-only tracking admin exposes queue metadata. Rendered text and button UR
 3. In the transaction that changes a dependency, call `invalidate_live_messages(renderer, subject_id)` for each affected subject. Use the write path for operations that bypass Django signals, including `QuerySet.update()` and `bulk_update()`. If a child row moves between parents, account for both the old and the new subject.
 4. Add tests that go through the real sender and relevant model writes with a mocked Discord transport. Include a second unrelated subject, a rollback, a change during an in-flight edit, and a repeated render that sends no PATCH. Keep credentials and recipient IDs synthetic.
 
-Register a dependency at app startup. For example, this is the subscription for a signup row. Each save that names a watched field and each deletion can affect its parent event. A full save also triggers a render comparison.
+Register a dependency at app startup. This signup subscription reads the saved parent ID from the database because callers can assign a new event in memory and save only the status. A delete uses the parent ID on the deleted row. The signup pre-save receiver also invalidates the former event when a signup moves.
 
 ```python
 from discordbot.live_signals import watch_live_fields
@@ -46,6 +46,9 @@ watch_live_fields(
     renderer="event_signup_reminder",
     fields={"event", "event_id", "status"},
     subject_ids=lambda signup: (signup.event_id,),
+    saved_subject_ids=lambda signup: EventSignup.objects.filter(pk=signup.pk).values_list(
+        "event_id", flat=True
+    ),
 )
 ```
 
