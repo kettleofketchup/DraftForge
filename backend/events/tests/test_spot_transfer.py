@@ -14,11 +14,17 @@ from events.constants import (
     SignupAction,
     SignupMeans,
     SignupStatus,
+    StaffReasonPolicy,
 )
 from events.eligibility import EligibilityResult, Reason, ReasonCode, Rule, Severity
 from events.exceptions import SpotTransferRefused
 from events.ledger import SignupActor, latest_restorable_withdrawal
 from events.models import Event, EventSignup, SignupLedgerEntry
+from events.overrides import (
+    OverrideReasonRequired,
+    OverrideRequired,
+    StaffReasonRequired,
+)
 from events.services import (
     TRANSFER_EVENT_STATES,
     SpotTransferResult,
@@ -30,6 +36,7 @@ from events.services import (
     transfer_spot,
 )
 from events.tests.base import EventTestCase
+from org.models import OrgUser
 from tournament.models import Tournament
 
 LineState = tuple[str, int | None, datetime | None, int | None]
@@ -700,3 +707,269 @@ class MemberSwapTests(_TransferFixtures):
         users = set(tournament.users.values_list("pk", flat=True))
         self.assertIn(recipient.user_id, users)
         self.assertNotIn(giver.user_id, users)
+
+
+STEAM_MISSING = EligibilityResult(
+    reasons=(
+        Reason(
+            code=ReasonCode.STEAM_ID_MISSING,
+            severity=Severity.BLOCK,
+            rule=Rule.REQUIRE_STEAM_ID,
+            message="This event requires a Steam friend ID on your profile.",
+        ),
+    )
+)
+
+
+class StaffTransferTests(_TransferFixtures):
+    def staff_give(
+        self, giver: EventSignup, recipient: CustomUser, **kwargs: Any
+    ) -> SpotTransferResult:
+        return transfer_spot(
+            self.row(giver), recipient, actor=self.staff_actor, **kwargs
+        )
+
+    def assert_staff_raises(
+        self,
+        exc_type: type[Exception],
+        giver: EventSignup,
+        recipient: CustomUser,
+        **kwargs: Any,
+    ) -> Exception:
+        event = giver.event
+        state = self.line_state(event)
+        entries = self.ledger_count(event)
+        with self.assertRaises(exc_type) as ctx:
+            self.staff_give(giver, recipient, **kwargs)
+        self.assertEqual(self.line_state(event), state)
+        self.assertEqual(self.ledger_count(event), entries)
+        return ctx.exception
+
+    def new_entries(self, event: Event, start: int) -> list[SignupLedgerEntry]:
+        return list(
+            SignupLedgerEntry.objects.filter(event=event).order_by("pk")[start:]
+        )
+
+    def requiring_event(self, **overrides: Any) -> tuple[Event, EventSignup]:
+        event = self.transfer_event(**overrides)
+        giver = self.join(event)
+        Event.objects.filter(pk=event.pk).update(
+            require_steam_id=True, require_mmr_verified=True
+        )
+        return event, self.row(giver)
+
+    def giver_only_ineligible(self, giver: EventSignup) -> Any:
+        def evaluate(_event: Event, user: CustomUser, **_kw: Any) -> EligibilityResult:
+            return STEAM_MISSING if user.pk == giver.user_id else EligibilityResult()
+
+        return patch("events.services.evaluate_signup", side_effect=evaluate)
+
+    def test_staff_ineligible_requires_override(self) -> None:
+        _event, giver = self.requiring_event()
+
+        exc = self.assert_staff_raises(OverrideRequired, giver, self.make_user())
+
+        assert isinstance(exc, OverrideRequired)
+        codes = {v.code for v in exc.violations}
+        self.assertIn(ReasonCode.STEAM_ID_MISSING, codes)
+        self.assertIn(ReasonCode.MMR_UNVERIFIED, codes)
+        self.assertEqual({v.category for v in exc.violations}, {"eligibility"})
+
+    def test_staff_override_succeeds(self) -> None:
+        event, giver = self.requiring_event()
+        recipient = self.make_user()
+        codes = [ReasonCode.STEAM_ID_MISSING, ReasonCode.MMR_UNVERIFIED]
+        start = self.ledger_count(event)
+
+        result = self.staff_give(
+            giver, recipient, acknowledged=codes, reason=" vouched for "
+        )
+
+        self.assertEqual(result.mode, "transfer")
+        self.assertEqual(self.row(result.recipient).status, giver.status)
+        out, into = self.new_entries(event, start)
+        self.assertEqual(into.subject_user_id, recipient.pk)
+        self.assertEqual(set(into.rules_overridden), set(codes))
+        self.assertEqual(out.rules_overridden, [])
+        self.assertEqual({out.reason, into.reason}, {"vouched for"})
+
+    def test_staff_override_without_reason_refused(self) -> None:
+        _event, giver = self.requiring_event()
+        self.assert_staff_raises(
+            OverrideReasonRequired,
+            giver,
+            self.make_user(),
+            acknowledged=[ReasonCode.STEAM_ID_MISSING, ReasonCode.MMR_UNVERIFIED],
+        )
+
+    def test_staff_partial_acknowledgement_reprompts(self) -> None:
+        _event, giver = self.requiring_event()
+        codes = [ReasonCode.STEAM_ID_MISSING, ReasonCode.MMR_UNVERIFIED]
+        exc = self.assert_staff_raises(
+            OverrideRequired, giver, self.make_user(), acknowledged=codes[:1]
+        )
+        assert isinstance(exc, OverrideRequired)
+        self.assertEqual([v.code for v in exc.violations], [ReasonCode.MMR_UNVERIFIED])
+
+    def test_staff_non_member_override_creates_org_user(self) -> None:
+        event = self.transfer_event()
+        giver = self.join(event)
+        outsider = CustomUser.objects.create_user(
+            username="staff_transfer_outsider", password="x"
+        )
+
+        exc = self.assert_staff_raises(OverrideRequired, giver, outsider)
+        assert isinstance(exc, OverrideRequired)
+        [violation] = exc.violations
+        self.assertEqual(violation.code, "not_org_member")
+        self.assertEqual(violation.rule, "membership")
+        self.assertEqual(violation.category, "eligibility")
+        self.assertFalse(
+            OrgUser.objects.filter(user=outsider, organization=self.org).exists()
+        )
+
+        self.staff_give(
+            giver, outsider, acknowledged=["not_org_member"], reason="new member"
+        )
+
+        self.assertTrue(
+            OrgUser.objects.filter(user=outsider, organization=self.org).exists()
+        )
+
+    def test_staff_override_logged(self) -> None:
+        _event, giver = self.requiring_event()
+        with capture_logs() as logs:
+            with self.assertRaises(OverrideRequired):
+                self.staff_give(giver, self.make_user())
+        prompts = [e for e in logs if e["event"] == "spot_transfer_override_required"]
+        self.assertEqual(len(prompts), 1)
+        self.assertEqual(prompts[0]["subsystem"], "line")
+        self.assertIn(ReasonCode.STEAM_ID_MISSING, prompts[0]["codes"])
+        self.assertNotIn("params", prompts[0])
+
+    def test_placements_policy_requires_reason(self) -> None:
+        event = self.transfer_event(staff_reason_policy=StaffReasonPolicy.PLACEMENTS)
+        giver = self.join(event)
+        recipient = self.make_user()
+
+        self.assert_staff_raises(StaffReasonRequired, giver, recipient)
+        result = self.staff_give(giver, recipient, reason="swap requested")
+
+        self.assertEqual(self.row(result.recipient).user_id, recipient.pk)
+
+    def test_reason_before_override(self) -> None:
+        _event, giver = self.requiring_event(
+            staff_reason_policy=StaffReasonPolicy.PLACEMENTS
+        )
+        self.assert_staff_raises(StaffReasonRequired, giver, self.make_user())
+
+    def test_staff_as_recipient_still_needs_reason(self) -> None:
+        OrgUser.objects.get_or_create(user=self.admin, organization=self.org)
+        with self.subTest("staff receives"):
+            event = self.transfer_event(
+                staff_reason_policy=StaffReasonPolicy.PLACEMENTS
+            )
+            giver = self.join(event)
+            self.assert_staff_raises(StaffReasonRequired, giver, self.admin)
+        with self.subTest("staff gives"):
+            event = self.transfer_event(
+                staff_reason_policy=StaffReasonPolicy.PLACEMENTS
+            )
+            giver = self.join(event, self.admin)
+            self.assert_staff_raises(StaffReasonRequired, giver, self.make_user())
+
+    def test_staff_may_place_rejected_and_dropped(self) -> None:
+        event = self.transfer_event()
+        for status in (SignupStatus.REJECTED, SignupStatus.DROPPED):
+            with self.subTest(status=status):
+                giver = self.row(self.join(event))
+                recipient = self.make_user()
+                held = self.set_status(self.join(event, recipient), status)
+
+                result = self.staff_give(giver, recipient)
+
+                self.assertEqual(result.mode, "transfer")
+                self.assertEqual(result.recipient.pk, held.pk)
+                placed = self.row(held)
+                self.assertEqual(placed.status, giver.status)
+                self.assertEqual(placed.line_seq, giver.line_seq)
+                self.assertEqual(self.row(giver).status, SignupStatus.CANCELLED)
+
+    def assert_staff_swapped(self, giver: EventSignup, recipient: EventSignup) -> None:
+        self.staff_give(giver, recipient.user)
+        after_giver, after_recipient = self.row(giver), self.row(recipient)
+        self.assertEqual(
+            (after_giver.status, after_giver.line_seq),
+            (recipient.status, recipient.line_seq),
+        )
+        self.assertEqual(
+            (after_recipient.status, after_recipient.line_seq),
+            (giver.status, giver.line_seq),
+        )
+
+    def test_staff_may_demote_by_swap(self) -> None:
+        with self.subTest("waitlisted giver vs approved recipient"):
+            event = self.transfer_event(max_players=1, auto_confirm=False)
+            seated = self.row(self.join(event))
+            waiting = self.row(self.join(event))
+            self.assertEqual(waiting.status, SignupStatus.WAITLISTED)
+            self.assert_staff_swapped(waiting, seated)
+        with self.subTest("approved giver later in line"):
+            event = self.transfer_event(auto_confirm=False)
+            earlier = self.row(self.join(event))
+            later = self.row(self.join(event))
+            self.assert_staff_swapped(later, earlier)
+        with self.subTest("rsvp giver vs approved recipient"):
+            event = self.transfer_event(auto_confirm=False)
+            approved = self.join(event)
+            rsvp = self.set_status(self.join(event), SignupStatus.RSVP)
+            approved = self.set_status(approved, SignupStatus.APPROVED)
+            self.assert_staff_swapped(rsvp, approved)
+
+    def test_staff_swap_checks_giver_eligibility(self) -> None:
+        event = self.transfer_event(auto_approve=False)
+        giver = self.set_status(self.join(event), SignupStatus.PENDING_APPROVAL)
+        recipient = self.set_status(self.join(event), SignupStatus.APPROVED)
+
+        with self.giver_only_ineligible(giver):
+            exc = self.assert_staff_raises(OverrideRequired, giver, recipient.user)
+            assert isinstance(exc, OverrideRequired)
+            [violation] = exc.violations
+            self.assertEqual(violation.code, ReasonCode.STEAM_ID_MISSING)
+            self.assertTrue(violation.message.startswith("Giver: "))
+
+            start = self.ledger_count(event)
+            self.staff_give(
+                giver,
+                recipient.user,
+                acknowledged=[ReasonCode.STEAM_ID_MISSING],
+                reason="cover",
+            )
+
+        out, into = self.new_entries(event, start)
+        self.assertEqual(out.subject_user_id, giver.user_id)
+        self.assertEqual(out.rules_overridden, [ReasonCode.STEAM_ID_MISSING])
+        self.assertEqual(into.rules_overridden, [])
+        self.assertEqual(self.row(giver).status, SignupStatus.APPROVED)
+        self.assertEqual(self.row(recipient).status, SignupStatus.PENDING_APPROVAL)
+
+    def test_staff_swap_skips_giver_when_not_raised(self) -> None:
+        event = self.transfer_event(max_players=1, auto_confirm=False)
+        giver = self.row(self.join(event))
+        recipient = self.row(self.join(event))
+        self.assertEqual(recipient.status, SignupStatus.WAITLISTED)
+
+        with self.giver_only_ineligible(giver):
+            result = self.staff_give(giver, recipient.user)
+
+        self.assertEqual(result.mode, "swap")
+        self.assertEqual(self.row(giver).status, SignupStatus.WAITLISTED)
+
+    def test_staff_transfer_not_capped(self) -> None:
+        event = self.transfer_event(auto_approve=False)
+        giver = self.set_status(self.join(event), SignupStatus.APPROVED)
+
+        result = self.staff_give(giver, self.make_user())
+
+        self.assertEqual(self.row(result.recipient).status, SignupStatus.APPROVED)
+        self.assertEqual(result.recipient.line_seq, giver.line_seq)

@@ -1753,15 +1753,19 @@ def _transfer_guard(
     return None
 
 
+def _is_org_member(event: Event, user: CustomUser) -> bool:
+    return (
+        event.organization_id is None
+        or OrgUser.objects.nocache()
+        .filter(user=user, organization_id=event.organization_id)
+        .exists()
+    )
+
+
 def _member_recipient_eligibility(
     event: Event, giver: EventSignup, recipient_user: CustomUser, actor: SignupActor
 ) -> EligibilityResult:
-    if (
-        event.organization_id is not None
-        and not OrgUser.objects.nocache()
-        .filter(user=recipient_user, organization_id=event.organization_id)
-        .exists()
-    ):
+    if not _is_org_member(event, recipient_user):
         raise _refuse_transfer(
             "not_org_member", event=event, actor=actor, recipient_user=recipient_user
         )
@@ -1777,6 +1781,127 @@ def _member_recipient_eligibility(
             reasons=_member_safe_reasons(result),
         )
     return result
+
+
+def _require_transfer_reason(
+    event: Event,
+    giver: EventSignup,
+    target: EventSignup,
+    *,
+    actor: SignupActor,
+    actions: tuple[SignupAction, SignupAction],
+    reason: str,
+) -> str:
+    sides = (
+        (giver.user_id, actions[0], giver.status),
+        (target.user_id, actions[1], target.status if target.pk is not None else None),
+    )
+    for subject_id, action, from_status in sides:
+        reason = require_staff_reason(
+            event_id=event.pk,
+            policy=event.staff_reason_policy,
+            actor=actor,
+            subject_id=subject_id,
+            action=action,
+            from_status=from_status,
+            reason=reason,
+        )
+    return reason
+
+
+def _gains_seat_status(status: str, held: str) -> bool:
+    return status in _SEAT_STATUS_ORDER and (
+        held not in _SEAT_STATUS_ORDER or _seat_status_above(status, held)
+    )
+
+
+def _eligibility_violations(
+    result: EligibilityResult, *, prefix: str = ""
+) -> list[Violation]:
+    return [
+        Violation(
+            code=str(r.code),
+            rule=r.rule,
+            message=f"{prefix}{r.message}",
+            category="eligibility",
+            params=dict(r.params),
+        )
+        for r in result.reasons
+    ]
+
+
+def _violation_codes(violations: Sequence[Violation]) -> list[str]:
+    return list(dict.fromkeys(v.code for v in violations))
+
+
+def _staff_transfer_overrides(
+    event: Event,
+    giver: EventSignup,
+    recipient_user: CustomUser,
+    *,
+    giver_status: str | None,
+    actor: SignupActor,
+    acknowledged: Collection[str],
+    reason: str,
+) -> tuple[list[str], list[str]]:
+    is_member = _is_org_member(event, recipient_user)
+    recipient_violations = (
+        []
+        if is_member
+        else [
+            Violation(
+                code="not_org_member",
+                rule="membership",
+                category="eligibility",
+                message="Not a member of this organization",
+            )
+        ]
+    )
+    recipient_violations += _eligibility_violations(
+        evaluate_signup(
+            event,
+            recipient_user,
+            intent=giver.commitment,
+            actor=actor.user,
+            for_staff_placement=True,
+        )
+    )
+    giver_violations = (
+        _eligibility_violations(
+            evaluate_signup(
+                event,
+                giver.user,
+                intent=giver.commitment,
+                actor=actor.user,
+                for_staff_placement=True,
+            ),
+            prefix="Giver: ",
+        )
+        if giver_status is not None and _gains_seat_status(giver_status, giver.status)
+        else []
+    )
+    try:
+        check_overrides(
+            recipient_violations + giver_violations,
+            org_settings=org_override_settings(event.organization_id),
+            acknowledged=acknowledged,
+            reason=reason,
+        )
+    except OverrideRequired as exc:
+        log.info(
+            "spot_transfer_override_required",
+            system="events",
+            subsystem="line",
+            event_id=event.pk,
+            giver_signup_id=giver.pk,
+            recipient_user_id=recipient_user.pk,
+            codes=[v.code for v in exc.violations],
+            blocked=exc.blocked,
+        )
+        raise
+    if not is_member:
+        resolve_or_create_org_user(recipient_user, event.organization)
+    return _violation_codes(giver_violations), _violation_codes(recipient_violations)
 
 
 def _hand_over_place(
@@ -1865,15 +1990,6 @@ def transfer_spot(
         raise _refuse_transfer(
             code, event=locked, actor=actor, recipient_user=recipient_user
         )
-    if is_staff:
-        raise NotImplementedError("staff spot transfer")
-
-    result = _member_recipient_eligibility(locked, giver, recipient_user, actor)
-    status = _member_status_cap(giver.status, _decide_signup_status(locked, result))
-    if swap and _seat_status_above(target.status, status):
-        status = target.status
-    correlation_id = f"xfer:{uuid4().hex}"
-    reason = reason.strip()
 
     mode: Literal["transfer", "swap"] = "swap" if swap else "transfer"
     giver_action, target_action = (
@@ -1881,6 +1997,33 @@ def transfer_spot(
         if swap
         else (SignupAction.TRANSFERRED_OUT, SignupAction.TRANSFERRED_IN)
     )
+    reason = _require_transfer_reason(
+        locked,
+        giver,
+        target,
+        actor=actor,
+        actions=(giver_action, target_action),
+        reason=reason,
+    )
+    giver_overridden: list[str] = []
+    target_overridden: list[str] = []
+    if is_staff:
+        giver_overridden, target_overridden = _staff_transfer_overrides(
+            locked,
+            giver,
+            recipient_user,
+            giver_status=target.status if swap else None,
+            actor=actor,
+            acknowledged=acknowledged,
+            reason=reason,
+        )
+        status = giver.status
+    else:
+        result = _member_recipient_eligibility(locked, giver, recipient_user, actor)
+        status = _member_status_cap(giver.status, _decide_signup_status(locked, result))
+        if swap and _seat_status_above(target.status, status):
+            status = target.status
+    correlation_id = f"xfer:{uuid4().hex}"
 
     giver_before = _ranked_snapshot(giver)
     target_before = _ranked_snapshot(target) if target.pk is not None else None
@@ -1908,6 +2051,7 @@ def transfer_spot(
         before=giver_before,
         after=_counterparty_snapshot(giver, recipient_user.pk),
         reason=reason,
+        rules_overridden=giver_overridden,
         correlation_id=correlation_id,
     )
     record_signup_change(
@@ -1919,6 +2063,7 @@ def transfer_spot(
         before=target_before,
         after=_counterparty_snapshot(target, giver.user_id),
         reason=reason,
+        rules_overridden=target_overridden,
         correlation_id=correlation_id,
     )
 
