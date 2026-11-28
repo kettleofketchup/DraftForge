@@ -18,7 +18,7 @@ recipient clicked.
 | `attempts` | Claims granted for this key (reclaims add one) |
 | `recipient`, `discord_user_id` | The user and their Discord id at send time |
 | `organization` | The org the DM belongs to, when there is one |
-| `subject_type`, `subject_id` | The domain object: `event`, `tournament` or `game_lobby` |
+| `subject_type`, `subject_id` | The domain object: `event`, `tournament`, `game_lobby` or `captain_snapshot` |
 | `tournament_log` | The `DiscordTournamentLog` for tournament and lobby DMs |
 | `context` | A small per-kind allow-list (below); never content |
 | `has_components` | The DM had buttons or selects |
@@ -43,6 +43,7 @@ row. `DiscordDM.delete()` and `DiscordDM.objects.delete()` raise
 | `tournament_herodraft_link` | `events/tournament_tasks.py` | `tournament_herodraft_link:run:{task_id}:discord:{discord_id}` | `draft_id`, `game_id`, `activity` |
 | `lobby_info` | `lobby/tasks.py send_lobby_info` | `lobby_info:lobby:{lobby_id}:run:{task_id}:discord:{discord_id}` | `side` |
 | `signup_confirmation` | the gateway bot, after a signup button or modal | `signup_confirmation:interaction:{interaction_id}` | `result`, `interaction_id` |
+| `leadership_review` | `org/leadership/tasks.py send_leadership_review_dms` | `leadership_review:snapshot:{snapshot_id}:rater:{org_user_id}:part:{n}` | `snapshot_id`, `part`, `parts`, `trait_ids` |
 | `test_notification` | the TEST-only `send_test_notification` view | `test_notification:event:{event_pk}:discord:{discord_id}:req:{uuid}` | none |
 
 Keys are built by one helper per kind in `discordbot/dm_keys.py`, and `context` is
@@ -106,14 +107,16 @@ If the ledger cannot be reached, no DM is sent:
 
 Read timeouts, other connection errors and 5xx finalize `unknown`. A 401 logs
 `discord_auth_failed` and finalizes `failed`; `send_dm` returns `auth_rejected=True`
-rather than re-raising. Tournament and lobby sender loops record the failure and
-stop sending to further recipients.
+rather than re-raising. Tournament, lobby and leadership sender loops record the
+failure and stop sending to further recipients.
 
 ### Stuck sending
 
 A process that dies after the `sending` mark and before finalize leaves a `pending`
 row with `send_started_at` set. Nothing sweeps it, because resending could DM twice.
-The admin **stuck sending (>15 min)** filter lists these rows.
+The admin **stuck sending (>15 min)** filter lists these rows. A leadership review row
+repairs itself on the first click: the click proves delivery, so it is finalized
+`sent` with `error="finalized_by_click"`.
 
 ## Choke points and the guard
 
@@ -146,9 +149,18 @@ DM button clicks increment `click_count` and set the click timestamps:
   (no `guild_id`) in the background, so the ACK is never delayed.
 - HTTP-interactions mode: `discordbot/views.handle_message_component` records them
   directly.
+- Leadership review clicks (`lr:` ids) are recorded inside the review click endpoint,
+  in the same transaction.
 
 Link buttons (such as **Review on site**) open a URL without an interaction, so they
 cannot be tracked.
+
+## Gateway versus HTTP interactions
+
+Production uses the gateway bot. In HTTP-interactions mode the leadership click is
+answered with a deferred update and finished by the `complete_review_click` Celery
+task. There is no per-message lock across workers there, so two clicks within the same
+second can leave a stale render; the scores themselves are still right.
 
 ## Backfill
 
@@ -188,4 +200,5 @@ proves that a manual DM was delivered.
 ## Logging
 
 Ledger and send code logs with `system="discord", subsystem="dm"` and the fields
-`dm_kind`, `ledger_id`, `discord_user_id` and `status`.
+`dm_kind`, `ledger_id`, `discord_user_id` and `status`. Leadership click logs carry
+only `ledger_id`.
