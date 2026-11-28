@@ -1,0 +1,1 @@
+- Discord guild lists are now cached separately for each user and linked Discord account, preventing another user's cached guild list from being returned. Discord fetch errors no longer expose exception details.
