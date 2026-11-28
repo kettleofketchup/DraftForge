@@ -17,7 +17,11 @@ from rest_framework.test import APIClient
 from app.internal_client import transport
 
 BRIDGE_TOKEN = "ledger-bridge-token"
-BRIDGED_PREFIXES: tuple[str, ...] = ("/discord/dms/", "/discord/event-dm/")
+BRIDGED_PREFIXES: tuple[str, ...] = (
+    "/discord/dms/",
+    "/discord/event-dm/",
+    "/discord/live-messages/",
+)
 
 
 class BridgeResponse:

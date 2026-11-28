@@ -1,0 +1,1 @@
+- Subscriber event reminders now update in place on Discord when event details or the seated player count change. The reminder also reflects whether members can still sign up.

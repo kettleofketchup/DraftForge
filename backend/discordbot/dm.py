@@ -16,7 +16,7 @@ from django.conf import settings
 from discordbot.dm_ledger import PERMANENT_DM_ERROR_CODES, ErrorClass
 from discordbot.internal_client.dm_ledger import claim_dm, finalize_dm, mark_dm_sending
 from discordbot.models import DMKind, DMStatus, DMSubject
-from discordbot.payloads import build_dm_payload
+from discordbot.payloads import V2_FLAG, build_dm_payload
 from discordbot.schemas import DMClaimBody, DMFinalizeBody
 from discordbot.utils import (
     DISCORD_API_BASE,
@@ -30,7 +30,6 @@ from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
-V2_FLAG: int = 1 << 15
 ERROR_MAX_LEN = 300
 _LOG = {"system": "discord", "subsystem": "dm"}
 
@@ -50,6 +49,7 @@ class DMRequest:
     components: list[JSONDict] | None = None
     flags: int | None = None
     skip_status: DMStatus | None = None
+    allowed_mentions: JSONDict | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +142,8 @@ def _build_payload(req: DMRequest, ledger_id: int) -> JSONDict:
         raise _PayloadError("empty_payload")
     if req.flags is not None:
         payload["flags"] = req.flags
+    if req.allowed_mentions is not None:
+        payload["allowed_mentions"] = req.allowed_mentions
     payload["nonce"] = f"dm{ledger_id}"
     payload["enforce_nonce"] = True
     return payload

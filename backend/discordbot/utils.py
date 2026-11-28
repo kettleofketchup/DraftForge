@@ -147,10 +147,10 @@ def _retry_after_seconds(response: requests.Response) -> float:
     body = response_json(response)
     delay = body.get("retry_after") if isinstance(body, dict) else None
     if isinstance(delay, bool) or not isinstance(delay, int | float):
-        return 1.0
+        delay = response.headers.get("Retry-After", 1.0)
     try:
         delay = float(delay)
-    except OverflowError:
+    except (TypeError, ValueError, OverflowError):
         return 1.0
     if not math.isfinite(delay) or delay < 0:
         return 1.0
@@ -1055,6 +1055,19 @@ def sync_send_v2_message(
         return None
 
 
+def request_v2_message_edit(
+    channel_id: Snowflake,
+    message_id: Snowflake,
+    payload: JSONDict,
+    *,
+    max_retries: int = 3,
+) -> requests.Response:
+    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
+    return _rate_limited_request(
+        "PATCH", url, max_retries=max_retries, json=payload, headers=_get_headers()
+    )
+
+
 def sync_edit_v2_message(
     channel_id: Snowflake, message_id: Snowflake, v2_payload: JSONDict
 ) -> JSONDict | None:
@@ -1065,11 +1078,8 @@ def sync_edit_v2_message(
         message_id: Message ID to edit
         v2_payload: Dict with 'flags' and 'components' keys
     """
-    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
     try:
-        response = _rate_limited_request(
-            "PATCH", url, json=v2_payload, headers=_get_headers()
-        )
+        response = request_v2_message_edit(channel_id, message_id, v2_payload)
         response.raise_for_status()
         log.info(
             "v2_message_edited",

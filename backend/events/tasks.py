@@ -39,6 +39,7 @@ from app.internal_client import (
 from discordbot.dm import DMOutcome, DMRequest, send_dm
 from discordbot.dm_keys import signup_reminder_key
 from discordbot.models import DMKind, DMStatus, DMSubject, DMType
+from discordbot.payloads import live_component_digest
 from discordbot.utils import (
     DISCORD_API_BASE,
     MessageDeletedError,
@@ -61,7 +62,7 @@ from events.discord.embeds import (
     build_announcement_v2,
     build_scheduled_event_payload,
     build_scheduled_event_sync_payload,
-    build_subscriber_dm_embed,
+    build_subscriber_dm_v2,
 )
 from events.discord.gates import (
     attendance_reminder_gate,
@@ -1451,8 +1452,8 @@ def _send_subscriber_reminder(
     repeater_id: int | None,
     discord_event_pk: int | None,
     sub: "RepeaterSubscriberSchema",
-    embed: dict[str, Any],
-    components: list[dict[str, Any]] | None,
+    payload: dict[str, Any],
+    digest: str,
 ) -> tuple[DMOutcome, int | None]:
     dm_pk: int | None = None
 
@@ -1484,9 +1485,12 @@ def _send_subscriber_reminder(
             context={
                 "discord_event_id": discord_event_pk,
                 "repeater_id": repeater_id,
+                "live_v2": True,
+                "live_digest": digest,
             },
-            embed=embed,
-            components=components,
+            components=payload["components"],
+            flags=payload["flags"],
+            allowed_mentions=payload["allowed_mentions"],
         ),
         on_claimed=_on_claimed,
     )
@@ -1500,7 +1504,7 @@ def send_subscriber_notifications(event_id: int) -> str:
     Wraps the entire subscriber-DM loop in a lease so concurrent dispatches
     cannot iterate the subscriber set twice. The lease row uses channel_id="dm"
     as a sentinel (DMs aren't per-channel) and the common signup-reminder
-    embed as embed_data — the partial unique constraint keys on
+    payload as embed_data — the partial unique constraint keys on
     (source="signup_reminder", source_id=event_id) only.
 
     Filters out subscribers who already have an EventSignup for this event.
@@ -1526,17 +1530,16 @@ def send_subscriber_notifications(event_id: int) -> str:
         return "No Discord event"
     discord_event_pk = discord_state.discord_event_pk
 
-    # Read signups and build the embed before claiming the lease, so a failed
+    # Read signups before claiming the lease, so a failed
     # read neither DMs users who already signed up nor strands a lease.
     try:
         all_signups = get_event_signups(event_id)
-        dm_data = build_subscriber_dm_embed(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable(
             "send_subscriber_notifications", event_id, exc
         )
-    embed = dm_data["embed"]
-    components = dm_data.get("components")
+    payload = build_subscriber_dm_v2(event, signup_count=event.signup_count)
+    digest = live_component_digest(payload["components"])
 
     # Claim the lease BEFORE iterating subscribers. Concurrent dispatches
     # of this task hit the partial unique constraint and return None — exit
@@ -1545,7 +1548,7 @@ def send_subscriber_notifications(event_id: int) -> str:
         source="signup_reminder",
         source_id=event_id,
         channel_id="dm",
-        embed_data=embed,
+        embed_data=payload,
     )
     if log_pk is None:
         logger.info(
@@ -1580,8 +1583,8 @@ def send_subscriber_notifications(event_id: int) -> str:
                 repeater_id=event.event_repeater_id,
                 discord_event_pk=discord_event_pk,
                 sub=sub,
-                embed=embed,
-                components=components,
+                payload=payload,
+                digest=digest,
             )
             if outcome.status in (DMStatus.SENT, DMStatus.SKIPPED_TEST_MODE):
                 if dm_pk:

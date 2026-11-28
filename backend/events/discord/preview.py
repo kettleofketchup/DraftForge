@@ -21,7 +21,6 @@ from discordbot.payload_schema import DiscordMessage
 from discordbot.payloads import (
     ChannelMessagePayload,
     build_channel_message_payload,
-    build_dm_payload,
 )
 from discordbot.schemas import DiscordEventStateSchema
 from events.capacity import with_signup_counts
@@ -39,7 +38,7 @@ from events.discord.embeds import (
     build_profile_reminder_embed,
     build_scheduled_event_payload,
     build_scheduled_event_sync_payload,
-    build_subscriber_dm_embed,
+    build_subscriber_dm_v2,
 )
 from events.discord.gates import (
     Destination,
@@ -408,9 +407,8 @@ def _new_event_post(src: _Source) -> _Built:
 
 
 def _signup_reminder(src: _Source) -> _Built:
-    dm = build_subscriber_dm_embed(src.event, signups=src.signups)
     message = DiscordMessage.model_validate(
-        build_dm_payload(None, dm["embed"], dm.get("components"))
+        build_subscriber_dm_v2(src.event, signup_count=src.event.signup_count)
     )
     gate = signup_reminder_gate(
         src.event,

@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from discordbot.models import DMKind
 
@@ -11,6 +11,8 @@ class _Context(BaseModel):
 
 
 class SignupReminderContext(_Context):
+    live_v2: bool = False
+    live_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     discord_event_id: int | None = None
     repeater_id: int | None = None
 

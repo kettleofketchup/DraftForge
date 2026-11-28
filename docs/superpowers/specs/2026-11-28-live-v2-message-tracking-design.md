@@ -21,11 +21,11 @@ A separate edit row lets a source have multiple recipients and lets future chann
 ## Lifecycle
 
 1. The subscriber sender opts into `event_signup_reminder` using the allow-listed `live_v2` marker. It sends native Components V2 through the existing ledger. Successfully finalized receipts with both destination IDs register idempotently.
-2. Registration starts dirty. A change can commit after the sender renders but before Discord delivers the message. The first reconciliation reads the current source and covers that interval.
+2. Registration starts dirty. A change can commit after the sender renders but before Discord delivers the message. The initial send stores a component digest. The first reconciliation reads the current source, covering that interval without PATCHing an unchanged reminder.
 3. Event and signup mutations invalidate only the rows rendering that source. Tenant branding is a dependency where the renderer reads it. A rollback also discards invalidations from the rolled-back write. Writers using bulk ORM operations must explicitly invalidate affected subjects.
-4. A worker claims one eligible destination at a time. A lease identifies the render revision being delivered. The backend renders from current committed data and compares the payload digest with the last successful edit. Equal content can be acknowledged without a Discord request.
-5. The worker edits exactly that channel/message pair and supplies an explicit empty mention policy. Finishing the claimed revision leaves newer dirty work pending. A worker crash leaves an expiring lease and the next claim renders again. A lease protects database state, while Discord itself offers no conditional edit operation.
-6. A deleted source, confirmed missing target or permanently rejected edit stops further automatic attempts for that target. Transient failures reschedule it. Ambiguous edit outcomes can retry the same message. No edit failure calls the original send path.
+4. A worker claims one eligible destination at a time. A lease identifies the render revision being delivered. The backend renders from current committed data and compares the payload digest with the last confirmed send or edit. Equal content can be acknowledged without a Discord request.
+5. The worker edits exactly that channel/message pair and supplies an explicit empty mention policy. Finishing the claimed revision leaves newer dirty work pending. A worker crash leaves an expiring lease and the next claim renders again. A lease protects database state. Discord offers no conditional edit operation, so a late success for an obsolete lease triggers a corrective refresh.
+6. A deleted source or confirmed missing target ends automatic attempts for that destination. A permissions or payload rejection pauses work until the next matching source change. Transient failures reschedule it. Ambiguous edit outcomes can retry the same message. No edit failure calls the original send path.
 
 The runner stores IDs, progress and a digest. The renderer recreates content from domain tables. Rendered text, button URLs, credentials and personal message content do not belong in claim history or logs.
 

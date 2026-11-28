@@ -33,6 +33,7 @@ from events.constants import (  # noqa: F401 — re-exported for backward compat
     VoicePresenceSource,
 )
 from events.exceptions import ImmutableFieldError, LedgerAppendOnlyError
+from events.live_signals import event_data_changed
 from events.ready_check_constants import (
     READY_CHECK_FIELD_RANGES,
     PostCullFillMode,
@@ -624,8 +625,11 @@ class Event(
             update_fields = kwargs.get("update_fields")
             if update_fields is not None:
                 kwargs["update_fields"] = {*update_fields, "dota_lobby_password"}
-        super().save(*args, **kwargs)
+        # Keep the model write and signal-driven invalidation in one commit.
+        with transaction.atomic(savepoint=False):
+            super().save(*args, **kwargs)
 
+    @transaction.atomic
     def transition_state(
         self,
         new_state: str,
@@ -662,10 +666,11 @@ class Event(
         self.refresh_signup_post_on_commit()
 
     def refresh_signup_post_on_commit(self) -> None:
-        """Re-render the Discord signup post once the state change commits."""
+        """Invalidate event-based messages after a bulk state or ready-check write."""
         # Function-local: events.discord imports events.models.
         from events.discord.dispatch import notify_signup_changed
 
+        event_data_changed.send(sender=Event, event_id=self.pk)
         transaction.on_commit(lambda: notify_signup_changed(self))
 
 
@@ -901,7 +906,8 @@ class EventSignup(models.Model):
                 line_seq=self.line_seq,
             )
             return True
-        super().save(*args, **kwargs)
+        with transaction.atomic(savepoint=False):
+            super().save(*args, **kwargs)
         return False
 
     def _fill_first_fields(self, kwargs: dict[str, Any]) -> None:

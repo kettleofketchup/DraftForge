@@ -20,6 +20,7 @@ from .models import (
     DraftActivityChannel,
     DraftActivityInstance,
     EventTemplate,
+    LiveDiscordMessage,
     ScheduledEvent,
 )
 
@@ -193,5 +194,36 @@ class DiscordDMAdmin(admin.ModelAdmin):
 
     def has_delete_permission(
         self, request: HttpRequest, obj: DiscordDM | None = None
+    ) -> bool:
+        return False
+
+
+@admin.register(LiveDiscordMessage)
+class LiveDiscordMessageAdmin(admin.ModelAdmin):
+    list_display = [
+        "renderer",
+        "subject_id",
+        "message_id",
+        "state",
+        "revision",
+        "applied_revision",
+        "next_attempt_at",
+        "last_edited_at",
+        "error_code",
+    ]
+    list_filter = ["renderer", "state"]
+    search_fields = ["=subject_id", "=message_id", "=channel_id"]
+    exclude = ["lease_token"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(
+        self, request: HttpRequest, obj: LiveDiscordMessage | None = None
+    ) -> bool:
+        return False
+
+    def has_delete_permission(
+        self, request: HttpRequest, obj: LiveDiscordMessage | None = None
     ) -> bool:
         return False

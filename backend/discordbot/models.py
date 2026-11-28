@@ -669,8 +669,69 @@ class DiscordDM(models.Model):
             ),
         ]
 
+    @property
+    def delivered_address(self) -> tuple[str, str] | None:
+        if (
+            self.status == DMStatus.SENT
+            and self.discord_channel_id
+            and self.discord_message_id
+        ):
+            return self.discord_channel_id, self.discord_message_id
+        return None
+
     def __str__(self) -> str:
         return f"DM({self.kind}) {self.idempotency_key} ({self.status})"
 
     def delete(self, *args: object, **kwargs: object) -> NoReturn:
         raise LedgerImmutableError("DiscordDM rows are never deleted")
+
+
+class LiveMessageState(models.TextChoices):
+    ACTIVE = "active"
+    MISSING = "missing"
+    BLOCKED = "blocked"
+    SOURCE_GONE = "source_gone"
+
+
+class LiveDiscordMessage(models.Model):
+    """A delivered message and the database revision its next edit must reflect."""
+
+    renderer = models.CharField(max_length=64)
+    subject_id = models.PositiveBigIntegerField()
+    channel_id = models.CharField(max_length=20)
+    message_id = models.CharField(max_length=20, unique=True)
+    dm = models.OneToOneField(
+        DiscordDM,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="live_message",
+    )
+    state = models.CharField(
+        max_length=16, choices=LiveMessageState.choices, default=LiveMessageState.ACTIVE
+    )
+    revision = models.PositiveBigIntegerField(default=1)
+    applied_revision = models.PositiveBigIntegerField(default=0)
+    applied_hash = models.CharField(max_length=64, blank=True)
+    next_attempt_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
+    lease_token = models.UUIDField(null=True, blank=True)
+    lease_revision = models.PositiveBigIntegerField(default=0)
+    lease_hash = models.CharField(max_length=64, blank=True)
+    failures = models.PositiveIntegerField(default=0)
+    error_code = models.IntegerField(null=True, blank=True)
+    last_edited_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["renderer", "subject_id"], name="discord_live_subject_idx"
+            ),
+            models.Index(
+                fields=["next_attempt_at", "id"],
+                condition=models.Q(state="active", next_attempt_at__isnull=False),
+                name="discord_live_due_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.renderer} {self.subject_id} ({self.message_id})"

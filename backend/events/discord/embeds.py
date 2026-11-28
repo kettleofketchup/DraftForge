@@ -14,6 +14,8 @@ from django.conf import settings
 from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
 from app.models import GameType
+from discordbot.payloads import V2_FLAG
+from events.admission import self_serve_offered
 from events.constants import SEAT_HOLDING_STATUSES, EventState
 from events.discord.components import build_announcement_components
 from telemetry.logging import get_logger
@@ -733,6 +735,66 @@ def build_subscriber_dm_embed(
         include_buttons=True,
         signups=signups,
     )
+
+
+def build_subscriber_dm_v2(event: "EmbedEvent", *, signup_count: int) -> dict[str, Any]:
+    """Render a subscriber reminder from the same seat count shown on the event."""
+    section_text = f"## 🔔 Event Reminder: {event.name}\n{event.organization.name}"
+    description = event.description[:200]
+    notice = STATE_NOTICES.get(event.state)
+    if notice:
+        description = f"{description}\n\n{notice}".strip()
+    tz = ZoneInfo(event.timezone) if event.timezone else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    details = (
+        f"**When:** {_discord_timestamp(event.scheduled_at)} "
+        f"({_discord_timestamp(event.scheduled_at, 'R')}, {local_dt:%-I:%M %p %Z})\n"
+        f"**Signed up:** {signup_count}/{event.max_players or '∞'} players"
+    )
+    buttons = []
+    if self_serve_offered(event):
+        buttons.append(
+            {
+                "type": 2,
+                "style": 3,
+                "label": "Sign Up",
+                "custom_id": f"event_signup:{event.pk}",
+                "emoji": {"name": "✅"},
+            }
+        )
+    if url := _event_url(event):
+        buttons.append(
+            {
+                "type": 2,
+                "style": 5,
+                "label": "View Event",
+                "url": url,
+                "emoji": {"name": "🌐"},
+            }
+        )
+    return {
+        "flags": V2_FLAG,
+        "allowed_mentions": {"parse": []},
+        "components": [
+            {
+                "type": 17,
+                "accent_color": COLOR_REMINDER,
+                "components": [
+                    {
+                        "type": 9,
+                        "components": [{"type": 10, "content": section_text}],
+                        "accessory": {
+                            "type": 11,
+                            "media": {"url": event.organization.logo or LOGO_URL},
+                        },
+                    },
+                    *([{"type": 10, "content": description}] if description else []),
+                    {"type": 10, "content": details},
+                    *([{"type": 1, "components": buttons}] if buttons else []),
+                ],
+            }
+        ],
+    }
 
 
 def build_scheduled_event_payload(event: "EmbedEvent") -> dict[str, Any]:
