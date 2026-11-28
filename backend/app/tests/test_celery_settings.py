@@ -142,6 +142,7 @@ class CelerySettingsBootTest(SimpleTestCase):
         scheduled = set(beat_task_names("celery_light.py").values())
         self.assertIn("discordbot.tasks.sweep_stale_discord_leases", registered)
         self.assertIn("org.tasks.purge_expired_mmr_screenshots", registered)
+        self.assertIn("events.tasks.purge_expired_signup_records", registered)
         self.assertEqual(scheduled - registered, set())
 
     def test_worker_boot_modules(self) -> None:

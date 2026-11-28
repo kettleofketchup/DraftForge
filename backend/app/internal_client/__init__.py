@@ -13,7 +13,8 @@ Config:
 Modules:
     transport     URLs, auth headers, error logging, post/patch/get/api_get
     discord       message-log leases, audit logs, Discord events/messages, sync state
-    events        event state, event reads, repeaters, due scheduled events
+    events        event state, event reads, repeaters, due scheduled events,
+                  nightly sign-up records purge
     steam         league sync state, matches, league stats, MMR
     ops_notices   emit/resolve operations notices
     mmr_requests  nightly MMR screenshot retention purge
@@ -64,6 +65,7 @@ from app.internal_client.events import (
     get_events,
     get_events_list,
     get_repeater_subscribers,
+    purge_signup_records,
     transition_event_state,
 )
 from app.internal_client.mmr_requests import purge_mmr_screenshots
@@ -118,6 +120,7 @@ __all__ = [
     "get_sync_discord_state",
     "get_tracked_steam_league_ids",
     "purge_mmr_screenshots",
+    "purge_signup_records",
     "recalculate_user_mmr",
     "resolve_ops_notice",
     "search_message_logs",

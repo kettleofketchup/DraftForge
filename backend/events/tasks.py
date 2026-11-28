@@ -32,6 +32,7 @@ from app.internal_client import (
     get_or_create_discord_event,
     get_repeater_subscribers,
     get_sync_discord_state,
+    purge_signup_records,
     search_message_logs,
     transition_event_state,
     transport,
@@ -65,7 +66,6 @@ from events.discord.embeds import (
     build_scheduled_event_sync_payload,
     build_subscriber_dm_embed,
 )
-from events.discord.signup_destination import resolve_signup_channel_type
 from events.discord.gates import (
     announcement_branch,
     attendance_reminder_gate,
@@ -78,6 +78,7 @@ from events.discord.gates import (
     signup_reminder_gate,
     start_mention_gate,
 )
+from events.discord.signup_destination import resolve_signup_channel_type
 from events.scheduling.fire import fire_due_reminders
 from events.signup_post_lock import (
     acquire_lock,
@@ -281,6 +282,26 @@ def _update_signup_msg(
             success=True,
         )
     return update_data.get("message_id")
+
+
+@shared_task(ignore_result=True, soft_time_limit=300, time_limit=360)
+def purge_expired_signup_records() -> None:
+    max_calls: int = settings.SIGNUP_RECORDS_PURGE_MAX_CALLS
+    for _ in range(max_calls):
+        result = purge_signup_records()
+        if result is None:
+            log.warning(
+                "signup_records_purge_failed", system="events", subsystem="ledger"
+            )
+            return
+        if not result.get("more"):
+            return
+    log.info(
+        "signup_records_purge_incomplete",
+        system="events",
+        subsystem="ledger",
+        calls=max_calls,
+    )
 
 
 @shared_task

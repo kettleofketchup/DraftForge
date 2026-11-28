@@ -76,6 +76,10 @@ _beat_schedule = {
         "task": "org.tasks.purge_expired_mmr_screenshots",
         "schedule": crontab(hour=3, minute=30),
     },
+    "purge-signup-records-nightly": {
+        "task": "events.tasks.purge_expired_signup_records",
+        "schedule": crontab(hour=4, minute=30),
+    },
     "sync-active-org-discord-names": {
         "task": "user.tasks.discord_name_sync.sync_active_org_discord_names",
         "schedule": 1800.0,

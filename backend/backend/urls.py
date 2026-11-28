@@ -37,6 +37,7 @@ from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
+from events.views_records import internal_signup_records_purge
 from league.ssr import LeagueSSRView
 from league.views import LeagueView
 from league.views_admin_team import (
@@ -483,6 +484,11 @@ urlpatterns += [
     ),
     path("api/internal/scheduled-events/due/", get_due_scheduled_events),
     path("api/internal/events/<int:event_id>/full/", get_event_for_task),
+    path(
+        "api/internal/signup-records/purge/",
+        internal_signup_records_purge,
+        name="internal_signup_records_purge",
+    ),
     # Tournament endpoints
     path("", include("draft.internal_urls")),
     path(

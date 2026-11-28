@@ -125,3 +125,21 @@ def get_due_scheduled_events() -> list["ScheduledEventDueSchema"]:
     if resp and resp.ok:
         return [ScheduledEventDueSchema.model_validate(e) for e in resp.json()]
     return []
+
+
+SIGNUP_RECORDS_PURGE_PATH = "/signup-records/purge/"
+
+
+def purge_signup_records() -> dict[str, Any] | None:
+    resp = transport.post(SIGNUP_RECORDS_PURGE_PATH, {})
+    if resp is None or not resp.ok:
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        transport.log.error(
+            "signup_records_purge_invalid_json",
+            http_path=SIGNUP_RECORDS_PURGE_PATH,
+            **transport.LOG_BASE,
+        )
+        return None
