@@ -32,8 +32,9 @@ from events.overrides import (
     OverrideRequired,
     StaffReasonRequired,
 )
-from events.ready_check import _active_and_droppable
+from events.ready_check import ConfirmResult, _active_and_droppable, confirm_ready
 from events.ready_check_constants import (
+    ReadyCheckConfirmVia,
     ReadyCheckEntryState,
     ReadyCheckPhase,
     ReadyCheckScope,
@@ -1088,6 +1089,32 @@ class RollCallTransferTests(_TransferFixtures):
         entry = check.entries.get(user=recipient)
         self.assertEqual(entry.state, ReadyCheckEntryState.PENDING)
         self.assert_counts_agree(event, check)
+
+    def test_staff_transfer_to_dropped_member_excuses_entry(self) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.APPROVED, ReadyCheckEntryState.PENDING
+        )
+        dropped = self.seated(
+            event, check, SignupStatus.DROPPED, ReadyCheckEntryState.DROPPED
+        )
+
+        transfer_spot(self.row(giver), dropped.user, actor=self.staff_actor)
+
+        self.assertEqual(self.row(dropped).status, SignupStatus.APPROVED)
+        self.assertEqual(
+            self.entry_state(check, dropped.user_id), ReadyCheckEntryState.EXCUSED
+        )
+        self.assert_counts_agree(event, check)
+        self.assertEqual(
+            confirm_ready(
+                event,
+                dropped.user,
+                via=ReadyCheckConfirmVia.WEB,
+                actor=member(dropped.user),
+            ),
+            ConfirmResult.CLOSED,
+        )
 
     def test_recipient_own_confirmation_kept(self) -> None:
         event, check = self.roll_call()

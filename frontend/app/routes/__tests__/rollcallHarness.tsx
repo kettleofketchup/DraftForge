@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
       'cancel',
       'reinstate',
       'voidWithdrawal',
+      'transfer',
     ].map((name) => [
       name,
       { mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false },

@@ -2105,7 +2105,12 @@ def transfer_spot(
     )
     if check is not None:
         in_scope = scope_statuses(check_scope(check))
+        seated = seat_holding_statuses(locked)
         for row in (giver, target):
+            if row.status in seated:
+                check.entries.filter(
+                    signup_id=row.pk, state=ReadyCheckEntryState.DROPPED
+                ).update(state=ReadyCheckEntryState.EXCUSED)
             if row.status in in_scope:
                 enrol_signup_if_live(row, actor=actor)
 
