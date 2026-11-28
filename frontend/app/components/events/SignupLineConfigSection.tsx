@@ -1,5 +1,5 @@
 /**
- * Line-order rules and the staff reason policy for every event, series and
+ * Line-order rules, spot transfer and the staff reason policy for every event, series and
  * org-defaults form. Every form schema merges signupLineSchema (through
  * discordConfigSchema), so the narrowing cast below is sound.
  */
@@ -27,7 +27,10 @@ import {
   type SignupLineFields,
 } from './schemas';
 
-type LineRuleField = 'line_withdraw_forfeits' | 'line_switch_restamps';
+type LineRuleField =
+  | 'line_withdraw_forfeits'
+  | 'line_switch_restamps'
+  | 'allow_spot_transfer';
 
 const RULES: ReadonlyArray<{
   name: LineRuleField;
@@ -45,6 +48,12 @@ const RULES: ReadonlyArray<{
     label: 'Switching Main/Maybe gives up your place',
     description:
       'Moving between Main and Maybe sends the signup to the back of the line. When off, it keeps its place.',
+  },
+  {
+    name: 'allow_spot_transfer',
+    label: 'Allow spot transfer',
+    description:
+      'Members can give their place to another eligible member. If that member already has a place, the two swap.',
   },
 ];
 

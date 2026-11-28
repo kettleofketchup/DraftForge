@@ -130,6 +130,7 @@ const REPEATER_PAYLOAD = {
   allow_active_mmr: true,
   allow_battlecup_rating: true,
   allow_previous_rank: true,
+  allow_spot_transfer: false,
   allow_user_signups: true,
   auto_confirm: false,
   captains_draft_time: 10,

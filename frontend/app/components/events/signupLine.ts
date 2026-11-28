@@ -12,5 +12,7 @@ export function signupLineFrom(
       source?.line_switch_restamps ?? SIGNUP_LINE_DEFAULTS.line_switch_restamps,
     staff_reason_policy:
       source?.staff_reason_policy ?? SIGNUP_LINE_DEFAULTS.staff_reason_policy,
+    allow_spot_transfer:
+      source?.allow_spot_transfer ?? SIGNUP_LINE_DEFAULTS.allow_spot_transfer,
   };
 }

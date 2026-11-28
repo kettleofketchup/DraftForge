@@ -65,6 +65,7 @@ const baseDiscordConfig = {
   line_withdraw_forfeits: true,
   line_switch_restamps: true,
   staff_reason_policy: 'optional',
+  allow_spot_transfer: false,
 };
 
 describe('discord_subscriber_dm tolerance', () => {
@@ -318,6 +319,7 @@ const DISCORD_KEYS = [
   'line_withdraw_forfeits',
   'line_switch_restamps',
   'staff_reason_policy',
+  'allow_spot_transfer',
 ];
 const SIGNUP_OPEN_KEYS = ['signup_open_mode', 'signups_open_hours_before'];
 const LOBBY_KEYS = [
@@ -531,6 +533,7 @@ describe('signup line rules', () => {
       line_withdraw_forfeits: true,
       line_switch_restamps: true,
       staff_reason_policy: 'optional',
+      allow_spot_transfer: false,
     });
     expect(DISCORD_CONFIG_DEFAULTS).toMatchObject(SIGNUP_LINE_DEFAULTS);
   });
@@ -541,6 +544,7 @@ describe('signup line rules', () => {
         line_withdraw_forfeits: 'yes',
         line_switch_restamps: true,
         staff_reason_policy: 'optional',
+        allow_spot_transfer: false,
       }).success,
     ).toBe(false);
     expect(
@@ -577,12 +581,39 @@ describe('signup line rules', () => {
         line_withdraw_forfeits: false,
         line_switch_restamps: true,
         staff_reason_policy: 'placements',
+        allow_spot_transfer: true,
       }),
     ).toEqual({
       line_withdraw_forfeits: false,
       line_switch_restamps: true,
       staff_reason_policy: 'placements',
+      allow_spot_transfer: true,
     });
+  });
+
+  it('signupLineFrom defaults spot transfer off', () => {
+    expect(signupLineFrom({}).allow_spot_transfer).toBe(false);
+    expect(
+      signupLineFrom({ allow_spot_transfer: true }).allow_spot_transfer,
+    ).toBe(true);
+  });
+
+  it('rejects a non-boolean spot transfer setting', () => {
+    expect(
+      signupLineSchema.safeParse({
+        ...SIGNUP_LINE_DEFAULTS,
+        allow_spot_transfer: 'yes',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('tolerates event payloads without the spot transfer setting', () => {
+    expect(eventSchema.shape.allow_spot_transfer.parse(undefined)).toBe(
+      undefined,
+    );
+    expect(eventResponseSchema.shape.allow_spot_transfer.parse(true)).toBe(
+      true,
+    );
   });
 
   it('signupLineFrom defaults a missing staff reason policy to optional', () => {

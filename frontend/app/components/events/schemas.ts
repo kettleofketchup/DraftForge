@@ -233,6 +233,7 @@ export const eventSchema = z
     line_withdraw_forfeits: z.boolean().optional(),
     line_switch_restamps: z.boolean().optional(),
     staff_reason_policy: z.enum(STAFF_REASON_POLICIES).optional(),
+    allow_spot_transfer: z.boolean().optional(),
     event_voice_channel_id: z.string().optional(),
     voice_presence_confirms: z.boolean().optional(),
     is_off_schedule: z.boolean().optional(),
@@ -354,6 +355,7 @@ export const eventResponseSchema = z.object({
   line_withdraw_forfeits: z.boolean().optional(),
   line_switch_restamps: z.boolean().optional(),
   staff_reason_policy: z.enum(STAFF_REASON_POLICIES).optional(),
+  allow_spot_transfer: z.boolean().optional(),
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
   discord_event_title: z.string(),
@@ -742,11 +744,12 @@ export const SIGNUP_RULES_DEFAULTS = {
   allow_user_signups: true,
 } as const;
 
-/** Whether withdrawing or switching Main/Maybe sends a signup to the back of the line. */
+/** Line-order rules, the staff reason policy and whether members may give their place away. */
 export const signupLineSchema = z.object({
   line_withdraw_forfeits: z.boolean(),
   line_switch_restamps: z.boolean(),
   staff_reason_policy: z.enum(STAFF_REASON_POLICIES),
+  allow_spot_transfer: z.boolean(),
 });
 
 export type SignupLineFields = z.infer<typeof signupLineSchema>;
@@ -755,6 +758,7 @@ export const SIGNUP_LINE_DEFAULTS = {
   line_withdraw_forfeits: true,
   line_switch_restamps: true,
   staff_reason_policy: 'optional',
+  allow_spot_transfer: false,
 } as const;
 
 export const discordConfigSchema = z

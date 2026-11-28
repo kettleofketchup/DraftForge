@@ -237,6 +237,12 @@ export const EVENT_SECTION_FIELDS: SectionFieldMeta = {
         'tentative',
       ],
     },
+    allow_spot_transfer: {
+      label: 'Allow spot transfer',
+      description:
+        'Members can give their place to another eligible member. If that member already has a place, the two swap.',
+      keywords: ['transfer', 'give place', 'swap', 'line', 'spot'],
+    },
     staff_reason_policy: {
       label: 'Staff reasons',
       description:

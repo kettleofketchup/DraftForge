@@ -102,4 +102,28 @@ describe('SignupLineConfigSection', () => {
       expect(submitted).toEqual({ ...SIGNUP_LINE_DEFAULTS, [name]: false });
     },
   );
+
+  it('renders spot transfer unchecked by default', () => {
+    render(<Harness />);
+    const box = screen.getByTestId('signup-line-allow_spot_transfer');
+    expect(box).not.toBeChecked();
+    expect(screen.getByLabelText('Allow spot transfer')).toBe(box);
+    expect(
+      screen.getByText(
+        'Members can give their place to another eligible member. If that member already has a place, the two swap.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('submits allow_spot_transfer as true once checked', async () => {
+    let submitted: SignupLineFields | undefined;
+    render(<Harness onValues={(v) => (submitted = v)} />);
+    fireEvent.click(screen.getByTestId('signup-line-allow_spot_transfer'));
+    fireEvent.click(screen.getByText('go'));
+    await waitFor(() => expect(submitted).toBeDefined());
+    expect(submitted).toEqual({
+      ...SIGNUP_LINE_DEFAULTS,
+      allow_spot_transfer: true,
+    });
+  });
 });

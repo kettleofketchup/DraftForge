@@ -134,6 +134,7 @@ const event: EventType = {
   line_withdraw_forfeits: true,
   line_switch_restamps: true,
   staff_reason_policy: 'optional',
+  allow_spot_transfer: false,
   auto_approve: true,
   auto_confirm: false,
   require_mmr_verified: false,

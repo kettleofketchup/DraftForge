@@ -334,6 +334,7 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   line_withdraw_forfeits: boolean;
   line_switch_restamps: boolean;
   staff_reason_policy: StaffReasonPolicy;
+  allow_spot_transfer: boolean;
   auto_approve: boolean;
   auto_confirm: boolean;
   require_mmr_verified: boolean;
@@ -487,6 +488,7 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   line_withdraw_forfeits: boolean;
   line_switch_restamps: boolean;
   staff_reason_policy: StaffReasonPolicy;
+  allow_spot_transfer: boolean;
   auto_approve: boolean;
   auto_confirm: boolean;
   require_mmr_verified: boolean;

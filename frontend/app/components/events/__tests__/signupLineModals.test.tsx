@@ -80,7 +80,7 @@ import { OrgEventDefaultsHarness } from './orgEventDefaultsHarness';
 const FIELDS = ['line_withdraw_forfeits', 'line_switch_restamps'] as const;
 type Field = (typeof FIELDS)[number];
 
-async function uncheck(name: Field, tab: RegExp) {
+async function toggle(name: Field | 'allow_spot_transfer', tab: RegExp) {
   openTab(tab);
   fireEvent.click(await screen.findByTestId(`signup-line-${name}`));
 }
@@ -116,12 +116,26 @@ describe('EditEventModal signup line', () => {
     render(<EditEventModal event={event} open onOpenChange={() => {}} />, {
       wrapper: Wrapper,
     });
-    await uncheck(name, /approval/i);
+    await toggle(name, /approval/i);
     submit();
     await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
     expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
       line_withdraw_forfeits: name !== 'line_withdraw_forfeits',
       line_switch_restamps: name !== 'line_switch_restamps',
+    });
+  });
+
+  it('sends allow_spot_transfer true once checked', async () => {
+    render(<EditEventModal event={event} open onOpenChange={() => {}} />, {
+      wrapper: Wrapper,
+    });
+    await toggle('allow_spot_transfer', /approval/i);
+    submit();
+    await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
+    expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
+      allow_spot_transfer: true,
+      line_withdraw_forfeits: true,
+      line_switch_restamps: true,
     });
   });
 
@@ -170,12 +184,25 @@ describe('EditRepeaterModal signup line', () => {
       <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
       { wrapper: Wrapper },
     );
-    await uncheck(name, /^event$/i);
+    await toggle(name, /^event$/i);
     submit();
     await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
     expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
       line_withdraw_forfeits: name !== 'line_withdraw_forfeits',
       line_switch_restamps: name !== 'line_switch_restamps',
+    });
+  });
+
+  it('sends allow_spot_transfer true once checked', async () => {
+    render(
+      <EditRepeaterModal repeater={repeater} open onOpenChange={() => {}} />,
+      { wrapper: Wrapper },
+    );
+    await toggle('allow_spot_transfer', /^event$/i);
+    submit();
+    await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
+    expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
+      allow_spot_transfer: true,
     });
   });
 });
@@ -193,7 +220,7 @@ describe('org event defaults signup line', () => {
 
   it.each(FIELDS)('sends %s false once unchecked', async (name) => {
     await renderLoaded();
-    await uncheck(name, /^event$/i);
+    await toggle(name, /^event$/i);
     submit();
     await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
     expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
@@ -202,6 +229,17 @@ describe('org event defaults signup line', () => {
         line_withdraw_forfeits: name !== 'line_withdraw_forfeits',
         line_switch_restamps: name !== 'line_switch_restamps',
       },
+    });
+  });
+
+  it('sends allow_spot_transfer true once checked', async () => {
+    await renderLoaded();
+    await toggle('allow_spot_transfer', /^event$/i);
+    submit();
+    await waitFor(() => expect(api.mutateAsync).toHaveBeenCalled());
+    expect(api.mutateAsync.mock.calls[0][0]).toMatchObject({
+      id: orgDefaults.id,
+      data: { allow_spot_transfer: true },
     });
   });
 
