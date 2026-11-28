@@ -1,8 +1,10 @@
+from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
 
 from django.test import RequestFactory
+from structlog.testing import capture_logs
 
 from app.models import CustomUser
 from events.admission import NOT_ACCEPTING_MESSAGE
@@ -24,15 +26,28 @@ from events.ledger import (
     snapshot,
 )
 from events.line import waitlist_rank
-from events.models import Event, EventSignup, SignupLedgerEntry
-from events.overrides import StaffReasonRequired
+from events.models import (
+    Event,
+    EventSignup,
+    ReadyCheck,
+    ReadyCheckEntry,
+    SignupLedgerEntry,
+)
+from events.overrides import (
+    OverrideReasonRequired,
+    OverrideRequired,
+    StaffReasonRequired,
+)
+from events.ready_check_constants import ReadyCheckEntryState
 from events.schemas import SignupSnapshot
 from events.services import (
     VOID_NO_HISTORY_MESSAGE,
     VOID_NOT_REMOVED_MESSAGE,
+    VOID_OVER_CAPACITY_MESSAGE,
     _next_waitlist_position,
     cancel_signup,
     create_tentative_signup,
+    create_tournament_for_event,
     decline_signup,
     process_rsvp,
     reject_signup,
@@ -40,6 +55,10 @@ from events.services import (
 )
 from events.tests.base import EventTestCase
 from events.tests.test_signup_ledger_contract import LedgerContractMixin
+from org.models import OrgSettings
+from org.settings_constants import StaffOverridePolicy
+from org.settings_service import get_org_settings
+from tournament.models import Team, Tournament
 
 
 @patch("events.services.notify_signup_changed")
@@ -527,3 +546,335 @@ class VoidWithdrawalCoreTests(LedgerContractMixin, EventTestCase):
         void_withdrawal(self._row(signup), actor=self.staff_actor)
 
         self.assertEqual(self._row(signup).status, SignupStatus.APPROVED)
+
+
+class _VoidFixtures(LedgerContractMixin, EventTestCase):
+    def _row(self, signup: EventSignup) -> EventSignup:
+        return EventSignup.objects.nocache().get(pk=signup.pk)
+
+    def _join(self, event: Event, user: CustomUser | None = None) -> EventSignup:
+        user = user or self.make_user()
+        actor = SignupActor(user=user, role=ActorRole.MEMBER, means=SignupMeans.WEB)
+        return process_rsvp(event, user, actor=actor)
+
+    def _withdraw(self, signup: EventSignup) -> SignupLedgerEntry:
+        actor = SignupActor(
+            user=signup.user, role=ActorRole.MEMBER, means=SignupMeans.WEB
+        )
+        cancel_signup(self._row(signup), actor=actor)
+        return SignupLedgerEntry.objects.filter(
+            signup=signup, action=SignupAction.WITHDREW
+        ).latest("pk")
+
+    def _void_entries(self, signup: EventSignup) -> list[SignupLedgerEntry]:
+        return list(
+            SignupLedgerEntry.objects.filter(
+                signup=signup, action=SignupAction.VOIDED_WITHDRAWAL
+            )
+        )
+
+    def _set_policy(
+        self, policy: str, codes: Sequence[str] = ("over_capacity",)
+    ) -> None:
+        row = get_org_settings(self.org)
+        OrgSettings.objects.filter(pk=row.pk).update(
+            staff_override_policy=policy, staff_override_warning_codes=list(codes)
+        )
+
+
+@patch("events.services.notify_signup_changed")
+class VoidCapacityTests(_VoidFixtures):
+    def setUp(self) -> None:
+        super().setUp()
+        self._set_policy(StaffOverridePolicy.CONFIRM)
+
+    def _full_after_withdrawal(
+        self,
+    ) -> tuple[Event, EventSignup, EventSignup, SignupLedgerEntry]:
+        event = self.make_event(max_players=2)
+        self._join(event)
+        signup = self._join(event, self.subject)
+        waiting = self._join(event)
+        self.assertEqual(self._row(waiting).status, SignupStatus.WAITLISTED)
+        withdrew = self._withdraw(signup)
+        self.assertEqual(self._row(waiting).status, SignupStatus.APPROVED)
+        return event, signup, waiting, withdrew
+
+    def test_full_event_confirm_requires_override(self, _notify: Any) -> None:
+        _event, signup, _waiting, _withdrew = self._full_after_withdrawal()
+
+        with self.assertRaises(OverrideRequired) as ctx:
+            void_withdrawal(
+                self._row(signup), actor=self.staff_actor, reason="mistaken"
+            )
+
+        [violation] = ctx.exception.violations
+        self.assertEqual(violation.code, "over_capacity")
+        self.assertEqual(violation.rule, "capacity")
+        self.assertEqual(violation.category, "seating")
+        self.assertEqual(violation.message, VOID_OVER_CAPACITY_MESSAGE)
+        self.assertEqual(violation.params, {"capacity": 2, "seated": 2})
+        self.assertFalse(ctx.exception.blocked)
+        self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
+        self.assertEqual(self._void_entries(signup), [])
+
+    def test_full_event_confirm_acknowledged_restores(self, _notify: Any) -> None:
+        _event, signup, waiting, withdrew = self._full_after_withdrawal()
+        promoted = self._row(waiting)
+
+        void_withdrawal(
+            self._row(signup),
+            actor=self.staff_actor,
+            reason="mistaken",
+            acknowledged_codes=["over_capacity"],
+        )
+
+        snap = SignupSnapshot.model_validate(withdrew.before)
+        row = self._row(signup)
+        self.assertEqual(row.status, SignupStatus.APPROVED)
+        self.assertEqual(row.line_seq, snap.line_seq)
+        self.assertEqual(row.signed_up_at, snap.signed_up_at)
+        self.assertEqual(row.commitment, snap.commitment)
+        self.assertEqual(row.rsvp_class, snap.rsvp_class)
+        after = self._row(waiting)
+        self.assertEqual(after.status, promoted.status)
+        self.assertEqual(after.line_seq, promoted.line_seq)
+        [entry] = self._void_entries(signup)
+        self.assertEqual(entry.rules_overridden, ["over_capacity"])
+        self.assertEqual(entry.reason, "mistaken")
+
+    def test_acknowledged_without_reason_raises_reason_required(
+        self, _notify: Any
+    ) -> None:
+        _event, signup, _waiting, _withdrew = self._full_after_withdrawal()
+
+        with self.assertRaises(OverrideReasonRequired):
+            void_withdrawal(
+                self._row(signup),
+                actor=self.staff_actor,
+                reason="",
+                acknowledged_codes=["over_capacity"],
+            )
+
+        self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
+        self.assertEqual(self._void_entries(signup), [])
+
+    def test_silent_policy_over_seats_and_records_code(self, _notify: Any) -> None:
+        self._set_policy(StaffOverridePolicy.SILENT)
+        _event, signup, waiting, _withdrew = self._full_after_withdrawal()
+        promoted = self._row(waiting)
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        self.assertEqual(self._row(signup).status, SignupStatus.APPROVED)
+        after = self._row(waiting)
+        self.assertEqual(after.status, promoted.status)
+        self.assertEqual(after.line_seq, promoted.line_seq)
+        [entry] = self._void_entries(signup)
+        self.assertEqual(entry.rules_overridden, ["over_capacity"])
+
+    def test_block_policy_blocks(self, _notify: Any) -> None:
+        self._set_policy(StaffOverridePolicy.BLOCK)
+        _event, signup, _waiting, _withdrew = self._full_after_withdrawal()
+
+        with self.assertRaises(OverrideRequired) as ctx:
+            void_withdrawal(
+                self._row(signup),
+                actor=self.staff_actor,
+                reason="mistaken",
+                acknowledged_codes=["over_capacity"],
+            )
+
+        self.assertTrue(ctx.exception.blocked)
+        self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
+        self.assertEqual(self._void_entries(signup), [])
+
+    def test_waitlisted_restore_on_full_event_needs_no_override(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event(max_players=1)
+        self._join(event)
+        signup = self._join(event, self.subject)
+        self.assertEqual(self._row(signup).status, SignupStatus.WAITLISTED)
+        self._withdraw(signup)
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        self.assertEqual(self._row(signup).status, SignupStatus.WAITLISTED)
+        [entry] = self._void_entries(signup)
+        self.assertEqual(entry.rules_overridden, [])
+
+    def test_unknown_acknowledged_codes_ignored(self, _notify: Any) -> None:
+        _event, signup, _waiting, _withdrew = self._full_after_withdrawal()
+
+        with self.assertRaises(OverrideRequired):
+            void_withdrawal(
+                self._row(signup),
+                actor=self.staff_actor,
+                reason="mistaken",
+                acknowledged_codes=["bogus"],
+            )
+
+        self.assertEqual(self._void_entries(signup), [])
+
+    def test_override_required_is_logged(self, _notify: Any) -> None:
+        _event, signup, _waiting, _withdrew = self._full_after_withdrawal()
+
+        with capture_logs() as logs, self.assertRaises(OverrideRequired):
+            void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        [record] = [r for r in logs if r["event"] == "void_override_required"]
+        self.assertEqual(record["system"], "events")
+        self.assertEqual(record["subsystem"], "void")
+        self.assertEqual(record["signup_id"], signup.pk)
+        self.assertEqual(record["codes"], ["over_capacity"])
+        self.assertIs(record["blocked"], False)
+
+
+@patch("events.services.notify_mark_interested")
+@patch("events.services.notify_signup_changed")
+class VoidEligibilityRosterTests(_VoidFixtures):
+    def _require_steam_id(self, event: Event) -> None:
+        Event.objects.filter(pk=event.pk).update(require_steam_id=True)
+
+    def test_restored_approved_clears_eligibility(self, *_mocks: Any) -> None:
+        event = self.make_event()
+        member = self.make_user()
+        signup = self._join(event, member)
+        self.assertEqual(self._row(signup).status, SignupStatus.APPROVED)
+        self._withdraw(signup)
+        self._require_steam_id(event)
+        EventSignup.objects.filter(pk=signup.pk).update(
+            unmet_requirements=["stale"], eligibility_reasons=[{"code": "stale"}]
+        )
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        row = self._row(signup)
+        self.assertEqual(row.status, SignupStatus.APPROVED)
+        self.assertEqual(row.unmet_requirements, [])
+        self.assertEqual(row.eligibility_reasons, [])
+        self.assertIsNone(row.eligibility_checked_at)
+
+    def _clear_stamp(self, signup: EventSignup) -> None:
+        EventSignup.objects.filter(pk=signup.pk).update(
+            unmet_requirements=[], eligibility_reasons=[], eligibility_checked_at=None
+        )
+
+    def test_restored_pending_approval_is_stamped(self, *_mocks: Any) -> None:
+        event = self.make_event(require_steam_id=True)
+        signup = self._join(event, self.make_user())
+        self.assertEqual(self._row(signup).status, SignupStatus.PENDING_APPROVAL)
+        self._withdraw(signup)
+        self._clear_stamp(signup)
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        row = self._row(signup)
+        self.assertEqual(row.status, SignupStatus.PENDING_APPROVAL)
+        self.assertNotEqual(row.eligibility_reasons, [])
+        self.assertIsNotNone(row.eligibility_checked_at)
+
+    def test_restored_rsvp_is_stamped(self, *_mocks: Any) -> None:
+        event = self.make_event(auto_approve=False)
+        signup = self._join(event, self.make_user())
+        self.assertEqual(self._row(signup).status, SignupStatus.RSVP)
+        self._withdraw(signup)
+        self._require_steam_id(event)
+        self._clear_stamp(signup)
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        row = self._row(signup)
+        self.assertEqual(row.status, SignupStatus.RSVP)
+        self.assertNotEqual(row.eligibility_reasons, [])
+        self.assertIsNotNone(row.eligibility_checked_at)
+
+    def _tournament_event(self) -> Event:
+        event = self.make_event(roll_call_enabled=False)
+        create_tournament_for_event(event)
+        event.refresh_from_db()
+        return event
+
+    def _roster(self, event: Event) -> set[int]:
+        tournament = Tournament.objects.nocache().get(pk=event.tournament_id)
+        return set(tournament.users.values_list("pk", flat=True))
+
+    def test_roster_membership_readded(self, *_mocks: Any) -> None:
+        event = self._tournament_event()
+        member = self.make_user()
+        signup = self._join(event, member)
+        self.assertIn(member.pk, self._roster(event))
+        self._withdraw(signup)
+        self.assertNotIn(member.pk, self._roster(event))
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        self.assertEqual(self._row(signup).status, SignupStatus.APPROVED)
+        self.assertIn(member.pk, self._roster(event))
+
+    def test_team_membership_not_restored(self, *_mocks: Any) -> None:
+        event = self._tournament_event()
+        captain, member = self.make_user(), self.make_user()
+        self._join(event, captain)
+        signup = self._join(event, member)
+        team = Team.objects.create(
+            tournament=event.tournament, name="Void Team", captain=captain
+        )
+        team.members.add(captain, member)
+        self._withdraw(signup)
+        self.assertFalse(team.members.filter(pk=member.pk).exists())
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        self.assertIn(member.pk, self._roster(event))
+        fresh = Team.objects.nocache().get(pk=team.pk)
+        self.assertFalse(fresh.members.filter(pk=member.pk).exists())
+
+    def _roll_call_with_check(self) -> tuple[Event, EventSignup, ReadyCheck]:
+        event = self.make_event()
+        signup = self._join(event, self.subject)
+        Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+        check = ReadyCheck.objects.create(
+            event=event,
+            settings_snapshot={
+                "ready_check_scope": "main_only",
+                "effective_mode": "manual",
+            },
+        )
+        self._withdraw(signup)
+        return event, signup, check
+
+    def test_live_ready_check_enrols_and_correlates(self, *_mocks: Any) -> None:
+        _event, signup, check = self._roll_call_with_check()
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        entry = check.entries.get(user_id=signup.user_id)
+        self.assertEqual(entry.signup_id, signup.pk)
+        self.assertEqual(entry.state, ReadyCheckEntryState.PENDING)
+        [void_entry] = self._void_entries(signup)
+        self.assertEqual(void_entry.correlation_id, f"rc{check.pk}:void")
+
+    def test_live_ready_check_dropped_entry_is_excused(self, *_mocks: Any) -> None:
+        _event, signup, check = self._roll_call_with_check()
+        ReadyCheckEntry.objects.create(
+            ready_check=check,
+            signup=signup,
+            user_id=signup.user_id,
+            state=ReadyCheckEntryState.DROPPED,
+        )
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        entry = check.entries.get(user_id=signup.user_id)
+        self.assertEqual(entry.state, ReadyCheckEntryState.EXCUSED)
+
+    def test_no_ready_check_leaves_correlation_empty(self, *_mocks: Any) -> None:
+        signup = self._join(self.make_event(), self.subject)
+        self._withdraw(signup)
+
+        void_withdrawal(self._row(signup), actor=self.staff_actor)
+
+        [void_entry] = self._void_entries(signup)
+        self.assertEqual(void_entry.correlation_id, "")

@@ -16,7 +16,12 @@ from app.models import CustomUser, GameType
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
-from events.capacity import has_free_seat, lock_event, seat_holding_statuses
+from events.capacity import (
+    count_seats,
+    has_free_seat,
+    lock_event,
+    seat_holding_statuses,
+)
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
@@ -76,6 +81,7 @@ from events.models import (
     SignupLedgerEntry,
     TournamentTemplateMixin,
 )
+from events.overrides import OverrideRequired, Violation, check_overrides
 from events.ready_check_constants import (
     DROPPED_SIGNUP_MESSAGE,
     REMOVED_SIGNUP_STATUSES,
@@ -107,6 +113,7 @@ from org.mmr import game_for_event
 from org.mmr_official import apply_official_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+from org.settings_service import get_org_settings
 from org.standing import api as standing
 from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
@@ -1365,6 +1372,64 @@ VOIDABLE_STATUSES: frozenset[str] = frozenset(
 VOIDABLE_EVENT_STATES: frozenset[str] = frozenset(
     {EventState.SIGNUPS_OPEN, EventState.ROLL_CALL}
 )
+VOID_OVER_CAPACITY_MESSAGE = (
+    "Event is at capacity; restoring seats this member over capacity."
+)
+_STAFF_SEATED_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.APPROVED, SignupStatus.CONFIRMED}
+)
+
+
+def _over_capacity_violation(event: Event) -> Violation:
+    return Violation(
+        code="over_capacity",
+        rule="capacity",
+        category="seating",
+        message=VOID_OVER_CAPACITY_MESSAGE,
+        params={"capacity": event.max_players, "seated": count_seats(event)},
+    )
+
+
+def _void_violations(event: Event, snap: SignupSnapshot) -> list[Violation]:
+    if snap.status in seat_holding_statuses(event) and not has_free_seat(event):
+        return [_over_capacity_violation(event)]
+    return []
+
+
+def _check_void_overrides(
+    signup: EventSignup,
+    event: Event,
+    snap: SignupSnapshot,
+    *,
+    acknowledged_codes: Collection[str],
+    reason: str,
+) -> list[str]:
+    try:
+        return check_overrides(
+            _void_violations(event, snap),
+            org_settings=get_org_settings(event.organization_id),
+            acknowledged=acknowledged_codes,
+            reason=reason,
+        )
+    except OverrideRequired as exc:
+        log.info(
+            "void_override_required",
+            system="events",
+            subsystem="void",
+            signup_id=signup.pk,
+            event_id=event.pk,
+            codes=[v.code for v in exc.violations],
+            blocked=exc.blocked,
+        )
+        raise
+
+
+def _restored_eligibility(signup: EventSignup, event: Event) -> list[str]:
+    if signup.status in _STAFF_SEATED_STATUSES:
+        return clear_eligibility(signup)
+    return stamp_eligibility(
+        signup, evaluate_signup(event, signup.user, for_staff_placement=True)
+    )
 
 
 def _voided_extra(voided: SignupLedgerEntry) -> dict[str, Any]:
@@ -1404,7 +1469,10 @@ def void_withdrawal(
     )
     before = _ranked_snapshot(signup)
     snap = SignupSnapshot.model_validate(voided.before)
-    overridden: list[str] = []
+    overridden = _check_void_overrides(
+        signup, locked, snap, acknowledged_codes=acknowledged_codes, reason=reason
+    )
+    check = live_ready_check(locked, lock=True)
 
     restore_place(signup, snap)
     signup.waitlist_position = (
@@ -1412,7 +1480,13 @@ def void_withdrawal(
         if signup.status == SignupStatus.WAITLISTED
         else None
     )
-    signup.save(update_fields=["waitlist_position", "updated_at"])
+    eligibility = _restored_eligibility(signup, locked)
+    signup.save(update_fields=["waitlist_position", *eligibility, "updated_at"])
+    _roster_add_if_joins(signup)
+    if check is not None and signup.status in seat_holding_statuses(locked):
+        check.entries.filter(
+            signup_id=signup.pk, state=ReadyCheckEntryState.DROPPED
+        ).update(state=ReadyCheckEntryState.EXCUSED)
 
     void_entry = _record_leaf(
         signup,
@@ -1428,7 +1502,9 @@ def void_withdrawal(
         reason=reason,
         rules_overridden=overridden,
         caused_by=voided,
+        correlation_id=f"rc{check.pk}:void" if check is not None else "",
     )
+    enrol_signup_if_live(signup, actor=actor)
     promoted = _promote_from_waitlist(locked, cause=void_entry)
     if any(p.pk == signup.pk for p in promoted):
         _reread_signup(signup)
