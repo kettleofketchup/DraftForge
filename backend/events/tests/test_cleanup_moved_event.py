@@ -327,8 +327,8 @@ class CleanupMovedEventTests(TestCase):
         target.max_players = 3
         target.save(update_fields=["max_players"])
         seated = self._signup(stale, self._user("seated"), SignupStatus.APPROVED)
-        later = self._signup(stale, self._user("later"), SignupStatus.WAITLISTED, 2)
-        earlier = self._signup(stale, self._user("earlier"), SignupStatus.WAITLISTED, 1)
+        earlier = self._signup(stale, self._user("earlier"), SignupStatus.WAITLISTED, 2)
+        later = self._signup(stale, self._user("later"), SignupStatus.WAITLISTED, 1)
 
         cleanup.migrate_signups(stale, target, correlation_id="cleanup-0123456789ab")
 
@@ -342,8 +342,14 @@ class CleanupMovedEventTests(TestCase):
         earlier_move = SignupLedgerEntry.objects.get(
             event=target, signup=earlier, action=SignupAction.MOVED_EVENT
         )
+        self.assertEqual(earlier_move.before["waitlist_position"], 1)
         self.assertEqual(earlier_move.after["status"], SignupStatus.WAITLISTED)
         self.assertEqual(earlier_move.after["waitlist_position"], 1)
+        later_move = SignupLedgerEntry.objects.get(
+            event=target, signup=later, action=SignupAction.MOVED_EVENT
+        )
+        self.assertEqual(later_move.before["waitlist_position"], 1)
+        self.assertEqual(later_move.after["waitlist_position"], 2)
         promoted = SignupLedgerEntry.objects.filter(
             event=target, action=SignupAction.PROMOTED
         )
@@ -351,6 +357,39 @@ class CleanupMovedEventTests(TestCase):
         for entry in promoted:
             self.assertEqual(entry.caused_by_id, earlier_move.pk)
             self.assertEqual(entry.correlation_id, "cleanup-0123456789ab")
+
+    def test_migrate_signups_moves_waitlist_in_line_order(self) -> None:
+        stale = self._event(
+            "Stale", self.sunday + timedelta(days=1), EventState.SIGNUPS_OPEN
+        )
+        target = self._event("Target", self.sunday, EventState.SIGNUPS_OPEN)
+        target.max_players = 1
+        target.save(update_fields=["max_players"])
+        self._signup(target, self._user("held"), SignupStatus.APPROVED)
+        target_wait = self._signup(
+            target, self._user("twait"), SignupStatus.WAITLISTED, 7
+        )
+        first = self._signup(stale, self._user("first"), SignupStatus.WAITLISTED, 3)
+        second = self._signup(stale, self._user("second"), SignupStatus.WAITLISTED, 1)
+        third = self._signup(stale, self._user("third"), SignupStatus.WAITLISTED, 2)
+
+        cleanup.migrate_signups(stale, target, correlation_id="cleanup-0123456789ab")
+
+        waiting = list(
+            EventSignup.objects.filter(
+                event=target, status=SignupStatus.WAITLISTED
+            ).in_line_order()
+        )
+        self.assertEqual(
+            [r.pk for r in waiting], [target_wait.pk, first.pk, second.pk, third.pk]
+        )
+        self.assertEqual([r.waitlist_position for r in waiting[1:]], [8, 9, 10])
+        for rank, row in enumerate((first, second, third), start=1):
+            dest = SignupLedgerEntry.objects.get(
+                event=target, signup=row, action=SignupAction.MOVED_EVENT
+            )
+            self.assertEqual(dest.before["waitlist_position"], 1)
+            self.assertEqual(dest.after["waitlist_position"], rank + 1)
 
     def test_migrate_tournament_users_skips_overflow(self) -> None:
         stale = self._event(

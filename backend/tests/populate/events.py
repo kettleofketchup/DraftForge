@@ -13,8 +13,11 @@ from django.utils import timezone as tz
 from app.models import CustomUser, GameType
 from discordbot.models import DiscordEvent
 from events.constants import (
+    SEAT_HOLDING_STATUSES,
+    ActorRole,
     EventState,
     RepeatFrequency,
+    SignupMeans,
     SignupStatus,
     VoicePresenceSource,
 )
@@ -51,7 +54,10 @@ from tests.data.users import (
     STEAM_VERIFY_UNVERIFIED_USER,
     STEAM_VERIFY_VERIFIED_USER,
 )
-from tests.populate.constants import STEAM_VERIFY_EVENT_NAME
+from tests.populate.constants import (
+    LINE_ORDER_KEEP_PLACE_EVENT_NAME,
+    STEAM_VERIFY_EVENT_NAME,
+)
 from tests.populate.utils import ensure_league_user, ensure_org_user
 from tournament.models import Team, Tournament
 from user.models import PositionsModel
@@ -550,6 +556,8 @@ def populate_events_data(force: bool = False) -> None:
     )
     print("    Created Deadlock + Dota screenshot-required events")
 
+    _populate_keep_place_event(org, league, event_admin or site_admin)
+
     # 5c. Draft Test Tournament — ready for draft start, stable PK for browser testing
 
     draft_tournament, _ = Tournament.objects.update_or_create(
@@ -621,6 +629,43 @@ def populate_events_data(force: bool = False) -> None:
         f"    Created repeater={repeater.name}, event={event.name} (state={event.state})"
     )
     print("    Created org event defaults with discord channels")
+
+
+def _populate_keep_place_event(
+    org: Organization, league: League, created_by: CustomUser | None
+) -> None:
+    event, _ = Event.objects.update_or_create(
+        organization=org,
+        name=LINE_ORDER_KEEP_PLACE_EVENT_NAME,
+        defaults={
+            "description": "Both line rules off: returning members keep their place.",
+            "scheduled_at": tz.now() + timedelta(days=7),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": created_by,
+            "tournament_name": "Line Order Keep Place Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": True,
+            "allow_user_signups": True,
+            "max_players": 10,
+            "line_withdraw_forfeits": False,
+            "line_switch_restamps": False,
+        },
+    )
+    user = CustomUser.objects.get(pk=EVENTS_USERS[0].pk)
+    signup = EventSignup.objects.nocache().filter(event=event, user=user).first()
+    if signup is None or signup.status not in SEAT_HOLDING_STATUSES:
+        process_rsvp(
+            event,
+            user,
+            actor=SignupActor(user=user, role=ActorRole.MEMBER, means=SignupMeans.WEB),
+        )
+    print(f"    Created {LINE_ORDER_KEEP_PLACE_EVENT_NAME} (both line rules off)")
 
 
 def _ensure_steam_verify_user(

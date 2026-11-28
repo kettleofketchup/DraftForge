@@ -14,9 +14,12 @@ import {
   localToUTC,
   READY_CHECK_CONFIG_DEFAULTS,
   refineEventEnd,
+  SIGNUP_LINE_DEFAULTS,
   SIGNUP_OPEN_DEFAULTS,
+  signupLineSchema,
   utcToLocalInput,
 } from '~/components/events/schemas';
+import { signupLineFrom } from '~/components/events/signupLine';
 
 // A complete discordConfigSchema payload that intentionally omits the
 // dropped `discord_subscriber_dm` and `discord_subscriber_dm_hours`
@@ -57,6 +60,8 @@ const baseDiscordConfig = {
   require_profile_complete: false,
   roll_call_enabled: false,
   allow_user_signups: true,
+  line_withdraw_forfeits: true,
+  line_switch_restamps: true,
 };
 
 describe('discord_subscriber_dm tolerance', () => {
@@ -307,6 +312,8 @@ const DISCORD_KEYS = [
   'require_mmr_verified',
   'require_profile_complete',
   'allow_user_signups',
+  'line_withdraw_forfeits',
+  'line_switch_restamps',
 ];
 const SIGNUP_OPEN_KEYS = ['signup_open_mode', 'signups_open_hours_before'];
 const LOBBY_KEYS = [
@@ -511,5 +518,59 @@ describe('eventSchema user_is_event_operator', () => {
       eventSchema.parse({ ...payload, user_is_event_operator: true })
         .user_is_event_operator,
     ).toBe(true);
+  });
+});
+
+describe('signup line rules', () => {
+  it('defaults both rules on', () => {
+    expect(SIGNUP_LINE_DEFAULTS).toEqual({
+      line_withdraw_forfeits: true,
+      line_switch_restamps: true,
+    });
+    expect(DISCORD_CONFIG_DEFAULTS).toMatchObject(SIGNUP_LINE_DEFAULTS);
+  });
+
+  it('rejects a non-boolean rule', () => {
+    expect(
+      signupLineSchema.safeParse({
+        line_withdraw_forfeits: 'yes',
+        line_switch_restamps: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      discordConfigSchema.safeParse({
+        ...baseDiscordConfig,
+        line_switch_restamps: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('tolerates event payloads without the rules', () => {
+    const rules = z.object({
+      line_withdraw_forfeits: eventSchema.shape.line_withdraw_forfeits,
+      line_switch_restamps: eventResponseSchema.shape.line_switch_restamps,
+    });
+    expect(rules.parse({})).toEqual({});
+    expect(
+      rules.parse({
+        line_withdraw_forfeits: false,
+        line_switch_restamps: false,
+      }),
+    ).toEqual({ line_withdraw_forfeits: false, line_switch_restamps: false });
+  });
+
+  it('signupLineFrom falls back to the defaults', () => {
+    expect(signupLineFrom({})).toEqual(SIGNUP_LINE_DEFAULTS);
+    expect(signupLineFrom(null)).toEqual(SIGNUP_LINE_DEFAULTS);
+    expect(signupLineFrom(undefined)).toEqual(SIGNUP_LINE_DEFAULTS);
+  });
+
+  it('signupLineFrom copies loaded values', () => {
+    expect(
+      signupLineFrom({
+        line_withdraw_forfeits: false,
+        line_switch_restamps: true,
+      }),
+    ).toEqual({ line_withdraw_forfeits: false, line_switch_restamps: true });
   });
 });

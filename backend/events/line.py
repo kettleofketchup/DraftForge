@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Self
 
@@ -11,6 +11,7 @@ from django.db.models import (
     IntegerField,
     Max,
     OrderBy,
+    Q,
     QuerySet,
     Value,
     When,
@@ -20,7 +21,7 @@ from django.db.models.functions import RowNumber
 from django.utils import timezone
 
 from app.cache_utils import invalidate_after_commit
-from events.constants import LINE_EXCLUDED_STATUSES
+from events.constants import LINE_EXCLUDED_STATUSES, SignupStatus
 from events.exceptions import ImmutableFieldError
 from telemetry.logging import get_logger
 
@@ -43,6 +44,12 @@ def first_value(signup: EventSignup, first: str, *, at: datetime | None = None) 
     return getattr(signup, first.removeprefix("first_"))
 
 
+def start_first_fields(signup: EventSignup) -> list[str]:
+    for first in FIRST_FIELDS:
+        setattr(signup, first, first_value(signup, first, at=signup.signed_up_at))
+    return list(FIRST_FIELDS)
+
+
 def next_line_seq(event: Event) -> int:
     current = event.signups.nocache().aggregate(m=Max("line_seq"))["m"]
     return (current or 0) + 1
@@ -62,7 +69,6 @@ RESTORED_FIELDS: tuple[str, ...] = (
     "rsvp_class",
     "signed_up_at",
     "line_seq",
-    "waitlist_position",
 )
 
 
@@ -115,6 +121,64 @@ def swap_places(a: EventSignup, b: EventSignup) -> None:
     )
 
 
+def restamp_to_back(signup: EventSignup, *, reason: str) -> list[str]:
+    values = stamp(signup.event)
+    signup.line_seq = values["line_seq"]
+    signup.signed_up_at = values["signed_up_at"]
+    signup_id, event_id, line_seq = signup.pk, signup.event_id, signup.line_seq
+    transaction.on_commit(
+        lambda: log.info(
+            "signup_line_restamped",
+            system="events",
+            subsystem="line",
+            signup_id=signup_id,
+            event_id=event_id,
+            line_seq=line_seq,
+            reason=reason,
+        )
+    )
+    return ["line_seq", "signed_up_at"]
+
+
+def forfeits_on_withdraw(event: Event) -> bool:
+    return event.line_withdraw_forfeits
+
+
+def restamps_on_switch(event: Event) -> bool:
+    return event.line_switch_restamps
+
+
+def waitlist_ranks(event: Event) -> dict[int, int]:
+    pks = (
+        event.signups.nocache()
+        .filter(status=SignupStatus.WAITLISTED)
+        .order_by(*line_order_by())
+        .values_list("pk", flat=True)
+    )
+    return {pk: rank for rank, pk in enumerate(pks, start=1)}
+
+
+def ranks_if_waitlisted(
+    event: Event, signups: Collection[EventSignup | None]
+) -> dict[int, int]:
+    if any(s is not None and s.status == SignupStatus.WAITLISTED for s in signups):
+        return waitlist_ranks(event)
+    return {}
+
+
+def waitlist_rank(signup: EventSignup) -> int | None:
+    if signup.status != SignupStatus.WAITLISTED:
+        return None
+    if signup.line_seq is None:
+        ahead = Q(line_seq__isnull=False) | Q(line_seq__isnull=True, pk__lt=signup.pk)
+    else:
+        ahead = Q(line_seq__lt=signup.line_seq) | Q(
+            line_seq=signup.line_seq, pk__lt=signup.pk
+        )
+    waiting = signup.event.signups.nocache().filter(status=SignupStatus.WAITLISTED)
+    return waiting.filter(ahead).count() + 1
+
+
 def same_gate_distance(a: EventSignup, b: EventSignup) -> bool:
     return True
 
@@ -133,6 +197,23 @@ class EventSignupQuerySet(QuerySet):
                     partition_by=[
                         F("event_id"),
                         Case(excluded, default=Value(0), output_field=IntegerField()),
+                    ],
+                    order_by=line_order_by(),
+                ),
+                output_field=IntegerField(),
+            )
+        )
+
+    def annotate_waitlist_rank(self) -> Self:
+        waiting = When(status=SignupStatus.WAITLISTED, then=Value(1))
+        return self.annotate(
+            waitlist_rank=Case(
+                When(~Q(status=SignupStatus.WAITLISTED), then=Value(None)),
+                default=Window(
+                    RowNumber(),
+                    partition_by=[
+                        F("event_id"),
+                        Case(waiting, default=Value(0), output_field=IntegerField()),
                     ],
                     order_by=line_order_by(),
                 ),

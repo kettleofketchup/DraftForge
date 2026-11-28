@@ -63,6 +63,8 @@ export const config = {
   signup_deadline_hours: null,
   allow_team_signups: false,
   allow_user_signups: true,
+  line_withdraw_forfeits: true,
+  line_switch_restamps: true,
   auto_approve: true,
   auto_confirm: false,
   require_mmr_verified: false,

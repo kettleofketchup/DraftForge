@@ -12,8 +12,9 @@ from app.permissions import request_user
 from app.permissions_steam import VOUCH_EXCLUDED_STATUSES
 from common.game import GameType
 from events.capacity import seat_holding_statuses
-from events.constants import LINE_EXCLUDED_STATUSES, EventState
+from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupStatus
 from events.history import reduce_history_rules, reduce_history_snapshot
+from events.line import waitlist_ranks
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -259,6 +260,8 @@ class EventRepeaterSerializer(
             "start_cull_enabled",
             "start_cull_minutes_after",
             "post_cull_fill_mode",
+            "line_withdraw_forfeits",
+            "line_switch_restamps",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -703,6 +706,8 @@ class EventSerializer(
             "start_cull_enabled",
             "start_cull_minutes_after",
             "post_cull_fill_mode",
+            "line_withdraw_forfeits",
+            "line_switch_restamps",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -1017,6 +1022,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     unmet_requirements = serializers.SerializerMethodField()
     eligibility_reasons = serializers.SerializerMethodField()
     line_rank = serializers.SerializerMethodField()
+    waitlist_position = serializers.SerializerMethodField()
     can_verify_steam_account = serializers.SerializerMethodField()
 
     class Meta:
@@ -1087,6 +1093,18 @@ class EventSignupSerializer(serializers.ModelSerializer):
                 pk for pk, status in rows if status not in LINE_EXCLUDED_STATUSES
             ]
             ranks[obj.event_id] = {pk: i for i, pk in enumerate(in_line, start=1)}
+        return ranks[obj.event_id].get(obj.pk)
+
+    def get_waitlist_position(self, obj: EventSignup) -> int | None:
+        if obj.status != SignupStatus.WAITLISTED:
+            return None
+        if hasattr(obj, "waitlist_rank"):
+            return obj.waitlist_rank
+        ranks: dict[int, dict[int, int]] = self.context.setdefault(
+            "_signup_waitlist_ranks", {}
+        )
+        if obj.event_id not in ranks:
+            ranks[obj.event_id] = waitlist_ranks(obj.event)
         return ranks[obj.event_id].get(obj.pk)
 
     def _batch(self, obj: EventSignup) -> list[EventSignup]:
@@ -1411,6 +1429,8 @@ class OrgEventDefaultsSerializer(
             "start_cull_enabled",
             "start_cull_minutes_after",
             "post_cull_fill_mode",
+            "line_withdraw_forfeits",
+            "line_switch_restamps",
             # DiscordEventConfigMixin
             "discord_create_event",
             "discord_sync_signups",

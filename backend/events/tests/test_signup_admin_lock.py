@@ -55,6 +55,25 @@ class EventSignupAdminLockTests(EventTestCase):
         url = reverse("admin:events_eventsignup_change", args=[self.signup.pk])
         self.assertEqual(self.client.get(url).status_code, 200)
 
+    def test_change_view_shows_computed_waitlist_rank(self) -> None:
+        ahead = EventSignup.objects.create(
+            event=self.event, user=self.admin, status=SignupStatus.WAITLISTED
+        )
+        behind = EventSignup.objects.create(
+            event=self.event,
+            user=CustomUser.objects.create_user(username="lock_behind", password="x"),
+            status=SignupStatus.WAITLISTED,
+        )
+        EventSignup.objects.filter(pk=ahead.pk).update(waitlist_position=9)
+        EventSignup.objects.filter(pk=behind.pk).update(waitlist_position=1)
+        self.assertEqual(self.model_admin.computed_waitlist_rank(ahead), 1)
+        self.assertEqual(self.model_admin.computed_waitlist_rank(behind), 2)
+        self.assertIsNone(self.model_admin.computed_waitlist_rank(self.signup))
+        self.client.force_login(self.superuser)
+        url = reverse("admin:events_eventsignup_change", args=[behind.pk])
+        response = self.client.get(url)
+        self.assertContains(response, "Waitlist rank (line order)")
+
     def test_post_cannot_change_status(self) -> None:
         self.client.force_login(self.superuser)
         url = reverse("admin:events_eventsignup_change", args=[self.signup.pk])

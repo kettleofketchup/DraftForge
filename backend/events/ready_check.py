@@ -25,6 +25,7 @@ from events.ledger import (
     record_signup_change,
     snapshot,
 )
+from events.line import ranks_if_waitlisted, waitlist_rank
 from events.models import (
     Event,
     EventSignup,
@@ -299,6 +300,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
         entries.append(entry)
     ReadyCheckEntry.objects.bulk_create(entries)
 
+    ranks = ranks_if_waitlisted(locked, signups)
     for signup in signups:
         record_signup_change(
             event=locked,
@@ -306,7 +308,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
             actor=actor,
             action=SignupAction.READY_CHECK_ASKED,
             signup=signup,
-            after=snapshot(signup),
+            after=snapshot(signup, waitlist_rank=ranks.get(signup.pk)),
             reason="ready_check_opened",
             correlation_id=correlation_id,
         )
@@ -438,7 +440,8 @@ def confirm_ready(
     if signup.status not in scope_statuses(check_scope(check)):
         return _log_refused(locked, check, user, ConfirmResult.NOT_IN_CHECK)
 
-    before = snapshot(signup)
+    rank = waitlist_rank(signup)
+    before = snapshot(signup, waitlist_rank=rank)
     entry_changed = False
     if entry.state == ReadyCheckEntryState.PENDING:
         staff_on_held = (
@@ -474,7 +477,7 @@ def confirm_ready(
         action=SignupAction.CONFIRMED,
         signup=signup,
         before=before,
-        after=snapshot(signup),
+        after=snapshot(signup, waitlist_rank=rank),
         reason="ready_check_confirmed",
         caused_by=caused_by,
         correlation_id=f"rc{check.pk}:confirm",
@@ -571,9 +574,15 @@ def _record_member_rows(
     seat: bool = False,
 ) -> list[EventSignup]:
     seated: list[EventSignup] = []
+    ranks = ranks_if_waitlisted(locked, [entry.signup for entry in entries])
     for entry in entries:
         signup = entry.signup
-        before = snapshot(signup) if seat and signup is not None else None
+        rank = ranks.get(signup.pk) if signup is not None else None
+        before = (
+            snapshot(signup, waitlist_rank=rank)
+            if seat and signup is not None
+            else None
+        )
         if seat and signup is not None and _sync_signup_confirmed(locked, signup):
             seated.append(signup)
         record_signup_change(
@@ -583,7 +592,7 @@ def _record_member_rows(
             action=action,
             signup=signup,
             before=before,
-            after=snapshot(signup) if signup is not None else None,
+            after=snapshot(signup, waitlist_rank=rank) if signup is not None else None,
             reason=reason,
             correlation_id=correlation_id,
         )
@@ -706,6 +715,8 @@ def _drop(
     dropped_user_ids: list[int] = []
     dropped_signups: list[EventSignup] = []
     first_drop: SignupLedgerEntry | None = None
+    ranks = ranks_if_waitlisted(locked, [entry.signup for entry in entries])
+    dropped_ranks: list[int] = []
     for entry in entries:
         signup = entry.signup
         if signup is None:
@@ -717,7 +728,11 @@ def _drop(
         )
         if not updated:
             continue
-        before = snapshot(signup)
+        rank = ranks.get(signup.pk)
+        if rank is not None:
+            dropped_ranks.append(rank)
+            rank -= sum(1 for gone in dropped_ranks if gone < rank)
+        before = snapshot(signup, waitlist_rank=rank)
         signup.status = SignupStatus.DROPPED
         signup.waitlist_position = None
         signup.event = locked
@@ -734,7 +749,7 @@ def _drop(
             action=SignupAction.DROPPED,
             signup=signup,
             before=before,
-            after=snapshot(signup),
+            after=snapshot(signup, waitlist_rank=None),
             reason=reason,
             correlation_id=correlation_id,
         )

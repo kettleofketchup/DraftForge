@@ -4,7 +4,8 @@ from django.test import TestCase
 from rest_framework.test import APIRequestFactory
 
 from app.models import CustomUser
-from events.models import Event
+from events.constants import SEAT_HOLDING_STATUSES, SignupAction, SignupStatus
+from events.models import Event, EventSignup, SignupLedgerEntry
 from league.models import League
 from org.models import Organization
 from tests.data.leagues import EVENTS_LEAGUE, EVENTS_LEAGUE_ALT
@@ -16,6 +17,7 @@ from tests.data.users import (
     EVENT_PLAYER_4,
     EVENT_PLAYER_NO_PROFILE,
 )
+from tests.populate.constants import LINE_ORDER_KEEP_PLACE_EVENT_NAME
 from tests.populate.events import populate_events_data
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.users import populate_test_auth_users
@@ -84,3 +86,47 @@ class EventsDataEndpointTest(TestCase):
             resp.data["events_league_pk"],
             League.objects.get(name=EVENTS_LEAGUE.name).pk,
         )
+
+
+class KeepPlaceEventPopulateTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        populate_organizations_and_leagues(force=True)
+        populate_test_auth_users(force=True)
+        populate_events_data(force=True)
+
+    def _event(self) -> Event:
+        return Event.objects.nocache().get(
+            organization__name=EVENTS_ORG.name, name=LINE_ORDER_KEEP_PLACE_EVENT_NAME
+        )
+
+    def test_keep_place_event_populated(self) -> None:
+        event = self._event()
+        self.assertFalse(event.line_withdraw_forfeits)
+        self.assertFalse(event.line_switch_restamps)
+        self.assertTrue(event.allow_user_signups)
+        signups = list(EventSignup.objects.nocache().filter(event=event))
+        self.assertEqual(len(signups), 1)
+        signup = signups[0]
+        self.assertEqual(signup.user_id, EVENT_PLAYER_1.pk)
+        self.assertIn(signup.status, SEAT_HOLDING_STATUSES)
+        self.assertIsNotNone(signup.line_seq)
+        self.assertIsNotNone(signup.signed_up_at)
+        self.assertEqual(
+            list(
+                SignupLedgerEntry.objects.filter(signup=signup).values_list(
+                    "action", flat=True
+                )
+            ),
+            [SignupAction.SIGNED_UP],
+        )
+
+    def test_rerun_keeps_one_seated_row(self) -> None:
+        event = self._event()
+        signup = EventSignup.objects.nocache().get(event=event)
+        signup.status = SignupStatus.CANCELLED
+        signup.save(update_fields=["status"])
+        populate_events_data()
+        rows = list(EventSignup.objects.nocache().filter(event=self._event()))
+        self.assertEqual([r.pk for r in rows], [signup.pk])
+        self.assertIn(rows[0].status, SEAT_HOLDING_STATUSES)

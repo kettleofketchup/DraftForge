@@ -290,6 +290,17 @@ class EnrolTests(ReadyCheckCoreTestCase):
         assert entry is not None
         self.assertEqual(entry.state, ReadyCheckEntryState.PENDING)
 
+    def test_late_enrolment_records_computed_waitlist_rank(self) -> None:
+        self._check(scope=ReadyCheckScope.MAIN_AND_FILL)
+        self._signup(SignupStatus.WAITLISTED)
+        signup = self._signup(SignupStatus.WAITLISTED)
+        EventSignup.objects.filter(pk=signup.pk).update(waitlist_position=40)
+        signup = EventSignup.objects.nocache().get(pk=signup.pk)
+        with transaction.atomic():
+            enrol_signup_if_live(signup, actor=self._staff_actor())
+        asked = self._rows(SignupAction.READY_CHECK_ASKED)
+        self.assertEqual(asked[0].after["waitlist_position"], 2)
+
     def test_existing_confirmed_entry_confirms_approved_signup(self) -> None:
         create_tournament_for_event(self.rc_event)
         self.rc_event.refresh_from_db()

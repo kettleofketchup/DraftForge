@@ -99,8 +99,7 @@ class SignupLineStampingTests(TestCase):
         first_commitment: str,
     ) -> None:
         new.refresh_from_db()
-        self.assertNotEqual(new.pk, old_pk)
-        self.assertFalse(EventSignup.objects.filter(pk=old_pk).exists())
+        self.assertEqual(new.pk, old_pk)
         self.assertEqual(new.first_signed_up_at, past)
         self.assertEqual(new.first_commitment, first_commitment)
         self.assertGreater(new.line_seq, later.line_seq)
@@ -212,18 +211,16 @@ class SignupLineStampingTests(TestCase):
             .values_list("pk", flat=True)
         )
 
-    def test_demote_diverges_line_from_waitlist_order(self) -> None:
-        """Pins current behaviour: demote sets waitlist_position only, not line_seq."""
+    def test_demote_converges_line_with_waitlist_order(self) -> None:
         event = self._event(max_players=3)
         a, _b, _c = (process_rsvp(event, u, actor=SYSTEM) for u in self.users[:3])
         d = process_rsvp(event, self.users[3], actor=SYSTEM)
         self.assertEqual(d.status, SignupStatus.WAITLISTED)
         demote_to_waitlist(a, actor=SYSTEM)
-        self.assertEqual(self._list_order(event), [a.pk, d.pk])
+        self.assertEqual(self._list_order(event), [d.pk, a.pk])
         self.assertEqual(self._waitlist_order(event), [d.pk, a.pk])
 
-    def test_reinstate_to_waitlist_diverges_line_from_waitlist_order(self) -> None:
-        """Pins current behaviour: reinstate onto the waitlist keeps the old line_seq."""
+    def test_reinstate_to_waitlist_converges_line_with_waitlist_order(self) -> None:
         event = self._event(max_players=3)
         a = process_rsvp(event, self.users[0], actor=SYSTEM)
         process_rsvp(event, self.users[1], actor=SYSTEM)
@@ -236,6 +233,6 @@ class SignupLineStampingTests(TestCase):
         reinstate_signup(a, actor=SYSTEM)
         a.refresh_from_db()
         self.assertEqual(a.status, SignupStatus.WAITLISTED)
-        self.assertEqual(a.line_seq, 1)
-        self.assertEqual(self._list_order(event), [a.pk, e.pk])
+        self.assertGreater(a.line_seq, e.line_seq)
+        self.assertEqual(self._list_order(event), [e.pk, a.pk])
         self.assertEqual(self._waitlist_order(event), [e.pk, a.pk])

@@ -51,6 +51,7 @@ import {
 } from '~/components/events/rollCallNavigation';
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
+import { SignupInLineSince } from '~/components/events/SignupInLineSince';
 import { canRestoreSignup } from '~/components/events/signupPartitions';
 import { startTournamentErrorMessage } from '~/components/events/startTournamentError';
 import { toGameType } from '~/components/game/constants';
@@ -320,6 +321,7 @@ export default function RollCallPage() {
       isAdmin={isAdmin}
       conductMember={conductMemberFor(signup.user)}
       leaguePk={event.tournament_league ?? null}
+      eventTimezone={event.timezone}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
       onSelect={setFocusedId}
@@ -678,6 +680,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap,
   isAdmin,
   leaguePk,
+  eventTimezone,
   pending,
   focused,
   onSelect,
@@ -693,6 +696,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   leaguePk: number | null;
+  eventTimezone?: string;
   pending: boolean;
   focused: boolean;
   onSelect: (id: number) => void;
@@ -723,6 +727,7 @@ const SignupStrip = memo(function SignupStrip({
         )}
         <EventStateBadge state={signup.status} />
       </span>
+      <SignupInLineSince signup={signup} eventTimezone={eventTimezone} />
       <ConductBadge member={conductMember} />
     </span>
   );

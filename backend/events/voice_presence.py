@@ -17,6 +17,7 @@ from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
 from events.constants import EventState, SignupAction, VoicePresenceSource
 from events.ledger import SignupActor, snapshot
+from events.line import waitlist_rank
 from events.models import (
     Event,
     EventSignup,
@@ -574,19 +575,21 @@ def set_presence_manually(
         row.present = present
         row.source = VoicePresenceSource.MANUAL
         row.save()
+        rank = waitlist_rank(signup)
+        voice: dict[str, object] = {
+            "voice": {
+                "present": present,
+                "previous": previous,
+                "source": str(VoicePresenceSource.MANUAL),
+            }
+        }
         entry = _record_leaf(
             signup,
             event=locked,
             actor=actor,
             action=SignupAction.VOICE_PRESENCE_SET,
-            before=snapshot(signup),
-            extra={
-                "voice": {
-                    "present": present,
-                    "previous": previous,
-                    "source": str(VoicePresenceSource.MANUAL),
-                }
-            },
+            before=snapshot(signup, waitlist_rank=rank),
+            after=snapshot(signup, extra=voice, waitlist_rank=rank),
             reason=reason,
             correlation_id=f"vp{locked.pk}:{user.pk}",
         )

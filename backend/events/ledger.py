@@ -125,8 +125,14 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+_UNSET: Any = object()
+
+
 def snapshot(
-    signup: EventSignup, *, extra: dict[str, Any] | None = None
+    signup: EventSignup,
+    *,
+    extra: dict[str, Any] | None = None,
+    waitlist_rank: int | None = _UNSET,
 ) -> SignupSnapshot:
     return SignupSnapshot(
         status=signup.status,
@@ -134,7 +140,9 @@ def snapshot(
         rsvp_class=signup.rsvp_class,
         signed_up_at=signup.signed_up_at,
         line_seq=signup.line_seq,
-        waitlist_position=signup.waitlist_position,
+        waitlist_position=(
+            signup.waitlist_position if waitlist_rank is _UNSET else waitlist_rank
+        ),
         event_team_id=signup.event_team_id,
         extra=dict(extra) if extra else {},
     )
