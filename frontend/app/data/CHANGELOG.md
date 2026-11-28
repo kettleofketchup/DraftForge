@@ -14,6 +14,19 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.22.0] - 2026-11-28
+
+### Added
+
+- Show one permission badge per Discord channel in event, series and organization settings. Details identify which settings work, are blocked or cannot be verified; signup fallback permissions now appear under their actual announcement channel instead of affecting a different signup channel. Pickers that share a channel, or fall back to one, all show that channel's badge.
+
+### Fixed
+
+- Link missing Discord preview prerequisites to event and series settings without losing unsaved edits.
+- Stop info dialogs clipping the edges and focus rings of buttons inside them, such as the Discord preview's missing-field links.
+- Post Discord signups correctly in ordinary text channels as well as forums, distinguish queued reposts from confirmed delivery, and bound automatic retries; explicit reposts warn when an earlier delivery is uncertain.
+- Recover deleted legacy Discord signup posts tracked only by a successful message log, without clearing replacement posts or active delivery attempts.
+
 ## [0.21.0] - 2026-11-27
 
 ### Upgrading

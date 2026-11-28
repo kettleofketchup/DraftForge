@@ -1,1 +1,0 @@
-- Post Discord signups correctly in ordinary text channels as well as forums, distinguish queued reposts from confirmed delivery, and bound automatic retries; explicit reposts warn when an earlier delivery is uncertain.

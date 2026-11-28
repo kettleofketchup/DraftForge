@@ -1,1 +1,0 @@
-- Show one permission badge per Discord channel in event, series and organization settings. Details identify which settings work, are blocked or cannot be verified; signup fallback permissions now appear under their actual announcement channel instead of affecting a different signup channel. Pickers that share a channel, or fall back to one, all show that channel's badge.
