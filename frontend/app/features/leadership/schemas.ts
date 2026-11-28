@@ -61,10 +61,11 @@ export const MemberLeadershipSchema = z.object({
   member: MemberSummarySchema,
   rating: z.number().nullable(),
   status: RatingStatusSchema,
-  reviews: z.number(),
+  reviews: z.number().nullable(),
   traits: z.array(TraitRatingSchema),
   points: z.object({ all_time: z.number(), this_month: z.number() }),
   events: z.array(EventAggregateSchema).optional(),
+  feedback_private: z.boolean(),
 });
 export type MemberLeadership = z.infer<typeof MemberLeadershipSchema>;
 
@@ -117,7 +118,7 @@ export const ModerationReviewSchema = z.object({
 });
 export type ModerationReview = z.infer<typeof ModerationReviewSchema>;
 
-// backend/org/leadership/constants.py ModerationReleaseState; 'hidden' is the viewer's own snapshot
+// backend/org/leadership/constants.py ModerationReleaseState; 'hidden' replaces every unreleased state on the viewer's own snapshot
 export const RELEASE_STATES = [
   'voided',
   'open',
@@ -154,6 +155,7 @@ export const EventCaptainReviewsSchema = z.object({
   own_snapshot: z.boolean(),
   reviews: z.array(ModerationReviewSchema).nullable(),
   aggregate: EventAggregateSchema.nullable(),
+  feedback_private: z.boolean(),
 });
 export type EventCaptainReviews = z.infer<typeof EventCaptainReviewsSchema>;
 
@@ -185,6 +187,8 @@ export const LEADERSHIP_SETTINGS_FIELDS = [
   'leaderboard_public',
   'require_staff_release',
   'auto_release_after_hours',
+  'review_dms_enabled',
+  'captain_feedback_visible',
 ] as const;
 
 export const LeadershipSettingsValuesSchema = z.object({
@@ -199,6 +203,8 @@ export const LeadershipSettingsValuesSchema = z.object({
   leaderboard_public: z.boolean(),
   require_staff_release: z.boolean(),
   auto_release_after_hours: z.number().int().nullable(),
+  review_dms_enabled: z.boolean(),
+  captain_feedback_visible: z.boolean(),
 });
 export type LeadershipSettingsValues = z.infer<
   typeof LeadershipSettingsValuesSchema
@@ -254,6 +260,8 @@ export const LeadershipSettingsFormSchema = z
     leaderboard_public: z.boolean(),
     require_staff_release: z.boolean(),
     auto_release_after_hours: wholeNumber(1, 720).nullable(),
+    review_dms_enabled: z.boolean(),
+    captain_feedback_visible: z.boolean(),
     points: z.record(z.string(), wholeNumber(0, 1000)),
   })
   .refine((values) => values.max_age_days >= values.half_life_days, {

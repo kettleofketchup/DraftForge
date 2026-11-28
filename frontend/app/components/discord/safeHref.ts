@@ -5,6 +5,8 @@ function parseWith(
   if (!url) return undefined;
   try {
     const parsed = new URL(url);
+    // A preview may use a reserved .invalid host for a sample destination.
+    if (/(^|\.)invalid\.?$/.test(parsed.hostname)) return undefined;
     return protocols.includes(parsed.protocol) ? url : undefined;
   } catch {
     return undefined;

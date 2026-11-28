@@ -31,6 +31,7 @@ const tracksPayload = [
     board_open: true,
     can_manage: false,
     can_moderate: false,
+    own_private: false,
   },
   {
     key: 'conduct',
@@ -49,6 +50,7 @@ const tracksPayload = [
     board_open: false,
     can_manage: false,
     can_moderate: false,
+    own_private: false,
   },
 ];
 
@@ -87,10 +89,35 @@ describe('standing schemas', () => {
       ],
       rows_visible: true,
       own_row: { member: member(2), value: null, sample: 1, status: 'new' },
+      own_private: false,
     });
     expect(board.rows[0].value).toBe(0.912);
     expect(board.rows[1].status).toBe('new');
     expect(board.own_row?.member.org_user_pk).toBe(2);
+  });
+
+  it('parses own_private on a track and a leaderboard', () => {
+    const track = TrackInfoSchema.parse({
+      ...tracksPayload[1],
+      own_private: true,
+    });
+    expect(track.own_private).toBe(true);
+    const board = StandingLeaderboardSchema.parse({
+      track: 'leadership',
+      metric: tracksPayload[1].metrics[0],
+      period: 'all',
+      total: null,
+      rows: [],
+      rows_visible: true,
+      own_row: null,
+      own_private: true,
+    });
+    expect(board.own_private).toBe(true);
+  });
+
+  it('requires own_private', () => {
+    const { own_private: _own, ...rest } = tracksPayload[1];
+    expect(TrackInfoSchema.safeParse(rest).success).toBe(false);
   });
 
   it('rejects an unknown metric format', () => {

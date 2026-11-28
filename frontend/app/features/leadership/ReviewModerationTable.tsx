@@ -3,6 +3,7 @@ import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { CELL_BREAKPOINT_QUERIES, DataTable } from '~/components/ui/data-table';
 import { DisplayName } from '~/components/user/avatar';
+import { FEEDBACK_PRIVATE_NOTE } from '~/features/standing/format';
 import { useMediaQuery } from '~/hooks/useMediaQuery';
 import { formatRating } from './format';
 import {
@@ -46,7 +47,9 @@ export function ReviewModerationTable({
     [viewerPk, traits, onVoid, onUnvoid, pendingPk, stacked],
   );
   const id = captain.org_user_id;
-  const rating = captain.aggregate?.rating ?? null;
+  const rating = captain.feedback_private
+    ? null
+    : (captain.aggregate?.rating ?? null);
   const badge = releaseBadge(captain.release_state);
   const own = captain.own_snapshot || captain.reviews === null;
   return (
@@ -118,12 +121,22 @@ export function ReviewModerationTable({
         </div>
       </div>
       {captain.own_snapshot || captain.reviews === null ? (
-        <p
-          className="text-sm text-muted-foreground"
-          data-testid={`leadership-moderation-own-${id}`}
-        >
-          {OWN_SNAPSHOT_NOTE}
-        </p>
+        <>
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid={`leadership-moderation-own-${id}`}
+          >
+            {OWN_SNAPSHOT_NOTE}
+          </p>
+          {captain.feedback_private && (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid={`leadership-moderation-feedback-private-${id}`}
+            >
+              {FEEDBACK_PRIVATE_NOTE}
+            </p>
+          )}
+        </>
       ) : (
         <DataTable
           columns={columns}

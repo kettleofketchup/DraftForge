@@ -127,6 +127,33 @@ describe('ReviewModerationTable', () => {
     expect(screen.queryByTestId(/^leadership-(void|unvoid)-/)).toBeNull();
   });
 
+  it('hides the overall rating and notes private feedback on the own snapshot', () => {
+    renderTable(
+      captainWith({
+        own_snapshot: true,
+        reviews: null,
+        aggregate: eventAggregate({ rating: 4.1 }),
+        feedback_private: true,
+      }),
+    );
+    const block = screen.getByTestId('leadership-moderation-7');
+    expect(block).not.toHaveTextContent('overall');
+    expect(block).not.toHaveTextContent('4.1');
+    expect(screen.getByTestId('leadership-moderation-own-7')).toHaveTextContent(
+      OWN_NOTE,
+    );
+    expect(
+      screen.getByTestId('leadership-moderation-feedback-private-7'),
+    ).toHaveTextContent('Your org keeps captain feedback private.');
+  });
+
+  it('shows no private note when feedback is visible', () => {
+    renderTable(captainWith({ own_snapshot: true, reviews: null }));
+    expect(
+      screen.queryByTestId('leadership-moderation-feedback-private-7'),
+    ).toBeNull();
+  });
+
   it('shows a deleted rater', () => {
     renderTable(captainWith({ reviews: [moderationReview({ rater: null })] }));
     expect(

@@ -6,6 +6,7 @@ import { SecondaryButton } from '~/components/ui/buttons';
 import { Progress } from '~/components/ui/progress';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { FEEDBACK_PRIVATE_NOTE } from '~/features/standing/format';
 import type { TrackDetailProps } from '~/features/standing/panels';
 import { formatOrgDate } from '~/features/standing/periods';
 import { getLogger } from '~/lib/logger';
@@ -189,9 +190,10 @@ export function MemberLeadershipPanel({
               className="text-sm text-muted-foreground"
               data-testid="leadership-member-own-note"
             >
-              {boardPublic
-                ? 'Members can see your rating and points; only you and moderators see the per-event detail.'
-                : 'Only you and moderators see this.'}{' '}
+              {!data.feedback_private &&
+                (boardPublic
+                  ? 'Members can see your rating and points; only you and moderators see the per-event detail. '
+                  : 'Only you and moderators see this. ')}
               Who rated you is never shown.
             </p>
           )}
@@ -204,46 +206,55 @@ export function MemberLeadershipPanel({
             </p>
           )}
 
-          <div className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className="text-2xl font-bold tabular-nums"
-                data-testid="leadership-member-rating"
+          {data.feedback_private ? (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="leadership-member-feedback-private"
+            >
+              {FEEDBACK_PRIVATE_NOTE}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className="text-2xl font-bold tabular-nums"
+                  data-testid="leadership-member-rating"
+                >
+                  {formatRating(data.rating)}
+                </span>
+                {data.status === 'new' && (
+                  <Badge variant="outline" data-testid="leadership-member-new">
+                    New
+                  </Badge>
+                )}
+              </div>
+              <div
+                className="text-sm text-muted-foreground"
+                data-testid="leadership-member-reviews"
               >
-                {formatRating(data.rating)}
-              </span>
+                {staffView
+                  ? `${plural(data.reviews ?? 0, 'review')} (includes unreleased)`
+                  : plural(data.reviews ?? 0, 'released review')}
+              </div>
               {data.status === 'new' && (
-                <Badge variant="outline" data-testid="leadership-member-new">
-                  New
-                </Badge>
+                <p className="text-sm text-muted-foreground">
+                  {staffView
+                    ? 'Not enough reviews to be ranked yet.'
+                    : 'Not enough released reviews to be ranked yet.'}
+                </p>
+              )}
+              {data.reviews === 0 && data.rating === null && (
+                <p
+                  className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground"
+                  data-testid="leadership-member-unreleased"
+                >
+                  {staffView
+                    ? 'No reviews yet.'
+                    : 'No released ratings yet. Ratings appear once a review window closes with enough reviews and the results are released.'}
+                </p>
               )}
             </div>
-            <div
-              className="text-sm text-muted-foreground"
-              data-testid="leadership-member-reviews"
-            >
-              {staffView
-                ? `${plural(data.reviews, 'review')} (includes unreleased)`
-                : plural(data.reviews, 'released review')}
-            </div>
-            {data.status === 'new' && (
-              <p className="text-sm text-muted-foreground">
-                {staffView
-                  ? 'Not enough reviews to be ranked yet.'
-                  : 'Not enough released reviews to be ranked yet.'}
-              </p>
-            )}
-            {data.reviews === 0 && data.rating === null && (
-              <p
-                className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground"
-                data-testid="leadership-member-unreleased"
-              >
-                {staffView
-                  ? 'No reviews yet.'
-                  : 'No released ratings yet. Ratings appear once a review window closes with enough reviews and the results are released.'}
-              </p>
-            )}
-          </div>
+          )}
 
           <div className="flex flex-col gap-1">
             <dl className="grid grid-cols-2 gap-3">
@@ -279,36 +290,37 @@ export function MemberLeadershipPanel({
             </p>
           </div>
 
-          {data.traits.some((trait) => trait.rating !== null) && (
-            <ul className="flex flex-col gap-2">
-              {data.traits.map((trait) => (
-                <li
-                  key={trait.key}
-                  className="flex flex-col gap-1"
-                  data-testid={`leadership-member-trait-${trait.key}`}
-                >
-                  <div className="flex justify-between gap-2 text-sm">
-                    <span className="min-w-0 break-words">{trait.label}</span>
-                    <span className="shrink-0 tabular-nums">
-                      {trait.rating !== null
-                        ? formatRating(trait.rating)
-                        : staffView
-                          ? 'No reviews'
-                          : 'Not released'}
-                    </span>
-                  </div>
-                  {trait.rating !== null && (
-                    <Progress
-                      value={((trait.rating - 1) / 4) * 100}
-                      aria-label={trait.label}
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+          {!data.feedback_private &&
+            data.traits.some((trait) => trait.rating !== null) && (
+              <ul className="flex flex-col gap-2">
+                {data.traits.map((trait) => (
+                  <li
+                    key={trait.key}
+                    className="flex flex-col gap-1"
+                    data-testid={`leadership-member-trait-${trait.key}`}
+                  >
+                    <div className="flex justify-between gap-2 text-sm">
+                      <span className="min-w-0 break-words">{trait.label}</span>
+                      <span className="shrink-0 tabular-nums">
+                        {trait.rating !== null
+                          ? formatRating(trait.rating)
+                          : staffView
+                            ? 'No reviews'
+                            : 'Not released'}
+                      </span>
+                    </div>
+                    {trait.rating !== null && (
+                      <Progress
+                        value={((trait.rating - 1) / 4) * 100}
+                        aria-label={trait.label}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          {data.events && (
+          {!data.feedback_private && data.events && (
             <div className="flex flex-col gap-1">
               <h4 className="font-semibold">Rated events</h4>
               {data.events.length === 0 ? (

@@ -11,6 +11,8 @@ export interface LeadershipAccess {
   canModerate: boolean;
   /** Members can see the board; always true for org staff. */
   boardOpen: boolean;
+  /** The org hides the viewer's own review-derived feedback. */
+  feedbackPrivate: boolean;
 }
 
 export function leadershipTrack(
@@ -28,5 +30,6 @@ export function leadershipAccess(access: OrgFeatureAccess): LeadershipAccess {
     canManage: track?.can_manage === true,
     canModerate: track?.can_moderate === true,
     boardOpen: track?.board_open === true,
+    feedbackPrivate: track?.own_private === true,
   };
 }

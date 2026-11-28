@@ -89,6 +89,7 @@ export function memberLeadership(
     })),
     points: { all_time: 42, this_month: 13 },
     events: [eventAggregate()],
+    feedback_private: false,
     ...overrides,
   };
 }
@@ -161,6 +162,7 @@ export function moderationCaptain(
     own_snapshot: false,
     reviews: [moderationReview()],
     aggregate: null,
+    feedback_private: false,
     ...overrides,
   };
 }
@@ -178,6 +180,7 @@ export function eventReviews(
 
 export const SETTINGS_DEFAULTS: LeadershipSettingsValues = {
   review_window_hours: 72,
+  review_dms_enabled: false,
   rating_max_points: 10,
   rating_min_reviewers: 2,
   ranked_min_reviews: 3,
@@ -188,6 +191,7 @@ export const SETTINGS_DEFAULTS: LeadershipSettingsValues = {
   leaderboard_public: false,
   require_staff_release: false,
   auto_release_after_hours: null,
+  captain_feedback_visible: true,
 };
 
 export function leadershipSettings(
@@ -239,6 +243,7 @@ export function leadershipTrackInfo(
     board_open: true,
     can_manage: false,
     can_moderate: false,
+    own_private: false,
     ...overrides,
   };
 }

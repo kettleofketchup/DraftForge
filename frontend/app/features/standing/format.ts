@@ -22,3 +22,5 @@ export function formatMetricValue(
 export function formatTotal(total: number, format: MetricFormat): string {
   return formatNumber(total, format);
 }
+
+export const FEEDBACK_PRIVATE_NOTE = 'Your org keeps captain feedback private.';

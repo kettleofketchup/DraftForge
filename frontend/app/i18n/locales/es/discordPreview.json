@@ -106,5 +106,10 @@
   },
   "variant": {
     "current_post": "La publicación existente, como se actualiza ahora"
+  },
+  "leadership_review": {
+    "title": "Mensaje de evaluación del capitán",
+    "description": "Un ejemplo de la evaluación de un compañero con los rasgos de capitán guardados.",
+    "no_traits": "Activa y guarda al menos un rasgo del capitán para previsualizar el mensaje de evaluación."
   }
 }

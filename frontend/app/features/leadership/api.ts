@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import api from '~/components/api/axios';
+import { DiscordMessageSchema } from '~/components/discord/types';
 import {
   EventReviewsSchema,
   LeadershipSettingsSchema,
@@ -120,6 +121,15 @@ export async function releaseResults(
     captains === undefined ? {} : { captains },
   );
   return ReleaseResultSchema.parse(response.data);
+}
+
+const ReviewDmPreviewSchema = z.object({
+  messages: z.array(DiscordMessageSchema),
+});
+
+export async function getReviewDmPreview(orgId: number) {
+  const response = await api.get(`${base(orgId)}/review-dm-preview/`);
+  return ReviewDmPreviewSchema.parse(response.data);
 }
 
 export async function getLeadershipSettings(

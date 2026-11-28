@@ -163,9 +163,10 @@ export function NumberSetting<
   );
 }
 
-export function ToggleSetting<TForm extends FieldValues, N extends Path<TForm>>(
-  props: SettingProps<TForm, N>,
-) {
+export function ToggleSetting<
+  TForm extends FieldValues,
+  N extends Path<TForm>,
+>({ action, ...props }: SettingProps<TForm, N> & { action?: ReactNode }) {
   const { control, name, label, help, testIdPrefix } = props;
   return (
     <FormField
@@ -186,7 +187,10 @@ export function ToggleSetting<TForm extends FieldValues, N extends Path<TForm>>(
               </FormControl>
               <FormLabel>{label}</FormLabel>
             </div>
-            <DefaultControls {...props} />
+            <div className="flex flex-wrap items-center gap-2">
+              {action}
+              <DefaultControls {...props} />
+            </div>
           </div>
           <FormDescription>{help}</FormDescription>
           <FormMessage />

@@ -938,7 +938,8 @@ throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go throu
 a captain's own `members/{org_user_id}/` summary and own entry in
 `events/{event_id}/reviews/` carry `feedback_private: true` with the review-derived
 fields `null` (`reviews` is nullable), and leaderboards plus `standing_tracks[]` carry
-`own_private: true` for that viewer.
+`own_private: true` for that viewer. See
+[Private captain feedback](../features/organization-leadership.md#private-captain-feedback).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

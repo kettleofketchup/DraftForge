@@ -50,6 +50,7 @@ function conductTrack(overrides: Partial<TrackInfo> = {}): TrackInfo {
     board_open: true,
     can_manage: false,
     can_moderate: false,
+    own_private: false,
     ...overrides,
   };
 }
@@ -96,6 +97,7 @@ function respond(base: Partial<StandingLeaderboard> = {}) {
       rows: [row(1, 0.91), row(2, 0.8), row(3, null, 'new', 1)],
       rows_visible: true,
       own_row: row(2, 0.8),
+      own_private: false,
       ...base,
     }),
   );

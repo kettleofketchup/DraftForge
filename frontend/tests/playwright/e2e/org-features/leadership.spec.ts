@@ -80,6 +80,18 @@ async function expectNoOverflow(page: Page, where: string): Promise<void> {
   }
 }
 
+async function openOwnPointsPanel(page: Page): Promise<void> {
+  await page.getByTestId('standing-metric-leadership').click();
+  const switched = page.waitForResponse(
+    (r) =>
+      r.url().includes('/standing/leadership/leaderboard/') &&
+      r.url().includes('metric=points'),
+  );
+  await page.getByTestId('standing-metric-leadership-points').click();
+  expect((await switched).ok()).toBe(true);
+  await expect(page.getByTestId('leadership-member')).toBeVisible();
+}
+
 test.describe('Org features: leadership @cicd', () => {
   let data: OrgFeaturesTestData;
 
@@ -411,6 +423,87 @@ test.describe('Org features: leadership @cicd', () => {
     await expect(page.getByTestId(`${memberEvent}-unreleased`)).toHaveCount(0);
   });
 
+  test('captain feedback private hides own rating @cicd', async ({
+    page,
+    context,
+    request,
+  }) => {
+    data = await resetOrgFeatures(request, { captainFeedbackPrivate: true });
+    const { event_pk, released_captain_org_user_pk: released } =
+      data.leadership;
+    const tabUrl = `/organizations/${data.orgs.features.pk}?tab=leadership`;
+
+    await loginOrgFeatures(context, 'member');
+    await visitAndWaitForHydration(page, tabUrl);
+    await expect(page.getByTestId('standing-own-private')).toHaveText(
+      'Your org keeps captain feedback private.',
+    );
+    await expect(page.getByTestId('leadership-member-rating')).toHaveCount(0);
+    await expect(page.getByTestId(`leadership-row-${released}`)).toHaveCount(0);
+
+    await openOwnPointsPanel(page);
+    await expect(
+      page.getByTestId('leadership-member-feedback-private'),
+    ).toHaveText('Your org keeps captain feedback private.');
+    await expect(page.getByTestId('leadership-member-rating')).toHaveCount(0);
+    await expect(
+      page.getByTestId(`leadership-member-event-${event_pk}`),
+    ).toHaveCount(0);
+    await expect(page.getByTestId('leadership-member-reviews')).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid^="leadership-member-trait-"]'),
+    ).toHaveCount(0);
+
+    await loginOrgFeatures(context, 'admin');
+    await visitAndWaitForHydration(page, tabUrl);
+    await expect(page.getByTestId(`leadership-row-${released}`)).toBeVisible();
+  });
+
+  test('admin previews the captain review DM while sending is off @cicd', async ({
+    page,
+    context,
+  }) => {
+    const pk = data.orgs.features.pk;
+    await loginOrgFeatures(context, 'admin');
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${pk}?settings=leadership`,
+    );
+
+    const sendDms = page.getByTestId('leadership-setting-review_dms_enabled');
+    await expect(sendDms).not.toBeChecked();
+    const previewResponse = page.waitForResponse(
+      (r) =>
+        r.request().method() === 'GET' &&
+        new URL(r.url()).pathname ===
+          `/api/organizations/${pk}/leadership/review-dm-preview/`,
+    );
+    await page.getByTestId('discord-preview-leadership-review').click();
+    const response = await previewResponse;
+    expect(response.status()).toBe(200);
+    const { messages } = await response.json();
+    expect(messages.length).toBeGreaterThan(0);
+
+    const dialog = page.getByRole('dialog', { name: 'Captain review DM' });
+    const cards = dialog.getByTestId('discord-message');
+    await expect(cards).toHaveCount(messages.length);
+    const first = cards.first();
+    await expect(first).toContainText('Sample Captain');
+    await expect(first).toContainText('Communication');
+    for (const score of ['1', '2', '3', '4', '5']) {
+      await expect(
+        first.getByRole('button', { name: score, exact: true }).first(),
+      ).toBeDisabled();
+    }
+    const siteAction = first.getByRole('link', { name: 'Review on site' });
+    await expect(siteAction).toBeVisible();
+    await expect(siteAction).toHaveAttribute('aria-disabled', 'true');
+    expect(await siteAction.getAttribute('href')).toBeNull();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(sendDms).not.toBeChecked();
+  });
+
   test('admin edits leadership settings and traits @cicd', async ({
     page,
     context,
@@ -431,6 +524,14 @@ test.describe('Org features: leadership @cicd', () => {
     await expect(windowHours).toBeVisible();
     await windowHours.fill('48');
     await page.getByTestId('leadership-setting-points-captained').fill('7');
+    const reviewDms = page.getByTestId('leadership-setting-review_dms_enabled');
+    const feedbackVisible = page.getByTestId(
+      'leadership-setting-captain_feedback_visible',
+    );
+    await expect(reviewDms).not.toBeChecked();
+    await expect(feedbackVisible).toBeChecked();
+    await reviewDms.click();
+    await feedbackVisible.click();
     await page.getByTestId('leadership-trait-new-label').fill('Shot calling');
     await page.getByTestId('leadership-trait-add').click();
 
@@ -445,7 +546,12 @@ test.describe('Org features: leadership @cicd', () => {
         r.url().includes(`/organizations/${pk}/leadership/traits/`),
     );
     await page.getByTestId('org-settings-save').click();
-    expect((await patched).status()).toBe(200);
+    const patchResponse = await patched;
+    expect(patchResponse.status()).toBe(200);
+    expect(patchResponse.request().postDataJSON()).toMatchObject({
+      review_dms_enabled: true,
+      captain_feedback_visible: false,
+    });
     expect((await put).status()).toBe(200);
     await expect(page.getByTestId('org-settings-save-bar')).toHaveCount(0);
 
@@ -471,6 +577,12 @@ test.describe('Org features: leadership @cicd', () => {
     await expect(
       page.getByTestId('leadership-setting-points-captained'),
     ).toHaveValue('7');
+    await expect(
+      page.getByTestId('leadership-setting-review_dms_enabled'),
+    ).toBeChecked();
+    await expect(
+      page.getByTestId('leadership-setting-captain_feedback_visible'),
+    ).not.toBeChecked();
     const labels = page.locator(
       '[data-testid^="leadership-trait-"][data-testid$="-label"]',
     );
@@ -552,5 +664,26 @@ test.describe('Org features: leadership @cicd', () => {
     await expect(page.getByTestId(`leadership-void-reason-${pk}`)).toHaveCount(
       0,
     );
+  });
+
+  test('private feedback note does not overflow at 390px @cicd', async ({
+    page,
+    context,
+    request,
+  }) => {
+    data = await resetOrgFeatures(request, { captainFeedbackPrivate: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginOrgFeatures(context, 'member');
+    await visitAndWaitForHydration(
+      page,
+      `/organizations/${data.orgs.features.pk}?tab=leadership`,
+    );
+    await expect(page.getByTestId('standing-own-private')).toBeVisible();
+    await expectNoOverflow(page, 'private feedback board note');
+    await openOwnPointsPanel(page);
+    await expect(
+      page.getByTestId('leadership-member-feedback-private'),
+    ).toBeVisible();
+    await expectNoOverflow(page, 'private feedback panel note');
   });
 });
