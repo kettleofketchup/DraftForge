@@ -26,6 +26,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 
 from app.models import CustomUser
+from discordbot.payload_schema import DiscordMessage
 from events.models import Event
 from org.contributions.serializers import member_summary
 from org.feature_errors import (
@@ -44,6 +45,7 @@ from org.leadership.release import (
     release_floor,
     release_state,
 )
+from org.leadership.review_dm import preview as preview_review_dms
 from org.leadership.reviews import (
     release_results,
     submit_review,
@@ -148,6 +150,21 @@ def leadership_settings(request: Request, org_id: int) -> Response:
             raise _refused(exc) from exc
     return Response(
         settings_data(row, kind_points(org), moderator_count=moderator_count(org))
+    )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def leadership_review_dm_preview(request: Request, org_id: int) -> Response:
+    org = _admin_org(request, org_id)
+    messages = preview_review_dms(org.pk, now=timezone.now())
+    return Response(
+        {
+            "messages": [
+                DiscordMessage.model_validate(m).model_dump(mode="json")
+                for m in messages
+            ]
+        }
     )
 
 

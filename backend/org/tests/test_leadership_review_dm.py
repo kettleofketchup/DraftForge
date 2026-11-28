@@ -5,8 +5,9 @@ from typing import Any
 from unittest.mock import patch
 
 from django.core.cache import cache
-from django.db import transaction
+from django.db import connection, transaction
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 from rest_framework.test import APIClient
 from structlog.testing import capture_logs
@@ -16,6 +17,7 @@ from discordbot.dm_keys import leadership_review_key
 from discordbot.dm_ledger import DMClaim, DMFinal
 from discordbot.internal_leadership_views import LeadershipReviewClickThrottle
 from discordbot.models import DiscordDM, DMKind, DMStatus, DMSubject
+from discordbot.payload_schema import DiscordMessage
 from discordbot.schemas import ClickResult, PlannedMessage, ReviewDMPlanResponse
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
@@ -31,6 +33,7 @@ from org.leadership.review_dm_render import (
 )
 from org.leadership.reviews import void_review, withdraw_review
 from org.leadership.traits import materialize_traits
+from org.models import Organization
 from org.models_leadership import (
     CaptainReview,
     CaptainReviewDraft,
@@ -62,6 +65,101 @@ def _rows(n: int) -> list[TraitRow]:
     return [
         TraitRow(trait_id=100 + i, label=f"Trait {i}", active=True) for i in range(n)
     ]
+
+
+class ReviewDMPreviewTest(LeadershipTestCase):
+    def test_preview_with_sending_off_uses_defaults_without_writing_or_sending(
+        self,
+    ) -> None:
+        self.assertFalse(CaptainTrait.objects.filter(organization=self.org).exists())
+        self.assertFalse(
+            OrgLeadershipSettings.objects.filter(organization=self.org).exists()
+        )
+        client = self.client_for(self.admin)
+        with (
+            CaptureQueriesContext(connection) as queries,
+            patch("requests.sessions.Session.request") as transport,
+            patch("org.leadership.tasks.send_leadership_review_dms.delay") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = client.get(self.url("review-dm-preview/"))
+        self.assertEqual(response.status_code, 200)
+        (message,) = response.json()["messages"]
+        self.assertEqual(message["flags"], 32768)
+        self.assertIn("**Communication**", _texts(message))
+        self.assertIn("Sample Captain (Sample Event)", _texts(message)[0])
+        self.assertIn("0 of 4 scored", _texts(message))
+        self.assertFalse(
+            any(
+                q["sql"]
+                .lstrip()
+                .upper()
+                .startswith(("INSERT", "UPDATE", "DELETE", "REPLACE"))
+                for q in queries
+            )
+        )
+        transport.assert_not_called()
+        enqueue.assert_not_called()
+
+    def test_multipart_matches_production_renderer_with_configured_traits_and_window(
+        self,
+    ) -> None:
+        for i, order in enumerate((7, 4, 2, 2, 9, 5, 1), start=1):
+            CaptainTrait.objects.create(
+                pk=100 + i,
+                organization=self.org,
+                key=f"trait{i}",
+                label=f"Skill {i}",
+                order=order,
+                active=i != 5,
+            )
+        OrgLeadershipSettings.objects.create(
+            organization=self.org, review_window_hours=24
+        )
+        now = tz.now()
+        with patch("org.leadership.views.timezone.now", return_value=now):
+            response = self.client_for(self.admin).get(self.url("review-dm-preview/"))
+        self.assertEqual(response.status_code, 200)
+        rows = [
+            TraitRow(trait_id=index, label=f"Skill {i}", active=True)
+            for index, i in enumerate((7, 3, 4, 2, 6, 1), start=1)
+        ]
+        expected = [
+            DiscordMessage.model_validate(
+                render_part(
+                    captain_name="Sample Captain",
+                    event_name="Sample Event",
+                    close_at=now + timedelta(hours=24),
+                    part=index,
+                    parts=2,
+                    traits=part,
+                    scores={},
+                    snapshot_id=1,
+                    site_url="https://example.invalid/events/1?review=1",
+                    state="progress",
+                )
+            ).model_dump(mode="json")
+            for index, part in enumerate((rows[:5], rows[5:]), start=1)
+        ]
+        self.assertEqual(response.json(), {"messages": expected})
+        CaptainTrait.objects.filter(organization=self.org).update(active=False)
+        empty = self.client_for(self.admin).get(self.url("review-dm-preview/"))
+        self.assertEqual(empty.json(), {"messages": []})
+
+    def test_preview_uses_the_settings_permission_and_organization_boundary(
+        self,
+    ) -> None:
+        url = self.url("review-dm-preview/")
+        self.org.staff.add(self.cap_a)
+        for user in (self.cap_a, self.mates_a[0]):
+            with self.subTest(user=user.pk):
+                self.assertEqual(self.client_for(user).get(url).status_code, 403)
+        self.assertIn(APIClient().get(url).status_code, (401, 403))
+        other = Organization.objects.create(name="Other club", owner=self.cap_b)
+        set_org_feature(other, FeatureKey.LEADERSHIP, enabled=True, actor=None)
+        self.assertEqual(self.client_for(self.cap_b).get(url).status_code, 403)
+        set_org_feature(self.org, FeatureKey.LEADERSHIP, enabled=False, actor=None)
+        self.assertEqual(self.client_for(self.admin).get(url).status_code, 403)
 
 
 @override_settings(SITE_URL=SITE)

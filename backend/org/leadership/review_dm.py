@@ -1,7 +1,7 @@
 """Leadership review DMs: planning sends and button clicks."""
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Final
 
 from django.conf import settings
@@ -23,7 +23,7 @@ from org.leadership.review_dm_render import (
 )
 from org.leadership.reviews import check_rater_writable, submit_review
 from org.leadership.settings import get_leadership_settings
-from org.leadership.traits import materialize_traits
+from org.leadership.traits import effective_traits, materialize_traits
 from org.models import OrgUser
 from org.models_leadership import (
     CaptainReview,
@@ -57,10 +57,37 @@ def _discord_id(raw: str | None) -> str | None:
     return raw if raw and raw.isdigit() and len(raw) <= 20 else None
 
 
-def _chunks(rows: list[TraitRow]) -> list[list[TraitRow]]:
+def _trait_parts(
+    traits: Sequence[CaptainTrait], *, sample_ids: bool = False
+) -> list[list[TraitRow]]:
+    active = sorted((t for t in traits if t.active), key=lambda t: (t.order, t.pk))
+    rows = [
+        TraitRow(trait_id=index if sample_ids else t.pk, label=t.label, active=True)
+        for index, t in enumerate(active, start=1)
+    ]
     return [
         rows[i : i + MAX_TRAITS_PER_MESSAGE]
         for i in range(0, len(rows), MAX_TRAITS_PER_MESSAGE)
+    ]
+
+
+def preview(org_id: int, *, now: datetime) -> list[dict[str, Any]]:
+    parts = _trait_parts(effective_traits(org_id), sample_ids=True)
+    window = get_leadership_settings(org_id).review_window_hours
+    return [
+        render_part(
+            captain_name="Sample Captain",
+            event_name="Sample Event",
+            close_at=now + timedelta(hours=window),
+            part=index,
+            parts=len(parts),
+            traits=rows,
+            scores={},
+            snapshot_id=1,
+            site_url="https://example.invalid/events/1?review=1",
+            state="progress",
+        )
+        for index, rows in enumerate(parts, start=1)
     ]
 
 
@@ -91,13 +118,7 @@ def plan(
         return []
     dispatch = snaps[0].event.leadership_review_dm_dispatch or {}
     skip = None if get_leadership_settings(org_id).review_dms_enabled else "disabled"
-    active = sorted(
-        (t for t in materialize_traits(org_id) if t.active),
-        key=lambda t: (t.order, t.pk),
-    )
-    parts = _chunks(
-        [TraitRow(trait_id=t.pk, label=t.label, active=True) for t in active]
-    )
+    parts = _trait_parts(materialize_traits(org_id))
     messages: list[PlannedMessage] = []
     for snap in snaps:
         captain_name = user_display_name(snap.captain.user)

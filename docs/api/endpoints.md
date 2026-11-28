@@ -931,6 +931,8 @@ they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are
 throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go through the
 [standing endpoints](#organization-standing).
 
+`GET review-dm-preview/` returns `{"messages": [...]}` for organization admins. Each sample uses the organization’s active traits and review window with a fictional captain and event. More than five traits produce a second message. The preview also works while sending is disabled.
+
 `GET/PATCH settings/` includes `review_dms_enabled` (default `false`) and
 `captain_feedback_visible` (default `true`). While `captain_feedback_visible` is off,
 a captain's own `members/{org_user_id}/` summary and own entry in
