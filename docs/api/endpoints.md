@@ -1822,10 +1822,31 @@ Errors use their own envelope, not `{"detail"}`:
 
 | Method | Endpoint | Description | Operation |
 |--------|----------|-------------|-----------|
-| POST | `contact-receipts/` | Import a range of the bound guild's external contacts, store or update each one and settle its promotion point (below). | `promotion:import` |
+| POST | `contact-receipts/` | Import a range of the bound guild's external contacts, store or update each one and settle its promotion point (below). | `promotion:import` or `promotion:write` |
+| GET | `contact-receipts/?event_id={id}&cursor=&limit=` | Page through one bound event's current receipt history (below). | `promotion:read` |
 
-`promotion:import` records external contacts and awards and voids promotion points.
+`promotion:import` and `promotion:write` record external contacts and award and void
+promotion points; a request needing either consumes one rate-budget unit.
 There is no recipients read and no contribution-totals export.
+
+### GET contact-receipts/
+
+`event_id` is required; `limit` is 1–100 (default 100); `cursor` is the previous
+page's `next_cursor`, valid only for the same org, event and limit. Other query
+parameters are rejected. The event must belong to the org and be bound.
+
+```json
+{"schema_version": 1,
+ "items": [{"receipt_id": "91", "source_contact_id": "5512", "event_id": "720",
+            "discord_id": "123456789012345678", "contact_method": "dm",
+            "contact_reason": "invite", "recorded_at": "2026-11-20T18:04:00Z",
+            "retracted_at": null, "source_revision": 2, "point_status": "holder"}],
+ "next_cursor": null}
+```
+
+Items are ordered by receipt ID and include retracted receipts. This is current
+history, not a change feed: edits to receipts already paged past appear only on a
+re-read from the start.
 
 ### POST contact-receipts/
 
@@ -1896,6 +1917,51 @@ Response `200`:
 
 Token management (`/api/organizations/{id}/api-tokens/`, session auth) accepts
 `operations` on create; see [MMR sync API](../features/org-mmr-sync-api.md#token-operations).
+
+## Org API connections
+
+Guide: [Org API connections](../features/org-api-connections.md). Paths below are relative to
+`/api/organizations/{id}/`, session auth with CSRF, org admins only.
+Another org's connection IDs are `404`. Errors are `{"code", "detail"}` with a fixed
+code; `409` for `configuration_changed` and other conflicts.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `api-connections/` | List connections (redacted: no key, hash or credential; `credential_present` instead). |
+| POST | `api-connections/` | Create a connection. Everything is off and no key is issued. `201` with the row. |
+| GET, PATCH | `api-connections/{cid}/` | Read or edit. PATCH needs `config_version`; a stale one is `409 configuration_changed`. `outbound_credential` (string) replaces the credential, `clear_outbound_credential: true` clears it; omit both to keep it. Changing the origin with a stored credential needs one of them (`credential_required_for_new_origin`). |
+| DELETE | `api-connections/{cid}/` | Archive: turn everything off, revoke the key, clear the credential, cancel queued runs. History stays. |
+| POST | `api-connections/{cid}/issue-key/`, `api-connections/{cid}/rotate-key/` | Body `{}` or `{"confirmed_operations": [...]}`. `201 {"connection", "credential": {"id", "prefix", "token"}}` with `Cache-Control: no-store`; the token is shown only here. `409 grant_confirmation_required` (with `operations`) when legacy keys would be consolidated. |
+| POST | `api-connections/{cid}/revoke-key/` | Revoke the inbound key; outbound directions are unaffected. |
+| POST | `api-connections/{cid}/test/` | Body `{"direction": "mmr_pull" \| "mmr_push" \| "promotion_push"}`. `202 {"run_id", "state"}`. Works on saved disabled connections; never writes domain data. |
+| POST | `api-connections/{cid}/pull/` | Body `{}`. Queue a pull with the saved configuration; returns the active run if one exists. `202` with the run. |
+| GET | `api-connections/{cid}/runs/?cursor=`, `api-connections/{cid}/runs/{run_id}/` | Run history (50 per page, opaque cursor) and one run's counters and redacted issues. |
+| GET | `api-connections/{cid}/deliveries/?state=pending\|retry\|paused&cursor=` | Unsent MMR deliveries (50 per page) and `reasons.paused` totals over all paused deliveries. |
+| POST | `api-connections/{cid}/deliveries/resume/` | Body `{"config_version"}`. Retry up to 500 paused deliveries whose reason is fixed under the current configuration. |
+| POST | `api-connections/{cid}/deliveries/resync/` | Body `{"config_version", "confirm": true}`. Cancel unsent deliveries and queue the current value of every member at new revisions. |
+| GET | `api-connections/promotion/` | The org's promotion stream: deployment-managed or adopted, and its bindings. |
+| PUT | `api-connections/{cid}/promotion-binding/` | Body `{"events": [{"event_id", "occasion_id"}]}`. Edit the adopted stream's event bindings. |
+| GET | `api-connections/{cid}/promotion/outbox/` | Promotion receipt counts by state and reason. |
+| POST | `api-connections/{cid}/promotion/resume/`, `api-connections/{cid}/promotion/send-backlog/` | Resume paused receipts; release `backlog_held` receipts (body `{"confirmed_count"}` matching the current count). |
+
+Create, edit, enable, issue and rotate share a budget of 30 per minute per org and per
+admin; pull and test 5 per minute, and tests 100 per day per org. Reads, revoke,
+archive and disable-only PATCHes are not limited.
+
+### Internal org API sync routes
+
+Used by the light Celery worker; `X-Internal-Token` and an allowed source IP. Responses
+carry only IDs, lease tokens, states and fixed codes.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/internal/org-api-sync/claim/` | Body `{"limit": 1-50}`. Queue due scheduled pulls and lease due runs and deliveries: `{"claims": [{"kind", "id", "fence"}], "promotion_due"}`. |
+| POST | `/api/internal/org-api-sync/runs/{run_id}/step/` | Body `{"fence"}`. One bounded step; returns `state`, `continuation`, `error_code` and the next `fence`. |
+| POST | `/api/internal/org-api-sync/deliveries/{delivery_id}/step/` | Body `{"fence"}`. One MMR push attempt. |
+| POST | `/api/internal/org-api-sync/promotion/step/` | Send one due promotion receipt for adopted orgs. |
+| POST | `/api/internal/org-api-sync/cleanup/` | Purge runs past 90 days. |
+
+Steps answer `429 busy` when the backend process already runs 4 steps.
 
 ## Response Format
 

@@ -41,16 +41,22 @@ the adaptor's intake, and the adaptor never holds its own API key for DraftForge
 
 ### 1. Issue the adaptor's DraftForge token
 
-In **Org Settings → API access**, an org admin creates a token with the operations the
-adaptor needs:
+In **Org Settings → API connections**, an org admin issues a key on the org's promotion
+connection with the operations the adaptor needs. An org has one promotion stream, so
+promotion grants live on that one connection only (see
+[Org API connections](org-api-connections.md#promotion)).
 
 | Operation | Label | Needs the feature |
 |-----------|-------|-------------------|
-| `promotion:import` | Import external contact history and promotion points | Promotion |
+| `promotion:write` | Write contact receipts and promotion points | Promotion |
+| `promotion:import` | Import external contact history and promotion points (existing keys) | Promotion |
+| `promotion:read` | Read contact receipt history | Promotion |
 | `mmr:read`, `mmr:write` | Read / update member MMRs | MMR sync API |
 
-`promotion:import` records external contacts and awards and voids promotion points. The
-adaptor uses one token for both jobs, so it also needs the MMR pair when it syncs MMRs;
+`promotion:write` and `promotion:import` allow the same import: they record external
+contacts and award and void promotion points. Existing keys keep `promotion:import`;
+nothing widens it to read. `promotion:read` allows only the receipt history read
+(see [API](#api)). The adaptor uses one token for both jobs, so it also needs the MMR pair when it syncs MMRs;
 an adaptor that only imports contacts needs `promotion:import` alone. The API access
 section is shown to org admins when the MMR sync API or Promotion is unlocked, so a
 promotion-only token can be issued without the MMR sync API feature. The same request
@@ -65,7 +71,8 @@ Grants are fixed when the token is created. Every request checks, in order: the 
 its org, the operation grant (`403 operation_not_granted`), the operation's feature, that
 the owner is still an org admin, and the rate budget. Tokens that existed before grants
 were added only have the MMR pair; nothing widens them. The operations are exactly
-`mmr:read`, `mmr:write` and `promotion:import`; any other name is rejected as unknown.
+`mmr:read`, `mmr:write`, `promotion:read`, `promotion:write` and `promotion:import`; any
+other name is rejected as unknown.
 
 ### 2. Bind the org and its events
 
@@ -97,7 +104,13 @@ binding fails closed (`403 binding_missing`):
 
 ### 3. Point the dispatcher at the adaptor
 
-The dispatcher is off until configured:
+The settings in this section and in step 2 are the deployment setup. An operator can
+move an org onto its promotion connection instead, with a per-org adaptor credential;
+after that the org's admins edit its event bindings in Org Settings and the deployment
+settings no longer apply to it, even while its connection is off. See
+[adopting legacy promotion sync](../deployment/org-api-connections.md#adopting-legacy-promotion-sync).
+
+The deployment dispatcher is off until configured:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
@@ -341,7 +354,11 @@ python manage.py dispatch_promotion_contacts --limit 100                 # send 
 python manage.py dispatch_promotion_contacts --limit 100 --resume-paused # paused rows back to pending first
 ```
 
-There is no Celery task or schedule; an operator or an external scheduler runs it. Each
+For orgs on deployment settings there is no Celery task or schedule; an operator or an
+external scheduler runs it. For adopted orgs with promotion push on, the
+`org-api-sync-sweep` beat task dispatches their rows over the connection, sharing the
+org's limit of two outbound requests at a time, and org admins can **Resume** paused rows
+and release `backlog_held` rows from the connection's Recovery tab. Each
 run prints a JSON report (`due`, `leased`, `counts` per resulting state, `reasons`,
 `resumed`, `skipped_unbound`).
 
@@ -359,7 +376,8 @@ Rows are sent only for bound orgs and events; others stay `pending`
 
 Turn the integration off; do not migrate back over retained data.
 
-1. Set `PROMOTION_ADAPTOR_ENABLED=false`. Rows stay as they are.
+1. Set `PROMOTION_ADAPTOR_ENABLED=false`, and for adopted orgs turn off promotion push
+   on the connection. Rows stay as they are.
 2. Revoke the adaptor's `dfk_` token in API access, or clear `PROMOTION_SYNC_BINDINGS`.
    Imports stop and the Promotion tab returns to its local-only behaviour. Credits,
    voids and restores already written stay in the ledger.
@@ -372,10 +390,18 @@ rollback never widens a grant.
 
 ## API
 
-The only integration endpoint is `POST /api/organizations/<org_id>/integration/v1/contact-receipts/`
-(operation `promotion:import`). It takes only `Authorization: Bearer dfk_…` and answers
+The integration endpoints are `POST /api/organizations/<org_id>/integration/v1/contact-receipts/`
+(operation `promotion:import` or `promotion:write`; a request consumes one rate-budget
+unit either way) and `GET` on the same path (operation `promotion:read`), which pages
+through one bound event's current receipt history. It takes only `Authorization: Bearer dfk_…` and answers
 errors as `{"error": {"code", "message", "request_id"}}`. The request and response
 shapes are in [API endpoints](../api/endpoints.md#integration-api).
+
+The history read returns receipt IDs, the external contact ID, event, Discord ID,
+contact method and reason, recorded and retracted times, source revision and point
+status. It never returns usernames, messages, templates or candidate lists. Retracted
+receipts stay in it so a reader can reconcile deletions. It is current history paged by
+receipt ID, not a change feed: re-read from the start to see edits.
 
 There is no event recipients read and no contribution-totals export, and no grant for
 either: the adaptor imports the whole guild instead of asking who may be reported, and
