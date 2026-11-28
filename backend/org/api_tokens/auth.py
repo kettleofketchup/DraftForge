@@ -3,11 +3,11 @@ from rest_framework.exceptions import AuthenticationFailed, NotFound, Permission
 from rest_framework.request import Request
 
 from app.models import CustomUser
-from org.api_tokens.operations import Operation, entitlement_for
+from org.api_tokens.operations import PROMOTION_OPERATIONS, Operation, entitlement_for
 from org.api_tokens.throttle import check_and_record
 from org.api_tokens.tokens import lookup_token
 from org.feature_errors import not_permitted, require_feature
-from org.models import Organization, OrgApiToken
+from org.models import Organization, OrgApiPromotionAdoption, OrgApiToken
 from org.permissions import has_org_admin_access
 from telemetry.logging import get_logger
 
@@ -89,6 +89,14 @@ def gate_token_request(
         ),
         None,
     )
+    if granted is not None and str(granted) in PROMOTION_OPERATIONS:
+        stream = (
+            OrgApiPromotionAdoption.objects.filter(organization_id=org_id)
+            .values_list("connection_id", flat=True)
+            .first()
+        )
+        if stream is not None and stream != token.connection_id:
+            granted = None
     if granted is None:
         log.info(
             "org_api_operation_denied",

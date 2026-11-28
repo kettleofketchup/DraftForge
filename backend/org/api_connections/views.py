@@ -31,7 +31,9 @@ from org.api_connections.lifecycle import (
 )
 from org.api_connections.promotion_config import (
     PromotionStreamError,
+    check_promotion_grants,
     describe,
+    lock_org,
     parse_event_bindings,
     resolve_promotion_config,
     set_promotion_binding,
@@ -54,6 +56,9 @@ from org.models import Organization, OrgApiConnection, OrgApiMmrDelivery, OrgApi
 DELIVERY_PAGE_SIZE = 50
 DELIVERY_STATES = ("pending", "retry", "paused")
 DELIVERY_CURSOR_SALT = "org-api-connections.deliveries"
+CONFLICT_CODES = frozenset(
+    {"configuration_changed", "binding_locked", "promotion_stream_exists"}
+)
 
 
 class ConnectionRateLimited(APIException):
@@ -103,7 +108,7 @@ def _connection(org: Organization, connection_id: int) -> OrgApiConnection:
 def _error(exc: ConnectionConfigError | CredentialError) -> Response:
     return Response(
         {"code": exc.code, "detail": exc.code},
-        status=409 if exc.code in ("configuration_changed", "binding_locked") else 400,
+        status=409 if exc.code in CONFLICT_CODES else 400,
     )
 
 
@@ -117,6 +122,10 @@ def _check_patch(connection: OrgApiConnection, patch: dict[str, Any]) -> None:
     if any(patch.get(field) is True for field in unavailable):
         raise ConnectionConfigError("direction_unavailable")
     added = set(config.operations) - set(connection.operations)
+    try:
+        check_promotion_grants(connection.organization_id, connection.pk, added)
+    except PromotionStreamError as exc:
+        raise ConnectionConfigError(exc.code) from None
     required = set(entitlements_for(added))
     if (config.enabled and not connection.enabled) or (
         config.inbound_enabled and not connection.inbound_enabled
@@ -218,6 +227,8 @@ def connection_detail(request: Request, org_id: int, connection_id: int) -> Resp
         check_action_budget(org.pk, request.user.pk)
     try:
         with transaction.atomic():
+            if type(request.data) is dict and "operations" in request.data:
+                lock_org(org.pk)
             current = OrgApiConnection.objects.select_for_update().get(pk=connection.pk)
             if request.method == "DELETE":
                 if current.archived_at is None:

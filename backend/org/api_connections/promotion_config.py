@@ -7,7 +7,7 @@ only source, enabled or not; the deployment settings are never consulted again.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from types import MappingProxyType
@@ -27,6 +27,7 @@ from org.api_connections.limits import CREDENTIAL_BYTES
 from org.api_connections.safe_http import public_origin
 from org.api_connections.schemas import ConnectionConfigError
 from org.api_connections.tls_adapter import SafeHttpError
+from org.api_tokens.operations import PROMOTION_OPERATIONS
 from org.models import (
     Organization,
     OrgApiConnection,
@@ -156,8 +157,45 @@ def describe(resolved: ResolvedPromotionConfig) -> dict[str, Any]:
     }
 
 
-def _lock_org(org_id: int) -> Organization:
+def lock_org(org_id: int) -> Organization:
     return Organization.objects.nocache().select_for_update().get(pk=org_id)
+
+
+def holds_promotion_grants(operations: Iterable[str]) -> bool:
+    return not PROMOTION_OPERATIONS.isdisjoint(operations)
+
+
+def promotion_stream_holder(org_id: int) -> int | None:
+    """The one connection allowed promotion grants: adopted, else legacy holder."""
+    adopted = (
+        OrgApiPromotionAdoption.objects.filter(organization_id=org_id)
+        .values_list("connection_id", flat=True)
+        .first()
+    )
+    if adopted is not None:
+        return adopted
+    candidates = (
+        OrgApiConnection.objects.filter(
+            organization_id=org_id, archived_at__isnull=True
+        )
+        .order_by("-legacy_multi_credential", "pk")
+        .values_list("pk", "operations")
+    )
+    return next(
+        (pk for pk, operations in candidates if holds_promotion_grants(operations)),
+        None,
+    )
+
+
+def check_promotion_grants(
+    org_id: int, connection_id: int | None, operations: Iterable[str]
+) -> None:
+    if not holds_promotion_grants(operations):
+        return
+    lock_org(org_id)
+    holder = promotion_stream_holder(org_id)
+    if holder is not None and holder != connection_id:
+        raise PromotionStreamError("promotion_stream_exists")
 
 
 def _has_receipts(org_id: int) -> bool:
@@ -223,7 +261,7 @@ def set_promotion_binding(
     _check_events(org_id, events)
     try:
         with transaction.atomic():
-            org = _lock_org(org_id)
+            org = lock_org(org_id)
             current = OrgApiConnection.objects.select_for_update().get(pk=connection.pk)
             if current.archived_at is not None:
                 raise PromotionStreamError("connection_archived")
@@ -236,6 +274,8 @@ def set_promotion_binding(
             if adoption is None:
                 if settings.PROMOTION_SYNC.for_org(org_id) is not None:
                     raise PromotionStreamError("managed_by_deployment")
+                if promotion_stream_holder(org_id) not in (None, current.pk):
+                    raise PromotionStreamError("promotion_stream_exists")
                 OrgApiPromotionAdoption.objects.create(
                     organization_id=org_id, connection=current, adopted_by=actor
                 )
@@ -280,6 +320,14 @@ def set_promotion_binding(
             )
     except IntegrityError:
         raise PromotionStreamError("promotion_stream_exists") from None
+    log.info(
+        "promotion_binding_updated",
+        system="org",
+        subsystem="api_connections",
+        org_id=org_id,
+        connection_id=connection.pk,
+        events=len(events),
+    )
     return resolve_promotion_config(org_id)
 
 
@@ -294,7 +342,8 @@ def stream_destination_locked(connection: OrgApiConnection, new_base_url: str) -
         except CredentialError:
             return url
 
-    if origin(connection.outbound_base_url) == origin(new_base_url):
+    current = origin(connection.outbound_base_url)
+    if current is None or current == origin(new_base_url):
         return False
     return _has_receipts(connection.organization_id)
 
@@ -315,23 +364,34 @@ def _check_credential(credential: str) -> None:
 
 
 class _DryRun(Exception):
-    def __init__(self, connection: OrgApiConnection) -> None:
+    def __init__(self, connection: OrgApiConnection, created: bool) -> None:
         self.connection = connection
+        self.created = created
 
 
-def _stream_connection(org_id: int, actor: CustomUser) -> OrgApiConnection:
-    candidates = OrgApiConnection.objects.select_for_update().filter(
-        organization_id=org_id, archived_at__isnull=True
-    )
-    legacy = candidates.filter(legacy_multi_credential=True).order_by("pk").first()
-    if legacy is not None:
-        return legacy
-    for candidate in candidates.order_by("pk"):
-        if "promotion:import" in candidate.operations:
-            return candidate
-    return OrgApiConnection.objects.create(
-        organization_id=org_id, name=STREAM_NAME, created_by=actor, updated_by=actor
-    )
+def _stream_connection(
+    org_id: int, actor: CustomUser, origin: str
+) -> tuple[OrgApiConnection, bool]:
+    holder = promotion_stream_holder(org_id)
+    if holder is None:
+        created = OrgApiConnection.objects.create(
+            organization_id=org_id,
+            name=STREAM_NAME,
+            created_by=actor,
+            updated_by=actor,
+        )
+        return created, True
+    candidate = OrgApiConnection.objects.select_for_update().get(pk=holder)
+    if candidate.outbound_base_url or candidate.outbound_credential_ciphertext:
+        try:
+            same = candidate.outbound_base_url and canonical_origin(
+                candidate.outbound_base_url
+            ) == canonical_origin(origin)
+        except CredentialError:
+            same = False
+        if not same:
+            raise PromotionStreamError("destination_conflict")
+    return candidate, False
 
 
 def adopt_legacy_promotion(
@@ -356,12 +416,12 @@ def adopt_legacy_promotion(
     _check_events(org_id, env.events)
     try:
         with transaction.atomic():
-            org = _lock_org(org_id)
+            org = lock_org(org_id)
             if (org.discord_server_id or "").strip() != str(env.guild_id):
                 raise PromotionStreamError("binding_mismatch", 400)
             if OrgApiPromotionAdoption.objects.filter(organization_id=org_id).exists():
                 raise PromotionStreamError("promotion_stream_exists")
-            connection = _stream_connection(org_id, actor)
+            connection, created = _stream_connection(org_id, actor, origin)
             connection = apply_config_patch(
                 connection,
                 actor=actor,
@@ -399,8 +459,10 @@ def adopt_legacy_promotion(
                 credential_changed=True,
             )
             if dry_run:
-                raise _DryRun(connection)
+                raise _DryRun(connection, created)
     except _DryRun as preview:
+        if preview.created:
+            preview.connection.pk = None
         return preview.connection
     except ConnectionConfigError as exc:
         raise PromotionStreamError(exc.code, 400) from None

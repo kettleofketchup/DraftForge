@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from app.models import CustomUser
 from common.game import GameType
 from org.api_connections.mutations import MmrMutationContext
+from org.api_connections.promotion_config import holds_promotion_grants
 from org.api_tokens.auth import OrgApiTokenAuthentication, gate_token_request
 from org.api_tokens.operations import (
     Operation,
@@ -34,6 +35,7 @@ from org.feature_errors import not_permitted, require_feature, require_org_admin
 from org.models import (
     Organization,
     OrgApiLimits,
+    OrgApiPromotionAdoption,
     OrgApiToken,
     OrgApiTokenUsage,
     OrgLog,
@@ -119,6 +121,14 @@ def org_api_tokens(request: Request, org_id: int) -> Response:
     operations = serializer.validated_data.get("operations") or default_operations()
     for feature in entitlements_for(operations):
         require_feature(org, feature)
+    if (
+        holds_promotion_grants(operations)
+        and OrgApiPromotionAdoption.objects.filter(organization=org).exists()
+    ):
+        return Response(
+            {"code": "promotion_stream_exists", "detail": "promotion_stream_exists"},
+            status=status.HTTP_409_CONFLICT,
+        )
     issued = issue_token(
         org, request.user, serializer.validated_data["name"], operations=operations
     )

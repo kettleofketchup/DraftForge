@@ -46,7 +46,9 @@ class Command(BaseCommand):
         except PromotionStreamError as exc:
             raise CommandError(exc.code) from None
         verb = "would adopt" if options["dry_run"] else "adopted"
-        self.stdout.write(
-            f"org {options['org']} {verb} promotion stream on connection "
-            f"{connection.pk}"
+        target = (
+            "a new connection"
+            if connection.pk is None
+            else f"connection {connection.pk}"
         )
+        self.stdout.write(f"org {options['org']} {verb} promotion stream on {target}")

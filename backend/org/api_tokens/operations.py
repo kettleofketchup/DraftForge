@@ -24,6 +24,14 @@ class Operation(StrEnum):
     PROMOTION_WRITE = "promotion:write"
 
 
+PROMOTION_OPERATIONS: frozenset[str] = frozenset(
+    {
+        Operation.PROMOTION_IMPORT.value,
+        Operation.PROMOTION_READ.value,
+        Operation.PROMOTION_WRITE.value,
+    }
+)
+
 _ENTITLEMENTS: dict[Operation, FeatureKey] = {
     Operation.MMR_READ: FeatureKey.MMR_SYNC,
     Operation.MMR_WRITE: FeatureKey.MMR_SYNC,

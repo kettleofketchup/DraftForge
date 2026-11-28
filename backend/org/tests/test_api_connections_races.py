@@ -575,8 +575,9 @@ class PromotionStreamRaceTests(TransactionTestCase):
         rival = OrgApiConnection.objects.create(organization=org, name="Rival")
         outcome = self.race(self.adopt(org), self.bind(rival, event))
         self.assertEqual(outcome.count("ok"), 1, outcome)
-        self.assertTrue(
-            {"managed_by_deployment", "promotion_stream_exists"} & set(outcome),
+        self.assertEqual(
+            len({"managed_by_deployment", "promotion_stream_exists"} & set(outcome)),
+            1,
             outcome,
         )
         self.assertSingleStream(org, 1)
@@ -593,3 +594,36 @@ class PromotionStreamRaceTests(TransactionTestCase):
             ["ok", "promotion_stream_exists"],
         )
         self.assertSingleStream(org, 1)
+
+    @override_settings(
+        CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    )
+    def test_concurrent_org_bind_and_grant_single_authority(self) -> None:
+        org, event = self.org("Bind vs grant", env_bound=False)
+        bound = OrgApiConnection.objects.create(organization=org, name="Bound")
+        granted = OrgApiConnection.objects.create(organization=org, name="Granted")
+
+        def grant() -> None:
+            client = APIClient()
+            client.force_authenticate(CustomUser.objects.get(pk=self.operator.pk))
+            resp = client.patch(
+                f"/api/organizations/{org.pk}/api-connections/{granted.pk}/",
+                {"config_version": 1, "operations": ["promotion:import"]},
+                format="json",
+            )
+            if resp.status_code != 200:
+                raise PromotionStreamError(resp.data["code"])
+
+        self.assertEqual(
+            self.race(self.bind(bound, event), grant),
+            ["ok", "promotion_stream_exists"],
+        )
+        granted.refresh_from_db()
+        adoption = OrgApiPromotionAdoption.objects.filter(organization=org).first()
+        if adoption is None:
+            self.assertEqual(granted.operations, ["promotion:import"])
+            self.assertFalse(OrgApiPromotionBinding.objects.filter(organization=org))
+        else:
+            self.assertEqual(adoption.connection_id, bound.pk)
+            self.assertEqual(granted.operations, [])
+            self.assertSingleStream(org, 1)
