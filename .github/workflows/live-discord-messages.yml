@@ -1,12 +1,13 @@
 name: Live Discord message tests
 
-# The full backend suite covers these tests on main. Run the focused suite
-# while the tracking work is stacked on the DM ledger.
 on:
   pull_request:
-    branches: [feature/dm-ledger-core]
+    branches: [main]
     paths:
-      - 'backend/**'
+      - 'backend/discordbot/**'
+      - 'backend/events/**'
+      - 'backend/org/**'
+      - 'backend/config/celery*.py'
       - 'docker/.env.test'
       - 'pyproject.toml'
       - 'poetry.lock'
@@ -59,6 +60,8 @@ jobs:
           "$python" manage.py test "${labels[@]}" \
             discordbot.tests.test_dm_ledger discordbot.tests.test_dm_send \
             discordbot.tests.test_internal_dm_views discordbot.tests.test_dm_choke_point \
+            discordbot.tests.test_dm_keys discordbot.tests.test_leadership_gateway \
             events.tests.test_discord_tasks events.tests.test_discord_preview \
             events.tests.test_signup_ledger_contract org.tests.test_standing_contribution_parity \
+            org.tests.test_leadership_review_dm org.tests.test_leadership_review_dm_task \
             app.tests.test_celery_settings tests.test_app_boundaries user.tests.test_app_registration --parallel 2
