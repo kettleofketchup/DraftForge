@@ -37,6 +37,7 @@ from org.api_connections.promotion_config import (
     parse_event_bindings,
     resolve_promotion_config,
     set_promotion_binding,
+    stream_archive_locked,
     stream_destination_locked,
 )
 from org.api_connections.recovery import (
@@ -57,7 +58,12 @@ DELIVERY_PAGE_SIZE = 50
 DELIVERY_STATES = ("pending", "retry", "paused")
 DELIVERY_CURSOR_SALT = "org-api-connections.deliveries"
 CONFLICT_CODES = frozenset(
-    {"configuration_changed", "binding_locked", "promotion_stream_exists"}
+    {
+        "configuration_changed",
+        "binding_locked",
+        "promotion_stream_exists",
+        "promotion_stream_in_use",
+    }
 )
 
 
@@ -231,6 +237,8 @@ def connection_detail(request: Request, org_id: int, connection_id: int) -> Resp
                 lock_org(org.pk)
             current = OrgApiConnection.objects.select_for_update().get(pk=connection.pk)
             if request.method == "DELETE":
+                if current.archived_at is None and stream_archive_locked(current):
+                    raise ConnectionConfigError("promotion_stream_in_use")
                 if current.archived_at is None:
                     current.archived_at = timezone.now()
                     current.enabled = current.inbound_enabled = False

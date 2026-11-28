@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from config.promotion_sync import PromotionSyncConfig
+from events.models import Event
 from org.api_connections import tls_adapter
 from org.api_connections.crypto import canonical_origin, open_credential
 from org.api_connections.promotion_config import (
@@ -23,7 +24,7 @@ from org.api_connections.promotion_config import (
     env_dispatch_bindings,
     resolve_promotion_config,
 )
-from org.api_tokens.tokens import issue_token
+from org.api_tokens.tokens import hash_secret
 from org.integration.bindings import get_event_binding, get_org_binding
 from org.integration.contacts import ImportBatch, contact_sync_status
 from org.integration.errors import IntegrationError
@@ -33,6 +34,7 @@ from org.models import (
     OrgApiPromotionAdoption,
     OrgApiPromotionBinding,
     OrgApiPromotionEventBinding,
+    OrgApiToken,
     OrgLog,
 )
 from org.models_promotion_sync import (
@@ -152,19 +154,30 @@ class PromotionResolverTests(_AdoptionBase):
         self.assertEqual(self.adopt().pk, self.issued.token.connection_id)
 
     def test_adopted_stream_is_sole_promotion_authority(self) -> None:
-        stray = issue_token(
-            self.org, self.admin, "stray-import", operations=["promotion:import"]
+        stray = OrgApiConnection.objects.create(
+            organization=self.org,
+            name="stray",
+            enabled=True,
+            inbound_enabled=True,
+            operations=["promotion:import"],
         )
-        self.imported([self.entry(8021, self.recipient)], raw=stray.raw)
         connection = self.adopt()
         self.assertEqual(connection.pk, self.issued.token.connection_id)
-        resp = self.post([self.entry(8022, self.recipient)], raw=stray.raw)
-        self.assertError(resp, 403, "operation_not_granted")
-        self.imported(
-            [self.entry(8022, self.recipient)],
-            after=8021,
-            through=8022,
+        self.assertNotEqual(stray.pk, connection.pk)
+        raw = "dfk_0123456789ab_stray-secret"
+        OrgApiToken.objects.create(
+            connection=stray,
+            organization=self.org,
+            user=self.admin,
+            issued_by=self.admin,
+            name="stray",
+            prefix="0123456789ab",
+            secret_hash=hash_secret("stray-secret"),
+            operations=["promotion:import"],
         )
+        resp = self.post([self.entry(8022, self.recipient)], raw=raw)
+        self.assertError(resp, 403, "operation_not_granted")
+        self.imported([self.entry(8022, self.recipient)])
         session = APIClient()
         session.force_authenticate(self.admin)
         legacy = session.post(
@@ -174,6 +187,69 @@ class PromotionResolverTests(_AdoptionBase):
         )
         self.assertEqual(legacy.status_code, 409, legacy.data)
         self.assertEqual(legacy.data["code"], "promotion_stream_exists")
+
+    def test_legacy_key_issued_before_adoption_keeps_working(self) -> None:
+        session = APIClient()
+        session.force_authenticate(self.admin)
+        late = session.post(
+            f"/api/organizations/{self.org.pk}/api-tokens/",
+            {"name": "late", "operations": ["promotion:read", "promotion:import"]},
+            format="json",
+        )
+        self.assertEqual(late.status_code, 201, late.data)
+        token = OrgApiToken.objects.get(pk=late.data["id"])
+        self.assertEqual(token.connection_id, self.issued.token.connection_id)
+        self.assertTrue(token.legacy_credential)
+        self.assertEqual(token.operations, ["promotion:import", "promotion:read"])
+        stream = OrgApiConnection.objects.get(pk=token.connection_id)
+        self.assertEqual(stream.operations, ["promotion:import", "promotion:read"])
+        self.imported([self.entry(8021, self.recipient)], raw=late.data["token"])
+        self.assertEqual(self.adopt().pk, stream.pk)
+        self.imported(
+            [self.entry(8022, self.recipient)],
+            raw=late.data["token"],
+            after=8021,
+            through=8022,
+        )
+
+    def test_legacy_key_refused_beside_single_credential_stream(self) -> None:
+        OrgApiConnection.objects.filter(pk=self.issued.token.connection_id).update(
+            legacy_multi_credential=False
+        )
+        before = OrgApiConnection.objects.count()
+        session = APIClient()
+        session.force_authenticate(self.admin)
+        resp = session.post(
+            f"/api/organizations/{self.org.pk}/api-tokens/",
+            {"name": "late", "operations": ["promotion:import"]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 409, resp.data)
+        self.assertEqual(resp.data["code"], "promotion_stream_exists")
+        self.assertEqual(OrgApiConnection.objects.count(), before)
+
+    def test_adoption_refuses_promotion_keys_off_stream(self) -> None:
+        stray = OrgApiConnection.objects.create(
+            organization=self.org,
+            name="stray",
+            enabled=True,
+            inbound_enabled=True,
+            operations=["promotion:import"],
+        )
+        OrgApiToken.objects.create(
+            connection=stray,
+            organization=self.org,
+            user=self.admin,
+            issued_by=self.admin,
+            name="stray",
+            prefix="0123456789ab",
+            secret_hash="0" * 64,
+            operations=["promotion:import"],
+        )
+        self.assertAdoptionError("promotion_keys_elsewhere", dry_run=True)
+        self.assertAdoptionError("promotion_keys_elsewhere")
+        OrgApiToken.objects.filter(connection=stray).update(revoked_at=timezone.now())
+        self.assertEqual(self.adopt().pk, self.issued.token.connection_id)
 
     def test_dry_run_writes_nothing(self) -> None:
         connection = self.adopt(dry_run=True)
@@ -593,6 +669,60 @@ class PromotionBindingApiTests(_AdoptionBase):
         resp = self.put(legacy, [(event.pk, 5)])
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertEqual(resp.data["connection_id"], legacy.pk)
+
+    def _adopted_other_stream(self) -> Event:
+        self.other_org.admins.add(self.admin)
+        self.other_org.discord_server_id = "880000000000000001"
+        self.other_org.save()
+        event = self.event.__class__.objects.create(
+            organization=self.other_org,
+            name="Other",
+            scheduled_at=self.event.scheduled_at,
+            created_by=self.admin,
+        )
+        self.assertEqual(self.put(self.connection, [(event.pk, 5)]).status_code, 200)
+        return event
+
+    def test_archived_stream_without_receipts_can_be_replaced(self) -> None:
+        event = self._adopted_other_stream()
+        base = f"/api/organizations/{self.other_org.pk}/api-connections/"
+        archived = self.session.delete(f"{base}{self.connection.pk}/")
+        self.assertEqual(archived.status_code, 200, archived.data)
+        resp = self.put(self.connection, [(event.pk, 5)])
+        self.assertEqual(resp.data["code"], "connection_archived")
+        fresh = OrgApiConnection.objects.create(organization=self.other_org, name="N")
+        resp = self.put(fresh, [(event.pk, 7)])
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["connection_id"], fresh.pk)
+        adoption = OrgApiPromotionAdoption.objects.get(organization=self.other_org)
+        self.assertEqual(adoption.connection_id, fresh.pk)
+        self.assertFalse(
+            OrgApiPromotionBinding.objects.filter(connection=self.connection).exists()
+        )
+
+    def test_stream_with_receipts_cannot_be_archived(self) -> None:
+        event = self._adopted_other_stream()
+        ExternalPromotionReceipt.objects.create(
+            organization=self.other_org,
+            source="contact_log",
+            source_contact_id=1,
+            recorded_at=self.event.scheduled_at,
+            contact_date_ny=self.event.scheduled_at.date(),
+            contact_method="DISCORD_DM",
+            contact_reason="EVENT_INVITE",
+            occasion_id=5,
+            source_hash="x" * 64,
+            discord_id="1",
+            event=event,
+        )
+        base = f"/api/organizations/{self.other_org.pk}/api-connections/"
+        resp = self.session.delete(f"{base}{self.connection.pk}/")
+        self.assertEqual(resp.status_code, 409, resp.data)
+        self.assertEqual(resp.data["code"], "promotion_stream_in_use")
+        self.connection.refresh_from_db()
+        self.assertIsNone(self.connection.archived_at)
+        other = OrgApiConnection.objects.create(organization=self.other_org, name="O")
+        self.assertEqual(self.session.delete(f"{base}{other.pk}/").status_code, 200)
 
 
 class ObservationProvenanceTests(_ImportBase):

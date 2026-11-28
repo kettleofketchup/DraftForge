@@ -24,16 +24,21 @@ from org.api_connections.audit import audit_connection
 from org.api_connections.config import apply_config_patch
 from org.api_connections.crypto import CredentialError, canonical_origin
 from org.api_connections.limits import CREDENTIAL_BYTES
+from org.api_connections.promotion_stream import (
+    PromotionStreamError,
+    holds_promotion_grants,
+    lock_org,
+    promotion_stream_holder,
+)
 from org.api_connections.safe_http import public_origin
 from org.api_connections.schemas import ConnectionConfigError
 from org.api_connections.tls_adapter import SafeHttpError
-from org.api_tokens.operations import PROMOTION_OPERATIONS
 from org.models import (
-    Organization,
     OrgApiConnection,
     OrgApiPromotionAdoption,
     OrgApiPromotionBinding,
     OrgApiPromotionEventBinding,
+    OrgApiToken,
 )
 from org.models_promotion_sync import ExternalPromotionReceipt, ReceiptSource
 from telemetry.logging import get_logger
@@ -49,13 +54,6 @@ Transport = Literal["env", "connection", "held", "none"]
 LEGACY_EFFECTIVE_AT: Final = datetime(1970, 1, 1, tzinfo=UTC)
 MAX_EVENT_BINDINGS: Final = 500
 STREAM_NAME: Final = "Promotion contact sync"
-
-
-class PromotionStreamError(Exception):
-    def __init__(self, code: str, status: int = 409) -> None:
-        self.code = code
-        self.status = status
-        super().__init__(code)
 
 
 @dataclass(frozen=True)
@@ -157,36 +155,6 @@ def describe(resolved: ResolvedPromotionConfig) -> dict[str, Any]:
     }
 
 
-def lock_org(org_id: int) -> Organization:
-    return Organization.objects.nocache().select_for_update().get(pk=org_id)
-
-
-def holds_promotion_grants(operations: Iterable[str]) -> bool:
-    return not PROMOTION_OPERATIONS.isdisjoint(operations)
-
-
-def promotion_stream_holder(org_id: int) -> int | None:
-    """The one connection allowed promotion grants: adopted, else legacy holder."""
-    adopted = (
-        OrgApiPromotionAdoption.objects.filter(organization_id=org_id)
-        .values_list("connection_id", flat=True)
-        .first()
-    )
-    if adopted is not None:
-        return adopted
-    candidates = (
-        OrgApiConnection.objects.filter(
-            organization_id=org_id, archived_at__isnull=True
-        )
-        .order_by("-legacy_multi_credential", "pk")
-        .values_list("pk", "operations")
-    )
-    return next(
-        (pk for pk, operations in candidates if holds_promotion_grants(operations)),
-        None,
-    )
-
-
 def check_promotion_grants(
     org_id: int, connection_id: int | None, operations: Iterable[str]
 ) -> None:
@@ -250,6 +218,40 @@ def _locked_events(binding: OrgApiPromotionBinding, wanted: Mapping[int, int]) -
     ).exists()
 
 
+def _repoint_archived_stream(
+    adoption: OrgApiPromotionAdoption,
+    connection: OrgApiConnection,
+    actor: CustomUser,
+) -> None:
+    """Move an archived, receipt-free stream onto ``connection``."""
+    archived = OrgApiConnection.objects.filter(
+        pk=adoption.connection_id, archived_at__isnull=False
+    ).exists()
+    if not archived or _has_receipts(adoption.organization_id):
+        raise PromotionStreamError("promotion_stream_exists")
+    OrgApiPromotionBinding.objects.filter(connection_id=adoption.connection_id).delete()
+    previous = adoption.connection_id
+    adoption.connection = connection
+    adoption.adopted_by = actor
+    adoption.adopted_at = timezone.now()
+    adoption.save(update_fields=["connection", "adopted_by", "adopted_at"])
+    log.info(
+        "promotion_stream_repointed",
+        system="org",
+        subsystem="api_connections",
+        org_id=adoption.organization_id,
+        from_connection_id=previous,
+        connection_id=connection.pk,
+    )
+
+
+def stream_archive_locked(connection: OrgApiConnection) -> bool:
+    """The adopted stream cannot be archived once it has imported receipts."""
+    return OrgApiPromotionAdoption.objects.filter(
+        connection=connection
+    ).exists() and _has_receipts(connection.organization_id)
+
+
 def set_promotion_binding(
     connection: OrgApiConnection,
     *,
@@ -280,7 +282,7 @@ def set_promotion_binding(
                     organization_id=org_id, connection=current, adopted_by=actor
                 )
             elif adoption.connection_id != current.pk:
-                raise PromotionStreamError("promotion_stream_exists")
+                _repoint_archived_stream(adoption, current, actor)
             binding, created = OrgApiPromotionBinding.objects.get_or_create(
                 connection=current,
                 defaults={"organization_id": org_id, "guild_id": guild},
@@ -394,6 +396,21 @@ def _stream_connection(
     return candidate, False
 
 
+def _check_no_other_promotion_keys(org_id: int, connection_id: int) -> None:
+    """Adoption would cut off active promotion keys held outside the stream."""
+    elsewhere = (
+        OrgApiToken.objects.filter(
+            organization_id=org_id,
+            revoked_at__isnull=True,
+            connection__archived_at__isnull=True,
+        )
+        .exclude(connection_id=connection_id)
+        .values_list("operations", flat=True)
+    )
+    if any(holds_promotion_grants(operations) for operations in elsewhere):
+        raise PromotionStreamError("promotion_keys_elsewhere")
+
+
 def adopt_legacy_promotion(
     *,
     org_id: int,
@@ -422,6 +439,7 @@ def adopt_legacy_promotion(
             if OrgApiPromotionAdoption.objects.filter(organization_id=org_id).exists():
                 raise PromotionStreamError("promotion_stream_exists")
             connection, created = _stream_connection(org_id, actor, origin)
+            _check_no_other_promotion_keys(org_id, connection.pk)
             connection = apply_config_patch(
                 connection,
                 actor=actor,

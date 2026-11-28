@@ -19,7 +19,12 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from org.api_connections import safe_http, tls_adapter
-from org.api_connections.safe_http import SafeHttpError, canonical_url, request_json
+from org.api_connections.safe_http import (
+    SafeHttpError,
+    canonical_url,
+    public_origin,
+    request_json,
+)
 from org.api_connections.types import SafeHttpRequest
 from org.tests.fixtures.api_connections.tls_server import tls_endpoint
 
@@ -125,6 +130,14 @@ class SafeHttpTests(SimpleTestCase):
         with self.assertRaises(SafeHttpError) as caught:
             request_json(request, deadline=time.monotonic() + 2, **kwargs)
         self.assertEqual(caught.exception.code, code)
+
+    def test_public_origin_rejects_missing_host(self) -> None:
+        with (
+            patch.object(safe_http, "canonical_url", return_value="https:///a"),
+            self.assertRaises(SafeHttpError) as caught,
+        ):
+            public_origin("https://adaptor.example/a")
+        self.assertEqual(caught.exception.code, "invalid_url")
 
     def test_canonical_idna_ip_and_url_policy(self) -> None:
         self.assertEqual(

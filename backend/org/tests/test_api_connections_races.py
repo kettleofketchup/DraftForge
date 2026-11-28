@@ -27,6 +27,7 @@ from org.api_connections.pull import create_pull_run
 from org.api_connections.push import acquire_delivery_lease
 from org.api_connections.revisions import next_revision
 from org.api_tokens.sync import SyncResult, sync_mmrs
+from org.api_tokens.tokens import issue_token
 from org.features import FeatureKey, set_org_feature
 from org.mmr import mark_org_mmr_verified, merge_org_mmrs, set_org_mmr
 from org.models import (
@@ -594,6 +595,27 @@ class PromotionStreamRaceTests(TransactionTestCase):
             ["ok", "promotion_stream_exists"],
         )
         self.assertSingleStream(org, 1)
+
+    def test_concurrent_legacy_promotion_keys_share_one_stream(self) -> None:
+        org, _ = self.org("Legacy keys", env_bound=True)
+
+        def issue(name: str) -> Callable[[], object]:
+            return lambda: issue_token(
+                Organization.objects.get(pk=org.pk),
+                CustomUser.objects.get(pk=self.operator.pk),
+                name,
+                operations=["promotion:import"],
+            )
+
+        self.assertEqual(self.race(issue("a"), issue("b")), ["ok", "ok"])
+        tokens = OrgApiToken.objects.filter(organization=org)
+        self.assertEqual(len({token.connection_id for token in tokens}), 1)
+        self.assertEqual(tokens.count(), 2)
+        self.adopt(org)()
+        self.assertEqual(
+            OrgApiPromotionAdoption.objects.get(organization=org).connection_id,
+            tokens.first().connection_id,
+        )
 
     @override_settings(
         CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}

@@ -66,7 +66,8 @@ def canonical_url(url: str) -> str:
 def public_origin(url: str) -> str:
     """Canonical origin of ``url`` once every DNS answer is public; no request is sent."""
     host = urlsplit(canonical_url(url)).hostname
-    assert host is not None
+    if not host:
+        raise SafeHttpError("invalid_url")
     public_answers(host, time.monotonic() + REQUEST_SECONDS)
     return canonical_origin(url)
 
