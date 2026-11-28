@@ -3,6 +3,7 @@ from typing import Any
 from rest_framework import serializers
 
 from org.api_connections.config import CONFIG_FIELDS
+from org.api_connections.types import MmrPullConfig, MmrPushConfig
 from org.models import OrgApiConnection
 
 
@@ -35,6 +36,16 @@ class ConnectionSerializer(serializers.ModelSerializer):
             "promotion_stream",
         )
         read_only_fields = fields
+
+    def to_representation(self, instance: OrgApiConnection) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        data["mmr_push_config"] = MmrPushConfig.model_validate(
+            instance.mmr_push_config or {}
+        ).model_dump(mode="json")
+        data["mmr_pull_config"] = MmrPullConfig.model_validate(
+            instance.mmr_pull_config or {}
+        ).model_dump(mode="json")
+        return data
 
     def get_credential_present(self, obj: OrgApiConnection) -> bool:
         return bool(obj.outbound_credential_ciphertext)

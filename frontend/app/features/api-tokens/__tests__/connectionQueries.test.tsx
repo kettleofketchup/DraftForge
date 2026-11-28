@@ -15,6 +15,8 @@ import {
   updateConnection,
 } from '../connectionApi';
 import {
+  WriteOnlyCredential,
+  splitCredential,
   useArchiveConnection,
   useConnection,
   useConnectionQueryHygiene,
@@ -141,7 +143,9 @@ describe('connection mutations', () => {
     const { result } = renderHook(() => useCreateConnection(ORG, access), {
       wrapper,
     });
-    await act(() => result.current.mutateAsync({ name: 'Ratings service' }));
+    await act(() =>
+      result.current.mutateAsync({ body: { name: 'Ratings service' } }),
+    );
     expect(client.getQueryData(connectionKeys.detail(ORG, 9, 12))).toEqual(
       apiConnection(),
     );
@@ -166,6 +170,48 @@ describe('connection mutations', () => {
       saved,
     );
     expect(invalid(connectionKeys.list(ORG, 9))).toBe(true);
+  });
+
+  it('create and update send the credential but never keep it in variables', async () => {
+    vi.mocked(createConnection).mockResolvedValue(apiConnection());
+    vi.mocked(updateConnection).mockResolvedValue(apiConnection());
+    const { client, wrapper } = setup();
+    const create = renderHook(() => useCreateConnection(ORG, access), {
+      wrapper,
+    });
+    const [body, credential] = splitCredential({
+      name: 'Ratings service',
+      outbound_credential: 'create-secret',
+    });
+    await act(() => create.result.current.mutateAsync({ body, credential }));
+    expect(createConnection).toHaveBeenCalledWith(ORG, {
+      name: 'Ratings service',
+      outbound_credential: 'create-secret',
+    });
+    const update = renderHook(() => useUpdateConnection(ORG, access), {
+      wrapper,
+    });
+    await act(() =>
+      update.result.current.mutateAsync({
+        connectionId: 12,
+        patch: { config_version: 1 },
+        credential: new WriteOnlyCredential('update-secret'),
+      }),
+    );
+    expect(updateConnection).toHaveBeenCalledWith(ORG, 12, {
+      config_version: 1,
+      outbound_credential: 'update-secret',
+    });
+    const text = cacheText(client);
+    expect(text).not.toContain('create-secret');
+    expect(text).not.toContain('update-secret');
+    for (const mutation of client.getMutationCache().getAll()) {
+      const vars = mutation.state.variables as { credential?: unknown };
+      if (vars.credential instanceof WriteOnlyCredential) {
+        expect(vars.credential.take()).toBeNull();
+      }
+    }
+    expect(browserStorageText()).not.toMatch(/(create|update)-secret/);
   });
 
   it('archive and revoke store the returned row and refresh legacy tokens', async () => {

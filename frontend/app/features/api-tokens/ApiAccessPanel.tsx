@@ -48,6 +48,7 @@ import {
   type ApiLimits,
   type ApiLimitsForm,
   type ApiToken,
+  type ApiUserRef,
   type CreateTokenForm,
   type CreatedApiToken,
   type TokenFeature,
@@ -120,6 +121,11 @@ export function ApiAccessPanel({
     [onConnectionDraftChange, closeConnection],
   );
   const tokens = useApiTokens(orgId, access, enabled);
+  const keyOwners = useMemo(() => {
+    const owners = new Map<number, ApiUserRef | null>();
+    for (const token of tokens.data ?? []) owners.set(token.id, token.user);
+    return owners;
+  }, [tokens.data]);
   const usage = useApiUsage(orgId, access, USAGE_DAYS, enabled);
   const limits = useApiLimits(orgId, access, enabled);
   const revoke = useRevokeApiToken(orgId, access);
@@ -199,6 +205,7 @@ export function ApiAccessPanel({
           <ApiConnectionTable
             connections={connections.data}
             onManage={onManage}
+            keyOwners={keyOwners}
             toolbarActions={
               <PrimaryButton
                 type="button"

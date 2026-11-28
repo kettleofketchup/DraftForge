@@ -5,6 +5,7 @@ import {
   DEFAULT_API_CONNECTION_COLUMNS,
   makeApiConnectionColumns,
   type ApiConnectionColumnId,
+  type KeyOwners,
 } from './apiConnectionColumns';
 import type { ApiConnection } from './connectionSchemas';
 
@@ -13,6 +14,7 @@ export interface ApiConnectionTableProps {
   testIdPrefix?: string;
   columns?: readonly ApiConnectionColumnId[];
   onManage?: (row: ApiConnection) => void;
+  keyOwners?: KeyOwners;
   toolbarActions?: ReactNode;
   emptyMessage?: string;
 }
@@ -22,12 +24,14 @@ export function ApiConnectionTable({
   testIdPrefix = 'api-connection',
   columns = DEFAULT_API_CONNECTION_COLUMNS,
   onManage,
+  keyOwners,
   toolbarActions,
   emptyMessage = 'No connections yet',
 }: ApiConnectionTableProps) {
   const cols = useMemo(
-    () => makeApiConnectionColumns({ testIdPrefix, columns, onManage }),
-    [testIdPrefix, columns, onManage],
+    () =>
+      makeApiConnectionColumns({ testIdPrefix, columns, onManage, keyOwners }),
+    [testIdPrefix, columns, onManage, keyOwners],
   );
   return (
     <DataTable

@@ -90,11 +90,12 @@ export async function issueConnectionKey(
     `${one(orgId, connectionId)}/${action}/`,
     body,
   );
-  const { connection, credential } = IssueKeyResponseSchema.parse(
-    response.data,
-  );
+  // The server has already minted the key: hand it over before any other check.
+  const { credential } = IssueKeyResponseSchema.pick({
+    credential: true,
+  }).parse(response.data);
   onSecret(credential);
-  return connection;
+  return IssueKeyResponseSchema.parse(response.data).connection;
 }
 
 export async function revokeConnectionKey(

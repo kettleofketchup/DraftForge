@@ -33,6 +33,7 @@ import { ConnectionInboundTab } from './ConnectionInboundTab';
 import { TokenSecret } from './TokenSecret';
 import {
   canManageConnections,
+  splitCredential,
   useArchiveConnection,
   useConnection,
   useConnectionQueryHygiene,
@@ -189,21 +190,27 @@ function ConnectionEditor({
     setServerError(null);
     try {
       if (creating) {
-        const row = await create.mutateAsync(buildConnectionCreate(values));
+        const [body, credential] = splitCredential(
+          buildConnectionCreate(values),
+        );
+        const row = await create.mutateAsync({ body, credential });
         adopt(row);
         toast.success('Connection created');
         onCreated?.(row.id);
         return;
       }
       if (!base) return;
-      const patch = buildConnectionPatch(base, values);
-      if (Object.keys(patch).length === 1) {
+      const [patch, credential] = splitCredential(
+        buildConnectionPatch(base, values),
+      );
+      if (!credential && Object.keys(patch).length === 1) {
         form.reset(connectionFormValues(base));
         return;
       }
       const row = await update.mutateAsync({
         connectionId: base.id,
         patch,
+        credential,
       });
       adopt(row);
       toast.success('Connection saved');
@@ -234,6 +241,19 @@ function ConnectionEditor({
 
   const reload = (): void => {
     if (latest) adopt(latest);
+  };
+
+  // Rebases the draft onto the latest version; the result still needs Save.
+  const reapply = (): void => {
+    if (!latest || !base) return;
+    const from = connectionFormValues(base);
+    const draft = form.getValues();
+    adopt(latest);
+    for (const field of Object.keys(draft) as (keyof ConnectionForm)[]) {
+      if (JSON.stringify(draft[field]) !== JSON.stringify(from[field])) {
+        form.setValue(field, draft[field], { shouldDirty: true });
+      }
+    }
   };
 
   const runIssue = async (rotate: boolean): Promise<void> => {
@@ -340,9 +360,24 @@ function ConnectionEditor({
               data-testid="api-connection-conflict"
             >
               <span className="flex-1">
-                Someone else saved this connection. Your draft is kept; reload
-                to see their version before saving.
+                Someone else saved this connection. Your draft is kept: reload
+                their version, or reapply your changes on top of it and review
+                before saving.
               </span>
+              <SecondaryButton
+                type="button"
+                size="sm"
+                className="min-h-11 sm:min-h-8"
+                onClick={reapply}
+                disabled={
+                  !latest ||
+                  !base ||
+                  latest.config_version === base.config_version
+                }
+                data-testid="api-connection-reapply"
+              >
+                Reapply my changes
+              </SecondaryButton>
               <SecondaryButton
                 type="button"
                 size="sm"

@@ -33,7 +33,7 @@ import {
   revokeApiToken,
 } from '../api';
 import { getConnection, listConnections } from '../connectionApi';
-import { apiConnection } from './connectionFixtures';
+import { apiConnection, connectionCredential } from './connectionFixtures';
 import { apiToken, apiUsage, createdApiToken } from './fixtures';
 
 vi.mock('../api', () => ({
@@ -466,6 +466,23 @@ describe('API connections', () => {
         'api-connection-status-12',
       ),
     ).toHaveTextContent('Disabled');
+  });
+
+  it("shows the active key's owner on the connection row", async () => {
+    vi.mocked(listConnections).mockResolvedValue([
+      apiConnection({
+        inbound_enabled: true,
+        operations: ['mmr:read', 'mmr:write'],
+        inbound_credentials: [connectionCredential({ id: 1 })],
+      }),
+    ]);
+    renderPanel(fullAccess);
+    expect(
+      await screen.findByTestId('api-connection-key-owner-12'),
+    ).toHaveTextContent('owner');
+    expect(screen.getByTestId('api-connection-summary-12')).toHaveTextContent(
+      /key by owner/,
+    );
   });
 
   it('opens the editor from Manage and reports its draft to the host', async () => {

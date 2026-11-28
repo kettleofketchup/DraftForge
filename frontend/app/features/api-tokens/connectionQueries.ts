@@ -118,13 +118,62 @@ function refreshKeys(
   });
 }
 
+/**
+ * Carries a write-only credential into one request. It serializes as null and
+ * empties once read, so mutation variables never retain the plaintext.
+ */
+export class WriteOnlyCredential {
+  #value: string | null;
+
+  constructor(value: string) {
+    this.#value = value;
+  }
+
+  take(): string | null {
+    const value = this.#value;
+    this.#value = null;
+    return value;
+  }
+
+  toJSON(): null {
+    return null;
+  }
+}
+
+/** Moves the outbound credential out of a body into a WriteOnlyCredential. */
+export function splitCredential<T extends { outbound_credential?: string }>(
+  body: T,
+): [Omit<T, 'outbound_credential'>, WriteOnlyCredential | undefined] {
+  const { outbound_credential, ...rest } = body;
+  return [
+    rest,
+    outbound_credential
+      ? new WriteOnlyCredential(outbound_credential)
+      : undefined,
+  ];
+}
+
+function withCredential<T extends object>(
+  body: T,
+  credential: WriteOnlyCredential | undefined,
+): T & { outbound_credential?: string } {
+  const value = credential?.take();
+  return value ? { ...body, outbound_credential: value } : body;
+}
+
+export interface CreateConnectionInput {
+  body: Omit<ConnectionCreate, 'outbound_credential'>;
+  credential?: WriteOnlyCredential;
+}
+
 export function useCreateConnection(
   orgId: number,
   access: OrgFeatureAccess,
-): UseMutationResult<ApiConnection, unknown, ConnectionCreate> {
+): UseMutationResult<ApiConnection, unknown, CreateConnectionInput> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body) => createConnection(orgId, body),
+    mutationFn: ({ body, credential }) =>
+      createConnection(orgId, withCredential(body, credential)),
     onSuccess: (row) =>
       storeConnection(queryClient, orgId, access.viewerPk, row),
   });
@@ -132,7 +181,8 @@ export function useCreateConnection(
 
 export interface UpdateConnectionInput {
   connectionId: number;
-  patch: ConnectionPatch;
+  patch: Omit<ConnectionPatch, 'outbound_credential'>;
+  credential?: WriteOnlyCredential;
 }
 
 export function useUpdateConnection(
@@ -141,8 +191,8 @@ export function useUpdateConnection(
 ): UseMutationResult<ApiConnection, unknown, UpdateConnectionInput> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ connectionId, patch }) =>
-      updateConnection(orgId, connectionId, patch),
+    mutationFn: ({ connectionId, patch, credential }) =>
+      updateConnection(orgId, connectionId, withCredential(patch, credential)),
     onSuccess: (row) =>
       Promise.all([
         storeConnection(queryClient, orgId, access.viewerPk, row),

@@ -151,6 +151,22 @@ describe('connection api', () => {
     expect(onSecret).not.toHaveBeenCalled();
   });
 
+  it('delivers a minted key even when the connection fails to parse', async () => {
+    post.mockResolvedValueOnce({
+      data: {
+        connection: { ...apiConnectionWire(), mmr_pull_config: {} },
+        credential: { id: 31, prefix: 'feedbeef', token: RAW_KEY },
+      },
+    });
+    const onSecret = vi.fn();
+    await expect(
+      issueConnectionKey(7, 12, { rotate: true }, onSecret),
+    ).rejects.toBeInstanceOf(ZodError);
+    expect(onSecret).toHaveBeenCalledWith(
+      expect.objectContaining({ token: RAW_KEY }),
+    );
+  });
+
   it('revokes the key', async () => {
     post.mockResolvedValue({ data: apiConnectionWire() });
     await revokeConnectionKey(7, 12);

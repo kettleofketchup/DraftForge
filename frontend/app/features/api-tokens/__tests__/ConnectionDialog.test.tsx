@@ -419,6 +419,79 @@ describe('ConnectionDialog', () => {
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
   });
 
+  it('test_cas_reapply_rebases_draft_onto_latest', async () => {
+    vi.mocked(getConnection).mockResolvedValue(apiConnection());
+    const { client } = setup();
+    const name = await screen.findByTestId('api-connection-name');
+    fireEvent.change(name, { target: { value: 'My draft' } });
+    const server = apiConnection({
+      config_version: 2,
+      name: 'Server rename',
+      enabled: true,
+    });
+    act(() => {
+      client.setQueryData(connectionKeys.detail(ORG, 9, 12), server);
+    });
+    await screen.findByTestId('api-connection-conflict');
+    fireEvent.click(screen.getByTestId('api-connection-reapply'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('api-connection-conflict')).toBeNull(),
+    );
+    expect(name).toHaveValue('My draft');
+    expect(screen.getByTestId('api-connection-enabled')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(updateConnection).not.toHaveBeenCalled();
+    vi.mocked(updateConnection).mockResolvedValue(
+      apiConnection({ config_version: 3, name: 'My draft', enabled: true }),
+    );
+    fireEvent.click(screen.getByTestId('api-connection-save'));
+    await waitFor(() =>
+      expect(updateConnection).toHaveBeenCalledWith(ORG, 12, {
+        config_version: 2,
+        name: 'My draft',
+      }),
+    );
+  });
+
+  it('test_saved_outbound_credential_leaves_no_cache_trace', async () => {
+    const stored = apiConnection({
+      outbound_base_url: 'https://ratings.example',
+      outbound_auth: 'bearer',
+      credential_present: true,
+    });
+    vi.mocked(getConnection).mockResolvedValue(stored);
+    vi.mocked(updateConnection).mockResolvedValue(
+      apiConnection({ ...stored, config_version: 2 }),
+    );
+    const { client, rerender } = setup();
+    await screen.findByTestId('api-connection-name');
+    fireEvent.click(screen.getByTestId('api-connection-credential-replace'));
+    fireEvent.change(screen.getByTestId('api-connection-credential'), {
+      target: { value: 'outbound-secret' },
+    });
+    fireEvent.click(screen.getByTestId('api-connection-save'));
+    await waitFor(() =>
+      expect(updateConnection).toHaveBeenCalledWith(ORG, 12, {
+        config_version: 1,
+        outbound_credential: 'outbound-secret',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('api-connection-save')).toBeDisabled(),
+    );
+    expect(cacheText(client)).not.toContain('outbound-secret');
+    expect(browserStorageText()).not.toContain('outbound-secret');
+    rerender({ open: false });
+    await waitFor(() =>
+      expect(screen.queryByTestId('api-connection-dialog')).toBeNull(),
+    );
+    expect(cacheText(client)).not.toContain('outbound-secret');
+    expect(browserStorageText()).not.toContain('outbound-secret');
+    expect(document.body.textContent).not.toContain('outbound-secret');
+  });
+
   it('shows a mapped server error on the field and no success while pending', async () => {
     vi.mocked(getConnection).mockResolvedValue(
       apiConnection({

@@ -10,7 +10,9 @@ export {
   type ConnectionDialogProps,
 } from './ConnectionDialog';
 export {
+  WriteOnlyCredential,
   canManageConnections,
+  splitCredential,
   useArchiveConnection,
   useConnection,
   useConnectionQueryHygiene,
@@ -21,6 +23,8 @@ export {
   useIssueConnectionKey,
   useRevokeConnectionKey,
   useUpdateConnection,
+  type CreateConnectionInput,
+  type UpdateConnectionInput,
 } from './connectionQueries';
 export { connectionKeys } from './connectionQueryKeys';
 export * from './connectionSchemas';

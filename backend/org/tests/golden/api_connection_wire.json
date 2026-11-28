@@ -1,0 +1,241 @@
+{
+  "connections": [
+    {
+      "archived_at": null,
+      "config_version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": 2,
+      "credential_present": false,
+      "enabled": true,
+      "game_type": null,
+      "id": 1,
+      "inbound_credentials": [],
+      "inbound_enabled": true,
+      "interval_minutes": null,
+      "last_error_code": "",
+      "last_run_summary": {},
+      "last_success_at": null,
+      "legacy_multi_credential": false,
+      "mark_verified": false,
+      "mmr_pull_config": {
+        "acknowledge_per_member": false,
+        "body": null,
+        "credential_field": null,
+        "mapping": {
+          "list_path": "",
+          "mmr_path": "mmr",
+          "player_id_path": "id",
+          "player_id_type": "steam_account_id"
+        },
+        "method": "GET",
+        "pagination": {
+          "has_more_path": null,
+          "kind": "none",
+          "next_cursor_path": null,
+          "page_size": 500,
+          "start": 1
+        },
+        "path": "/",
+        "query": {},
+        "request_mode": "org"
+      },
+      "mmr_pull_enabled": false,
+      "mmr_push_config": {
+        "body": null,
+        "credential_field": null,
+        "path": "/api/v1/organizations/{org_id}/mmr",
+        "query": {}
+      },
+      "mmr_push_enabled": false,
+      "name": "Backfilled",
+      "next_due_at": null,
+      "operations": [
+        "mmr:read",
+        "mmr:write"
+      ],
+      "outbound_auth": "none",
+      "outbound_authorizer": null,
+      "outbound_base_url": "",
+      "outbound_credential_owner": null,
+      "outbound_credential_set_at": null,
+      "overwrite_policy": "missing_only",
+      "promotion_push_enabled": false,
+      "promotion_stream": false,
+      "updated_at": "2026-01-01T00:00:00Z",
+      "updated_by": 2
+    },
+    {
+      "archived_at": null,
+      "config_version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": 2,
+      "credential_present": false,
+      "enabled": true,
+      "game_type": null,
+      "id": 1,
+      "inbound_credentials": [
+        {
+          "created_at": "2026-01-01T00:00:00Z",
+          "id": 1,
+          "issued_by_id": 2,
+          "operations": [
+            "mmr:read",
+            "mmr:write"
+          ],
+          "prefix": "fixture1",
+          "revoked_at": null,
+          "user_id": 2
+        }
+      ],
+      "inbound_enabled": true,
+      "interval_minutes": null,
+      "last_error_code": "",
+      "last_run_summary": {},
+      "last_success_at": null,
+      "legacy_multi_credential": false,
+      "mark_verified": false,
+      "mmr_pull_config": {
+        "acknowledge_per_member": false,
+        "body": null,
+        "credential_field": null,
+        "mapping": {
+          "list_path": "",
+          "mmr_path": "mmr",
+          "player_id_path": "id",
+          "player_id_type": "steam_account_id"
+        },
+        "method": "GET",
+        "pagination": {
+          "has_more_path": null,
+          "kind": "none",
+          "next_cursor_path": null,
+          "page_size": 500,
+          "start": 1
+        },
+        "path": "/",
+        "query": {},
+        "request_mode": "org"
+      },
+      "mmr_pull_enabled": false,
+      "mmr_push_config": {
+        "body": null,
+        "credential_field": null,
+        "path": "/api/v1/organizations/{org_id}/mmr",
+        "query": {}
+      },
+      "mmr_push_enabled": false,
+      "name": "Legacy route",
+      "next_due_at": null,
+      "operations": [
+        "mmr:read",
+        "mmr:write"
+      ],
+      "outbound_auth": "none",
+      "outbound_authorizer": null,
+      "outbound_base_url": "",
+      "outbound_credential_owner": null,
+      "outbound_credential_set_at": null,
+      "overwrite_policy": "missing_only",
+      "promotion_push_enabled": false,
+      "promotion_stream": false,
+      "updated_at": "2026-01-01T00:00:00Z",
+      "updated_by": 2
+    }
+  ],
+  "issue_key_response": {
+    "connection": {
+      "archived_at": null,
+      "config_version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "created_by": 2,
+      "credential_present": false,
+      "enabled": true,
+      "game_type": null,
+      "id": 1,
+      "inbound_credentials": [
+        {
+          "created_at": "2026-01-01T00:00:00Z",
+          "id": 1,
+          "issued_by_id": 2,
+          "operations": [
+            "mmr:read",
+            "mmr:write"
+          ],
+          "prefix": "fixture1",
+          "revoked_at": "2026-01-02T00:00:00Z",
+          "user_id": 2
+        },
+        {
+          "created_at": "2026-01-01T00:00:00Z",
+          "id": 1,
+          "issued_by_id": 2,
+          "operations": [
+            "mmr:read",
+            "mmr:write"
+          ],
+          "prefix": "fixture1",
+          "revoked_at": null,
+          "user_id": 2
+        }
+      ],
+      "inbound_enabled": true,
+      "interval_minutes": null,
+      "last_error_code": "",
+      "last_run_summary": {},
+      "last_success_at": null,
+      "legacy_multi_credential": false,
+      "mark_verified": false,
+      "mmr_pull_config": {
+        "acknowledge_per_member": false,
+        "body": null,
+        "credential_field": null,
+        "mapping": {
+          "list_path": "",
+          "mmr_path": "mmr",
+          "player_id_path": "id",
+          "player_id_type": "steam_account_id"
+        },
+        "method": "GET",
+        "pagination": {
+          "has_more_path": null,
+          "kind": "none",
+          "next_cursor_path": null,
+          "page_size": 500,
+          "start": 1
+        },
+        "path": "/",
+        "query": {},
+        "request_mode": "org"
+      },
+      "mmr_pull_enabled": false,
+      "mmr_push_config": {
+        "body": null,
+        "credential_field": null,
+        "path": "/api/v1/organizations/{org_id}/mmr",
+        "query": {}
+      },
+      "mmr_push_enabled": false,
+      "name": "Legacy route",
+      "next_due_at": null,
+      "operations": [
+        "mmr:read",
+        "mmr:write"
+      ],
+      "outbound_auth": "none",
+      "outbound_authorizer": null,
+      "outbound_base_url": "",
+      "outbound_credential_owner": null,
+      "outbound_credential_set_at": null,
+      "overwrite_policy": "missing_only",
+      "promotion_push_enabled": false,
+      "promotion_stream": false,
+      "updated_at": "2026-01-01T00:00:00Z",
+      "updated_by": 2
+    },
+    "credential": {
+      "id": 1,
+      "prefix": "fixture1",
+      "token": "dfk_fixture_token"
+    }
+  }
+}

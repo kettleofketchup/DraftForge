@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   ApiTokenSchema,
@@ -5,6 +7,7 @@ import {
   ConnectionFormSchema,
   ConnectionPatchSchema,
   ConnectionSchema,
+  ConnectionsSchema,
   DeliveryPageSchema,
   IssueKeyResponseSchema,
   RunSchema,
@@ -19,6 +22,34 @@ import {
   connectionCredential,
   connectionRun,
 } from './connectionFixtures';
+
+// Written by backend/org/tests/test_api_connections_wire.py from real serializer output.
+const backendWire = JSON.parse(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        '../../../../../backend/org/tests/golden/api_connection_wire.json',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  ),
+) as { connections: unknown[]; issue_key_response: unknown };
+
+describe('backend wire fixture', () => {
+  it('parses legacy-route and backfilled rows', () => {
+    const rows = ConnectionsSchema.parse(backendWire.connections);
+    expect(rows.map((row) => row.name)).toEqual(['Backfilled', 'Legacy route']);
+    expect(rows[0].mmr_pull_config.mapping.player_id_type).toBe(
+      'steam_account_id',
+    );
+  });
+
+  it('parses an issue-key response', () => {
+    const parsed = IssueKeyResponseSchema.parse(backendWire.issue_key_response);
+    expect(parsed.credential.token).not.toBe('');
+  });
+});
 
 describe('ConnectionSchema', () => {
   it('parses a wire row and reads an empty run summary as none', () => {

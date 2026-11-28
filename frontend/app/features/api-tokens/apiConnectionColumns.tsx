@@ -4,8 +4,11 @@ import {
   DataTableColumnHeader,
   type AppColumnDef,
 } from '~/components/ui/data-table';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { maskedToken, relativeTime } from './apiTokenColumns';
 import type { ApiConnection } from './connectionSchemas';
+import type { ApiUserRef } from './schemas';
 
 export type ApiConnectionColumnId =
   | 'name'
@@ -44,6 +47,20 @@ export function activeCredentials(row: ApiConnection) {
   return row.inbound_credentials.filter((c) => c.revoked_at === null);
 }
 
+export type KeyOwners = ReadonlyMap<number, ApiUserRef | null>;
+
+/** The owner of the connection's first active key, when known. */
+export function keyOwner(
+  row: ApiConnection,
+  owners: KeyOwners | undefined,
+): ApiUserRef | null {
+  for (const key of activeCredentials(row)) {
+    const owner = owners?.get(key.id);
+    if (owner) return owner;
+  }
+  return null;
+}
+
 export function lastSyncText(row: ApiConnection): string {
   return relativeTime(row.last_success_at);
 }
@@ -52,12 +69,15 @@ export interface MakeApiConnectionColumnsOptions {
   testIdPrefix: string;
   columns?: readonly ApiConnectionColumnId[];
   onManage?: (row: ApiConnection) => void;
+  /** Legacy token id to owner, from the token list. */
+  keyOwners?: KeyOwners;
 }
 
 export function makeApiConnectionColumns({
   testIdPrefix,
   columns = DEFAULT_API_CONNECTION_COLUMNS,
   onManage,
+  keyOwners,
 }: MakeApiConnectionColumnsOptions): AppColumnDef<ApiConnection>[] {
   const all: Record<ApiConnectionColumnId, AppColumnDef<ApiConnection> | null> =
     {
@@ -70,6 +90,7 @@ export function makeApiConnectionColumns({
         cell: ({ row }) => {
           const c = row.original;
           const directions = connectionDirections(c);
+          const owner = keyOwner(c, keyOwners);
           return (
             <div className="flex min-w-0 flex-col gap-0.5">
               <span className="wrap-anywhere font-medium">{c.name}</span>
@@ -80,6 +101,7 @@ export function makeApiConnectionColumns({
                 {connectionStatus(c).label} ·{' '}
                 {directions.length ? directions.join(', ') : 'No directions'} ·{' '}
                 {lastSyncText(c)}
+                {owner ? ` · key by ${DisplayName(owner)}` : ''}
               </span>
             </div>
           );
@@ -136,17 +158,29 @@ export function makeApiConnectionColumns({
         accessorFn: (c) => activeCredentials(c)[0]?.prefix ?? '',
         cell: ({ row }) => {
           const keys = activeCredentials(row.original);
+          const owner = keyOwner(row.original, keyOwners);
           return keys.length ? (
-            <code className="font-mono text-xs wrap-anywhere">
-              {keys.map((k) => maskedToken(k.prefix)).join(', ')}
-            </code>
+            <div className="flex min-w-0 flex-col gap-1">
+              <code className="font-mono text-xs wrap-anywhere">
+                {keys.map((k) => maskedToken(k.prefix)).join(', ')}
+              </code>
+              {owner && (
+                <span
+                  className="flex min-w-0 items-center gap-2 text-xs"
+                  data-testid={`${testIdPrefix}-key-owner-${row.original.id}`}
+                >
+                  <UserAvatar user={owner} size="xs" />
+                  <span className="truncate">{DisplayName(owner)}</span>
+                </span>
+              )}
+            </div>
           ) : (
             <span className="text-muted-foreground">None</span>
           );
         },
         meta: {
-          headClassName: 'hidden w-36 lg:table-cell',
-          cellClassName: 'hidden w-36 lg:table-cell',
+          headClassName: 'hidden w-40 lg:table-cell',
+          cellClassName: 'hidden w-40 lg:table-cell',
         },
       },
       last_sync: {
