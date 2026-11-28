@@ -236,3 +236,5 @@ export function useStaffAction({
 
   return { run, dispatch, collect, dialogProps, isOpen: dialogProps.open };
 }
+
+export type StaffAction = ReturnType<typeof useStaffAction>;

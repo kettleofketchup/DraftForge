@@ -28,6 +28,10 @@ export {
   type SignupHistorySectionProps,
 } from './SignupHistorySection';
 export { SubscriberList } from './SubscriberList';
+export {
+  TransferSpotDialog,
+  type TransferSpotDialogProps,
+} from './TransferSpotDialog';
 export { useOverrideRetry } from './useOverrideRetry';
 export {
   useSignupOverride,
