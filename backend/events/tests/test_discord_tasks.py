@@ -812,6 +812,38 @@ class SubscriberReminderLedgerTest(_DiscordTaskTestCase):
         )
         self.assertEqual(self.discord.posts, 2)
 
+    @override_settings(DISCORD_BOT_TOKEN="fake-token")
+    def test_confirmation_during_patch_edits_each_reminder_only_once(self) -> None:
+        self._run()
+        destinations = [
+            self._row(recipient).delivered_address
+            for recipient in (self.member, self.outsider)
+        ]
+        signup = EventSignup.objects.create(
+            event=self.event, user=self.admin, status=SignupStatus.APPROVED
+        )
+        edits: list[tuple[str, str]] = []
+
+        def confirm_during_patch(
+            method: str, url: str, *, json: dict[str, Any], **kwargs: Any
+        ) -> Response:
+            self.assertEqual(method, "PATCH")
+            channel, _, message = url.split("/")[-3:]
+            self.assertIn("**Signed up:** 1/10 players", str(json["components"]))
+            if not edits:
+                signup.status = SignupStatus.CONFIRMED
+                signup.save(update_fields=["status"])
+            edits.append((channel, message))
+            return _discord_response(200, {"channel_id": channel, "id": message})
+
+        self.enterContext(patch("discordbot.utils._acquire_rate_limit_token"))
+        self.enterContext(
+            patch("discordbot.utils.requests.request", side_effect=confirm_during_patch)
+        )
+        self.assertEqual(refresh_live_messages(), 2)
+        self.assertCountEqual(edits, destinations)
+        self.assertEqual(refresh_live_messages(), 0)
+
     def test_reminder_event_dm_has_ledger_entry(self) -> None:
         self._run()
 

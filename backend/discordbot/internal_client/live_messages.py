@@ -2,15 +2,24 @@
 
 from app.internal_client import transport
 from app.internal_client.transport import InternalAPIUnavailable
-from discordbot.schemas import LiveEditClaim, LiveEditFinish
+from discordbot.schemas import (
+    LIVE_EDIT_SCAN_HEADER,
+    LiveEditClaim,
+    LiveEditFinish,
+    LiveEditScan,
+)
 
 
-def claim_edit(*, discord_user_id: str | None = None) -> LiveEditClaim | None:
+def claim_edit(
+    *, discord_user_id: str | None = None
+) -> LiveEditClaim | LiveEditScan | None:
     body = {"discord_user_id": discord_user_id} if discord_user_id is not None else {}
     response = transport.post("/discord/live-messages/claim/", body)
     if response is None or response.status_code not in (200, 204):
         raise InternalAPIUnavailable("live edit claim failed")
     if response.status_code == 204:
+        if response.headers.get(LIVE_EDIT_SCAN_HEADER) == LiveEditScan.LIMIT_REACHED:
+            return LiveEditScan.LIMIT_REACHED
         return None
     try:
         return LiveEditClaim.model_validate(response.json())

@@ -3,8 +3,8 @@
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from django.db.models import Model
-from django.db.models.signals import post_delete, post_save, pre_save
+from django.db.models import Model, QuerySet
+from django.db.models.signals import post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
 from discordbot.live_messages import invalidate_live_messages, invalidate_live_subjects
@@ -26,9 +26,10 @@ def watch_live_fields[T: Model](
 ) -> None:
     """Refresh subjects on matching saves and deletes, inside the caller's transaction.
 
-    A resolver can return a queryset to refresh multiple subjects in a single SQL
-    statement. Full saves have no changed-field list, so the renderer's digest is
-    the final check before issuing an edit.
+    Resolve subjects before the row is deleted and after it is saved. A resolver
+    can return a queryset to refresh multiple subjects in a single SQL statement.
+    Full saves have no changed-field list, so the renderer's digest is the final
+    check before issuing an edit.
     """
 
     def saved(
@@ -46,12 +47,21 @@ def watch_live_fields[T: Model](
                 renderer, (saved_subject_ids or subject_ids)(instance)
             )
 
-    def deleted(*, instance: T, **kwargs: Any) -> None:
+    def deleting(*, instance: T, **kwargs: Any) -> None:
         invalidate_live_subjects(renderer, subject_ids(instance))
 
     uid = f"live.{renderer}.{model._meta.label_lower}"
     post_save.connect(saved, model, weak=False, dispatch_uid=uid)
-    post_delete.connect(deleted, model, weak=False, dispatch_uid=uid)
+    pre_delete.connect(deleting, model, weak=False, dispatch_uid=uid)
+
+
+def _signup_event_ids(signup: EventSignup) -> QuerySet[EventSignup, int]:
+    return (
+        EventSignup.objects.using(signup._state.db)
+        .nocache()
+        .filter(pk=signup.pk)
+        .values_list("event_id", flat=True)
+    )
 
 
 @receiver(pre_save, sender=EventSignup, dispatch_uid="live.signup.previous_event")
@@ -66,12 +76,7 @@ def signup_leaving_event(
         return
     if update_fields is not None and {"event", "event_id"}.isdisjoint(update_fields):
         return
-    previous = (
-        EventSignup.objects.nocache()
-        .filter(pk=instance.pk)
-        .values_list("event_id", flat=True)
-        .first()
-    )
+    previous = _signup_event_ids(instance).select_for_update().first()
     if previous is not None and previous != instance.event_id:
         invalidate_live_messages(REMINDER, previous)
 
@@ -105,11 +110,9 @@ def connect_live_signals() -> None:
         EventSignup,
         renderer=REMINDER,
         fields={"event", "event_id", "status"},
-        subject_ids=lambda signup: (signup.event_id,),
-        # A partial save can leave an unsaved FK assignment on the instance.
-        saved_subject_ids=lambda signup: EventSignup.objects.filter(
-            pk=signup.pk
-        ).values_list("event_id", flat=True),
+        # Hold the persisted signup parent stable until the delete commits.
+        subject_ids=lambda signup: list(_signup_event_ids(signup).select_for_update()),
+        saved_subject_ids=_signup_event_ids,
     )
     watch_live_fields(
         Organization,

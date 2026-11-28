@@ -60,6 +60,27 @@ class LiveSignalTests(EventTestCase):
         signup.delete()
         self.assertEqual(self.revisions(), [4, 3, 1])
 
+    def test_stale_signup_delete_wakes_only_the_persisted_event(self):
+        signup = EventSignup.objects.create(
+            event=self.event, user=self.admin, status=SignupStatus.APPROVED
+        )
+        stale = EventSignup.objects.get(pk=signup.pk)
+        moved = EventSignup.objects.get(pk=signup.pk)
+        moved.event = self.sibling
+        moved.save(update_fields=["event"])
+        self.assertEqual(self.revisions(), [3, 2, 1])
+
+        with transaction.atomic():
+            stale.delete()
+            self.assertEqual(self.revisions(), [3, 3, 1])
+            transaction.set_rollback(True)
+
+        self.assertEqual(self.revisions(), [3, 2, 1])
+        self.assertTrue(EventSignup.objects.filter(event=self.sibling).exists())
+        signup.delete()
+        self.assertFalse(EventSignup.objects.filter(event=self.sibling).exists())
+        self.assertEqual(self.revisions(), [3, 3, 1])
+
     def test_bulk_state_transition_rolls_back_with_dirty_mark(self):
         with transaction.atomic():
             self.event.transition_state(EventState.ROLL_CALL)

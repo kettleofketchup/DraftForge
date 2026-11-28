@@ -134,6 +134,20 @@ class LiveMessageTests(TestCase):
         self.assertIsNone(row.next_attempt_at)
         self.assertEqual(row.last_edited_at, edited_at)
 
+    def test_unchanged_components_during_edit_do_not_trigger_another_patch(self):
+        row = self.track()
+        claim = claim_live_edit()
+        invalidate_live_messages(row.renderer, row.subject_id)
+        self.assertTrue(finish_live_edit(row.pk, claim["token"], "edited"))
+        row.refresh_from_db()
+        edited_at = row.last_edited_at
+        self.assertEqual(row.applied_revision, 1)
+        self.assertIsNone(claim_live_edit())
+        row.refresh_from_db()
+        self.assertEqual(row.applied_revision, row.revision)
+        self.assertEqual(row.last_edited_at, edited_at)
+        self.assertIsNone(row.next_attempt_at)
+
     def test_uncertain_patch_reconciled_on_expired_lease_and_stale_ack_fenced(self):
         row = self.track()
         a = claim_live_edit()
@@ -170,6 +184,28 @@ class LiveMessageTests(TestCase):
         repair = claim_live_edit()
         self.assertEqual(repair["payload"], self.render.return_value)
         self.assertNotEqual(repair["token"], current["token"])
+        self.assertTrue(finish_live_edit(row.pk, repair["token"], "edited"))
+        self.assertIsNone(claim_live_edit())
+
+    def test_late_success_while_rendering_unchanged_components_forces_repair(self):
+        row = self.track()
+        expired = claim_live_edit()
+        LiveDiscordMessage.objects.filter(pk=row.pk).update(
+            next_attempt_at=timezone.now() - EDIT_LEASE
+        )
+        self.render.return_value = {"components": [{"type": 10, "content": "latest"}]}
+        current = claim_live_edit()
+        self.assertTrue(finish_live_edit(row.pk, current["token"], "edited"))
+        invalidate_live_messages(row.renderer, row.subject_id)
+
+        def render_during_late_ack(*args):
+            self.render.side_effect = None
+            self.assertFalse(finish_live_edit(row.pk, expired["token"], "edited"))
+            return self.render.return_value
+
+        self.render.side_effect = render_during_late_ack
+        repair = claim_live_edit()
+        self.assertEqual(repair["payload"], current["payload"])
         self.assertTrue(finish_live_edit(row.pk, repair["token"], "edited"))
         self.assertIsNone(claim_live_edit())
 

@@ -11,7 +11,12 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from discordbot import live_messages
-from discordbot.schemas import LiveEditClaimRequest, LiveEditFinish
+from discordbot.schemas import (
+    LIVE_EDIT_SCAN_HEADER,
+    LiveEditClaimRequest,
+    LiveEditFinish,
+    LiveEditScan,
+)
 
 
 @api_view(["POST"])
@@ -23,6 +28,8 @@ def claim(request: Request) -> Response:
     except ValidationError:
         return Response({"error": "invalid_request"}, status=400)
     work = live_messages.claim_live_edit(discord_user_id=body.discord_user_id)
+    if isinstance(work, LiveEditScan):
+        return Response(status=204, headers={LIVE_EDIT_SCAN_HEADER: work.value})
     if work is None:
         return Response(status=204)
     return Response(work)

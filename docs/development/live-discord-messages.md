@@ -14,7 +14,7 @@ The `event_signup_reminder` renderer uses the same seated signup count as the ev
 2. Look up its Discord message ID under **Live Discord Messages**. The source ID identifies the event used to render it. Registration starts dirty to reconcile changes made during delivery.
 3. A relevant database write marks reminders for that event dirty. Celery beat schedules `discordbot.tasks.refresh_live_messages` every 15 seconds. The worker gets due work from the backend over the authenticated internal API. Worker capacity and Discord rate limits affect when an edit appears.
 4. The backend renders current data when it claims a row. When the rendered digest matches the last confirmed send or edit it clears that revision locally. Otherwise the worker sends a PATCH with the new components and explicit mention suppression.
-5. A successful completion acknowledges the leased revision. Changes that arrived after the claim remain pending. If an expired worker later reports a successful edit, the backend schedules a corrective PATCH with current data. An expired lease makes abandoned work eligible again.
+5. A successful completion records the components Discord accepted for the leased revision. Changes that arrived during the edit stay pending. If they render the same components, the next claim advances the revision locally. A late success from an expired worker makes the visible content uncertain and schedules a corrective PATCH.
 
 | Result | What happens to the message |
 | --- | --- |
@@ -35,20 +35,23 @@ The read-only tracking admin exposes queue metadata. Rendered text and button UR
 3. In the transaction that changes a dependency, call `invalidate_live_messages(renderer, subject_id)` for each affected subject. Use the write path for operations that bypass Django signals, including `QuerySet.update()` and `bulk_update()`. If a child row moves between parents, account for both the old and the new subject.
 4. Add tests that go through the real sender and relevant model writes with a mocked Discord transport. Include a second unrelated subject, a rollback, a change during an in-flight edit, and a repeated render that sends no PATCH. Keep credentials and recipient IDs synthetic.
 
-Register a dependency at app startup. This signup subscription reads the saved parent ID from the database because callers can assign a new event in memory and save only the status. A delete uses the parent ID on the deleted row. The signup pre-save receiver also invalidates the former event when a signup moves.
+Register a dependency at app startup. For a signup, a partial save can leave an unsaved event assignment on the instance. A stale instance can also point to an old event when the signup is deleted. Resolve the persisted parent after saves, and lock the signup before deletion to keep its parent stable until commit. The signup pre-save receiver also invalidates the former event when a signup moves.
 
 ```python
 from discordbot.live_signals import watch_live_fields
 from events.models import EventSignup
 
+def signup_event_ids(signup):
+    return EventSignup.objects.using(signup._state.db).nocache().filter(
+        pk=signup.pk
+    ).values_list("event_id", flat=True)
+
 watch_live_fields(
     EventSignup,
     renderer="event_signup_reminder",
     fields={"event", "event_id", "status"},
-    subject_ids=lambda signup: (signup.event_id,),
-    saved_subject_ids=lambda signup: EventSignup.objects.filter(pk=signup.pk).values_list(
-        "event_id", flat=True
-    ),
+    subject_ids=lambda signup: list(signup_event_ids(signup).select_for_update()),
+    saved_subject_ids=signup_event_ids,
 )
 ```
 
@@ -65,6 +68,6 @@ with transaction.atomic():
         event_data_changed.send(sender=Event, event_id=event_id)
 ```
 
-Worker calls use `POST /api/internal/discord/live-messages/claim/` and `POST /api/internal/discord/live-messages/<pk>/finish/`. Claims return one lease or HTTP 204 when the queue is empty. Each completion carries the lease token. The database lives on the backend, so worker code uses these endpoints even when local development runs all processes on one machine.
+Worker calls use `POST /api/internal/discord/live-messages/claim/` and `POST /api/internal/discord/live-messages/<pk>/finish/`. A claim returns one lease with HTTP 200. A plain HTTP 204 ends the batch. A 204 with `X-Live-Edit-Scan: limit-reached` tells the worker to keep looking for eligible edits. Each request scans up to 32 rows, and each worker run makes up to 20 claim requests. Each completion carries the lease token.
 
 Discord's API documents which fields can be edited on bot-authored messages and how retry delays are reported. [Edit Message](https://docs.discord.com/developers/resources/message#edit-message) · [Rate Limits](https://docs.discord.com/developers/topics/rate-limits)

@@ -19,6 +19,7 @@ from discordbot.models import (
     LiveMessageState,
 )
 from discordbot.payloads import live_component_digest
+from discordbot.schemas import LiveEditScan
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -120,7 +121,9 @@ def invalidate_live_subjects(renderer: str, subject_ids: Iterable[int]) -> int:
     )
 
 
-def claim_live_edit(*, discord_user_id: str | None = None) -> dict[str, Any] | None:
+def claim_live_edit(
+    *, discord_user_id: str | None = None
+) -> dict[str, Any] | LiveEditScan | None:
     """Claim one due edit. Competing workers compare-and-swap on the deadline."""
     from discordbot.live_renderers import render_live_message
 
@@ -133,8 +136,7 @@ def claim_live_edit(*, discord_user_id: str | None = None) -> dict[str, Any] | N
             return None
         rows = rows.filter(dm__discord_user_id=target)
 
-    # Bound the request, even if a subject was removed or its rendered view
-    # hasn't changed for many recipients. Beat continues on the next pass.
+    # Each request scans a bounded number of rows, including unchanged renders.
     for _ in range(CLAIM_SCAN_LIMIT):
         now = timezone.now()
         due = rows.filter(next_attempt_at__lte=now)
@@ -193,7 +195,7 @@ def claim_live_edit(*, discord_user_id: str | None = None) -> dict[str, Any] | N
             "message_id": row.message_id,
             "payload": payload,
         }
-    return None
+    return LiveEditScan.LIMIT_REACHED
 
 
 def _finish_success(pk: int, token: str, *, patched: bool) -> bool:
@@ -215,15 +217,16 @@ def _finish_success(pk: int, token: str, *, patched: bool) -> bool:
                 ).update(
                     revision=F("revision") + 1,
                     applied_hash="",
+                    lease_hash="",
                     next_attempt_at=Coalesce("next_attempt_at", now),
                 )
             return False
         dirty = row.revision != row.lease_revision
         owned.update(
             applied_revision=row.lease_revision,
-            # A stale success may have dirtied this row while the PATCH was
-            # in flight. In that case the next pass must reach Discord.
-            applied_hash="" if dirty else row.lease_hash,
+            # A late PATCH clears both hashes. A no-op only confirms the digest
+            # already on record, even if its render finished after that PATCH.
+            applied_hash=row.lease_hash if patched else row.applied_hash,
             lease_token=None,
             lease_hash="",
             failures=0,

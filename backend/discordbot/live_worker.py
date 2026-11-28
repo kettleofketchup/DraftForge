@@ -11,7 +11,7 @@ from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
 from discordbot.http_evidence import discord_error_code, response_json
 from discordbot.internal_client.live_messages import claim_edit, finish_edit
-from discordbot.schemas import LiveEditClaim, LiveEditFinish
+from discordbot.schemas import LiveEditClaim, LiveEditFinish, LiveEditScan
 from discordbot.utils import (
     DiscordAuthError,
     _retry_after_seconds,
@@ -116,6 +116,8 @@ def drain_live_edits() -> int:
             claim = claim_edit(discord_user_id=recipient)
             if claim is None:
                 break
+            if isinstance(claim, LiveEditScan):
+                continue
             try:
                 result = apply_edit(claim)
             except DiscordAuthError:

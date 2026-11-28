@@ -13,14 +13,19 @@ from rest_framework.test import APIClient
 from app.redis_client import get_redis_client
 from app.redis_keys import namespaced_key
 from discordbot.internal_client.live_messages import claim_edit, finish_edit
+from discordbot.live_messages import CLAIM_SCAN_LIMIT, track_message
+from discordbot.live_renderers import render_live_message
 from discordbot.live_worker import (
     BATCH_SIZE,
     apply_edit,
     cooldown_remaining,
     pause_live_edits,
 )
+from discordbot.payloads import live_component_digest
 from discordbot.schemas import LiveEditClaim, LiveEditFinish
 from discordbot.tasks import refresh_live_messages
+from discordbot.tests.ledger_bridge import ledger_bridge
+from events.tests.base import EventTestCase
 
 TOKEN = str(uuid4())
 COMPONENTS = [{"type": 10, "content": "Signed up: 12"}]
@@ -92,6 +97,23 @@ class LiveWorkerTests(SimpleTestCase):
         queue.side_effect = [response(200, CLAIM), response(204)] * BATCH_SIZE
         self.assertEqual(refresh_live_messages(), BATCH_SIZE)
         self.assertEqual(http.call_count, BATCH_SIZE)
+
+    @override_settings(TEST=True, TEST_DISCORD_USER_ID="1001")
+    @patch(HTTP)
+    @patch(TRANSPORT)
+    def test_scan_continuations_share_the_worker_batch_budget(
+        self, queue: MagicMock, http: MagicMock
+    ) -> None:
+        queue.return_value = response(204)
+        queue.return_value.headers["X-Live-Edit-Scan"] = "limit-reached"
+        self.assertEqual(refresh_live_messages(), 0)
+        self.assertEqual(queue.call_count, BATCH_SIZE)
+        for attempt in queue.call_args_list:
+            self.assertEqual(
+                attempt.args,
+                ("/discord/live-messages/claim/", {"discord_user_id": "1001"}),
+            )
+        http.assert_not_called()
 
     @patch(ACQUIRE)
     @patch(HTTP)
@@ -193,6 +215,56 @@ class LiveWorkerTests(SimpleTestCase):
 
 
 @override_settings(TEST=False, DISCORD_BOT_TOKEN="test-bot-token")
+class LiveQueueScanTests(EventTestCase):
+    def test_edit_behind_a_full_page_of_unchanged_dms_runs_in_the_same_batch(
+        self,
+    ) -> None:
+        renderer = "event_signup_reminder"
+        current = render_live_message(renderer, self.event.pk)
+        assert current is not None
+        digest = live_component_digest(current["components"])
+        for index in range(CLAIM_SCAN_LIMIT):
+            track_message(
+                renderer=renderer,
+                subject_id=self.event.pk,
+                channel_id="102",
+                message_id=str(1000 + index),
+                initial_digest=digest,
+            )
+        other_event = self.make_event()
+        previous = render_live_message(renderer, other_event.pk)
+        assert previous is not None
+        changed = track_message(
+            renderer=renderer,
+            subject_id=other_event.pk,
+            channel_id="102",
+            message_id="2000",
+            initial_digest=live_component_digest(previous["components"]),
+        )
+        other_event.name = "Moved to Saturday"
+        other_event.save(update_fields=["name"])
+        with (
+            ledger_bridge(),
+            patch("discordbot.live_worker.cooldown_remaining", return_value=0),
+            patch(ACQUIRE),
+            patch(
+                HTTP, return_value=response(200, {"id": "2000", "channel_id": "102"})
+            ) as http,
+        ):
+            self.assertEqual(refresh_live_messages(), 1)
+        http.assert_called_once()
+        self.assertEqual(
+            http.call_args.args,
+            ("PATCH", "https://discord.com/api/v10/channels/102/messages/2000"),
+        )
+        changed.refresh_from_db()
+        sent = http.call_args.kwargs["json"]["components"]
+        self.assertIn("Moved to Saturday", str(sent))
+        self.assertEqual(changed.applied_hash, live_component_digest(sent))
+        self.assertIsNone(changed.next_attempt_at)
+
+
+@override_settings(TEST=False, DISCORD_BOT_TOKEN="test-bot-token")
 class LiveWorkerCooldownTests(SimpleTestCase):
     def setUp(self) -> None:
         # Run against CI's Redis. Keep the worker key isolated from parallel tests.
@@ -268,7 +340,7 @@ class LiveEditApiTests(SimpleTestCase):
         finish.side_effect = [True, False]
         with patch(TRANSPORT, side_effect=post):
             work = claim_edit()
-            assert work is not None
+            assert isinstance(work, LiveEditClaim)
             self.assertEqual((work.channel_id, work.message_id), ("102", "100"))
             result = LiveEditFinish(token=work.token, outcome="edited")
             self.assertTrue(finish_edit(work.id, result))

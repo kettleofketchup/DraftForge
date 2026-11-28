@@ -16,6 +16,7 @@ transport layer.
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Any, Literal, Optional, Self
 from uuid import UUID
 
@@ -572,6 +573,13 @@ class LiveEditClaimRequest(BaseModel):
     # A test worker can only narrow the backend's own eligible destinations.
     discord_user_id: DiscordId | None = None
     model_config = {"extra": "forbid"}
+
+
+LIVE_EDIT_SCAN_HEADER = "X-Live-Edit-Scan"
+
+
+class LiveEditScan(StrEnum):
+    LIMIT_REACHED = "limit-reached"
 
 
 class LiveEditPayload(BaseModel):

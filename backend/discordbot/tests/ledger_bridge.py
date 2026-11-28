@@ -27,6 +27,7 @@ BRIDGED_PREFIXES: tuple[str, ...] = (
 class BridgeResponse:
     def __init__(self, resp: HttpResponse) -> None:
         self.status_code: int = resp.status_code
+        self.headers = resp.headers
         self.ok: bool = 200 <= resp.status_code < 400
         self.text: str = resp.content.decode(errors="replace")
 
