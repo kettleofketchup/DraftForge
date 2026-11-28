@@ -49,7 +49,12 @@
     "backend": {
       "allOf": [
         { "$ref": "#/definitions/component" },
-        { "properties": { "replicas": { "const": 1 } } }
+        {
+          "properties": {
+            "replicas": { "const": 1 },
+            "extraEnvSecrets": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+          }
+        }
       ]
     },
     "frontend": { "$ref": "#/definitions/component" },

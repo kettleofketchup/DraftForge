@@ -70,6 +70,13 @@ from .test_herodraft import (
 )
 from .test_mmr_requests import mmr_requests_data, mmr_requests_reset
 from .test_mmr_sync import login_mmr_sync, reset_mmr_sync
+from .test_org_api_connections import (
+    drive_org_api_connections,
+    login_org_api_connections,
+    org_api_connections_state,
+    reset_org_api_connections,
+    seed_org_api_promotion_backlog,
+)
 from .test_org_features import login_org_features, org_features_data, reset_org_features
 from .test_signup_history import reset_signup_history, signup_history_data
 from .test_steam import create_test_match
@@ -187,6 +194,12 @@ urlpatterns = [
         "login-mmr-sync/<str:role>/",
         login_mmr_sync,
         name="test-login-mmr-sync",
+    ),
+    # Org API connections E2E users (tests.data.org_api_connections)
+    path(
+        "login-org-api-connections/<str:role>/",
+        login_org_api_connections,
+        name="test-login-org-api-connections",
     ),
     path(
         "login-as/",
@@ -384,6 +397,26 @@ urlpatterns = [
     path("org-features/data/", org_features_data, name="test-org-features-data"),
     path("org-features/reset/", reset_org_features, name="test-org-features-reset"),
     path("mmr-sync/reset/", reset_mmr_sync, name="test-mmr-sync-reset"),
+    path(
+        "org-api-connections/reset/",
+        reset_org_api_connections,
+        name="test-org-api-connections-reset",
+    ),
+    path(
+        "org-api-connections/drive/",
+        drive_org_api_connections,
+        name="test-org-api-connections-drive",
+    ),
+    path(
+        "org-api-connections/state/",
+        org_api_connections_state,
+        name="test-org-api-connections-state",
+    ),
+    path(
+        "org-api-connections/promotion-backlog/",
+        seed_org_api_promotion_backlog,
+        name="test-org-api-connections-promotion-backlog",
+    ),
     path("game-org-mmr/data/", game_org_mmr_data, name="test-game-org-mmr-data"),
     path(
         "game-org-mmr/approve-setup/",

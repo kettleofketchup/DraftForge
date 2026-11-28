@@ -72,6 +72,7 @@ export const EXTERNAL_WRITEBACK_STATES = [
   'in_flight',
   'retry',
   'paused',
+  'backlog_held',
   'reconciliation_required',
   'applied',
   'canceled',

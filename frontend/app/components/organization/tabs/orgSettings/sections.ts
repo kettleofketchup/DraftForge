@@ -84,10 +84,15 @@ export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
   },
   {
     id: 'api-access',
-    label: 'API access',
+    label: 'API connections',
     icon: KeyRound,
     keywords: [
       'api',
+      'access',
+      'connection',
+      'key',
+      'pull',
+      'push',
       'token',
       'mmr',
       'sync',

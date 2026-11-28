@@ -348,6 +348,7 @@ describe('ComposePanel external writeback feedback', () => {
       /needs review before it can be recorded externally/,
     ],
     ['retry', /will try recording it externally again/],
+    ['backlog_held', /only if an org admin releases it/],
   ] as const)(
     'reports a %s writeback separately from the recorded send, never as synced',
     async (state, text) => {

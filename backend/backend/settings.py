@@ -49,6 +49,7 @@ DISCORD_ACTIVITY_ENABLED = env_bool("DISCORD_ACTIVITY_ENABLED")
 READY_CHECK_AUTOMATIC_LIVE = env_bool("READY_CHECK_AUTOMATIC_LIVE")
 DFLOGO_EMOJI_ID = os.environ.get("DFLOGO_EMOJI_ID")
 SITE_URL = os.environ.get("SITE_URL", "https://localhost")
+ORG_API_CREDENTIAL_KEYS = os.environ.get("ORG_API_CREDENTIAL_KEYS", "")
 
 # Internal service auth — celery workers and Discord bot call Django via HTTP
 INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
@@ -104,6 +105,10 @@ SECRET_KEY_FALLBACKS = env_list("DJANGO_SECRET_KEY_FALLBACKS")
 NODE_ENV = "dev"
 TEST = env_bool("TEST")
 RELEASE = env_bool("RELEASE")
+# Scheduled org API connection pulls; test stacks skip them unless enabled.
+ORG_API_SCHEDULED_PULLS = env_bool(
+    "ORG_API_SCHEDULED_PULLS", default=not TEST or RELEASE
+)
 DEBUG = env_bool("DEBUG")
 
 # Concurrent test runs share one Redis and number their drafts from 1, so each

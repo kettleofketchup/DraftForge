@@ -87,6 +87,7 @@ class UserAppRegistrationTests(SimpleTestCase):
                 "org_orgapitoken",
                 "org_orgapitokenusage",
                 "org_orgapilimits",
+                "org_orgapiconnection",
                 "league_leagueuser",
                 "lobby_gamelobby",
                 "lobby_gamelobbyevent",

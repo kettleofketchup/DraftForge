@@ -1,4 +1,5 @@
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from django.db import transaction
@@ -7,6 +8,12 @@ from django.db.models import Q
 from app.models import CustomUser
 from common.game import GameType
 from events.eligibility import refresh_members_eligibility
+from org.api_connections.mutations import (
+    MmrMutationContext,
+    MmrRevisionConflict,
+    check_expected_revision,
+    lock_memberships,
+)
 from org.mmr import (
     OrgMmrError,
     bulk_set_org_mmrs,
@@ -16,7 +23,7 @@ from org.mmr import (
 )
 from org.mmr_official import apply_official_org_mmr
 from org.mmr_requests.permissions import may_verify_org_mmr
-from org.models import Organization, OrgLog, OrgUser
+from org.models import Organization, OrgLog, OrgMmrSyncState, OrgUser
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -47,6 +54,7 @@ class _Entry:
     steam_account_id: int | None
     discord_id: str | None
     mmr: int | None
+    expected_revision: int | None = None
 
     def ref(self) -> dict[str, Any]:
         ref: dict[str, Any] = {"index": self.index}
@@ -92,33 +100,69 @@ def _parse(index: int, raw: Any, game_type: int) -> _Entry | str:
         validate_org_mmr(game_type, mmr)
     except OrgMmrError as exc:
         return str(exc)
-    return _Entry(index=index, steam_account_id=steam, discord_id=discord, mmr=mmr)
+    revision = raw.get("expected_revision")
+    if revision is not None and (type(revision) is not int or revision < 0):
+        return "expected_revision must be a nonnegative integer"
+    return _Entry(
+        index=index,
+        steam_account_id=steam,
+        discord_id=discord,
+        mmr=mmr,
+        expected_revision=revision,
+    )
 
 
 def _members(org: Organization, entries: list[_Entry]) -> list[OrgUser]:
     steam_ids = {e.steam_account_id for e in entries if e.steam_account_id is not None}
     discord_ids = {e.discord_id for e in entries if e.discord_id is not None}
-    return list(
+    matching = Q(user__steam_account_id__in=steam_ids) | Q(
+        user__discordId__in=discord_ids
+    )
+    candidates = list(
         OrgUser.objects.nocache()
         .filter(organization=org)
-        .filter(
-            Q(user__steam_account_id__in=steam_ids) | Q(user__discordId__in=discord_ids)
-        )
+        .filter(matching)
+        .values_list("pk", flat=True)
+    )
+    locked = lock_memberships(candidates, required=False)
+    return list(
+        OrgUser.objects.nocache()
+        .filter(pk__in=[member.pk for member in locked], organization=org)
+        .filter(matching)
+        .order_by("pk")
         .select_related("user")
         .prefetch_related(game_mmrs_prefetch(fresh=True))
     )
 
 
-def _match(
-    entry: _Entry, by_steam: dict[int, OrgUser], by_discord: dict[str, OrgUser]
-) -> OrgUser | None | str:
-    via_steam = by_steam.get(entry.steam_account_id) if entry.steam_account_id else None
-    via_discord = by_discord.get(entry.discord_id) if entry.discord_id else None
-    if via_steam and via_discord and via_steam.pk != via_discord.pk:
+def match_member[M](
+    by_steam: Mapping[int, M],
+    by_discord: Mapping[str, M],
+    *,
+    steam_account_id: int | None,
+    discord_id: str | None,
+    identity: Callable[[M], int],
+) -> M | None | str:
+    via_steam = by_steam.get(steam_account_id) if steam_account_id else None
+    via_discord = by_discord.get(discord_id) if discord_id else None
+    if via_steam and via_discord and identity(via_steam) != identity(via_discord):
         return "steam_id and discord_id belong to different members"
     return via_steam or via_discord
 
 
+def _match(
+    entry: _Entry, by_steam: dict[int, OrgUser], by_discord: dict[str, OrgUser]
+) -> OrgUser | None | str:
+    return match_member(
+        by_steam,
+        by_discord,
+        steam_account_id=entry.steam_account_id,
+        discord_id=entry.discord_id,
+        identity=lambda member: member.pk,
+    )
+
+
+@transaction.atomic
 def sync_mmrs(
     org: Organization,
     actor: CustomUser,
@@ -126,7 +170,10 @@ def sync_mmrs(
     *,
     game_type: int = GameType.DOTA2,
     mark_verified: bool = True,
+    sync_context: MmrMutationContext | None = None,
 ) -> SyncResult:
+    if len(raw_entries) > MAX_ENTRIES:
+        raise OrgMmrError("Too many entries")
     result = SyncResult()
     entries: list[_Entry] = []
     for index, raw in enumerate(raw_entries):
@@ -141,13 +188,15 @@ def sync_mmrs(
     by_discord = {m.user.discordId: m for m in members if m.user.discordId}
 
     targets: dict[int, tuple[OrgUser, int | None]] = {}
+    contexts: dict[int, MmrMutationContext] = {}
+    seen: set[int] = set()
     for entry in entries:
         matched = _match(entry, by_steam, by_discord)
         if isinstance(matched, str):
             result.invalid.append({"index": entry.index, "error": matched})
         elif matched is None:
             result.unmatched.append(entry.ref())
-        elif matched.user_id in targets:
+        elif matched.user_id in seen:
             result.invalid.append(
                 {"index": entry.index, "error": "duplicate entry for this member"}
             )
@@ -159,6 +208,16 @@ def sync_mmrs(
                 }
             )
         else:
+            seen.add(matched.user_id)
+            context = sync_context or MmrMutationContext()
+            if entry.expected_revision is not None:
+                context = replace(context, expected_revision=entry.expected_revision)
+            try:
+                check_expected_revision(matched, game_type, context)
+            except MmrRevisionConflict:
+                result.invalid.append({"index": entry.index, "error": "conflict"})
+                continue
+            contexts[matched.user_id] = context
             targets[matched.user_id] = (matched, entry.mmr)
 
     changed: dict[int, int | None] = {}
@@ -182,9 +241,17 @@ def sync_mmrs(
                     actor=actor,
                     source="api_sync",
                     extra_log={"old_mmr": old_values.get(user_id, mmr or 0)},
+                    sync_context=contexts[user_id],
                 )
         elif changed:
-            bulk_set_org_mmrs(org.pk, game_type, changed)
+            bulk_set_org_mmrs(
+                org.pk,
+                game_type,
+                changed,
+                sync_context=replace(
+                    sync_context or MmrMutationContext(), expected_revision=None
+                ),
+            )
             OrgLog.objects.bulk_create(
                 OrgLog(
                     organization=org,
@@ -227,8 +294,14 @@ def member_rows(org: Organization, game_type: int) -> list[dict[str, Any]]:
         .prefetch_related(game_mmrs_prefetch(fresh=False))
         .order_by("pk")
     )
+    revisions = dict(
+        OrgMmrSyncState.objects.filter(
+            org_user__organization=org, game_type=game_type
+        ).values_list("org_user_id", "revision")
+    )
     return [
         {
+            "revision": revisions.get(m.pk, 0),
             "user_id": m.user_id,
             "username": m.user.username,
             "steam_id": m.user.steam_account_id,

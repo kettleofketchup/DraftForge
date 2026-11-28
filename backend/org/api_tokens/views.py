@@ -19,6 +19,8 @@ from rest_framework.response import Response
 
 from app.models import CustomUser
 from common.game import GameType
+from org.api_connections.mutations import MmrMutationContext
+from org.api_connections.promotion_config import PromotionStreamError
 from org.api_tokens.auth import OrgApiTokenAuthentication, gate_token_request
 from org.api_tokens.operations import (
     Operation,
@@ -118,13 +120,21 @@ def org_api_tokens(request: Request, org_id: int) -> Response:
     operations = serializer.validated_data.get("operations") or default_operations()
     for feature in entitlements_for(operations):
         require_feature(org, feature)
-    issued = issue_token(
-        org, request.user, serializer.validated_data["name"], operations=operations
-    )
-    return Response(
+    try:
+        issued = issue_token(
+            org, request.user, serializer.validated_data["name"], operations=operations
+        )
+    except PromotionStreamError as exc:
+        return Response(
+            {"code": exc.code, "detail": exc.code},
+            status=status.HTTP_409_CONFLICT,
+        )
+    response = Response(
         {**_token_row(issued.token), "token": issued.raw},
         status=status.HTTP_201_CREATED,
     )
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @api_view(["DELETE"])
@@ -176,8 +186,25 @@ def org_api_usage(request: Request, org_id: int) -> Response:
             }
         )
     limits = limits_for(org.pk)
+    connection_usage: dict[str, Any] = {}
+    if request.query_params.get("by_connection") == "true":
+        totals = (
+            qs.filter(token__connection__isnull=False)
+            .values("token__connection_id")
+            .annotate(requests=Sum("request_count"), throttled=Sum("throttled_count"))
+            .order_by("token__connection_id")
+        )
+        connection_usage["connections"] = [
+            {
+                "connection_id": row["token__connection_id"],
+                "requests": row["requests"],
+                "throttled": row["throttled"],
+            }
+            for row in totals
+        ]
     return Response(
         {
+            **connection_usage,
             "since": since.isoformat(),
             "days": days,
             "limits": {"per_minute": limits.per_minute, "per_day": limits.per_day},
@@ -251,5 +278,8 @@ def org_mmr_sync(request: Request, org_id: int) -> Response:
         data["entries"],
         game_type=int(data["game_type"]),
         mark_verified=data["mark_verified"],
+        sync_context=MmrMutationContext(
+            origin_connection_id=request.auth.connection_id
+        ),
     )
     return Response(result.as_dict())

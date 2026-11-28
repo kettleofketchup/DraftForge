@@ -178,7 +178,10 @@ describe('form schemas', () => {
     expect(importOp?.description).toBe(
       'Records external contacts and awards and voids promotion points.',
     );
-    expect(operationLabel('promotion:read')).toBe('promotion:read');
+    expect(operationLabel('promotion:read')).toBe(
+      'Read contact receipt history',
+    );
+    expect(operationLabel('future:grant')).toBe('future:grant');
   });
 
   it('matches the backend limit ranges', () => {

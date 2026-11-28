@@ -249,6 +249,10 @@ urlpatterns = [
         name="org-features",
     ),
     path(
+        "api/organizations/<int:org_id>/api-connections/",
+        include("org.api_connections.urls"),
+    ),
+    path(
         "api/organizations/<int:org_id>/api-tokens/",
         org_api_tokens,
         name="org-api-tokens",
@@ -591,6 +595,7 @@ urlpatterns += [
 ]
 
 urlpatterns += [
+    path("api/internal/org-api-sync/", include("org.api_connections.internal_urls")),
     path("api/internal/mmr-requests/", include("org.mmr_requests.internal_urls")),
 ]
 

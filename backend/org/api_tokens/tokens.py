@@ -8,8 +8,20 @@ from django.db import transaction
 from django.utils import timezone
 
 from app.models import CustomUser
+from org.api_connections.promotion_stream import (
+    PromotionStreamError,
+    holds_promotion_grants,
+    lock_org,
+    promotion_stream_holder,
+)
 from org.api_tokens.operations import default_operations, parse_operations
-from org.models import Organization, OrgApiToken, OrgLog
+from org.models import (
+    Organization,
+    OrgApiConnection,
+    OrgApiPromotionAdoption,
+    OrgApiToken,
+    OrgLog,
+)
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -36,6 +48,27 @@ def _new_prefix() -> str:
             return prefix
 
 
+def _legacy_stream(
+    org: Organization, user: CustomUser, granted: list[str]
+) -> OrgApiConnection | None:
+    """The shared legacy connection a promotion key joins, as the backfill does."""
+    lock_org(org.pk)
+    if OrgApiPromotionAdoption.objects.filter(organization=org).exists():
+        raise PromotionStreamError("promotion_stream_exists")
+    holder = promotion_stream_holder(org.pk)
+    if holder is None:
+        return None
+    stream = OrgApiConnection.objects.select_for_update().get(pk=holder)
+    if not stream.legacy_multi_credential:
+        raise PromotionStreamError("promotion_stream_exists")
+    if not (stream.enabled and stream.inbound_enabled):
+        raise PromotionStreamError("inbound_disabled")
+    stream.operations = sorted(set(stream.operations) | set(granted))
+    stream.updated_by = user
+    stream.save(update_fields=["operations", "updated_by", "updated_at"])
+    return stream
+
+
 def issue_token(
     org: Organization,
     user: CustomUser,
@@ -46,7 +79,9 @@ def issue_token(
     """Create a token. Without ``operations`` it gets the MMR pair only.
 
     Raises ValueError for an empty or unknown operation list. Callers check
-    that the org has each operation's feature before issuing.
+    that the org has each operation's feature before issuing. Promotion keys
+    share the org's one legacy stream connection; PromotionStreamError when the
+    stream is adopted or held by a single-credential connection.
     """
     granted = (
         default_operations()
@@ -55,8 +90,23 @@ def issue_token(
     )
     prefix = _new_prefix()
     secret = secrets.token_urlsafe(SECRET_BYTES)
+    promotion = holds_promotion_grants(granted)
     with transaction.atomic():
+        stream = _legacy_stream(org, user, granted) if promotion else None
+        connection = stream or OrgApiConnection.objects.create(
+            organization=org,
+            name=name,
+            created_by=user,
+            updated_by=user,
+            enabled=True,
+            inbound_enabled=True,
+            operations=granted,
+            legacy_multi_credential=promotion,
+        )
         token = OrgApiToken.objects.create(
+            connection=connection,
+            legacy_credential=promotion,
+            issued_by=user,
             organization=org,
             user=user,
             name=name,
@@ -100,7 +150,7 @@ def lookup_token(raw: str) -> OrgApiToken | None:
         return None
     prefix, secret = parsed
     token = (
-        OrgApiToken.objects.select_related("user", "organization")
+        OrgApiToken.objects.select_related("user", "organization", "connection")
         .filter(prefix=prefix)
         .first()
     )

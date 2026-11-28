@@ -1,9 +1,43 @@
-from typing import Any
+from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
+
+from django.apps import apps
 from django.conf import settings
 from django.db import models
+from django.utils.module_loading import import_string
 
 from app.cache_utils import invalidate_after_commit
+
+if TYPE_CHECKING:
+    from app.models import CustomUser
+
+
+@contextmanager
+def track_user_identity(user: CustomUser, kwargs: dict[str, Any]) -> Iterator[None]:
+    fields = {"steam_account_id", "steamid", "discordId"}
+    update_fields = kwargs.get("update_fields")
+    snapshot = getattr(user, "_identity_snapshot", {})
+    changed = (
+        update_fields is not None and bool(fields.intersection(update_fields))
+    ) or any(
+        name in user.__dict__ and user.__dict__[name] != snapshot.get(name)
+        for name in fields
+    )
+    if (
+        user._state.adding
+        or not apps.is_installed("org")
+        or not changed
+        or (update_fields is not None and not fields.intersection(update_fields))
+    ):
+        yield
+        return
+    # Resolve after model loading: light workers do not install org.
+    service = import_string("org.api_connections.identity.user_identity_mutation")
+    with service(user):
+        yield
 
 
 class PositionsModel(models.Model):

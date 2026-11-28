@@ -16,6 +16,11 @@ Environment variables:
         appear only once (occasions once per org). Only occasion linkage is
         supported: there is no date fallback.
 
+These settings apply only to orgs that have not adopted a connection stream
+(``org.api_connections.promotion_config``, ``manage.py
+adopt_org_promotion_sync``). An adopted org never falls back to them, and the
+adaptor key here is never copied into org-owned storage.
+
 The configured guild is checked against the org's own Discord server when a
 binding is used (`org.integration.bindings`), not here, because settings load
 before the database is available. Errors name the bad field, never its value.

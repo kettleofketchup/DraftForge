@@ -10,7 +10,13 @@ from app.models import CustomUser
 from common.game import GameType
 from events.eligibility.store import refresh_unmet_requirements
 from league.models import LeagueUser
+from org.api_connections.mutations import (
+    MmrMutationContext,
+    check_expected_revision,
+    lock_memberships,
+)
 from org.mmr import (
+    _drop_read_caches,
     invalidate_org_user_tournaments,
     mark_org_mmr_verified,
     set_org_mmr,
@@ -72,10 +78,14 @@ def apply_official_org_mmr(
     request: MmrChangeRequest | None = None,
     extra_log: dict[str, object] | None = None,
     log_unchanged: bool = False,
+    sync_context: MmrMutationContext | None = None,
 ) -> OrgMmrWriteResult:
     validate_org_mmr(game_type, value)
-    verified = may_verify_org_mmr(actor, org_user)
+    caller = org_user
     with transaction.atomic():
+        org_user = lock_memberships([org_user.pk])[0]
+        check_expected_revision(org_user, game_type, sync_context)
+        verified = may_verify_org_mmr(actor, org_user)
         previous = (
             OrgUserGameMmr.objects.nocache()
             .select_for_update()
@@ -92,9 +102,10 @@ def apply_official_org_mmr(
                 value,
                 mark_verified=verified,
                 verified_by=actor if verified else None,
+                sync_context=sync_context,
             )
         elif verified and not noop:
-            mark_org_mmr_verified(org_user, game_type, actor)
+            mark_org_mmr_verified(org_user, game_type, actor, sync_context=sync_context)
 
         superseded_ids = (
             _supersede_pending(org_user, game_type, value, actor, request)
@@ -153,6 +164,9 @@ def apply_official_org_mmr(
                 *(lu.league for lu in league_users),
             )
             invalidate_org_user_tournaments(org_user)
+        caller.has_active_dota_mmr = org_user.has_active_dota_mmr
+        caller.dota_mmr_last_verified = org_user.dota_mmr_last_verified
+        _drop_read_caches(caller)
 
     return OrgMmrWriteResult(
         value=value,

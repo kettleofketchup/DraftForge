@@ -4,6 +4,10 @@ An external service (a bot, a spreadsheet script, a rank tracker) can push org M
 members in bulk with an app token. The values land in the same per-game org MMR as manual
 edits (see [Org MMR per game](org-mmr.md)).
 
+This page covers the inbound API. To have DraftForge push MMR changes to a service, or
+pull MMRs from one, configure an [API connection](org-api-connections.md). Every token
+belongs to a connection; tokens created here get one automatically.
+
 ---
 
 ## Turning it on
@@ -15,7 +19,8 @@ and work again when the feature is switched back on.
 
 ## Tokens
 
-Org admins manage tokens in **Org Settings → API access**.
+Org admins manage tokens in **Org Settings → API connections** (each connection's
+**Inbound key** tab), or with the legacy `api-tokens/` endpoints below.
 
 - A token belongs to one org and one user, and acts as that user. Every request re-checks
   that the user is still an org admin, so removing the role disables their tokens.
@@ -33,18 +38,41 @@ Each token is granted a fixed list of operations when it is created:
 |-----------|--------|-------------------|
 | `mmr:read` | `GET mmr-sync/` | MMR sync API |
 | `mmr:write` | `POST mmr-sync/` | MMR sync API |
+| `promotion:read` | a bound event's contact receipt history | Promotion |
+| `promotion:write` | contact imports (same as `promotion:import`) | Promotion |
 | `promotion:import` | the adaptor's contact imports: records external contacts and awards and voids promotion points | Promotion |
 
 The create form has a switch per operation, defaulting to the MMR pair, and disables
 operations whose feature is locked. Through the API, `POST api-tokens/` takes an optional
 `"operations": [...]`; without it the token gets `["mmr:read", "mmr:write"]`. An empty or
 unknown list is `400`, and asking for an operation whose feature is locked is `403`.
-These three are the only operations; any other name is unknown. Tokens created before operations
-existed keep the MMR pair. Token rows list their operations, and **API access** is shown
+These five are the only operations; any other name is unknown. Tokens created before operations
+existed keep the MMR pair, and migrated tokens keep exactly their grants. Token rows list their operations, and **API connections** is shown
 to org admins when the MMR sync API or Promotion is unlocked, so a promotion-only token
 can be issued while MMR sync API is off. Contributions alone does not show it. A request
 for an operation the token lacks gets `403 operation_not_granted`. The promotion
 operation is described in [promotion contact sync](promotion-contact-sync.md).
+
+### Replacing migrated connection keys
+
+A migrated connection can retain multiple legacy keys with different grants. Those keys
+keep their individual grants until explicitly replaced. The first issue or rotation on
+such a connection replaces **all** its legacy keys with one key holding the connection's
+full `operations` list. This can grant more permissions than any single legacy key held.
+
+The session-admin endpoints `POST api-connections/<id>/issue-key/` and
+`POST api-connections/<id>/rotate-key/` require explicit confirmation in this case.
+Without it they return `409 grant_confirmation_required` with the resulting `operations`
+list, and leave the old keys untouched. Review that list, narrow the connection's grants
+if necessary, then send `{"confirmed_operations": ["mmr:read", "mmr:write"]}` with exactly
+the intended grants. Editing connection grants revokes existing keys immediately.
+A successful issue or rotation returns the new key once with `Cache-Control: no-store`.
+
+Connection creation, edits, enabling, key issuance and rotation share an administrative
+budget of 30 requests per minute per org and per acting admin. Reading, revoking keys,
+archiving connections and PATCH requests containing only disabled flags (plus
+`config_version`) remain available when that budget is exhausted. Do not combine an
+emergency disable with a name or configuration edit.
 
 ## Limits and usage
 
@@ -53,12 +81,15 @@ operation is described in [promotion contact sync](promotion-contact-sync.md).
 | Requests per minute | 60 | each token |
 | Requests per day (UTC) | 5,000 | each token |
 
-Site admins can change both per organization (API access section, `PUT api-limits/`, or
+Site admins can change both per organization (API connections section, `PUT api-limits/`, or
 the Django admin "Org API limits"). A request over a limit gets `429` with a `Retry-After`
 header.
 
 Every token request is counted in `OrgApiTokenUsage` (per token, user and UTC day:
-accepted and throttled counts). The API access section shows the last 30 days per user.
+accepted and throttled counts). The API connections section shows the last 30 days per user.
+`GET api-tokens/usage/?by_connection=true` adds a `connections` list with each
+connection's totals across all of its keys, old and rotated ones included. Rate limits
+stay per key, so a rotated key starts with fresh budgets.
 The Django admin lists the raw rows.
 
 ## Endpoints
@@ -72,9 +103,13 @@ Returns the members you can match against:
 
 ```json
 {"game_type": 1, "members": [
-  {"user_id": 12, "username": "alice", "steam_id": 1001, "discord_id": "1234", "mmr": 4200}
+  {"user_id": 12, "username": "alice", "steam_id": 1001, "discord_id": "1234", "mmr": 4200,
+   "revision": 7}
 ]}
 ```
+
+`revision` is the member's current MMR revision for that game (0 before any tracked
+change). It increases with every change to the value or its verification.
 
 ### `POST /api/organizations/<org_id>/mmr-sync/`
 
@@ -102,6 +137,11 @@ Returns the members you can match against:
   existing Official verification metadata, including when overwriting an Official value,
   without superseding pending requests. Unchanged values are left untouched.
 - Only existing members of the org are updated. The API never adds members.
+- Optional `expected_revision` per entry (a nonnegative integer from `GET`): if the
+  member's revision has moved on, that entry is reported in `invalid` with
+  `"error": "conflict"` and is not applied. Without it, the push is last-write-wins.
+- Values pushed through a connection's key are not pushed back to that same
+  connection.
 
 Response:
 

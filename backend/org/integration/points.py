@@ -39,6 +39,9 @@ from org.contributions.kinds import ContributionKind
 from org.integration.event_lock import with_event_mutations
 from org.models import ContributionEntry, OrgLog, OrgUser, PromoSend
 from org.models_promotion_sync import (
+    HOLDING_STATUSES as HOLDING,
+)
+from org.models_promotion_sync import (
     ContactReason,
     ExternalPromotionReceipt,
     OutboxState,
@@ -59,6 +62,7 @@ __all__ = [
     "PointOutcome",
     "external_point_held",
     "external_point_held_for",
+    "reclassify_echo",
     "resettle_key",
     "retract",
     "settle",
@@ -437,6 +441,44 @@ def supersede(
     if old_event_id is not None and not kept:
         restored = resettle_key(old_event_id, old_discord_id, released_by=receipt)
     return PointOutcome(outcome.point, outcome.voided_local, restored)
+
+
+def reclassify_echo(receipt: ExternalPromotionReceipt) -> PointOutcome:
+    """Settle an imported contact again once its outbox row is applied.
+
+    Runs under the org and event locks, after the row naming this receipt's
+    source id is marked applied in the same transaction. A holder releases
+    its point (credit voided, local point restored or a duplicate promoted);
+    a duplicate just becomes the echo. Other statuses are left as they are.
+    """
+    status = receipt.point_status
+    if status not in (*HOLDING, PointStatus.DUPLICATE):
+        return PointOutcome(status)
+    event_id, discord_id, held = (
+        receipt.event_id,
+        receipt.discord_id,
+        receipt.holds_point,
+    )
+    if held:
+        unsettle(receipt)
+    else:
+        _save_point(receipt, PointStatus.NOT_APPLICABLE, holds=False)
+    outcome = settle(receipt)
+    restored = 0
+    if held and event_id is not None:
+        restored = resettle_key(event_id, discord_id, released_by=receipt)
+    log.info(
+        "promo_echo_reclassified",
+        system="org",
+        subsystem="integration",
+        org_id=receipt.organization_id,
+        event_id=event_id,
+        receipt_id=receipt.pk,
+        previous=status,
+        point=outcome.point,
+        restored_local=restored,
+    )
+    return PointOutcome(outcome.point, restored_local=restored)
 
 
 def retract(receipt: ExternalPromotionReceipt) -> int:

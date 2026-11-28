@@ -242,6 +242,21 @@ export {
   type MmrSyncRole,
   type MmrSyncTestData,
 } from './mmr-sync';
+// Org API connections utilities (org-features/org-api-connections spec)
+export {
+  connectionApi,
+  driveOrgApiConnections,
+  loginOrgApiConnections,
+  machineRequest,
+  orgApiConnectionsState,
+  resetOrgApiConnections,
+  seedPromotionBacklog,
+  type ConnectionRow,
+  type FakeCall,
+  type OrgApiConnectionsRole,
+  type OrgApiConnectionsState,
+  type OrgApiConnectionsTestData,
+} from './org-api-connections';
 
 // Discord Activity harness (activity specs)
 export {

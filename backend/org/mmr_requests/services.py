@@ -12,6 +12,8 @@ from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
 from league.mmr import set_league_mmr
 from league.models import LeagueUser
+from org.api_connections.mutations import lock_memberships
+from org.api_connections.revisions import lock_revision_counters, record_mmr_change
 from org.mmr import LEAGUE_GAME, OrgMmrError, validate_org_mmr
 from org.mmr_official import apply_official_org_mmr
 from org.mmr_requests.permissions import can_review_mmr_request, may_self_verify
@@ -512,8 +514,21 @@ def repoint_mmr_requests(
     )
 
 
+@transaction.atomic
 def _repoint_mmr_verifiers(claimer: CustomUser, target_user: CustomUser) -> int:
-    game_mmrs = list(OrgUserGameMmr.objects.nocache().filter(verified_by=target_user))
+    ids = list(
+        OrgUserGameMmr.objects.nocache()
+        .filter(verified_by=target_user)
+        .values_list("org_user_id", flat=True)
+        .distinct()
+    )
+    members = {member.pk: member for member in lock_memberships(ids)}
+    lock_revision_counters(list(members.values()))
+    game_mmrs = list(
+        OrgUserGameMmr.objects.nocache()
+        .filter(verified_by=target_user, org_user_id__in=members)
+        .order_by("org_user_id", "game_type")
+    )
     league_users = list(
         LeagueUser.objects.nocache().filter(mmr_verified_by=target_user)
     )
@@ -523,6 +538,13 @@ def _repoint_mmr_verifiers(claimer: CustomUser, target_user: CustomUser) -> int:
         )
         for row in game_mmrs:
             row.verified_by_id = claimer.pk
+            record_mmr_change(
+                members[row.org_user_id],
+                row.game_type,
+                previous_value=row.mmr,
+                previous_verified_at=row.verified_at,
+                verification_changed=True,
+            )
     if league_users:
         LeagueUser.objects.filter(pk__in=[r.pk for r in league_users]).update(
             mmr_verified_by=claimer

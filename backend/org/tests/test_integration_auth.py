@@ -12,6 +12,7 @@ from django.core.cache import cache
 from django.test import override_settings
 from django.urls import path
 from django.utils import timezone
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
@@ -39,12 +40,23 @@ except ImportError as _import_error:  # pragma: no cover
 
 
 class _PromotionProbe(IntegrationAPIView):
-    def get(self, request, org_id: int) -> Response:
+    def get(self, request: Request, org_id: int) -> Response:
         org = gate_token_request(request, org_id, operation=Operation.PROMOTION_IMPORT)
         return Response({"org_id": org.pk})
 
 
+class _PromotionAlternativeProbe(IntegrationAPIView):
+    def get(self, request: Request, org_id: int) -> Response:
+        org = gate_token_request(
+            request,
+            org_id,
+            operation=(Operation.PROMOTION_IMPORT, Operation.PROMOTION_WRITE),
+        )
+        return Response({"org_id": org.pk})
+
+
 urlpatterns = [
+    path("probe/<int:org_id>/alternatives/", _PromotionAlternativeProbe.as_view()),
     path("probe/<int:org_id>/promotion/", _PromotionProbe.as_view()),
     *project_urlpatterns,
 ]
@@ -63,11 +75,21 @@ class OperationCatalogTests(unittest.TestCase):
                 "mmr:read": FeatureKey.MMR_SYNC,
                 "mmr:write": FeatureKey.MMR_SYNC,
                 "promotion:import": FeatureKey.PROMOTION,
+                "promotion:read": FeatureKey.PROMOTION,
+                "promotion:write": FeatureKey.PROMOTION,
             },
         )
 
     def test_parse_rejects_unknown_empty_and_non_strings(self) -> None:
-        for bad in ([], ["promotion:write"], ["MMR:READ"], [1], "mmr:read", None):
+        for bad in (
+            [],
+            ["contributions:read"],
+            ["MMR:READ"],
+            ["PROMOTION:WRITE"],
+            [1],
+            "mmr:read",
+            None,
+        ):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 parse_operations(bad)
 
@@ -75,9 +97,12 @@ class OperationCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown operation"):
             parse_operations(["contributions:read"])
 
-    def test_promotion_read_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unknown operation"):
-            parse_operations(["promotion:read"])
+    def test_new_promotion_grants_parse_without_widening_import(self) -> None:
+        self.assertEqual(
+            parse_operations(["promotion:write", "promotion:read"]),
+            ["promotion:read", "promotion:write"],
+        )
+        self.assertEqual(parse_operations(["promotion:import"]), ["promotion:import"])
 
     def test_parse_dedupes_and_sorts_canonically(self) -> None:
         self.assertEqual(
@@ -144,13 +169,67 @@ class GrantTests(ApiTokenBase):
 
     def test_issuance_rejects_unknown_and_empty_operations(self) -> None:
         self.client.force_authenticate(self.admin)
-        for ops in ([], ["promotion:write"], ["promotion:read"], "promotion:import"):
+        for ops in ([], ["contributions:read"], ["PROMOTION:READ"], "promotion:import"):
             with self.subTest(ops=ops):
                 resp = self.client.post(
                     self.tokens_url(), {"name": "x", "operations": ops}, format="json"
                 )
                 self.assertEqual(resp.status_code, 400)
         self.assertFalse(OrgApiToken.objects.filter(name="x").exists())
+
+    def test_new_promotion_grants_require_promotion_and_reach_only_their_method(
+        self,
+    ) -> None:
+        self.client.force_authenticate(self.admin)
+        for operation in ("promotion:read", "promotion:write"):
+            set_org_feature(self.org, FeatureKey.PROMOTION, enabled=False, actor=None)
+            denied = self.client.post(
+                self.tokens_url(),
+                {"name": "new", "operations": [operation]},
+                format="json",
+            )
+            self.assertEqual(denied.status_code, 403)
+            set_org_feature(self.org, FeatureKey.PROMOTION, enabled=True, actor=None)
+            issued = self.client.post(
+                self.tokens_url(),
+                {"name": "new", "operations": [operation]},
+                format="json",
+            )
+            self.assertEqual(issued.status_code, 201, issued.data)
+            self.assertEqual(issued.data["operations"], [operation])
+            machine = self.bearer(issued.data["token"])
+            url = f"/api/organizations/{self.org.pk}/integration/v1/contact-receipts/"
+            read = machine.get(url, {"event_id": "1"})
+            write = machine.post(url, {}, format="json")
+            denied_code = "operation_not_granted"
+            if operation == "promotion:read":
+                self.assertEqual(read.json()["error"]["code"], "binding_missing")
+                self.assertEqual(write.json()["error"]["code"], denied_code)
+            else:
+                self.assertEqual(read.json()["error"]["code"], denied_code)
+                self.assertEqual(write.status_code, 400)
+        legacy = issue_token(
+            self.org, self.admin, "import", operations=["promotion:import"]
+        )
+        legacy.token.refresh_from_db()
+        self.assertEqual(legacy.token.operations, ["promotion:import"])
+
+    def test_alternative_grants_consume_one_budget_admission(self) -> None:
+        for operations in (
+            ["promotion:write"],
+            ["promotion:import"],
+            ["promotion:write", "promotion:import"],
+        ):
+            issued = issue_token(
+                self.org, self.admin, "Alternatives", operations=operations
+            )
+            response = self.bearer(issued.raw).get(
+                f"/probe/{self.org.pk}/alternatives/"
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(
+                OrgApiTokenUsage.objects.get(token=issued.token).request_count, 1
+            )
 
     def test_staff_cannot_issue_scoped_token(self) -> None:
         self.client.force_authenticate(self.staff)

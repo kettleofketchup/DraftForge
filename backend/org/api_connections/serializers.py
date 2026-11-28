@@ -1,0 +1,79 @@
+from typing import Any
+
+from rest_framework import serializers
+
+from org.api_connections.config import CONFIG_FIELDS
+from org.api_connections.types import MmrPullConfig, MmrPushConfig
+from org.models import OrgApiConnection
+
+
+class ConnectionSerializer(serializers.ModelSerializer):
+    credential_present = serializers.SerializerMethodField()
+    inbound_credentials = serializers.SerializerMethodField()
+    promotion_stream = serializers.SerializerMethodField()
+    outbound_principal = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrgApiConnection
+        fields = (
+            "id",
+            "config_version",
+            *CONFIG_FIELDS,
+            "created_at",
+            "updated_at",
+            "archived_at",
+            "created_by",
+            "updated_by",
+            "credential_present",
+            "outbound_credential_owner",
+            "outbound_authorizer",
+            "outbound_principal",
+            "outbound_credential_set_at",
+            "inbound_credentials",
+            "legacy_multi_credential",
+            "last_run_summary",
+            "last_success_at",
+            "last_error_code",
+            "next_due_at",
+            "promotion_stream",
+        )
+        read_only_fields = fields
+
+    def to_representation(self, instance: OrgApiConnection) -> dict[str, Any]:
+        data = super().to_representation(instance)
+        data["mmr_push_config"] = MmrPushConfig.model_validate(
+            instance.mmr_push_config or {}
+        ).model_dump(mode="json")
+        data["mmr_pull_config"] = MmrPullConfig.model_validate(
+            instance.mmr_pull_config or {}
+        ).model_dump(mode="json")
+        return data
+
+    def get_credential_present(self, obj: OrgApiConnection) -> bool:
+        return bool(obj.outbound_credential_ciphertext)
+
+    def get_inbound_credentials(self, obj: OrgApiConnection) -> list[dict[str, Any]]:
+        fields = (
+            "id",
+            "prefix",
+            "user_id",
+            "issued_by_id",
+            "operations",
+            "created_at",
+            "revoked_at",
+        )
+        return [
+            {field: getattr(token, field) for field in fields}
+            for token in sorted(obj.tokens.all(), key=lambda token: token.pk)
+        ]
+
+    def get_promotion_stream(self, obj: OrgApiConnection) -> bool:
+        return hasattr(obj, "promotion_adoption")
+
+    def get_outbound_principal(self, obj: OrgApiConnection) -> dict[str, Any] | None:
+        user = (
+            obj.outbound_authorizer
+            if obj.outbound_auth == "none"
+            else obj.outbound_credential_owner
+        )
+        return {"pk": user.pk, "username": user.username} if user else None

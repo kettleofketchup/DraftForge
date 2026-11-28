@@ -11,6 +11,12 @@ from django.utils import timezone
 from app.cache_utils import invalidate_after_commit, invalidate_model, invalidate_obj
 from common.game import GameType
 from league.mmr_sync import sync_league_mmrs_from_org
+from org.api_connections.mutations import (
+    MmrMutationContext,
+    check_expected_revision,
+    lock_memberships,
+)
+from org.api_connections.revisions import record_mmr_change
 from org.models import OrgUser, OrgUserGameMmr
 from telemetry.logging import get_logger
 from tournament.models import Tournament
@@ -185,16 +191,20 @@ def set_org_mmr(
     *,
     mark_verified: bool,
     verified_by: CustomUser | None = None,
+    sync_context: MmrMutationContext | None = None,
 ) -> OrgUserGameMmr | None:
     validate_org_mmr(game_type, mmr)
     value = mmr or 0
     with transaction.atomic():
+        locked = lock_memberships([org_user.pk])[0]
+        check_expected_revision(locked, game_type, sync_context)
         existing = (
             OrgUserGameMmr.objects.nocache()
             .filter(org_user_id=org_user.pk, game_type=game_type)
             .first()
         )
         old = existing.mmr if existing is not None else 0
+        previous_verified_at = existing.verified_at if existing is not None else None
         now = timezone.now()
         row: OrgUserGameMmr | None = None
         if value:
@@ -221,7 +231,19 @@ def set_org_mmr(
         elif existing is not None:
             existing.delete()
         if game_type == GameType.DOTA2 and mark_verified:
-            mark_dota_mmr_verified(org_user)
+            mark_dota_mmr_verified(locked)
+            org_user.has_active_dota_mmr = locked.has_active_dota_mmr
+            org_user.dota_mmr_last_verified = locked.dota_mmr_last_verified
+        record_mmr_change(
+            locked,
+            game_type,
+            previous_value=old,
+            previous_verified_at=previous_verified_at,
+            context=sync_context,
+            verification_changed=value == 0
+            and mark_verified
+            and game_type == GameType.DOTA2,
+        )
         _drop_read_caches(org_user)
         log.info(
             "org_mmr_set",
@@ -242,22 +264,46 @@ def set_org_mmr(
 
 
 def mark_org_mmr_verified(
-    org_user: OrgUser, game_type: int, actor: CustomUser | None
+    org_user: OrgUser,
+    game_type: int,
+    actor: CustomUser | None,
+    *,
+    sync_context: MmrMutationContext | None = None,
 ) -> None:
     validate_org_mmr(game_type, None)
     with transaction.atomic():
+        locked = lock_memberships([org_user.pk])[0]
+        check_expected_revision(locked, game_type, sync_context)
         existing = (
             OrgUserGameMmr.objects.nocache()
             .select_for_update()
             .filter(org_user_id=org_user.pk, game_type=game_type)
             .first()
         )
+        previous_value = existing.mmr if existing is not None else 0
+        previous_verified_at = (
+            existing.verified_at
+            if existing is not None
+            else locked.dota_mmr_last_verified
+            if game_type == GameType.DOTA2
+            else None
+        )
         if existing is not None:
             existing.verified_at = timezone.now()
             existing.verified_by = actor
             existing.save(update_fields=["verified_at", "verified_by", "updated_at"])
         if game_type == GameType.DOTA2:
-            mark_dota_mmr_verified(org_user)
+            mark_dota_mmr_verified(locked)
+            org_user.has_active_dota_mmr = locked.has_active_dota_mmr
+            org_user.dota_mmr_last_verified = locked.dota_mmr_last_verified
+        record_mmr_change(
+            locked,
+            game_type,
+            previous_value=previous_value,
+            previous_verified_at=previous_verified_at,
+            context=sync_context,
+            verification_changed=existing is None and game_type == GameType.DOTA2,
+        )
         _drop_read_caches(org_user)
         log.info(
             "org_mmr_marked_verified",
@@ -280,7 +326,13 @@ def _loser_row_wins(loser_row: OrgUserGameMmr, keeper_row: OrgUserGameMmr) -> bo
     return loser_row.mmr > keeper_row.mmr
 
 
-def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
+@transaction.atomic
+def merge_org_mmrs(
+    loser: OrgUser, keeper: OrgUser, *, sync_context: MmrMutationContext | None = None
+) -> None:
+    locked = {member.pk: member for member in lock_memberships([loser.pk, keeper.pk])}
+    if len(locked) != 2 or loser.organization_id != keeper.organization_id:
+        raise OrgMmrError("Membership unavailable for merge")
     rows = list(
         OrgUserGameMmr.objects.nocache().filter(org_user_id__in=[loser.pk, keeper.pk])
     )
@@ -290,6 +342,7 @@ def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
     if not loser_rows:
         return
     keeper_rows = {row.game_type: row for row in rows if row.org_user_id == keeper.pk}
+    previous = {game: (row.mmr, row.verified_at) for game, row in keeper_rows.items()}
     moved: list[OrgUserGameMmr] = []
     raised: list[OrgUserGameMmr] = []
     now = timezone.now()
@@ -312,6 +365,16 @@ def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
             OrgUserGameMmr.objects.bulk_update(
                 raised, ["mmr", "updated_at", "verified_at", "verified_by"]
             )
+        for game in sorted({row.game_type for row in rows}):
+            value, verified_at = previous.get(game, (0, None))
+            record_mmr_change(
+                locked[keeper.pk],
+                game,
+                previous_value=value,
+                previous_verified_at=verified_at,
+                context=sync_context,
+                identity_changed=True,
+            )
         log.info(
             "org_mmr_merged",
             system="org",
@@ -326,11 +389,13 @@ def merge_org_mmrs(loser: OrgUser, keeper: OrgUser) -> None:
         invalidate_org_user_tournaments(keeper)
 
 
+@transaction.atomic
 def bulk_set_org_mmrs(
     organization_id: int,
     game_type: int,
     values: dict[int, int | None],
     *,
+    sync_context: MmrMutationContext | None = None,
     keep_league_user_ids: Collection[int] = (),
 ) -> None:
     validate_org_mmr(game_type, None)
@@ -340,9 +405,10 @@ def bulk_set_org_mmrs(
         except OrgMmrError as exc:
             raise OrgMmrError(f"user {user_id}: {exc}") from exc
     org_users = list(
-        OrgUser.objects.nocache().filter(
-            organization_id=organization_id, user_id__in=list(values)
-        )
+        OrgUser.objects.nocache()
+        .select_for_update()
+        .filter(organization_id=organization_id, user_id__in=list(values))
+        .order_by("pk")
     )
     by_user = {ou.user_id: ou for ou in org_users}
     missing = sorted(set(values) - set(by_user))
@@ -350,6 +416,14 @@ def bulk_set_org_mmrs(
         raise OrgMmrError(
             f"users {missing} are not members of organization {organization_id}"
         )
+    previous = {
+        row.org_user_id: (row.mmr, row.verified_at)
+        for row in OrgUserGameMmr.objects.nocache().filter(
+            org_user__in=org_users, game_type=game_type
+        )
+    }
+    for member in org_users:
+        check_expected_revision(member, game_type, sync_context)
     upserts = [
         OrgUserGameMmr(
             org_user=by_user[uid],
@@ -374,6 +448,15 @@ def bulk_set_org_mmrs(
             OrgUserGameMmr.objects.filter(
                 org_user_id__in=cleared, game_type=game_type
             ).delete()
+        for member in org_users:
+            old, verified_at = previous.get(member.pk, (0, None))
+            record_mmr_change(
+                member,
+                game_type,
+                previous_value=old,
+                previous_verified_at=verified_at,
+                context=sync_context,
+            )
         log.info(
             "org_mmr_set",
             system="org",

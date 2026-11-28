@@ -1,9 +1,25 @@
+from collections.abc import Iterable
+from typing import Any, Self
+
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
+from django.utils.module_loading import import_string
 
 from app.cache_utils import invalidate_obj
 from common.game import GameType
+from org.models_api_connections import (
+    OrgApiConnection,  # noqa: F401
+    OrgApiMmrDelivery,  # noqa: F401
+    OrgApiMmrPullTarget,  # noqa: F401
+    OrgApiPromotionAdoption,  # noqa: F401
+    OrgApiPromotionBinding,  # noqa: F401
+    OrgApiPromotionEventBinding,  # noqa: F401
+    OrgApiRunCheckpoint,  # noqa: F401
+    OrgApiSyncRun,  # noqa: F401
+    OrgMmrRevisionCounter,  # noqa: F401
+    OrgMmrSyncState,  # noqa: F401
+)
 from org.models_api_tokens import (
     OrgApiLimits,  # noqa: F401
     OrgApiToken,  # noqa: F401
@@ -108,10 +124,21 @@ class Organization(models.Model):
         super().save(*args, **kwargs)
         # cacheops' post_save handles invalidation.
 
+    @transaction.atomic
     def delete(self, *args: object, **kwargs: object) -> None:
+        list(
+            self.members.select_for_update().order_by("pk").values_list("pk", flat=True)
+        )
         for league in self.leagues.all():
             invalidate_obj(league)
         super().delete(*args, **kwargs)
+
+
+class OrgUserQuerySet(models.QuerySet["OrgUser"]):
+    def delete(self) -> tuple[int, dict[str, int]]:
+        with transaction.atomic(using=self.db):
+            list(self.select_for_update().order_by("pk").values_list("pk", flat=True))
+            return super().delete()
 
 
 class OrgUser(models.Model):
@@ -135,6 +162,59 @@ class OrgUser(models.Model):
     # MMR verification
     has_active_dota_mmr = models.BooleanField(default=False)
     dota_mmr_last_verified = models.DateTimeField(null=True, blank=True)
+
+    objects: models.Manager["OrgUser"] = models.Manager.from_queryset(OrgUserQuerySet)()
+    _membership_user_id: int | None
+
+    @classmethod
+    def from_db(
+        cls, db: str | None, field_names: Iterable[str], values: Iterable[Any]
+    ) -> Self:
+        instance = super().from_db(db, field_names, values)
+        instance._membership_user_id = instance.__dict__.get("user_id")
+        return instance
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        adding = self._state.adding
+        update_fields = kwargs.get("update_fields")
+        writes_user = update_fields is None or bool(
+            {"user", "user_id"}.intersection(update_fields)
+        )
+        changed = self.user_id != getattr(self, "_membership_user_id", None)
+        if not adding and writes_user and (changed or update_fields is not None):
+            # Resolve after org.models finishes loading.
+            service = import_string(
+                "org.api_connections.identity.member_identity_mutation"
+            )
+            with service(self):
+                super().save(*args, **kwargs)
+        else:
+            if not adding and update_fields is None:
+                deferred = self.get_deferred_fields()
+                kwargs["update_fields"] = [
+                    field.name
+                    for field in self._meta.concrete_fields
+                    if not field.primary_key
+                    and field.name != "user"
+                    and field.attname not in deferred
+                ]
+                writes_user = False
+            super().save(*args, **kwargs)
+        if adding or writes_user:
+            self._membership_user_id = self.user_id
+
+    def delete(
+        self, using: str | None = None, keep_parents: bool = False
+    ) -> tuple[int, dict[str, int]]:
+        database = using or self._state.db or "default"
+        with transaction.atomic(using=database):
+            list(
+                type(self)
+                .objects.using(database)
+                .select_for_update()
+                .filter(pk=self.pk)
+            )
+            return super().delete(using=database, keep_parents=keep_parents)
 
     @property
     def needs_mmr_verification(self) -> bool:
@@ -194,6 +274,21 @@ class OrgLog(models.Model):
         ("create_api_token", "Create API Token"),
         ("revoke_api_token", "Revoke API Token"),
         ("set_api_limits", "Set API Limits"),
+        ("create_api_connection", "Create API Connection"),
+        ("edit_api_connection", "Edit API Connection"),
+        ("enable_api_connection", "Enable API Connection"),
+        ("disable_api_connection", "Disable API Connection"),
+        ("archive_api_connection", "Archive API Connection"),
+        ("issue_connection_key", "Issue Connection Key"),
+        ("rotate_connection_key", "Rotate Connection Key"),
+        ("revoke_connection_key", "Revoke Connection Key"),
+        ("api_connection_owner_lost", "API Connection Owner Lost"),
+        ("resume_mmr_deliveries", "Resume MMR Deliveries"),
+        ("resync_mmr_deliveries", "Resync MMR Deliveries"),
+        ("edit_promotion_binding", "Edit Promotion Binding"),
+        ("adopt_promotion_sync", "Adopt Promotion Sync"),
+        ("resume_promotion_outbox", "Resume Promotion Outbox"),
+        ("release_promotion_backlog", "Release Promotion Backlog"),
         ("void_promo_point", "Void Promotion Point"),
         ("restore_promo_point", "Restore Promotion Point"),
         ("update_external_contact", "Update External Contact"),

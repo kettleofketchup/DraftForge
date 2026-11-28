@@ -66,14 +66,23 @@ PATCH_UNRELATED_QUERIES = 15
 STAFF_PUT_QUERIES = 41
 STAFF_PUT_NOOP_QUERIES = 26
 STAFF_PUT_OPEN_QUERIES = 22
-MERGE_DISCORD_QUERIES = 232
-MERGE_CLAIM_QUERIES = 209
-DELETE_API_QUERIES = 124
-DELETE_ADMIN_QUERIES = 177
-DELETE_ADMIN_CONFIRM_QUERIES = 55
+# Connection ledgers add 11 queries to merge/delete: one owner-loss EXISTS,
+# seven SET_NULL updates (connection creator/updater/credential owner/authorizer,
+# run requester, adoption actor, token issuer), and three membership cascades
+# (delivery SELECT, pull-target DELETE, sync-state DELETE). Admin confirmation
+# adds three ledger SELECTs; admin deletion includes that confirmation cost.
+# MMR locks add 10/15 to Discord/claim merges and two to account deletion.
+# Pre-locking revision counters reads tracked games (two SELECTs) when the
+# account is locked and again when deferred identity changes publish; deletion
+# also looks for MMR rows the user verified (one SELECT).
+MERGE_DISCORD_QUERIES = 257
+MERGE_CLAIM_QUERIES = 239
+DELETE_API_QUERIES = 140
+DELETE_ADMIN_QUERIES = 196
+DELETE_ADMIN_CONFIRM_QUERIES = 58
 PROMO_SEND_QUERIES = 30
 PROMO_UNDO_QUERIES = 13
-PROMO_RELEASE_QUERIES = 138
+PROMO_RELEASE_QUERIES = 154
 LEADERBOARD_MEMBER_QUERIES = 8
 LEADERBOARD_ANON_QUERIES = 3
 LEADERBOARD_OWN_ROW_QUERIES = 8

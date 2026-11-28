@@ -103,6 +103,13 @@ class PromotionImportObservation(models.Model):
     adjacent spans with the same timestamp coalesced under the org lock.
     """
 
+    connection = models.ForeignKey(
+        "org.OrgApiConnection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     organization = models.ForeignKey("org.Organization", on_delete=models.CASCADE)
     source = models.CharField(max_length=32, default="contact_log")
     after = models.BigIntegerField()
@@ -224,6 +231,13 @@ class ExternalPromotionReceipt(models.Model):
         "event",
     )
 
+    connection = models.ForeignKey(
+        "org.OrgApiConnection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     organization = models.ForeignKey(
         "org.Organization",
         on_delete=models.CASCADE,
@@ -407,6 +421,7 @@ class OutboxState(models.TextChoices):
     IN_FLIGHT = "in_flight", "In flight"
     RETRY = "retry", "Retry"
     PAUSED = "paused", "Paused"
+    BACKLOG_HELD = "backlog_held", "Backlog held"
     RECONCILIATION_REQUIRED = "reconciliation_required", "Reconciliation required"
     APPLIED = "applied", "Applied"
     CANCELED = "canceled", "Canceled"
@@ -428,6 +443,13 @@ class PromotionContactOutbox(models.Model):
     # Written once, when the receipt identity is complete.
     FROZEN_ONCE_SET: ClassVar[tuple[str, ...]] = ("payload", "payload_hash")
 
+    connection = models.ForeignKey(
+        "org.OrgApiConnection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
     organization = models.ForeignKey(
         "org.Organization",
         on_delete=models.CASCADE,

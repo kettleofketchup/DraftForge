@@ -144,6 +144,36 @@ class CelerySettingsBootTest(SimpleTestCase):
         self.assertIn("org.tasks.purge_expired_mmr_screenshots", registered)
         self.assertEqual(scheduled - registered, set())
 
+    def test_worker_registers_org_api_sync_tasks(self) -> None:
+        env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
+        code = (
+            "import json, sys\n"
+            "from config.celery_light import app\n"
+            "app.loader.import_default_modules()\n"
+            "names = sorted(n for n in app.tasks if 'org_api_sync' in n)\n"
+            "print(json.dumps([names, 'org.api_connections.orchestration' in sys.modules]))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        names, loaded_orm_side = json.loads(result.stdout.strip().splitlines()[-1])
+        self.assertEqual(
+            names,
+            [
+                "config.tasks_org_api_sync.org_api_sync_cleanup",
+                "config.tasks_org_api_sync.org_api_sync_promotion",
+                "config.tasks_org_api_sync.org_api_sync_step",
+                "config.tasks_org_api_sync.org_api_sync_sweep",
+            ],
+        )
+        self.assertFalse(loaded_orm_side)
+
     def test_worker_boot_modules(self) -> None:
         env = {**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings_celery"}
         code = (

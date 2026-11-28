@@ -25,6 +25,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 app.autodiscover_tasks()
 app.autodiscover_tasks(["events"], related_name="tournament_tasks")
+app.autodiscover_tasks(["config"], related_name="tasks_org_api_sync")
 
 # Beat schedule — copied from config/celery.py
 _beat_schedule = {
@@ -73,6 +74,16 @@ _beat_schedule = {
     "sync-active-org-discord-names": {
         "task": "user.tasks.discord_name_sync.sync_active_org_discord_names",
         "schedule": 1800.0,
+    },
+    # Org API connection syncs: claim due pulls, tests and deliveries, and
+    # purge run history past its 90-day retention. Keep both files in step.
+    "org-api-sync-sweep": {
+        "task": "config.tasks_org_api_sync.org_api_sync_sweep",
+        "schedule": 60.0,
+    },
+    "org-api-sync-cleanup-daily": {
+        "task": "config.tasks_org_api_sync.org_api_sync_cleanup",
+        "schedule": crontab(hour=3, minute=30),
     },
 }
 
