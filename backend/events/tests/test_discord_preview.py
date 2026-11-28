@@ -1,6 +1,7 @@
 """Discord previews equal what the tasks send, and never send or write."""
 
 import ast
+import itertools
 import json
 import subprocess
 import sys
@@ -28,6 +29,7 @@ from discordbot.models import (
     DiscordMessageLog,
 )
 from discordbot.payload_schema import DiscordMessage
+from discordbot.tests.ledger_bridge import ledger_bridge
 from events.constants import (
     EventState,
     RepeatFrequency,
@@ -187,6 +189,12 @@ class _PreviewTestCase(_DiscordTaskTestCase):
                 captured.edits.append(body)
             return _ok_response({"id": "m1"})
 
+        dm_ids = itertools.count(700)
+
+        def fake_dm_request(method: str, url: str, **kwargs: Any) -> MagicMock:
+            fake_request(method, url, **kwargs)
+            return _ok_response({"id": str(next(dm_ids))})
+
         def fake_post(url: str, **kwargs: Any) -> MagicMock:
             captured.scheduled_create.append(kwargs["json"])
             return MagicMock(
@@ -199,9 +207,15 @@ class _PreviewTestCase(_DiscordTaskTestCase):
 
         with ExitStack() as stack:
             stack.enter_context(override_settings(TEST=False))
+            stack.enter_context(ledger_bridge())
             stack.enter_context(
                 patch(
                     "discordbot.utils._rate_limited_request", side_effect=fake_request
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "discordbot.dm._rate_limited_request", side_effect=fake_dm_request
                 )
             )
             stack.enter_context(
@@ -358,6 +372,8 @@ class PreviewParityTest(_PreviewTestCase):
         self.assertEqual(len(sent.messages), 2)
         self.assertEqual(len(response.messages), 1)
         for body in sent.messages:
+            self.assertTrue(body.pop("enforce_nonce"))
+            self.assertTrue(body.pop("nonce").startswith("dm"))
             self.assertEqual(_dump(response.messages[0]), body)
         self.assertEqual(response.destination.type, "dm")
         self.assertIn("dm_per_subscriber", response.notes)
