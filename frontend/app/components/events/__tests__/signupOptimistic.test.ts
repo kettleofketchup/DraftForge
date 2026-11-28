@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { EventSignupType } from '../schemas';
 import {
+  isSignupAction,
   optimisticSignupStatus,
   overlayPendingSignups,
   replaceSignup,
+  SIGNUP_ACTIONS,
   signupIdOf,
+  upsertSignup,
 } from '../signupOptimistic';
 
 function signup(id: number, status: string): EventSignupType {
@@ -30,9 +33,19 @@ describe('optimisticSignupStatus', () => {
       expect(optimisticSignupStatus('void_withdrawal', state)).toBeNull();
     },
   );
+
+  it('leaves transfer to the server', () => {
+    expect(SIGNUP_ACTIONS).toContain('transfer');
+    expect(isSignupAction('transfer')).toBe(true);
+    expect(optimisticSignupStatus('transfer', 'signups_open')).toBeNull();
+  });
 });
 
 describe('signupIdOf', () => {
+  it('reads the giver id from transfer vars', () => {
+    expect(signupIdOf({ id: 4, recipient_user_id: 9 })).toBe(4);
+  });
+
   it('reads plain ids and { id } objects', () => {
     expect(signupIdOf(7)).toBe(7);
     expect(signupIdOf({ id: 8, mmr: 3000 })).toBe(8);
@@ -113,5 +126,24 @@ describe('replaceSignup', () => {
   it('ignores rows that are not in the list', () => {
     const list = [signup(1, 'approved')];
     expect(replaceSignup(list, signup(9, 'confirmed'))).toBe(list);
+  });
+});
+
+describe('upsertSignup', () => {
+  it('replaces an existing row in place and keeps the others', () => {
+    const list = [signup(1, 'approved'), signup(2, 'approved')];
+    const updated = signup(1, 'cancelled');
+    const out = upsertSignup(list, updated);
+    expect(out).toEqual([updated, list[1]]);
+    expect(out[1]).toBe(list[1]);
+    expect(out).not.toBe(list);
+  });
+
+  it('appends a row that is not in the list', () => {
+    const list = [signup(1, 'approved')];
+    const added = signup(9, 'approved');
+    const out = upsertSignup(list, added);
+    expect(out).toEqual([list[0], added]);
+    expect(out[0]).toBe(list[0]);
   });
 });

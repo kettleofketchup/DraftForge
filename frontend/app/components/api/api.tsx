@@ -161,6 +161,7 @@ export {
   getEvents,
   getOrgEventDefaults,
   getRepeaterSubscribers,
+  getSpotTransferRefusal,
   openSignups,
   reactivateRepeater,
   reinstateSignup,
@@ -172,6 +173,7 @@ export {
   startRollCall,
   startTournament,
   subscribeToRepeater,
+  transferSpot,
   unconfirmSignup,
   unsubscribeFromRepeater,
   updateEvent,
@@ -195,6 +197,10 @@ export type {
   OrgEventDefaultsType,
   RepeaterSubscriber,
   SignupBody,
+  SpotTransferBody,
+  SpotTransferReason,
+  SpotTransferRefusal,
+  SpotTransferResponse,
   VoidWithdrawalBody,
 } from './eventsAPI';
 

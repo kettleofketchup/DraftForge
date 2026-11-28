@@ -10,6 +10,7 @@ export const SIGNUP_ACTIONS = [
   'demote',
   'reinstate',
   'void_withdrawal',
+  'transfer',
 ] as const;
 
 export type SignupAction = (typeof SIGNUP_ACTIONS)[number];
@@ -22,7 +23,7 @@ export interface PendingSignupAction {
 /**
  * The status the server will give a signup after `action`, or null when it
  * depends on server-side state (reinstate and void_withdrawal can restore
- * any held status, or land on the back of the waitlist).
+ * any held status, or land on the back of the waitlist; transfer may swap).
  */
 export function optimisticSignupStatus(
   action: SignupAction,
@@ -42,6 +43,7 @@ export function optimisticSignupStatus(
       return SignupStatus.WAITLISTED;
     case 'reinstate':
     case 'void_withdrawal':
+    case 'transfer':
       return null;
   }
 }
@@ -96,4 +98,13 @@ export function replaceSignup(
   const next = signups.slice();
   next[idx] = updated;
   return next;
+}
+
+/** Like `replaceSignup`, but appends a row the list does not have yet. */
+export function upsertSignup(
+  signups: EventSignupType[],
+  row: EventSignupType,
+): EventSignupType[] {
+  const next = replaceSignup(signups, row);
+  return next === signups ? [...signups, row] : next;
 }

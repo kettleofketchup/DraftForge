@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   demoteSignup: vi.fn(),
   approveSignup: vi.fn(),
   adminAddSignup: vi.fn(),
+  transferSpot: vi.fn(),
 }));
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
@@ -244,6 +245,99 @@ describe('signup actions update rows before the server answers', () => {
 
     await act(async () => holds.resolve(signup(2, 'confirmed')));
     await waitFor(() => expect(api.getEventSignups).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('spot transfer mutation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    api.getEventSignups.mockResolvedValue([
+      signup(1, 'approved'),
+      signup(2, 'waitlisted'),
+    ]);
+  });
+
+  it('writes the giver and a new recipient row into the cache', async () => {
+    const { client, hook } = setup();
+    await waitFor(() =>
+      expect(hook.result.current.list.signups).toHaveLength(2),
+    );
+    const done = deferred<unknown>();
+    const refetch = deferred<EventSignupType[]>();
+    api.transferSpot.mockReturnValueOnce(done.promise);
+    api.getEventSignups.mockReturnValueOnce(refetch.promise);
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = hook.result.current.actions.transfer.mutateAsync({
+        id: 1,
+        recipient_user_id: 9,
+        reason: 'r',
+        acknowledged_codes: ['not_org_member'],
+      });
+    });
+    await waitFor(() =>
+      expect([...hook.result.current.list.pendingIds]).toEqual([1]),
+    );
+    expect(api.transferSpot).toHaveBeenCalledWith(1, {
+      recipient_user_id: 9,
+      reason: 'r',
+      acknowledged_codes: ['not_org_member'],
+    });
+    const response = {
+      mode: 'transfer',
+      correlation_id: 'xfer:1',
+      giver: signup(1, 'cancelled'),
+      recipient: signup(9, 'approved'),
+    };
+    await act(async () => {
+      done.resolve(response);
+      await expect(pending).resolves.toBe(response);
+    });
+    const cached = client.getQueryData<EventSignupType[]>([
+      'event-signups',
+      EVENT_ID,
+    ]);
+    expect(cached?.map((s) => [s.id, s.status])).toEqual([
+      [1, 'cancelled'],
+      [2, 'waitlisted'],
+      [9, 'approved'],
+    ]);
+    expect(
+      client.getQueryState(['event-signups', EVENT_ID])?.isInvalidated,
+    ).toBe(true);
+  });
+
+  it('replaces both rows of a swap in place', async () => {
+    const { client, hook } = setup();
+    await waitFor(() =>
+      expect(hook.result.current.list.signups).toHaveLength(2),
+    );
+    api.getEventSignups.mockReturnValueOnce(
+      deferred<EventSignupType[]>().promise,
+    );
+    api.transferSpot.mockResolvedValueOnce({
+      mode: 'swap',
+      correlation_id: 'xfer:2',
+      giver: signup(1, 'waitlisted'),
+      recipient: signup(2, 'approved'),
+    });
+    await act(async () => {
+      await hook.result.current.actions.transfer.mutateAsync({
+        id: 1,
+        recipient_user_id: 2,
+      });
+    });
+    expect(api.transferSpot).toHaveBeenCalledWith(1, {
+      recipient_user_id: 2,
+    });
+    const cached = client.getQueryData<EventSignupType[]>([
+      'event-signups',
+      EVENT_ID,
+    ]);
+    expect(cached?.map((s) => [s.id, s.status])).toEqual([
+      [1, 'waitlisted'],
+      [2, 'approved'],
+    ]);
   });
 });
 

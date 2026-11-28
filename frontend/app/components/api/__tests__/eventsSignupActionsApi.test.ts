@@ -1,3 +1,4 @@
+import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { post } = vi.hoisted(() => ({ post: vi.fn() }));
@@ -10,8 +11,10 @@ import {
   cancelSignup,
   confirmSignup,
   demoteSignup,
+  getSpotTransferRefusal,
   reinstateSignup,
   rejectSignup,
+  transferSpot,
   unconfirmSignup,
   voidWithdrawal,
 } from '../eventsAPI';
@@ -237,5 +240,107 @@ describe('void withdrawal and restore acknowledgements', () => {
       '/events/signups/5/reinstate/',
       undefined,
     );
+  });
+});
+
+function axiosError(status: number, data: unknown): AxiosError {
+  return new AxiosError('fail', 'ERR_BAD_REQUEST', undefined, undefined, {
+    status,
+    statusText: '',
+    data,
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+  });
+}
+
+describe('spot transfer', () => {
+  const recipient = { ...signup, id: 6, user: 3, status: 'approved' };
+  const response = {
+    mode: 'transfer',
+    correlation_id: 'xfer:abc',
+    giver: { ...signup, status: 'cancelled' },
+    recipient,
+  };
+
+  it('posts the recipient, reason and codes and returns the parsed body', async () => {
+    post.mockResolvedValue({ data: response });
+    await expect(
+      transferSpot(5, {
+        recipient_user_id: 3,
+        reason: ' r ',
+        acknowledged_codes: ['not_org_member'],
+      }),
+    ).resolves.toEqual(response);
+    expect(post).toHaveBeenCalledWith('/events/signups/5/transfer/', {
+      recipient_user_id: 3,
+      reason: 'r',
+      acknowledged_codes: ['not_org_member'],
+    });
+  });
+
+  it('sends only the recipient when no reason or codes are given', async () => {
+    post.mockResolvedValue({ data: { ...response, mode: 'swap' } });
+    await transferSpot(5, {
+      recipient_user_id: 3,
+      reason: '  ',
+      acknowledged_codes: [],
+    });
+    expect(post).toHaveBeenCalledWith('/events/signups/5/transfer/', {
+      recipient_user_id: 3,
+    });
+  });
+
+  it('rejects a malformed response', async () => {
+    post.mockResolvedValue({ data: { ...response, mode: 'gift' } });
+    await expect(transferSpot(5, { recipient_user_id: 3 })).rejects.toThrow();
+    post.mockResolvedValue({ data: { ...response, recipient: { id: 6 } } });
+    await expect(transferSpot(5, { recipient_user_id: 3 })).rejects.toThrow();
+  });
+
+  it('reads an ineligible refusal with member-safe reasons', () => {
+    const reasons = [
+      { code: 'steam_missing', rule: 'steam', message: 'Steam missing' },
+      {
+        code: 'recipient_ineligible',
+        rule: 'eligibility',
+        message: 'Not eligible for this event',
+      },
+    ];
+    expect(
+      getSpotTransferRefusal(
+        axiosError(400, {
+          code: 'recipient_ineligible',
+          error: 'They cannot take this place',
+          reasons,
+        }),
+      ),
+    ).toEqual({
+      code: 'recipient_ineligible',
+      error: 'They cannot take this place',
+      reasons,
+    });
+  });
+
+  it('defaults reasons to an empty list', () => {
+    expect(
+      getSpotTransferRefusal(
+        axiosError(400, { code: 'transfer_disabled', error: 'Off' }),
+      ),
+    ).toEqual({ code: 'transfer_disabled', error: 'Off', reasons: [] });
+  });
+
+  it('returns null for anything that is not a transfer refusal', () => {
+    expect(getSpotTransferRefusal(new Error('x'))).toBeNull();
+    expect(
+      getSpotTransferRefusal(axiosError(409, { code: 'x', error: 'y' })),
+    ).toBeNull();
+    expect(
+      getSpotTransferRefusal(axiosError(400, { error: 'reason_required' })),
+    ).toBeNull();
+    expect(
+      getSpotTransferRefusal(
+        axiosError(400, { code: 'x', error: 'y', reasons: [{ code: 1 }] }),
+      ),
+    ).toBeNull();
   });
 });

@@ -9,7 +9,8 @@ export type StaffSignupAction =
   | 'cancel'
   | 'demote'
   | 'reinstate'
-  | 'void_withdrawal';
+  | 'void_withdrawal'
+  | 'transfer';
 
 export const LEDGER_ACTION_FOR: Record<StaffSignupAction, string> = {
   admin_add: 'staff_added',
@@ -21,6 +22,7 @@ export const LEDGER_ACTION_FOR: Record<StaffSignupAction, string> = {
   demote: 'demoted',
   reinstate: 'reinstated',
   void_withdrawal: 'voided_withdrawal',
+  transfer: 'transferred_out',
 };
 
 // backend/events/ledger.py PLACEMENT_ACTIONS

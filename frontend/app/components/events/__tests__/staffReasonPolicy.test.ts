@@ -18,6 +18,7 @@ const ACTIONS: StaffSignupAction[] = [
   'demote',
   'reinstate',
   'void_withdrawal',
+  'transfer',
 ];
 
 const FROM_STATUSES = ['waitlisted', 'rsvp', 'pending'] as const;
@@ -31,7 +32,13 @@ function expected(
   if (policy === 'all_staff_changes') return 'required';
   if (policy === 'optional') return 'optional';
   const placement =
-    ['admin_add', 'demote', 'reinstate', 'void_withdrawal'].includes(action) ||
+    [
+      'admin_add',
+      'demote',
+      'reinstate',
+      'void_withdrawal',
+      'transfer',
+    ].includes(action) ||
     (action === 'approve' && fromStatus === 'waitlisted');
   return placement ? 'required' : 'optional';
 }
@@ -71,6 +78,7 @@ describe('staffReasonMode', () => {
       demote: 'demoted',
       reinstate: 'reinstated',
       void_withdrawal: 'voided_withdrawal',
+      transfer: 'transferred_out',
     });
   });
 
@@ -114,5 +122,20 @@ describe('staffReasonMode', () => {
     expect(staffReasonMode('placements', 'approve', { isSelf: false })).toBe(
       'optional',
     );
+  });
+
+  it('transfer needs a reason under placements but not on your own place', () => {
+    expect(
+      staffReasonMode('placements', 'transfer', {
+        fromStatus: 'approved',
+        isSelf: false,
+      }),
+    ).toBe('required');
+    expect(
+      staffReasonMode('placements', 'transfer', {
+        fromStatus: 'approved',
+        isSelf: true,
+      }),
+    ).toBe('optional');
   });
 });

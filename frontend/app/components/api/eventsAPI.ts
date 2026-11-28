@@ -290,6 +290,55 @@ export async function voidWithdrawal(
   return eventSignupSchema.parse(data);
 }
 
+export const spotTransferResponseSchema = z.object({
+  mode: z.enum(['transfer', 'swap']),
+  correlation_id: z.string(),
+  giver: eventSignupSchema,
+  recipient: eventSignupSchema,
+});
+export type SpotTransferResponse = z.infer<typeof spotTransferResponseSchema>;
+
+export interface SpotTransferBody {
+  recipient_user_id: number;
+  reason?: string;
+  acknowledged_codes?: string[];
+}
+
+export async function transferSpot(
+  signupId: number,
+  { recipient_user_id, reason, acknowledged_codes }: SpotTransferBody,
+): Promise<SpotTransferResponse> {
+  const { data } = await axios.post(`/events/signups/${signupId}/transfer/`, {
+    recipient_user_id,
+    ...reasonPayload(reason),
+    ...acknowledgedPayload(acknowledged_codes),
+  });
+  return spotTransferResponseSchema.parse(data);
+}
+
+// backend/events/services.py _member_safe_reasons: no severity, params or fix.
+export const spotTransferReasonSchema = z.object({
+  code: z.string(),
+  rule: z.string(),
+  message: z.string(),
+});
+export type SpotTransferReason = z.infer<typeof spotTransferReasonSchema>;
+
+const spotTransferRefusalSchema = z.object({
+  code: z.string(),
+  error: z.string(),
+  reasons: z.array(spotTransferReasonSchema).default([]),
+});
+export type SpotTransferRefusal = z.infer<typeof spotTransferRefusalSchema>;
+
+export function getSpotTransferRefusal(
+  err: unknown,
+): SpotTransferRefusal | null {
+  if (!isAxiosError(err) || err.response?.status !== 400) return null;
+  const parsed = spotTransferRefusalSchema.safeParse(err.response.data);
+  return parsed.success ? parsed.data : null;
+}
+
 // --- EventRepeater ---
 
 type ReadyCheckSettings = Omit<

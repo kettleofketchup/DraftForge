@@ -15,6 +15,7 @@ import type {
   EventStaffPayload,
   EventWritePayload,
   SignupBody,
+  SpotTransferResponse,
 } from '~/components/api/api';
 import {
   adminAddSignup as adminAddSignupAPI,
@@ -44,6 +45,7 @@ import {
   startRollCall as startRollCallAPI,
   startTournament as startTournamentAPI,
   subscribeToRepeater,
+  transferSpot as transferSpotAPI,
   unconfirmSignup as unconfirmSignupAPI,
   unsubscribeFromRepeater,
   updateEvent as updateEventAPI,
@@ -65,6 +67,7 @@ import {
   overlayPendingSignups,
   replaceSignup,
   signupIdOf,
+  upsertSignup,
 } from '~/components/events/signupOptimistic';
 import type { GameTypeValue } from '~/components/game/constants';
 import { organizationQueryKey } from '~/components/organization/hooks/useOrganization';
@@ -496,6 +499,10 @@ export interface SignupActionVars {
   acknowledged_codes?: string[];
 }
 
+export interface TransferSpotVars extends SignupActionVars {
+  recipient_user_id: number;
+}
+
 export interface AdminAddVars {
   userId: number;
   reason?: string;
@@ -590,6 +597,18 @@ export function useSignupActionMutations(eventId: number) {
           voidWithdrawalAPI(id, { reason, acknowledged_codes }),
       ),
     ),
+    transfer: useMutation({
+      mutationKey: [...signupActionKey(eventId), 'transfer'],
+      mutationFn: ({ id, ...body }: TransferSpotVars) =>
+        transferSpotAPI(id, body),
+      onMutate: () => queryClient.cancelQueries({ queryKey: signupsKey }),
+      onSuccess: ({ giver, recipient }: SpotTransferResponse) => {
+        queryClient.setQueryData<EventSignupType[]>(signupsKey, (old) =>
+          old ? upsertSignup(upsertSignup(old, giver), recipient) : old,
+        );
+      },
+      onSettled: invalidateAfterSignupActions,
+    }),
     adminAdd: useMutation({
       mutationKey: [...signupActionKey(eventId), 'admin_add'],
       mutationFn: ({ userId, reason }: AdminAddVars) =>

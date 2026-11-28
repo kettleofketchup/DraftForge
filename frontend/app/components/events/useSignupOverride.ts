@@ -12,25 +12,36 @@ import {
 
 const log = getLogger('events.void');
 
-export type SignupOverrideKind = 'void_withdrawal' | 'reinstate';
+export type SignupOverrideKind = 'void_withdrawal' | 'reinstate' | 'transfer';
 
 type SignupOverrideContext = {
   kind: SignupOverrideKind;
   id: number;
   name?: string;
   reason?: string;
+  recipientUserId?: number;
 };
+
+export interface SignupOverrideExtra {
+  recipientUserId?: number;
+}
 
 const FAILURE: Record<SignupOverrideKind, string> = {
   void_withdrawal: 'Failed to void withdrawal',
   reinstate: 'Failed to restore signup',
+  transfer: 'Failed to transfer place',
 };
 
 function subjectFor(ctx: SignupOverrideContext): string | undefined {
   if (!ctx.name) return undefined;
-  return ctx.kind === 'void_withdrawal'
-    ? `voiding ${ctx.name}'s withdrawal`
-    : `restoring ${ctx.name}`;
+  switch (ctx.kind) {
+    case 'void_withdrawal':
+      return `voiding ${ctx.name}'s withdrawal`;
+    case 'reinstate':
+      return `restoring ${ctx.name}`;
+    case 'transfer':
+      return `transferring ${ctx.name}'s place`;
+  }
 }
 
 export interface SignupOverride {
@@ -38,6 +49,7 @@ export interface SignupOverride {
     kind: SignupOverrideKind,
     id: number,
     name?: string,
+    extra?: SignupOverrideExtra,
   ) => (reason?: string) => Promise<void>;
   dialogProps: OverrideDialogBinding & {
     defaultReason: string;
@@ -50,19 +62,33 @@ export function useSignupOverride(
 ): SignupOverride {
   const voidWithdrawal = signupActions.voidWithdrawal.mutateAsync;
   const reinstate = signupActions.reinstate.mutateAsync;
+  const transfer = signupActions.transfer.mutateAsync;
 
   const action = useCallback(
-    (ack: OverrideAcknowledgement, ctx: SignupOverrideContext) => {
+    (
+      ack: OverrideAcknowledgement,
+      ctx: SignupOverrideContext,
+    ): Promise<unknown> => {
       const reason = ack.reason ?? ctx.reason;
-      return (ctx.kind === 'void_withdrawal' ? voidWithdrawal : reinstate)({
+      const vars = {
         id: ctx.id,
         ...(reason ? { reason } : {}),
         ...(ack.acknowledged_codes.length
           ? { acknowledged_codes: ack.acknowledged_codes }
           : {}),
-      });
+      };
+      switch (ctx.kind) {
+        case 'void_withdrawal':
+          return voidWithdrawal(vars);
+        case 'reinstate':
+          return reinstate(vars);
+        case 'transfer':
+          if (ctx.recipientUserId === undefined)
+            return Promise.reject(new Error('Transfer has no recipient'));
+          return transfer({ ...vars, recipient_user_id: ctx.recipientUserId });
+      }
     },
-    [voidWithdrawal, reinstate],
+    [voidWithdrawal, reinstate, transfer],
   );
 
   const { run, dialogProps, context } = useOverrideRetry(action, {
@@ -78,13 +104,21 @@ export function useSignupOverride(
   });
 
   const fire = useCallback(
-    (kind: SignupOverrideKind, id: number, name?: string) =>
+    (
+      kind: SignupOverrideKind,
+      id: number,
+      name?: string,
+      extra?: SignupOverrideExtra,
+    ) =>
       async (reason?: string): Promise<void> => {
         await run({
           kind,
           id,
           ...(name ? { name } : {}),
           ...(reason ? { reason } : {}),
+          ...(extra?.recipientUserId !== undefined
+            ? { recipientUserId: extra.recipientUserId }
+            : {}),
         });
       },
     [run],
