@@ -181,7 +181,44 @@ A reason that is given is saved with the change under every choice. Staff see it
 
 Under **Optional** the one-click buttons stay one-click. The actions that already open a dialog (the MMR approval recap, Remove, and the roll call confirm, reject and remove dialogs) get an optional reason field. When the choice requires a reason, a one-click action opens a short reason dialog first, and the dialog-based actions mark their field as required.
 
-**API:** each staff signup action (`admin-signup`, `approve`, `demote`, `reinstate`, `reject`, `confirm`, `unconfirm`, `cancel_signup` and `ready-check/confirm`) accepts an optional `reason` in the body, at most 500 characters after trimming. When the event's choice requires one and none is sent, the endpoint returns 400 `{"error": "reason_required"}`. Status errors come first: a request on a signup in the wrong state gets the usual status error, not `reason_required`. `ready-check/recheck` writes no history, so it ignores `reason`.
+**API:** each staff signup action (`admin-signup`, `approve`, `demote`, `reinstate`, `void-withdrawal`, `reject`, `confirm`, `unconfirm`, `cancel_signup` and `ready-check/confirm`) accepts an optional `reason` in the body, at most 500 characters after trimming. When the event's choice requires one and none is sent, the endpoint returns 400 `{"error": "reason_required"}`. Status errors come first: a request on a signup in the wrong state gets the usual status error, not `reason_required`. `ready-check/recheck` writes no history, so it ignores `reason`.
+
+#### Voiding a withdrawal
+
+Staff can void a withdrawal that should never have happened: a cancel, a decline or a rejection. The member comes back exactly as they were before it:
+
+- the same status, so a Maybe comes back as a Maybe and a waitlisted member comes back waitlisted;
+- the same commitment (main or maybe) and RSVP class;
+- the same place in line (`line_seq` and `signed_up_at`).
+
+**Void withdrawal** sits next to **Restore** on cancelled and rejected rows, in the event page's Removed tab and on the [roll call page](events/roll-call.md#3-roll-call-page). It works while signups are open and during roll call. Only event staff can void; members get 403. Voiding counts as a placement under [Staff reasons](#staff-reasons).
+
+Only the signup's latest cancel, decline or rejection can be voided, and only while nothing else has changed the signup since. A signup with no recorded withdrawal, such as one from before the [signup ledger](events/signup-ledger.md) existed, cannot be voided: staff get "This withdrawal has no recorded place to restore." and can still use Restore.
+
+Voiding never moves anyone else. Members promoted into the freed seat keep it. A restored waitlisted member takes their old place in the waitlist and is promoted straight away if a seat is free. When the restored status holds a seat and the event is full, the organization's [Staff placement](organization-settings.md#staff-placement) policy decides, through the `over_capacity` rule:
+
+| Policy | Voiding on a full event |
+|---|---|
+| **Silent** (default) | Seats the member over capacity and records `over_capacity` as an overridden rule |
+| **Confirm** | Asks staff to confirm the warning, with a reason, then seats the member over capacity |
+| **Block** | Refuses the void |
+
+When several warnings arrive at once, for example after voiding two rows quickly, they wait in turn and each names its member.
+
+**Restore** uses the same exact restore when the signup's withdrawal is on record and restoring would not seat the member over capacity. Otherwise Restore keeps its earlier behaviour:
+
+- no recorded withdrawal: Restore works as before;
+- while signups are open and the event is full, a member whose restored status holds a seat goes to the back of the waitlist, whatever the Staff placement policy. Restore never seats anyone over capacity during signups; Void withdrawal is the only way to do that;
+- during roll call, a member whose restored status holds a seat on a full event comes back approved as a main, as Restore did before.
+
+While signups are open, Restore refuses a rejected signup ("Only cancelled signups can be reinstated."). To undo a rejection then, use Void withdrawal.
+
+A void does not undo everything the withdrawal did:
+
+- tournament team membership, captaincy and deputy roles are not restored. The member rejoins the tournament roster when their restored status puts them on it; staff put them back on a team by hand;
+- a [late cancel](organization-conduct.md#late-cancels) recorded by the member's own withdrawal stays until the event completes. As for a member who signs up again, completion clears it while the member is still on the event. Staff can also change it in the Attendance panel.
+
+The signup's History shows the void as **Withdrawal voided**, with the reason and any overridden rule. See [Signup Ledger](events/signup-ledger.md#what-gets-recorded).
 
 #### Web vs Discord parity
 
@@ -203,7 +240,7 @@ The endpoint is a single canonical action accepting `{intent, profile}`; the old
 
 #### Approve flow
 
-Admin approve uses `POST /api/event-signups/{id}/approve/` with optional `{ "mmr": <int> }`. On approve:
+Admin approve uses `POST /api/events/signups/{id}/approve/` with optional `{ "mmr": <int> }`. On approve:
 
 - `EventSignup.status` → `approved`.
 - If `mmr` is supplied, the org MMR of the event's game is written and the OrgLog records `set_mmr` with `game_type`. The signup ledger's `approved` entry also records the override as `mmr_override` and `game_type` in its after snapshot. An `OrgUser` row is created if missing. The value is checked against that game's range (0–20000); an out-of-range value returns 400.
@@ -340,13 +377,14 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/event-signups/{id}/approve/` | Approve a signup. Optional body `{"mmr": <int>}` writes the org MMR of the event's game and logs `set_mmr`. Does NOT mutate positions. |
-| POST | `/api/event-signups/{id}/reject/` | Reject a signup |
-| POST | `/api/event-signups/{id}/confirm/` | Confirm attendance (roll-call) |
-| POST | `/api/event-signups/{id}/unconfirm/` | Reverse a confirm |
-| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the waitlist; it moves to the back of the line. Nobody is promoted into the freed seat; staff fill it by hand |
-| POST | `/api/event-signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
-| POST | `/api/event-signups/{id}/reinstate/` | Re-enable a cancelled signup |
+| POST | `/api/events/signups/{id}/approve/` | Approve a signup. Optional body `{"mmr": <int>}` writes the org MMR of the event's game and logs `set_mmr`. Does NOT mutate positions. |
+| POST | `/api/events/signups/{id}/reject/` | Reject a signup |
+| POST | `/api/events/signups/{id}/confirm/` | Confirm attendance (roll-call) |
+| POST | `/api/events/signups/{id}/unconfirm/` | Reverse a confirm |
+| POST | `/api/events/signups/{id}/demote/` | Move an active signup to the waitlist; it moves to the back of the line. Nobody is promoted into the freed seat; staff fill it by hand |
+| POST | `/api/events/signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
+| POST | `/api/events/signups/{id}/reinstate/` | Re-enable a cancelled signup. Staff restore the exact place when the withdrawal is on record and restoring would not seat the member over capacity; see [Voiding a withdrawal](#voiding-a-withdrawal) |
+| POST | `/api/events/signups/{id}/void-withdrawal/` | Void the latest cancel, decline or rejection and restore the signup exactly (event staff; `403` for anyone else). Optional body `{"reason": "...", "acknowledged_codes": ["over_capacity"]}`. `400` when the signup is not cancelled or rejected, or has no recorded withdrawal; `409` `override_required` on a full event under the Confirm or Block policy. See [Voiding a withdrawal](#voiding-a-withdrawal) |
 
 ### Repeaters & defaults
 

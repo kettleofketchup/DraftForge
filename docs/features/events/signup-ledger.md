@@ -38,8 +38,10 @@ Two event settings, both on by default, decide whether a signup that comes back 
 | Declined without ever signing up | RSVP or Maybe | none | always | `signed_up` |
 | Cancelled, after a real sign-up | Member reinstate | `line_withdraw_forfeits` | the setting is on | `reinstated` |
 | Dropped | Member reinstate | none | refused: "You were dropped from this event" | none |
-| Cancelled or dropped, signups open, event full | Staff reinstate | none | always | `reinstated` |
-| Cancelled or dropped with signups open and a free seat; or cancelled, rejected or dropped during roll call | Staff reinstate | none | never | `reinstated` |
+| Cancelled or rejected, with the withdrawal on record | Void withdrawal | none | never: the old place is restored | `voided_withdrawal` |
+| Cancelled with signups open, or cancelled or rejected during roll call, with the withdrawal on record, when restoring would not seat the member over capacity | Staff reinstate | none | never: the old place is restored | `voided_withdrawal` |
+| Cancelled or dropped, signups open, event full, and no restorable withdrawal or the restored status would hold a seat | Staff reinstate | none | always | `reinstated` |
+| Cancelled or dropped with signups open and a free seat, no restorable withdrawal; or cancelled, rejected or dropped during roll call otherwise | Staff reinstate | none | never | `reinstated` |
 | Declined without ever signing up | Any reinstate | none | always | `reinstated` |
 | Cancelled, rejected or Maybe | Staff add | none | always | `staff_added` |
 | Maybe | RSVP | `line_switch_restamps` | the setting is on | `switched_commitment` |
@@ -52,7 +54,7 @@ Every restamp logs `signup_line_restamped` (`system=events`, `subsystem=line`) w
 
 ## Commitment
 
-Each signup is either a **main** or a **maybe** signup (`commitment`). A tentative signup is a maybe; every other signup is a main. A tentative signup that is cancelled and then reinstated by a staff member comes back as a main. Each signup also has an RSVP class (`rsvp_class`), which is `standard` for every signup today.
+Each signup is either a **main** or a **maybe** signup (`commitment`). A tentative signup is a maybe; every other signup is a main. A tentative signup that is cancelled and then reinstated by a staff member comes back as a main, unless the cancel is on record and staff restore its exact place (see [Voided withdrawals](#voided-withdrawals)); then it comes back as a maybe. Each signup also has an RSVP class (`rsvp_class`), which is `standard` for every signup today.
 
 ## Original sign-up
 
@@ -102,6 +104,7 @@ Each signup change writes one entry (moving a signup to another event writes one
 | `confirmed` / `unconfirmed` | Staff confirm a signup or undo the confirmation |
 | `demoted` | Staff move a signup to the waitlist |
 | `reinstated` | A cancelled or rejected signup is reinstated |
+| `voided_withdrawal` | Staff void a cancel, decline or rejection, or a staff Restore restores the signup's exact place. `caused_by` points at the voided entry |
 | `promoted` | A waitlisted signup takes a freed seat |
 | `account_merged` | A signup moves to another account in an account merge |
 | `moved_event` | The stale repeater cleanup moves a signup to another event |
@@ -119,7 +122,7 @@ The role and means show who acted and how:
 | An operator setting voice presence by hand | `staff` | `web` |
 | The system (waitlist promotion, Discord account merge, cleanup script, test setup) | `system` | `system` |
 
-A staff member acting on their own signup is recorded as `member`. When they used a staff-only action to do it (approve, reject, confirm, unconfirm, demote, a staff add, or a reinstate that bypasses the member rules), the after snapshot carries `extra.staff_power: true`. Approving a profile claim is recorded as the approving staff member, with means `web`.
+A staff member acting on their own signup is recorded as `member`. When they used a staff-only action to do it (approve, reject, confirm, unconfirm, demote, a staff add, a void, or a reinstate that bypasses the member rules), the after snapshot carries `extra.staff_power: true`. Approving a profile claim is recorded as the approving staff member, with means `web`.
 
 ### Promotions
 
@@ -143,6 +146,12 @@ The correlation id groups entries that belong to one action:
 | Website | Empty |
 
 Feed joins and leaves do not write ledger entries; their presence rows hold the evidence. Only confirmations and manual overrides are recorded here.
+
+### Voided withdrawals
+
+A void restores the before snapshot of the signup's latest `withdrew`, `declined` or `rejected` entry: status, commitment, RSVP class, `signed_up_at` and `line_seq` (see [Voiding a withdrawal](../events.md#voiding-a-withdrawal)). Its `voided_withdrawal` entry links back to that entry through `caused_by`, and its after snapshot carries `extra.voided_entry_id` with the same id. The entry also records the staff reason and, when the void seated the member over capacity, `over_capacity` in `rules_overridden`. Promotions the void triggers point at it through `caused_by`.
+
+An entry can be voided only while it is the signup's latest cancel, decline or rejection, its before snapshot holds a status that was not already removed, and nothing has changed the signup's status or moved it to another event since. A second void of the same withdrawal is refused, because the signup is no longer cancelled or rejected. Signups whose history starts at a `backfilled` entry have nothing to restore.
 
 ### Approve with an MMR override
 
@@ -219,7 +228,7 @@ Each item has:
 | `subject` | `user_id`, `username`, `nickname`, `discordNickname`, `guildNickname`, `avatarUrl`, `discord_id` of the member. A deleted user falls back to the snapshot's name and Discord ID |
 | `actor` | The same user fields without `discord_id`, plus `role` (`member`, `staff` or `system`). All user fields are `null` for the system |
 | `before`, `after` | The signup snapshot (`status`, `commitment`, `rsvp_class`, `signed_up_at`, `line_seq`, `waitlist_position`, `event_team_id`, `extra`), or `null` when there is none or the stored snapshot cannot be read. `waitlist_position` is the computed waitlist rank at that moment |
-| `rules_overridden` | A list of rule names, empty today. A stored value that is not a list of strings comes back as `[]` and logs `signup_history_rules_invalid` |
+| `rules_overridden` | A list of the rule codes the change overrode, such as `over_capacity` on a void that seated a member over capacity. A stored value that is not a list of strings comes back as `[]` and logs `signup_history_rules_invalid` |
 | `caused_by` | The id of the causing entry, or `null` |
 
 Left out on purpose: `correlation_id`, the event and member snapshots, and any `extra` key other than `staff_power`, `mmr_override`, `game_type`, `from_user_id`, `discarded_duplicate`, `discarded_signup_id` and `event_id`.
