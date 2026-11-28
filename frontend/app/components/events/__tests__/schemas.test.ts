@@ -23,9 +23,8 @@ import {
 } from '~/components/events/schemas';
 import { signupLineFrom } from '~/components/events/signupLine';
 
-// A complete discordConfigSchema payload that intentionally omits the
-// dropped `discord_subscriber_dm` and `discord_subscriber_dm_hours`
-// fields. After PR-0 loosens those fields to optional, this should parse.
+// A complete discordConfigSchema payload that omits the dropped
+// `discord_subscriber_dm` and `discord_subscriber_dm_hours` fields; it must still parse.
 const baseDiscordConfig = {
   discord_create_event: false,
   discord_sync_signups: false,
@@ -262,7 +261,7 @@ describe('eventSchema leadership viewer flags', () => {
   });
 });
 
-// Pre-refactor key lists: the fragment composition must keep them exact.
+// Fixed key lists the fragment composition must reproduce exactly.
 const TEMPLATE_KEYS = [
   'name',
   'description',
