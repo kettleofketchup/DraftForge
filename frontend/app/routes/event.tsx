@@ -1292,7 +1292,11 @@ function SignupsTab({
                         void run(
                           'reinstate',
                           signup,
-                          signupOverride.fire('reinstate', signup.id),
+                          signupOverride.fire(
+                            'reinstate',
+                            signup.id,
+                            DisplayName(signup),
+                          ),
                         )
                       }
                       disabled={signupActions.reinstate.isPending}
@@ -1317,7 +1321,11 @@ function SignupsTab({
                         void run(
                           'void_withdrawal',
                           signup,
-                          signupOverride.fire('void_withdrawal', signup.id),
+                          signupOverride.fire(
+                            'void_withdrawal',
+                            signup.id,
+                            DisplayName(signup),
+                          ),
                           {
                             title: 'Void withdrawal',
                             actionLabel: 'Void withdrawal',

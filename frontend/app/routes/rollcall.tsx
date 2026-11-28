@@ -210,9 +210,14 @@ export default function RollCallPage() {
     async (signup: EventSignupType) => {
       const next = nextFocusFrom(signup);
       if (
-        await dispatch('reinstate', signup, fire('reinstate', signup.id), {
-          errorLabel: `restore ${DisplayName(signup)}`,
-        })
+        await dispatch(
+          'reinstate',
+          signup,
+          fire('reinstate', signup.id, DisplayName(signup)),
+          {
+            errorLabel: `restore ${DisplayName(signup)}`,
+          },
+        )
       ) {
         setFocusedId(next);
       }
@@ -226,7 +231,7 @@ export default function RollCallPage() {
         await dispatch(
           'void_withdrawal',
           signup,
-          fire('void_withdrawal', signup.id),
+          fire('void_withdrawal', signup.id, DisplayName(signup)),
           {
             title: 'Void withdrawal',
             actionLabel: 'Void withdrawal',

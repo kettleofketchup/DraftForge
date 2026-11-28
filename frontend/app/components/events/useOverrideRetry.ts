@@ -11,9 +11,9 @@ import { getLogger } from '~/lib/logger';
 
 const log = getLogger('useOverrideRetry');
 
-export interface UseOverrideRetryOptions<T> {
-  onSuccess?: (result: T) => void;
-  onError?: (err: unknown) => void;
+export interface UseOverrideRetryOptions<T, C = void> {
+  onSuccess?: (result: T, ctx: C) => void;
+  onError?: (err: unknown, ctx: C) => void;
   rethrow?: boolean;
 }
 
@@ -24,6 +24,7 @@ export interface OverrideDialogBinding {
   onConfirm: (reason: string) => Promise<void>;
   submitting: boolean;
   reasonError: string | null;
+  resetKey?: number;
 }
 
 export type OverrideRunOutcome = 'done' | 'override';
@@ -32,34 +33,59 @@ export interface UseOverrideRetry<C = void> {
   run: (ctx: C) => Promise<OverrideRunOutcome>;
   pending: boolean;
   dialogProps: OverrideDialogBinding;
+  context: C | null;
 }
+
+type PendingOverride<C> = {
+  key: number;
+  required: OverrideRequired;
+  args: [C] | [];
+  acknowledged: string[];
+};
 
 const REASON_REJECTED = 'A reason (1-500 characters) is required.';
 
+// Each 409 is queued with the ctx that hit it, so concurrent runs never
+// retry one action under another's override.
 export function useOverrideRetry<T, C = void>(
   action: (ack: OverrideAcknowledgement, ctx: C) => Promise<T>,
-  options: UseOverrideRetryOptions<T> = {},
+  options: UseOverrideRetryOptions<NoInfer<T>, NoInfer<C>> = {},
 ): UseOverrideRetry<C> {
-  const [override, setOverride] = useState<OverrideRequired | null>(null);
-  const [pending, setPending] = useState(false);
+  const [queue, setQueue] = useState<PendingOverride<C>[]>([]);
+  const queueRef = useRef<PendingOverride<C>[]>([]);
+  const [inFlight, setInFlight] = useState(0);
+  const [retrying, setRetrying] = useState(0);
   const [reasonError, setReasonError] = useState<string | null>(null);
-  const acknowledged = useRef<string[]>([]);
-  const runArgs = useRef<[C] | []>([]);
+  const nextKey = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  const commit = useCallback((next: PendingOverride<C>[]) => {
+    queueRef.current = next;
+    setQueue(next);
+  }, []);
+
+  const drop = useCallback(
+    (key: number) => {
+      if (queueRef.current[0]?.key === key) setReasonError(null);
+      commit(queueRef.current.filter((p) => p.key !== key));
+    },
+    [commit],
+  );
 
   const attempt = useCallback(
     async (
       ack: OverrideAcknowledgement,
-      fromRun: boolean,
+      args: [C] | [],
+      entry: PendingOverride<C> | null,
     ): Promise<OverrideRunOutcome> => {
-      setPending(true);
+      setInFlight((n) => n + 1);
+      if (entry) setRetrying((n) => n + 1);
+      const ctx = args[0] as C;
       try {
-        const result = await action(ack, ...(runArgs.current as [C]));
-        setOverride(null);
-        setReasonError(null);
-        acknowledged.current = [];
-        optionsRef.current.onSuccess?.(result);
+        const result = await action(ack, ...(args as [C]));
+        if (entry) drop(entry.key);
+        optionsRef.current.onSuccess?.(result, ctx);
         return 'done';
       } catch (err) {
         const required = getOverrideRequired(err);
@@ -68,70 +94,93 @@ export function useOverrideRetry<T, C = void>(
             blocked: required.blocked,
             codes: required.violations.map((v) => v.code),
           });
-          setReasonError(null);
-          setOverride(required);
+          if (entry) {
+            setReasonError(null);
+            commit(
+              queueRef.current.map((p) =>
+                p.key === entry.key ? { ...p, required } : p,
+              ),
+            );
+          } else {
+            commit([
+              ...queueRef.current,
+              {
+                key: nextKey.current++,
+                required,
+                args,
+                acknowledged: [],
+              },
+            ]);
+          }
           return 'override';
         }
-        if (
-          isOverrideReasonRequiredError(err) &&
-          ack.acknowledged_codes.length
-        ) {
+        if (entry && isOverrideReasonRequiredError(err)) {
           setReasonError(REASON_REJECTED);
           return 'override';
         }
-        setOverride(null);
-        if (fromRun && optionsRef.current.rethrow) throw err;
-        optionsRef.current.onError?.(err);
+        if (entry) drop(entry.key);
+        if (!entry && optionsRef.current.rethrow) throw err;
+        optionsRef.current.onError?.(err, ctx);
         return 'done';
       } finally {
-        setPending(false);
+        setInFlight((n) => n - 1);
+        if (entry) setRetrying((n) => n - 1);
       }
     },
-    [action],
+    [action, commit, drop],
   );
 
   const run = useCallback(
-    (...args: [ctx: C]) => {
-      runArgs.current = args;
-      acknowledged.current = [];
-      return attempt(NO_ACKNOWLEDGEMENT, true);
-    },
+    (...args: [ctx: C]) => attempt(NO_ACKNOWLEDGEMENT, args, null),
     [attempt],
   );
 
+  const active = queue[0] ?? null;
+
   const onConfirm = useCallback(
     async (reason: string) => {
-      if (!override || override.blocked) return;
-      const codes = [
-        ...acknowledged.current,
-        ...override.violations.map((v) => v.code),
+      const head = queueRef.current[0];
+      if (!head || head.required.blocked) return;
+      const acknowledged = [
+        ...new Set([
+          ...head.acknowledged,
+          ...head.required.violations.map((v) => v.code),
+        ]),
       ];
-      acknowledged.current = [...new Set(codes)];
+      const entry = { ...head, acknowledged };
+      commit(queueRef.current.map((p) => (p.key === head.key ? entry : p)));
       await attempt(
-        { acknowledged_codes: acknowledged.current, reason },
-        false,
+        { acknowledged_codes: acknowledged, reason },
+        head.args,
+        entry,
       );
     },
-    [attempt, override],
+    [attempt, commit],
   );
 
-  const onOpenChange = useCallback((open: boolean) => {
-    if (open) return;
-    setOverride(null);
-    setReasonError(null);
-    acknowledged.current = [];
-  }, []);
+  const onOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) return;
+      const head = queueRef.current[0];
+      if (head) drop(head.key);
+      setReasonError(null);
+    },
+    [drop],
+  );
 
+  const pending = inFlight > 0;
   return {
     run,
     pending,
+    context: active ? (active.args[0] as C) : null,
     dialogProps: {
-      open: override !== null,
+      open: active !== null,
       onOpenChange,
-      override,
+      override: active?.required ?? null,
       onConfirm,
-      submitting: pending,
+      submitting: retrying > 0,
       reasonError,
+      resetKey: active?.key,
     },
   };
 }

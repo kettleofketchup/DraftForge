@@ -531,4 +531,117 @@ describe('Void withdrawal and override-aware Restore', () => {
     expect(h.actions.voidWithdrawal.mutateAsync).not.toHaveBeenCalled();
     expect(voidButton(101).querySelector('kbd')).toBeNull();
   });
+
+  it('retries the row whose in-flight Restore hit the 409, not the later row', async () => {
+    renderRollCall({
+      signups: [signup(101, 'cancelled'), signup(102, 'cancelled')],
+    });
+    let rejectFirst!: (err: unknown) => void;
+    h.actions.reinstate.mutateAsync
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectFirst = reject)),
+      )
+      .mockResolvedValueOnce({});
+    focused(101);
+    key('1');
+    await waitFor(() => focused(102));
+    key('1');
+    await waitFor(() =>
+      expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledTimes(2),
+    );
+    await act(async () => rejectFirst(overCapacity()));
+    const dialog = await screen.findByTestId('override-warning-dialog');
+    expect(dialog).toHaveTextContent('player_101');
+    expect(dialog).not.toHaveTextContent('player_102');
+    fireEvent.change(within(dialog).getByRole('textbox'), {
+      target: { value: 'seat them' },
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /override/i }),
+      );
+    });
+    expect(h.actions.reinstate.mutateAsync.mock.calls).toEqual([
+      [{ id: 101 }],
+      [{ id: 102 }],
+      [{ id: 101, reason: 'seat them', acknowledged_codes: ['over_capacity'] }],
+    ]);
+    await waitFor(() =>
+      expect(screen.queryByTestId('override-warning-dialog')).toBeNull(),
+    );
+    expect(h.toastError).not.toHaveBeenCalled();
+  });
+
+  it('queues a second 409 behind the first and retries each with its own kind', async () => {
+    renderRollCall({
+      signups: [signup(101, 'cancelled'), signup(102, 'cancelled')],
+    });
+    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
+    h.actions.voidWithdrawal.mutateAsync.mockRejectedValueOnce(overCapacity());
+    fireEvent.click(voidButton(102));
+    fireEvent.click(
+      within(screen.getByTestId('rollcall-row-101')).getByTestId(
+        'rollcall-restore-btn',
+      ),
+    );
+    let dialog = await screen.findByTestId('override-warning-dialog');
+    await waitFor(() =>
+      expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledTimes(1),
+    );
+    expect(dialog).toHaveTextContent("voiding player_102's withdrawal");
+    fireEvent.change(within(dialog).getByRole('textbox'), {
+      target: { value: 'first' },
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /override/i }),
+      );
+    });
+    expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenLastCalledWith({
+      id: 102,
+      reason: 'first',
+      acknowledged_codes: ['over_capacity'],
+    });
+    dialog = await screen.findByTestId('override-warning-dialog');
+    await waitFor(() =>
+      expect(dialog).toHaveTextContent('restoring player_101'),
+    );
+    expect(within(dialog).getByRole('textbox')).toHaveValue('');
+    fireEvent.change(within(dialog).getByRole('textbox'), {
+      target: { value: 'second' },
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /override/i }),
+      );
+    });
+    expect(h.actions.reinstate.mutateAsync).toHaveBeenLastCalledWith({
+      id: 101,
+      reason: 'second',
+      acknowledged_codes: ['over_capacity'],
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId('override-warning-dialog')).toBeNull(),
+    );
+  });
+
+  it('names the void in the fallback toast when an acknowledged retry fails', async () => {
+    renderRollCall({ signups: [signup(101, 'cancelled')] });
+    h.actions.voidWithdrawal.mutateAsync
+      .mockRejectedValueOnce(overCapacity())
+      .mockRejectedValueOnce(axiosError(500, {}));
+    fireEvent.click(voidButton(101));
+    const dialog = await screen.findByTestId('override-warning-dialog');
+    fireEvent.change(within(dialog).getByRole('textbox'), {
+      target: { value: 'why' },
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /override/i }),
+      );
+    });
+    await waitFor(() =>
+      expect(h.toastError).toHaveBeenCalledWith('Failed to void withdrawal'),
+    );
+  });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { toast } from 'sonner';
 
 import type { OverrideAcknowledgement } from '~/components/api/overridesAPI';
@@ -17,15 +17,32 @@ export type SignupOverrideKind = 'void_withdrawal' | 'reinstate';
 type SignupOverrideContext = {
   kind: SignupOverrideKind;
   id: number;
+  name?: string;
   reason?: string;
 };
+
+const FAILURE: Record<SignupOverrideKind, string> = {
+  void_withdrawal: 'Failed to void withdrawal',
+  reinstate: 'Failed to restore signup',
+};
+
+function subjectFor(ctx: SignupOverrideContext): string | undefined {
+  if (!ctx.name) return undefined;
+  return ctx.kind === 'void_withdrawal'
+    ? `voiding ${ctx.name}'s withdrawal`
+    : `restoring ${ctx.name}`;
+}
 
 export interface SignupOverride {
   fire: (
     kind: SignupOverrideKind,
     id: number,
+    name?: string,
   ) => (reason?: string) => Promise<void>;
-  dialogProps: OverrideDialogBinding & { defaultReason: string };
+  dialogProps: OverrideDialogBinding & {
+    defaultReason: string;
+    subject?: string;
+  };
 }
 
 export function useSignupOverride(
@@ -33,7 +50,6 @@ export function useSignupOverride(
 ): SignupOverride {
   const voidWithdrawal = signupActions.voidWithdrawal.mutateAsync;
   const reinstate = signupActions.reinstate.mutateAsync;
-  const [defaultReason, setDefaultReason] = useState('');
 
   const action = useCallback(
     (ack: OverrideAcknowledgement, ctx: SignupOverrideContext) => {
@@ -49,24 +65,37 @@ export function useSignupOverride(
     [voidWithdrawal, reinstate],
   );
 
-  const { run, dialogProps } = useOverrideRetry(action, {
+  const { run, dialogProps, context } = useOverrideRetry(action, {
     rethrow: true,
-    onError: (error) => {
+    onError: (error, ctx) => {
       log.warn('Signup override retry failed', {
+        kind: ctx.kind,
+        signupId: ctx.id,
         error: extractApiError(error),
       });
-      toast.error(extractApiError(error) ?? 'Failed to restore signup');
+      toast.error(extractApiError(error) ?? FAILURE[ctx.kind]);
     },
   });
 
   const fire = useCallback(
-    (kind: SignupOverrideKind, id: number) =>
+    (kind: SignupOverrideKind, id: number, name?: string) =>
       async (reason?: string): Promise<void> => {
-        setDefaultReason(reason ?? '');
-        await run({ kind, id, ...(reason ? { reason } : {}) });
+        await run({
+          kind,
+          id,
+          ...(name ? { name } : {}),
+          ...(reason ? { reason } : {}),
+        });
       },
     [run],
   );
 
-  return { fire, dialogProps: { ...dialogProps, defaultReason } };
+  return {
+    fire,
+    dialogProps: {
+      ...dialogProps,
+      defaultReason: context?.reason ?? '',
+      subject: context ? subjectFor(context) : undefined,
+    },
+  };
 }
