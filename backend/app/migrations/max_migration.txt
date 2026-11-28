@@ -1,1 +1,1 @@
-0117_move_user_models_to_user
+0118_move_joke_to_joke

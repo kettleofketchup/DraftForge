@@ -1,0 +1,3 @@
+- Moved `Joke` and the tangoes API from `app` to the new web-only `joke` app. State-only migrations keep `app_joke` unchanged; the API paths and payloads are unchanged.
+- Relabelled the Joke ContentType in place, preserving permission ids and grants. Permission strings are now `joke.*_joke`; the `discord_merge_row_discarded` log model value is now `joke.Joke`.
+- To roll back, while the new image is still running: `python manage.py migrate joke zero`; then `python manage.py shell -c "from django.contrib.contenttypes.models import ContentType; ContentType.objects.filter(app_label='joke', model__in=['joke']).delete()"`; then deploy the previous image. Reversing the image first can create duplicate ContentTypes and strand grants.

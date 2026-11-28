@@ -13,12 +13,13 @@ from django.test import TestCase
 from django.utils import timezone as tz
 from social_django.models import UserSocialAuth
 
-from app.models import CustomUser, Joke
+from app.models import CustomUser
 from common.game import GameType
 from discordbot.models import DiscordEvent, DiscordEventDM, DMType
 from events.constants import EventState, SignupAction, SignupStatus
 from events.ledger import ActorRole, SignupMeans
 from events.models import Event, EventSignup, SignupLedgerEntry
+from joke.models import Joke
 from league.models import League, LeagueUser
 from org.contributions.kinds import ContributionKind
 from org.models import (
@@ -335,7 +336,7 @@ class MergeDiscardedRowsTest(TestCase):
             merge_discord_accounts(keep=keep, drop=drop)
 
         rows = _discarded(spy)
-        joke = [r for r in rows if r["model"] == "app.Joke"]
+        joke = [r for r in rows if r["model"] == Joke._meta.label]
         self.assertEqual(len(joke), 1)
         self.assertEqual(joke[0]["pk"], dropped_joke_pk)
         self.assertEqual(joke[0]["kept_user_id"], keep.pk)
@@ -353,7 +354,7 @@ class MergeDiscardedRowsTest(TestCase):
         with mock.patch("user.discord_accounts.logger") as spy:
             merge_discord_accounts(keep=keep, drop=drop)
 
-        self.assertNotIn("app.Joke", {r["model"] for r in _discarded(spy)})
+        self.assertNotIn(Joke._meta.label, {r["model"] for r in _discarded(spy)})
 
     def test_nickname_carried_when_kept_account_has_none(self) -> None:
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)

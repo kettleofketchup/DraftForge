@@ -15,8 +15,6 @@ from discordbot.services.member_names import normalise_name
 from telemetry.logging import get_logger
 from user.models import BaseUserProfile, DotaUserProfile, PositionsModel
 
-User = settings.AUTH_USER_MODEL
-
 log = get_logger(__name__)
 
 
@@ -217,7 +215,6 @@ class CustomUser(AbstractUser):
             and f.attname not in deferred
         ]
 
-    # Steam ID conversion constant
     # steamid (64-bit) = steam_account_id (32-bit) + STEAM_ID_64_BASE
     STEAM_ID_64_BASE = 76561197960265728
 
@@ -271,11 +268,9 @@ class CustomUser(AbstractUser):
 
     @property
     def dota_user_profile(self) -> DotaUserProfile | None:
-        """Convenience accessor — the user-wide Dota profile lives one hop
-        away on base_profile. Transitional sugar for the shims below and
-        writers still phrasing reads as `user.dota_user_profile`. None-safe
-        like the shims: a pre-pk user (no base_profile yet) returns None
-        instead of raising RelatedObjectDoesNotExist."""
+        """Transitional `user.dota_user_profile` accessor via base_profile for
+        the shims and remaining writers. Pre-pk users without base_profile
+        return None rather than raising RelatedObjectDoesNotExist."""
         bp = getattr(self, "base_profile", None)
         return getattr(bp, "dota_user_profile", None) if bp else None
 
@@ -373,9 +368,7 @@ class CustomUser(AbstractUser):
         return self._fetch_and_update_avatar_from_discord()
 
     def _is_avatar_url_valid(self, url: str) -> bool:
-        """
-        Check if the avatar URL returns a valid response (not 404).
-        """
+        """Return True only if the avatar URL responds to HEAD with HTTP 200."""
         try:
             response = requests.head(url, timeout=5)
             return response.status_code == 200
@@ -390,12 +383,7 @@ class CustomUser(AbstractUser):
             return False
 
     def _fetch_and_update_avatar_from_discord(self) -> bool:
-        """
-        Fetch the latest avatar from Discord API and update the database.
-
-        Returns:
-            bool: True if avatar was updated, False otherwise.
-        """
+        """Fetch the latest Discord API avatar; return True if the database was updated."""
         if not self.discordId:
             return False
 
@@ -565,19 +553,3 @@ class CustomUser(AbstractUser):
             models.Index(fields=["guildNickname"]),
             models.Index(fields=["discordUsername"]),
         ]
-
-
-class Joke(models.Model):
-    """Tracks joke-related data per user (tangoes purchased, etc.)."""
-
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="joke")
-    tangoes_purchased = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "Joke"
-        verbose_name_plural = "Jokes"
-
-    def __str__(self) -> str:
-        return f"{self.user.username} - {self.tangoes_purchased} tangoes"

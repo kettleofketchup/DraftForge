@@ -24,6 +24,7 @@ MOVE_MIGRATIONS: list[tuple[str, str]] = [
     ("app", "0117_move_user_models_to_user"),
     ("user", "0005_move_user_models_from_app"),
 ]
+MIGRATED_APPS: tuple[str, ...] = ("app", "user")
 APP = "app"
 USER = "user"
 # A SQLite table rebuild keeps sqlite_master's sql text but moves rootpage
@@ -250,10 +251,11 @@ class UserMoveMigrationTests(TransactionTestCase):
 
     def test_one_leaf_per_app(self) -> None:
         leaves = MigrationLoader(None, ignore_no_migrations=True).graph.leaf_nodes()
-        for app_label, name in MOVE_MIGRATIONS:
+        for app_label in MIGRATED_APPS:
             self.assertEqual(
-                [node for node in leaves if node[0] == app_label],
-                [(app_label, name)],
+                len([node for node in leaves if node[0] == app_label]),
+                1,
+                app_label,
             )
 
     def test_move_adds_no_org_ancestors(self) -> None:

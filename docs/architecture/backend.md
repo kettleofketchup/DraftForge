@@ -17,10 +17,10 @@ backend/
 │   ├── migrations/         # Database migrations
 │   ├── templatetags/       # Custom template tags
 │   ├── admin.py           # Django admin configuration
-│   ├── models.py          # CustomUser, Joke
+│   ├── models.py          # CustomUser
 │   ├── permissions.py     # Shared DRF permissions
-│   ├── serializers.py     # JokeSerializer
 │   └── views_main.py      # Auth pages and cross-domain home stats
+├── joke/                  # Tangoes counter: model, serializer, views and URLs
 ├── user/                  # User profiles and account operations
 │   ├── models.py          # Profiles, positions and claim requests
 │   ├── serializers.py     # User and positions payloads

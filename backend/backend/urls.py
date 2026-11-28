@@ -33,7 +33,6 @@ from app.views.internal import (
     update_tournament_log,
 )
 from app.views.ssr import EventSSRView
-from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from discordbot.internal_signup_delivery_views import (
     begin_signup_delivery,
@@ -206,8 +205,7 @@ urlpatterns = [
     ),
     path("api/avatars/refresh/", refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
-    path("api/jokes/tangoes/", get_tangoes, name="get-tangoes"),
-    path("api/jokes/tangoes/buy/", buy_tango, name="buy-tango"),
+    path("api/jokes/", include("joke.urls")),
     path("api/steam/", include("steam.urls")),
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),

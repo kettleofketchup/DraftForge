@@ -152,7 +152,7 @@ class CelerySettingsBootTest(SimpleTestCase):
             "app.loader.import_default_modules()\n"
             "names = ['user.models', 'bracket.models', 'events.tournament_tasks',"
             " 'tournament.signals', 'social_django.models', 'user.discord_accounts',"
-            " 'user.pipelines']\n"
+            " 'user.pipelines', 'joke.models']\n"
             "print(json.dumps({n: n in sys.modules for n in names}))"
         )
         result = subprocess.run(
@@ -176,6 +176,7 @@ class CelerySettingsBootTest(SimpleTestCase):
                 "social_django.models": False,
                 "user.discord_accounts": False,
                 "user.pipelines": False,
+                "joke.models": False,
             },
         )
 

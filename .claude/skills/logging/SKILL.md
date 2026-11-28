@@ -59,7 +59,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `auth` | `social` | — | `user/pipelines.py` | Discord OAuth social-auth pipeline: account reclaim/merge, username matching |
 | `auth` | `merge` | — | `user/discord_accounts.py` | Discord account de-dup / merge |
 | `tournament` | `draft`, `registration`, `user` | — | `app/models.py`, `tournament/functions.py`, `user/views_avatar.py`, `draft/models/team.py`, `draft/views/team_setup.py`, `draft/views/team_picks.py` | Draft build/pick/rebuild, captain/team registration, per-user avatar refresh |
-| `api` | `serializer`, `routing`, `main`, `csv_import`, `joke` | — | `app/serializers.py`, `user/serializers.py`, `user/views_account.py`, `app/views*.py`, `tournament/serializers/*.py`, `tournament/views/*.py`, `tournament/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
+| `api` | `serializer`, `routing`, `main`, `csv_import` | — | `user/serializers.py`, `user/views_account.py`, `app/views*.py`, `tournament/serializers/*.py`, `tournament/views/*.py`, `tournament/views/csv_import.py`, `backend/urls.py` | DRF serializer mutations, view cache-miss, CSV import, env/routing |
 | `user` | `functions` | — | `user/views_profile.py` | Profile-update request/validate/apply |
 | `app` | `signals` | — | `tournament/signals.py`, `draft/signals.py` | Model signal handlers (org/league user create, herodraft cleanup) |
 | `internal_client` | `http` | — | `app/internal_client/` (`transport.py` and per-domain modules) | Internal HTTP client errors and JSON-parse failures |

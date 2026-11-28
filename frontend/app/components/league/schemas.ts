@@ -47,7 +47,7 @@ export const LeagueWithUsersSchema = LeagueSchema.extend({
   staff: z.array(UserSchema).optional(),
 });
 
-// backend/app/serializers.py OrganizationsSerializer, nested in LeaguesSerializer
+// backend/org/serializers.py OrganizationsSerializer, nested in LeaguesSerializer
 export const LeagueListOrganizationSchema = z.object({
   pk: z.number(),
   name: z.string(),
@@ -57,7 +57,7 @@ export const LeagueListOrganizationSchema = z.object({
   created_at: z.string(),
 });
 
-// backend/app/serializers.py LeaguesSerializer (LeagueView list action)
+// backend/league/serializers.py LeaguesSerializer (LeagueView list action)
 export const LeagueListItemSchema = z.object({
   pk: z.number(),
   organization: LeagueListOrganizationSchema.nullable(),
