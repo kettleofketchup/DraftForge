@@ -1,4 +1,4 @@
-"""Leadership review DMs: planning sends (spec §7.1) and button clicks (§7.4)."""
+"""Leadership review DMs: planning sends and button clicks."""
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime

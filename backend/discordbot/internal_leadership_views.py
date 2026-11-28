@@ -1,4 +1,4 @@
-"""Internal API for leadership review DM button clicks (spec §7.4)."""
+"""Internal API for leadership review DM button clicks."""
 
 from django.utils import timezone
 from pydantic import ValidationError

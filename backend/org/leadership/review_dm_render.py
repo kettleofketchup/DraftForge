@@ -1,4 +1,4 @@
-"""Components V2 payload for one part of a leadership review DM (spec §7.2)."""
+"""Components V2 payload for one part of a leadership review DM."""
 
 import re
 from collections.abc import Mapping, Sequence

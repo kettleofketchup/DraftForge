@@ -1,4 +1,4 @@
-"""Gateway handler for leadership review DM buttons (``lr:`` custom ids, spec §7.4).
+"""Gateway handler for leadership review DM buttons (``lr:`` custom ids).
 
 No ORM: the click is applied by the backend over the internal API, then the
 clicked message is re-rendered with a raw PATCH of ``@original``.
