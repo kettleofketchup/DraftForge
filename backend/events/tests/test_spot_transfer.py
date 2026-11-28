@@ -502,3 +502,176 @@ class MemberTransferRecordTests(_TransferFixtures):
         self.assertEqual(done[0]["recipient_signup_id"], result.recipient.pk)
         self.assertEqual(done[0]["correlation_id"], result.correlation_id)
         self.assertEqual(done[0]["actor_role"], ActorRole.MEMBER)
+
+
+class MemberSwapTests(_TransferFixtures):
+    FIRST_FIELDS = ("first_signed_up_at", "first_commitment", "first_rsvp_class")
+
+    def seated_and_waitlisted(
+        self, **overrides: Any
+    ) -> tuple[Event, EventSignup, EventSignup]:
+        event = self.transfer_event(max_players=1, auto_confirm=False, **overrides)
+        seated = self.join(event)
+        waiting = self.join(event)
+        self.assertEqual(self.row(seated).status, SignupStatus.APPROVED)
+        self.assertEqual(self.row(waiting).status, SignupStatus.WAITLISTED)
+        return event, self.row(seated), self.row(waiting)
+
+    def test_swap_seated_with_waitlisted(self) -> None:
+        event, giver, recipient = self.seated_and_waitlisted()
+        bystander = self.row(self.join(event))
+        bystander_state = self.line_state(event)[bystander.pk]
+        firsts = {
+            row.pk: tuple(getattr(row, f) for f in self.FIRST_FIELDS)
+            for row in (giver, recipient)
+        }
+
+        result = self.give(giver, recipient.user)
+
+        self.assertEqual(result.mode, "swap")
+        self.assertEqual(result.recipient.pk, recipient.pk)
+        after_giver, after_recipient = self.row(giver), self.row(recipient)
+        self.assertEqual(
+            (
+                after_giver.line_seq,
+                after_giver.signed_up_at,
+                after_giver.status,
+                after_giver.waitlist_position,
+            ),
+            (
+                recipient.line_seq,
+                recipient.signed_up_at,
+                recipient.status,
+                recipient.waitlist_position,
+            ),
+        )
+        self.assertEqual(
+            (
+                after_recipient.line_seq,
+                after_recipient.signed_up_at,
+                after_recipient.status,
+                after_recipient.waitlist_position,
+            ),
+            (
+                giver.line_seq,
+                giver.signed_up_at,
+                giver.status,
+                giver.waitlist_position,
+            ),
+        )
+        for before, after in ((giver, after_giver), (recipient, after_recipient)):
+            self.assertEqual(after.commitment, before.commitment)
+            self.assertEqual(
+                tuple(getattr(after, f) for f in self.FIRST_FIELDS), firsts[before.pk]
+            )
+        self.assertEqual(self.line_state(event)[bystander.pk], bystander_state)
+        self.assertFalse(
+            SignupLedgerEntry.objects.filter(
+                event=event, action=SignupAction.PROMOTED
+            ).exists()
+        )
+
+    def test_swap_ledger(self) -> None:
+        event, giver, recipient = self.seated_and_waitlisted()
+        start = self.ledger_count(event)
+
+        result = self.give(giver, recipient.user, reason=" covering ")
+
+        entries = list(
+            SignupLedgerEntry.objects.filter(event=event).order_by("pk")[start:]
+        )
+        self.assertEqual(
+            [e.action for e in entries], [SignupAction.SWAPPED, SignupAction.SWAPPED]
+        )
+        out, into = entries
+        self.assertEqual(out.subject_user_id, giver.user_id)
+        self.assertEqual(into.subject_user_id, recipient.user_id)
+        self.assertEqual(out.correlation_id, into.correlation_id)
+        self.assertTrue(out.correlation_id.startswith("xfer:"))
+        self.assertEqual(result.correlation_id, out.correlation_id)
+        self.assertEqual(out.after["extra"]["counterparty_user_id"], recipient.user_id)
+        self.assertEqual(into.after["extra"]["counterparty_user_id"], giver.user_id)
+        self.assertEqual(out.before["status"], SignupStatus.APPROVED)
+        self.assertEqual(out.after["status"], SignupStatus.WAITLISTED)
+        self.assertEqual(into.before["status"], SignupStatus.WAITLISTED)
+        self.assertEqual(into.after["status"], SignupStatus.APPROVED)
+        self.assertEqual({out.reason, into.reason}, {"covering"})
+
+    def test_swap_notifies_once_and_marks_new_seat(self) -> None:
+        _event, giver, recipient = self.seated_and_waitlisted()
+        self.notify_changed.reset_mock()
+        self.notify_interested.reset_mock()
+
+        with capture_logs() as logs:
+            with self.captureOnCommitCallbacks(execute=True):
+                result = self.give(giver, recipient.user)
+
+        self.notify_changed.assert_called_once()
+        self.notify_interested.assert_called_once()
+        self.assertEqual(self.notify_interested.call_args.args[1], recipient.user_id)
+        done = [e for e in logs if e["event"] == "signup_spot_transferred"]
+        self.assertEqual([e["mode"] for e in done], ["swap"])
+        self.assertEqual(done[0]["recipient_signup_id"], result.recipient.pk)
+
+    def test_maybe_main_swap_refused(self) -> None:
+        event = self.transfer_event()
+        main = self.join(event)
+        maybe_user = self.make_user()
+        maybe = create_tentative_signup(event, maybe_user, actor=member(maybe_user))
+        self.assertEqual(self.row(maybe).status, SignupStatus.TENTATIVE)
+        self.assert_refused("commitment_mismatch", main, maybe_user)
+        self.assert_refused("commitment_mismatch", maybe, main.user)
+
+    def test_maybe_maybe_swap_ok(self) -> None:
+        event = self.transfer_event()
+        users = [self.make_user(), self.make_user()]
+        giver, other = (
+            self.row(create_tentative_signup(event, u, actor=member(u))) for u in users
+        )
+        self.assertLess(giver.line_seq, other.line_seq)
+
+        result = self.give(giver, other.user)
+
+        self.assertEqual(result.mode, "swap")
+        after_giver, after_other = self.row(giver), self.row(other)
+        self.assertEqual(after_giver.line_seq, other.line_seq)
+        self.assertEqual(after_other.line_seq, giver.line_seq)
+        for row in (after_giver, after_other):
+            self.assertEqual(row.status, SignupStatus.TENTATIVE)
+            self.assertEqual(row.commitment, Commitment.MAYBE)
+
+    def test_member_cannot_pull_better_place_down(self) -> None:
+        with self.subTest("waitlisted giver vs approved recipient"):
+            _event, seated, waiting = self.seated_and_waitlisted()
+            self.assert_refused("swap_would_demote_recipient", waiting, seated.user)
+        with self.subTest("approved giver later in line"):
+            event = self.transfer_event(auto_confirm=False)
+            earlier = self.join(event)
+            later = self.join(event)
+            self.assertEqual(self.row(later).status, SignupStatus.APPROVED)
+            self.assert_refused("swap_would_demote_recipient", later, earlier.user)
+        with self.subTest("rsvp giver vs approved recipient"):
+            event = self.transfer_event(auto_confirm=False)
+            approved = self.join(event)
+            rsvp = self.set_status(self.join(event), SignupStatus.RSVP)
+            approved = self.set_status(approved, SignupStatus.APPROVED)
+            self.assert_refused("swap_would_demote_recipient", rsvp, approved.user)
+
+    def test_swap_moves_tournament_membership(self) -> None:
+        event = self.transfer_event(
+            max_players=1, auto_confirm=False, roll_call_enabled=False
+        )
+        create_tournament_for_event(event)
+        event.refresh_from_db()
+        giver = self.row(self.join(event))
+        recipient = self.row(self.join(event))
+        self.assertEqual(recipient.status, SignupStatus.WAITLISTED)
+        tournament = Tournament.objects.nocache().get(pk=event.tournament_id)
+        self.assertTrue(tournament.users.filter(pk=giver.user_id).exists())
+        self.assertFalse(tournament.users.filter(pk=recipient.user_id).exists())
+
+        self.give(self.row(giver), recipient.user)
+
+        users = set(tournament.users.values_list("pk", flat=True))
+        self.assertIn(recipient.user_id, users)
+        self.assertNotIn(giver.user_id, users)

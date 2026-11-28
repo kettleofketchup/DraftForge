@@ -72,6 +72,7 @@ from events.line import (
     restore_place,
     same_gate_distance,
     start_first_fields,
+    swap_places,
     waitlist_rank,
 )
 from events.models import (
@@ -1716,6 +1717,7 @@ def _transfer_guard(
     recipient_user: CustomUser,
     *,
     is_staff: bool,
+    swap: bool,
 ) -> str | None:
     if not event.allow_spot_transfer:
         return "transfer_disabled"
@@ -1727,6 +1729,12 @@ def _transfer_guard(
         return "same_user"
     if not is_staff and target.status in _STAFF_REMOVED_STATUSES:
         return "recipient_removed"
+    if swap and (giver.status == SignupStatus.TENTATIVE) != (
+        target.status == SignupStatus.TENTATIVE
+    ):
+        return "commitment_mismatch"
+    if swap and not is_staff and _place_rank(giver) >= _place_rank(target):
+        return "swap_would_demote_recipient"
     if not same_gate_distance(giver, target):
         return "gate_distance"
     return None
@@ -1790,6 +1798,27 @@ def _hand_over_place(
     giver.save(update_fields=["status", "waitlist_position", *restamped, "updated_at"])
 
 
+def _swap_held_places(
+    event: Event,
+    giver: EventSignup,
+    target: EventSignup,
+    *,
+    giver_status: str,
+    target_status: str,
+) -> None:
+    swap_places(giver, target)
+    giver.waitlist_position, target.waitlist_position = (
+        target.waitlist_position,
+        giver.waitlist_position,
+    )
+    giver.status, target.status = giver_status, target_status
+    for row in (giver, target):
+        eligibility = _restored_eligibility(row, event)
+        row.save(
+            update_fields=["status", "waitlist_position", *eligibility, "updated_at"]
+        )
+
+
 def _counterparty_snapshot(signup: EventSignup, counterparty_id: int) -> SignupSnapshot:
     return snapshot(
         signup,
@@ -1816,13 +1845,13 @@ def transfer_spot(
     target = (
         held if held is not None else EventSignup(event=locked, user=recipient_user)
     )
-    code = _transfer_guard(locked, giver, target, recipient_user, is_staff=is_staff)
+    code = _transfer_guard(
+        locked, giver, target, recipient_user, is_staff=is_staff, swap=swap
+    )
     if code is not None:
         raise _refuse_transfer(
             code, event=locked, actor=actor, recipient_user=recipient_user
         )
-    if swap:
-        raise NotImplementedError("spot swap")
     if is_staff:
         raise NotImplementedError("staff spot transfer")
 
@@ -1831,12 +1860,26 @@ def transfer_spot(
     correlation_id = f"xfer:{uuid4().hex}"
     reason = reason.strip()
 
+    mode: Literal["transfer", "swap"] = "swap" if swap else "transfer"
+    giver_action, target_action = (
+        (SignupAction.SWAPPED, SignupAction.SWAPPED)
+        if swap
+        else (SignupAction.TRANSFERRED_OUT, SignupAction.TRANSFERRED_IN)
+    )
+
     giver_before = _ranked_snapshot(giver)
     target_before = _ranked_snapshot(target) if target.pk is not None else None
-    target_was_seated = (
-        target.pk is not None and target.status in _STAFF_SEATED_STATUSES
-    )
-    _hand_over_place(locked, giver, target, status)
+    was_seated = {
+        row.pk: row.status in _STAFF_SEATED_STATUSES
+        for row in (giver, target)
+        if row.pk is not None
+    }
+    if swap:
+        _swap_held_places(
+            locked, giver, target, giver_status=target.status, target_status=status
+        )
+    else:
+        _hand_over_place(locked, giver, target, status)
     for row in (giver, target):
         _roster_add_if_joins(row)
         _roster_remove_if_left(row)
@@ -1845,7 +1888,7 @@ def transfer_spot(
         event=locked,
         subject=giver.user,
         actor=actor,
-        action=SignupAction.TRANSFERRED_OUT,
+        action=giver_action,
         signup=giver,
         before=giver_before,
         after=_counterparty_snapshot(giver, recipient_user.pk),
@@ -1856,7 +1899,7 @@ def transfer_spot(
         event=locked,
         subject=recipient_user,
         actor=actor,
-        action=SignupAction.TRANSFERRED_IN,
+        action=target_action,
         signup=target,
         before=target_before,
         after=_counterparty_snapshot(target, giver.user_id),
@@ -1866,14 +1909,17 @@ def transfer_spot(
 
     invalidate_after_commit(giver, target, locked)
     transaction.on_commit(lambda: notify_signup_changed(locked))
-    if target.status in _STAFF_SEATED_STATUSES and not target_was_seated:
-        recipient_pk = recipient_user.pk
-        transaction.on_commit(lambda: notify_mark_interested(locked, recipient_pk))
+    for row in (giver, target):
+        if row.status in _STAFF_SEATED_STATUSES and not was_seated.get(row.pk, False):
+            user_pk = row.user_id
+            transaction.on_commit(
+                lambda user_pk=user_pk: notify_mark_interested(locked, user_pk)
+            )
     context: dict[str, Any] = {
         "system": "events",
         "subsystem": "line",
         "event_id": locked.pk,
-        "mode": "transfer",
+        "mode": mode,
         "giver_signup_id": giver.pk,
         "recipient_signup_id": target.pk,
         "correlation_id": correlation_id,
@@ -1881,7 +1927,7 @@ def transfer_spot(
     }
     transaction.on_commit(lambda: log.info("signup_spot_transferred", **context))
     return SpotTransferResult(
-        mode="transfer", giver=giver, recipient=target, correlation_id=correlation_id
+        mode=mode, giver=giver, recipient=target, correlation_id=correlation_id
     )
 
 
