@@ -176,7 +176,13 @@ def apply_admin_steam_account_id(
     """
     changed = user.steam_account_id != new_id
     user.steam_account_id = new_id
-    if not changed or new_id not in STEAM_ACCOUNT_ID_RANGE or actor is None:
+    # `None in range` falls back to a linear scan of all 2**32 values.
+    if (
+        not changed
+        or new_id is None
+        or new_id not in STEAM_ACCOUNT_ID_RANGE
+        or actor is None
+    ):
         return None
     grant = can_verify_steam_account(actor, user)
     if grant is not None:
