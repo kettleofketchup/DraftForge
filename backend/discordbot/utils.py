@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import math
 import time as _time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import redis as _redis
@@ -14,11 +16,26 @@ from app import internal_client
 from app.redis_keys import namespaced_key
 from telemetry.logging import get_logger
 
+from . import channel_routing
+from .delivery_types import (
+    DeliveryFailure,
+    FailureCategory,
+    FailurePhase,
+    ResolvedChannel,
+    SendOutcome,
+    SendResult,
+)
 from .embeds import (
     draft_ready_embed,
     event_announcement_embed,
     results_posted_embed,
     tournament_created_embed,
+)
+from .http_evidence import (
+    decode_response_json,
+    failure_from_exception,
+    failure_from_response,
+    response_json,
 )
 from .payloads import build_channel_message_payload, build_dm_payload
 from .services.discord_members import DISCORD_HTTP_TIMEOUT_S
@@ -126,6 +143,20 @@ def _acquire_rate_limit_token(max_wait: float = 10.0) -> bool:
         _time.sleep(0.05)
 
 
+def _retry_after_seconds(response: requests.Response) -> float:
+    body = response_json(response)
+    delay = body.get("retry_after") if isinstance(body, dict) else None
+    if isinstance(delay, bool) or not isinstance(delay, int | float):
+        return 1.0
+    try:
+        delay = float(delay)
+    except OverflowError:
+        return 1.0
+    if not math.isfinite(delay) or delay < 0:
+        return 1.0
+    return delay
+
+
 def _rate_limited_request(
     method: str, url: str, max_retries: int = 3, **kwargs: Any
 ) -> requests.Response:
@@ -135,12 +166,16 @@ def _rate_limited_request(
     Raises DiscordAuthError on 401.
     Applies DISCORD_HTTP_TIMEOUT_S unless the caller passes its own timeout.
     """
+    if max_retries < 1:
+        raise ValueError("max_retries must be at least 1")
     kwargs.setdefault("timeout", DISCORD_HTTP_TIMEOUT_S)
     for attempt in range(max_retries):
         _acquire_rate_limit_token()
         response = requests.request(method, url, **kwargs)
         if response.status_code == 429:
-            retry_after = response.json().get("retry_after", 1.0)
+            if attempt == max_retries - 1:
+                return response
+            retry_after = _retry_after_seconds(response)
             log.warning(
                 "discord_rate_limited",
                 system="discord",
@@ -268,8 +303,8 @@ def sync_send_embed(
         response = _rate_limited_request(
             "POST", url, json=payload, headers=_get_headers()
         )
-        response_data = response.json()
         response.raise_for_status()
+        response_data = decode_response_json(response)
         _log_discord_message(
             channel_id=channel_id,
             embed_data=embed,
@@ -291,25 +326,14 @@ def sync_send_embed(
         )
         return response_data
     except requests.RequestException as e:
-        status_code = (
-            getattr(e.response, "status_code", None)
-            if hasattr(e, "response") and e.response
-            else None
-        )
-        resp_data = None
-        try:
-            resp_data = (
-                e.response.json() if hasattr(e, "response") and e.response else None
-            )
-        except Exception:
-            pass
+        failure = failure_from_exception(e, FailurePhase.CREATE)
         _log_discord_message(
             channel_id=channel_id,
             embed_data=embed,
             source=source,
             source_id=source_id,
-            status_code=status_code,
-            response_data=resp_data,
+            status_code=failure.status,
+            response_data=failure.safe_json(),
             success=False,
         )
         log.error(
@@ -319,7 +343,7 @@ def sync_send_embed(
             channel_id=str(channel_id),
             source=source,
             source_id=source_id,
-            error=str(e),
+            **failure.log_fields(),
         )
         return None
 
@@ -411,6 +435,294 @@ def sync_send_results_posted(
     )
 
 
+def send_to_configured_channel(
+    channel_id: str,
+    expected_guild_id: str,
+    embed: dict | list[dict],
+    *,
+    title: str | None,
+    components: list[dict] | None = None,
+    source: str | None = None,
+    source_id: int | None = None,
+    content: str | None = None,
+    allowed_mentions: dict | None = None,
+    fired_by_user_id: int | None = None,
+    resolved: ResolvedChannel | None = None,
+    before_post: Callable[[int], bool] | None = None,
+    defer_success_finalization: bool = False,
+    create_max_retries: int = 3,
+) -> SendResult:
+    embeds = embed if isinstance(embed, list) else [embed]
+    payload: dict = {"embeds": embeds}
+    if components is not None:
+        payload["components"] = components
+    if content is not None:
+        payload["content"] = content
+    if allowed_mentions is not None:
+        payload["allowed_mentions"] = allowed_mentions
+    return _send_configured_payload(
+        channel_id,
+        expected_guild_id,
+        payload,
+        title=title,
+        embed_data=embeds[0] if embeds else {},
+        source=source,
+        source_id=source_id,
+        fired_by_user_id=fired_by_user_id,
+        resolved=resolved,
+        before_post=before_post,
+        defer_success_finalization=defer_success_finalization,
+        create_max_retries=create_max_retries,
+    )
+
+
+def sync_send_configured_channel(
+    channel_id: str,
+    expected_guild_id: str,
+    embed: dict | list[dict],
+    *,
+    title: str | None,
+    components: list[dict] | None = None,
+    source: str | None = None,
+    source_id: int | None = None,
+    content: str | None = None,
+    allowed_mentions: dict | None = None,
+    fired_by_user_id: int | None = None,
+    resolved: ResolvedChannel | None = None,
+    before_post: Callable[[int], bool] | None = None,
+    defer_success_finalization: bool = False,
+    create_max_retries: int = 3,
+) -> dict | None:
+    return send_to_configured_channel(
+        channel_id,
+        expected_guild_id,
+        embed,
+        title=title,
+        components=components,
+        source=source,
+        source_id=source_id,
+        content=content,
+        allowed_mentions=allowed_mentions,
+        fired_by_user_id=fired_by_user_id,
+        resolved=resolved,
+        before_post=before_post,
+        defer_success_finalization=defer_success_finalization,
+        create_max_retries=create_max_retries,
+    ).to_legacy()
+
+
+def _send_configured_payload(
+    channel_id: str,
+    expected_guild_id: str,
+    payload: dict,
+    *,
+    title: str | None,
+    embed_data: dict,
+    source: str | None = None,
+    source_id: int | None = None,
+    fired_by_user_id: int | None = None,
+    resolved: ResolvedChannel | None = None,
+    before_post: Callable[[int], bool] | None = None,
+    defer_success_finalization: bool = False,
+    create_max_retries: int = 3,
+) -> SendResult:
+    if create_max_retries < 1:
+        raise ValueError("create_max_retries must be at least one")
+    channel = (
+        resolved
+        if resolved is not None
+        else channel_routing.resolve_guild_channel(channel_id, expected_guild_id)
+    )
+    if isinstance(channel, ResolvedChannel) and (
+        channel.channel_id != channel_id or channel.guild_id != expected_guild_id
+    ):
+        channel = DeliveryFailure(
+            FailurePhase.CHANNEL_LOOKUP, FailureCategory.CHANNEL_MISMATCH
+        )
+    if isinstance(channel, DeliveryFailure):
+        log.warning(
+            "configured_send_failed",
+            system="discord",
+            subsystem="utils",
+            source=source,
+            source_id=source_id,
+            **channel.log_fields(),
+        )
+        return SendResult(SendOutcome.FAILED, failure=channel, fallback_safe=True)
+    try:
+        url, body = channel_routing.build_create_request(channel, payload, title)
+    except ValueError:
+        failure = DeliveryFailure(FailurePhase.BUILD, FailureCategory.UNAVAILABLE)
+        return SendResult(SendOutcome.FAILED, failure=failure, fallback_safe=True)
+
+    log_id = None
+    if source_id is not None:
+        claim = internal_client.claim_discord_message_log_result(
+            source=source or "unknown",
+            source_id=source_id,
+            channel_id=channel_id,
+            embed_data=embed_data,
+            fired_by_user_id=fired_by_user_id,
+        )
+        if claim.kind != "claimed" or claim.log_id is None:
+            outcome = (
+                SendOutcome.IN_FLIGHT
+                if claim.kind == "held"
+                else SendOutcome.UNAVAILABLE
+            )
+            return SendResult(
+                outcome,
+                failure=DeliveryFailure(
+                    FailurePhase.CLAIM, FailureCategory.UNAVAILABLE
+                ),
+            )
+        log_id = claim.log_id
+        if before_post is not None and not before_post(log_id):
+            failure = DeliveryFailure(FailurePhase.CLAIM, FailureCategory.UNAVAILABLE)
+            finalized = internal_client.finalize_discord_message_log(
+                log_id, success=False, response_data=failure.safe_json()
+            )
+            return SendResult(
+                SendOutcome.UNAVAILABLE,
+                message_log_id=log_id,
+                failure=failure,
+                finalized=finalized is not None and finalized.ok,
+            )
+    elif before_post is not None:
+        return SendResult(
+            SendOutcome.UNAVAILABLE,
+            failure=DeliveryFailure(FailurePhase.CLAIM, FailureCategory.UNAVAILABLE),
+        )
+
+    response = None
+    failure = None
+    try:
+        response = _rate_limited_request(
+            "POST",
+            url,
+            json=body,
+            headers=_get_headers(),
+            max_retries=create_max_retries,
+        )
+        if not 200 <= response.status_code < 300:
+            failure = failure_from_response(response, FailurePhase.CREATE)
+    except requests.RequestException as exc:
+        failure = failure_from_exception(exc, FailurePhase.CREATE)
+        if (
+            isinstance(
+                exc,
+                (requests.Timeout, requests.ConnectionError, DiscordRateLimitTimeout),
+            )
+            or failure.status is None
+        ):
+            log.warning(
+                "configured_send_uncertain",
+                system="discord",
+                subsystem="utils",
+                source=source,
+                source_id=source_id,
+                **failure.log_fields(),
+            )
+            return SendResult(
+                SendOutcome.UNCERTAIN, message_log_id=log_id, failure=failure
+            )
+    if failure is not None:
+        finalized_ok = False
+        if log_id is not None:
+            finalized = internal_client.finalize_discord_message_log(
+                log_id,
+                success=False,
+                status_code=failure.status,
+                response_data=failure.safe_json(),
+            )
+            finalized_ok = finalized is not None and finalized.ok
+        else:
+            log_id = _log_discord_message(
+                channel_id=channel_id,
+                embed_data=embed_data,
+                source=source,
+                source_id=source_id,
+                status_code=failure.status,
+                response_data=failure.safe_json(),
+                success=False,
+                fired_by_user_id=fired_by_user_id,
+            )
+        log.warning(
+            "configured_send_failed",
+            system="discord",
+            subsystem="utils",
+            source=source,
+            source_id=source_id,
+            **failure.log_fields(),
+        )
+        return SendResult(
+            SendOutcome.FAILED,
+            message_log_id=log_id,
+            failure=failure,
+            finalized=finalized_ok,
+            fallback_safe=finalized_ok,
+        )
+
+    try:
+        data = decode_response_json(response)
+    except requests.RequestException:
+        data = None
+    receipt = channel_routing.normalize_receipt(channel, data)
+    if receipt is None:
+        failure = DeliveryFailure(
+            FailurePhase.CREATE,
+            FailureCategory.MALFORMED_RESPONSE,
+            response.status_code,
+        )
+        log.warning(
+            "configured_send_uncertain",
+            system="discord",
+            subsystem="utils",
+            source=source,
+            source_id=source_id,
+            **failure.log_fields(),
+        )
+        return SendResult(SendOutcome.UNCERTAIN, message_log_id=log_id, failure=failure)
+
+    finalized_ok = False
+    if log_id is not None:
+        if not defer_success_finalization:
+            finalized = internal_client.finalize_discord_message_log(
+                log_id,
+                success=True,
+                discord_message_id=receipt.message_id,
+                status_code=response.status_code,
+                response_data=data,
+            )
+            finalized_ok = finalized is not None and finalized.ok
+    else:
+        log_id = _log_discord_message(
+            channel_id=channel_id,
+            embed_data=embed_data,
+            source=source,
+            source_id=source_id,
+            status_code=response.status_code,
+            response_data=data,
+            discord_message_id=receipt.message_id,
+            success=True,
+            fired_by_user_id=fired_by_user_id,
+        )
+    log.info(
+        "configured_send_delivered",
+        system="discord",
+        subsystem="utils",
+        source=source,
+        source_id=source_id,
+    )
+    return SendResult(
+        SendOutcome.DELIVERED,
+        receipt=receipt,
+        message_log_id=log_id,
+        finalized=finalized_ok,
+        raw_response=data,
+    )
+
+
 def sync_send_embed_with_components_no_log(
     channel_id: Snowflake,
     embed: JSONDict | list[JSONDict],
@@ -438,8 +750,8 @@ def sync_send_embed_with_components_no_log(
     response = _rate_limited_request(
         "POST", url, json=wire["body"], headers=_get_headers()
     )
-    response_data = response.json()
     response.raise_for_status()
+    response_data = decode_response_json(response)
     return response_data, response.status_code
 
 
@@ -550,30 +862,19 @@ def sync_send_embed_with_components(
         response_data["_message_log_id"] = log_pk
         return response_data
     except requests.RequestException as e:
-        status_code = (
-            getattr(e.response, "status_code", None)
-            if hasattr(e, "response") and e.response
-            else None
-        )
-        resp_data = None
-        try:
-            resp_data = (
-                e.response.json() if hasattr(e, "response") and e.response else None
-            )
-        except Exception:
-            pass
+        failure = failure_from_exception(e, FailurePhase.CREATE)
         internal_client.finalize_discord_message_log(
             log_pk,
             success=False,
-            status_code=status_code,
-            response_data=resp_data,
+            status_code=failure.status,
+            response_data=failure.safe_json(),
         )
         log.error(
             "embed_send_failed",
             system="discord",
             subsystem="utils",
             channel_id=str(channel_id),
-            error=str(e),
+            **failure.log_fields(),
         )
         return None
 
@@ -626,25 +927,14 @@ def _send_with_post_log(
         response_data["_message_log_id"] = log_pk
         return response_data
     except requests.RequestException as e:
-        status_code = (
-            getattr(e.response, "status_code", None)
-            if hasattr(e, "response") and e.response
-            else None
-        )
-        resp_data = None
-        try:
-            resp_data = (
-                e.response.json() if hasattr(e, "response") and e.response else None
-            )
-        except Exception:
-            pass
+        failure = failure_from_exception(e, FailurePhase.CREATE)
         _log_discord_message(
             channel_id=channel_id,
             embed_data=embed_data,
             source=source,
             source_id=source_id,
-            status_code=status_code,
-            response_data=resp_data,
+            status_code=failure.status,
+            response_data=failure.safe_json(),
             success=False,
             fired_by_user_id=fired_by_user_id,
         )
@@ -653,7 +943,7 @@ def _send_with_post_log(
             system="discord",
             subsystem="utils",
             channel_id=str(channel_id),
-            error=str(e),
+            **failure.log_fields(),
         )
         return None
 
@@ -664,6 +954,8 @@ def sync_send_v2_message(
     source: str | None = None,
     source_id: int | None = None,
     forum_thread_name: str | None = None,
+    *,
+    expected_guild_id: str | None = None,
 ) -> JSONDict | None:
     """Send a Components V2 message (no embeds, full component layout).
 
@@ -677,6 +969,19 @@ def sync_send_v2_message(
     Returns:
         dict: API response or None on error
     """
+    if expected_guild_id is not None:
+        return _send_configured_payload(
+            str(channel_id),
+            expected_guild_id,
+            v2_payload,
+            title=forum_thread_name,
+            embed_data={
+                "v2": True,
+                "component_count": len(v2_payload.get("components", [])),
+            },
+            source=source,
+            source_id=source_id,
+        ).to_legacy()
     if forum_thread_name:
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/threads"
         payload = {
@@ -696,8 +1001,8 @@ def sync_send_v2_message(
         response = _rate_limited_request(
             "POST", url, json=payload, headers=_get_headers()
         )
-        response_data = response.json()
         response.raise_for_status()
+        response_data = decode_response_json(response)
 
         if forum_thread_name and response_data.get("message"):
             msg_id = response_data["message"].get("id")
@@ -730,25 +1035,14 @@ def sync_send_v2_message(
         )
         return response_data
     except requests.RequestException as e:
-        status_code = (
-            getattr(e.response, "status_code", None)
-            if hasattr(e, "response") and e.response
-            else None
-        )
-        resp_data = None
-        try:
-            resp_data = (
-                e.response.json() if hasattr(e, "response") and e.response else None
-            )
-        except Exception:
-            pass
+        failure = failure_from_exception(e, FailurePhase.CREATE)
         _log_discord_message(
             channel_id=channel_id,
             embed_data=embed_data,
             source=source,
             source_id=source_id,
-            status_code=status_code,
-            response_data=resp_data,
+            status_code=failure.status,
+            response_data=failure.safe_json(),
             success=False,
         )
         log.error(
@@ -756,7 +1050,7 @@ def sync_send_v2_message(
             system="discord",
             subsystem="utils",
             channel_id=str(channel_id),
-            error=str(e),
+            **failure.log_fields(),
         )
         return None
 

@@ -39,12 +39,12 @@ from events.models import Event, EventRepeater
 from events.services import generate_events_for_repeater
 from events.tasks import (
     _create_discord_scheduled_event_impl,
-    _send_event_announcement_impl,
     _send_new_event_notification_impl,
     _send_start_mention_impl,
     _sync_discord_event_signups_impl,
     fire_event_reminder,
     send_attendance_reminder,
+    send_event_announcement,
     send_profile_reminder,
     send_subscriber_notifications,
 )
@@ -101,7 +101,7 @@ class _GateTable(EventTestCase):
 
 
 class SignupPostGateTableTest(_GateTable):
-    """tasks.py _send_event_announcement_impl pre-send checks."""
+    """Signup sender pre-send checks."""
 
     @staticmethod
     def _old(event: Any) -> str | None:
@@ -687,7 +687,12 @@ class TaskCallsGateTest(_DiscordTaskTestCase):
 
     def _assert_called(self, name: str, run: Callable[[], Any]) -> None:
         real = getattr(gates, name)
-        with patch(f"events.tasks.{name}", wraps=real) as spy:
+        module = (
+            "events.signup_post_send"
+            if name in ("signup_post_gate", "announcement_branch")
+            else "events.tasks"
+        )
+        with patch(f"{module}.{name}", wraps=real) as spy:
             run()
         spy.assert_called()
         self.assertEqual(spy.call_args.args[0].pk, self.ev.pk)
@@ -696,8 +701,8 @@ class TaskCallsGateTest(_DiscordTaskTestCase):
     def test_task_calls_gates(self, mock_req: MagicMock) -> None:
         mock_req.return_value = _ok_response({"id": "m1"})
         cases: list[tuple[str, Callable[[], Any]]] = [
-            ("signup_post_gate", lambda: _send_event_announcement_impl(self.ev.pk)),
-            ("announcement_branch", lambda: _send_event_announcement_impl(self.ev.pk)),
+            ("signup_post_gate", lambda: send_event_announcement(self.ev.pk)),
+            ("announcement_branch", lambda: send_event_announcement(self.ev.pk)),
             ("attendance_reminder_gate", lambda: send_attendance_reminder(self.ev.pk)),
             ("profile_reminder_gate", lambda: send_profile_reminder(self.ev.pk)),
             ("start_mention_gate", lambda: _send_start_mention_impl(self.ev.pk, 1)),
@@ -751,10 +756,22 @@ class TaskCallsGateTest(_DiscordTaskTestCase):
 
     @patch("discordbot.utils._rate_limited_request")
     def test_fire_event_reminder_ignores_toggles(self, mock_req: MagicMock) -> None:
-        mock_req.return_value = _ok_response({"id": "m1"})
+        channel = "100000000000000001"
+        guild = "200000000000000001"
+        self.org.discord_server_id = guild
+        self.org.save()
+
+        def response(method: str, *_args: Any, **_kwargs: Any) -> MagicMock:
+            return _ok_response(
+                {"id": channel, "guild_id": guild, "type": 0}
+                if method == "GET"
+                else {"id": "100000000000000003"}
+            )
+
+        mock_req.side_effect = response
         event = self.make_event(
             state=EventState.UPCOMING,
-            discord_announcement_channel_id="a-1",
+            discord_announcement_channel_id=channel,
             discord_confirm_attendance=False,
             discord_profile_reminder=False,
         )
@@ -766,21 +783,30 @@ class TaskCallsGateTest(_DiscordTaskTestCase):
                 posts = [c for c in mock_req.call_args_list if c.args[0] == "POST"]
                 self.assertEqual(len(posts), 1)
 
-    @patch("events.tasks.resolve_signup_channel_type", return_value=15)
     @patch("discordbot.utils._rate_limited_request")
-    def test_signup_only_event_still_posts_signup(
-        self, mock_req: MagicMock, _mock_channel_type: MagicMock
-    ) -> None:
-        mock_req.return_value = _ok_response({"id": "m1"})
+    def test_signup_only_event_still_posts_signup(self, mock_req: MagicMock) -> None:
+        channel = "100000000000000001"
+        guild = "200000000000000001"
+        self.org.discord_server_id = guild
+        self.org.save()
+        mock_req.side_effect = [
+            _ok_response({"id": channel, "guild_id": guild, "type": 15}),
+            _ok_response(
+                {
+                    "id": "100000000000000004",
+                    "message": {"id": "100000000000000003"},
+                }
+            ),
+        ]
         event = self.make_event(
             discord_post_signups=True,
-            discord_post_signups_channel_id="s-1",
+            discord_post_signups_channel_id=channel,
         )
-        result = _send_event_announcement_impl(event.pk)
-        self.assertEqual(result, f"Posted signup for event {event.pk}")
+        result = send_event_announcement(event.pk)
+        self.assertIn("delivered", result)
         posts = [c for c in mock_req.call_args_list if c.args[0] == "POST"]
         self.assertEqual(len(posts), 1)
-        self.assertIn("/channels/s-1/threads", posts[0].args[1])
+        self.assertIn(f"/channels/{channel}/threads", posts[0].args[1])
 
     def test_signup_reminder_task_returns_same_skip_strings(self) -> None:
         self.assertEqual(send_subscriber_notifications(self.ev.pk), "No repeater")
