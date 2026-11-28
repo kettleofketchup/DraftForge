@@ -19,11 +19,24 @@ from events.constants import (
 from events.eligibility import EligibilityResult, Reason, ReasonCode, Rule, Severity
 from events.exceptions import SpotTransferRefused
 from events.ledger import SignupActor, latest_restorable_withdrawal
-from events.models import Event, EventSignup, SignupLedgerEntry
+from events.models import (
+    Event,
+    EventSignup,
+    ReadyCheck,
+    ReadyCheckEntry,
+    RollCallMode,
+    SignupLedgerEntry,
+)
 from events.overrides import (
     OverrideReasonRequired,
     OverrideRequired,
     StaffReasonRequired,
+)
+from events.ready_check import _active_and_droppable
+from events.ready_check_constants import (
+    ReadyCheckEntryState,
+    ReadyCheckPhase,
+    ReadyCheckScope,
 )
 from events.services import (
     TRANSFER_EVENT_STATES,
@@ -973,3 +986,200 @@ class StaffTransferTests(_TransferFixtures):
 
         self.assertEqual(self.row(result.recipient).status, SignupStatus.APPROVED)
         self.assertEqual(result.recipient.line_seq, giver.line_seq)
+
+
+class RollCallTransferTests(_TransferFixtures):
+    def roll_call(
+        self, phase: str = ReadyCheckPhase.OPEN, **overrides: Any
+    ) -> tuple[Event, ReadyCheck]:
+        event = self.transfer_event(**overrides)
+        return event, self.open_check(event, phase)
+
+    def open_check(self, event: Event, phase: str) -> ReadyCheck:
+        Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+        return ReadyCheck.objects.create(
+            event=event,
+            phase=phase,
+            settings_snapshot={
+                "ready_check_scope": ReadyCheckScope.MAIN_ONLY,
+                "effective_mode": RollCallMode.MANUAL,
+            },
+        )
+
+    def seated(
+        self, event: Event, check: ReadyCheck, status: str, entry_state: str
+    ) -> EventSignup:
+        signup = EventSignup.objects.create(
+            event=event, user=self.make_user(), status=status
+        )
+        entry = ReadyCheckEntry.for_signup(check, signup)
+        entry.state = entry_state
+        entry.save()
+        return signup
+
+    def entry_state(self, check: ReadyCheck, user_id: int) -> str | None:
+        entry = check.entries.filter(user_id=user_id).first()
+        return None if entry is None else entry.state
+
+    def assert_counts_agree(self, event: Event, check: ReadyCheck) -> None:
+        active, _ = _active_and_droppable(check)
+        confirmed_entries = sum(
+            1 for e in active if e.state == ReadyCheckEntryState.CONFIRMED
+        )
+        confirmed_signups = EventSignup.objects.nocache().filter(
+            event=event, status=SignupStatus.CONFIRMED
+        )
+        self.assertEqual(confirmed_entries, confirmed_signups.count())
+
+    def test_held_check_refused(self) -> None:
+        event, check = self.roll_call(ReadyCheckPhase.HELD)
+        giver = self.seated(
+            event, check, SignupStatus.APPROVED, ReadyCheckEntryState.PENDING
+        )
+        recipient = self.make_user()
+
+        self.assert_refused("ready_check_held", giver, recipient)
+        with self.assertRaises(SpotTransferRefused) as ctx:
+            transfer_spot(self.row(giver), recipient, actor=self.staff_actor)
+        self.assertEqual(ctx.exception.code, "ready_check_held")
+
+    def test_transfer_confirmed_giver_to_unanswered_recipient(self) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.CONFIRMED, ReadyCheckEntryState.CONFIRMED
+        )
+        recipient = self.make_user()
+
+        result = self.give(giver, recipient)
+
+        placed = self.row(result.recipient)
+        self.assertEqual(placed.status, SignupStatus.APPROVED)
+        self.assertEqual(
+            self.entry_state(check, recipient.pk), ReadyCheckEntryState.PENDING
+        )
+        self.assertEqual(check.entries.get(user=recipient).signup_id, placed.pk)
+        self.assertEqual(self.row(giver).status, SignupStatus.CANCELLED)
+        self.assert_counts_agree(event, check)
+        self.assertFalse(
+            SignupLedgerEntry.objects.filter(
+                event=event, action=SignupAction.PROMOTED
+            ).exists()
+        )
+        self.assertFalse(
+            SignupLedgerEntry.objects.filter(
+                event=event,
+                subject_user=recipient,
+                action=SignupAction.CONFIRMED,
+            ).exists()
+        )
+
+    def test_staff_transfer_confirmed_place_not_confirmed_for_recipient(
+        self,
+    ) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.CONFIRMED, ReadyCheckEntryState.CONFIRMED
+        )
+        recipient = self.make_user()
+
+        result = transfer_spot(self.row(giver), recipient, actor=self.staff_actor)
+
+        self.assertEqual(self.row(result.recipient).status, SignupStatus.APPROVED)
+        entry = check.entries.get(user=recipient)
+        self.assertEqual(entry.state, ReadyCheckEntryState.PENDING)
+        self.assert_counts_agree(event, check)
+
+    def test_recipient_own_confirmation_kept(self) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.APPROVED, ReadyCheckEntryState.PENDING
+        )
+        recipient_row = self.seated(
+            event, check, SignupStatus.CONFIRMED, ReadyCheckEntryState.CONFIRMED
+        )
+        cancel_signup(self.row(recipient_row), actor=member(recipient_row.user))
+
+        self.give(giver, recipient_row.user)
+
+        self.assertEqual(self.row(recipient_row).status, SignupStatus.CONFIRMED)
+        self.assert_counts_agree(event, check)
+
+    def test_swap_only_one_side_confirmed(self) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.CONFIRMED, ReadyCheckEntryState.CONFIRMED
+        )
+        recipient = self.seated(
+            event, check, SignupStatus.APPROVED, ReadyCheckEntryState.PENDING
+        )
+        giver_seq, recipient_seq = giver.line_seq, recipient.line_seq
+
+        result = self.give(giver, recipient.user)
+
+        self.assertEqual(result.mode, "swap")
+        giver, recipient = self.row(giver), self.row(recipient)
+        self.assertEqual(giver.status, SignupStatus.CONFIRMED)
+        self.assertEqual(recipient.status, SignupStatus.APPROVED)
+        self.assertEqual(giver.line_seq, recipient_seq)
+        self.assertEqual(recipient.line_seq, giver_seq)
+        self.assert_counts_agree(event, check)
+
+    def test_staff_swap_statuses_follow_own_entries(self) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.APPROVED, ReadyCheckEntryState.PENDING
+        )
+        recipient = self.seated(
+            event, check, SignupStatus.CONFIRMED, ReadyCheckEntryState.CONFIRMED
+        )
+
+        result = transfer_spot(self.row(giver), recipient.user, actor=self.staff_actor)
+
+        self.assertEqual(result.mode, "swap")
+        self.assertEqual(self.row(giver).status, SignupStatus.APPROVED)
+        self.assertEqual(self.row(recipient).status, SignupStatus.CONFIRMED)
+        self.assert_counts_agree(event, check)
+
+    def test_cancelled_giver_entry_not_counted(self) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.APPROVED, ReadyCheckEntryState.PENDING
+        )
+        recipient = self.make_user()
+
+        self.give(giver, recipient)
+
+        active, droppable = _active_and_droppable(check)
+        active_users = {e.user_id for e in active}
+        self.assertNotIn(giver.user_id, active_users)
+        self.assertIn(recipient.pk, active_users)
+        self.assertNotIn(giver.user_id, {e.user_id for e in droppable})
+
+    def test_rollcall_correlation_prefix(self) -> None:
+        event, check = self.roll_call()
+        giver = self.seated(
+            event, check, SignupStatus.CONFIRMED, ReadyCheckEntryState.CONFIRMED
+        )
+        recipient = self.make_user()
+
+        result = self.give(giver, recipient)
+
+        self.assertTrue(result.correlation_id.startswith("xfer:"))
+        transfer_ids = set(
+            SignupLedgerEntry.objects.filter(
+                event=event,
+                action__in=(
+                    SignupAction.TRANSFERRED_OUT,
+                    SignupAction.TRANSFERRED_IN,
+                ),
+            ).values_list("correlation_id", flat=True)
+        )
+        self.assertEqual(transfer_ids, {result.correlation_id})
+        asked = SignupLedgerEntry.objects.get(
+            event=event, subject_user=recipient, action=SignupAction.READY_CHECK_ASKED
+        )
+        self.assertEqual(asked.correlation_id, f"rc{check.pk}:enrol")
+        transfer_in = SignupLedgerEntry.objects.get(
+            event=event, action=SignupAction.TRANSFERRED_IN
+        )
+        self.assertLess(transfer_in.pk, asked.pk)

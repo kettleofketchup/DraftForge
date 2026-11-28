@@ -98,12 +98,15 @@ from events.ready_check_constants import (
     DROPPED_SIGNUP_MESSAGE,
     REMOVED_SIGNUP_STATUSES,
     ReadyCheckEntryState,
+    ReadyCheckPhase,
 )
 from events.ready_check_core import (
     cancel_ready_check,
+    check_scope,
     enrol_signup_if_live,
     live_ready_check,
     ready_check_promotion_status,
+    scope_statuses,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
 from events.roster import (
@@ -1722,6 +1725,7 @@ def _transfer_guard(
     target: EventSignup,
     recipient_user: CustomUser,
     *,
+    check: ReadyCheck | None,
     is_staff: bool,
     swap: bool,
 ) -> str | None:
@@ -1729,6 +1733,8 @@ def _transfer_guard(
         return "transfer_disabled"
     if event.state not in TRANSFER_EVENT_STATES:
         return "event_state"
+    if check is not None and check.phase == ReadyCheckPhase.HELD:
+        return "ready_check_held"
     if giver.status in REMOVED_SIGNUP_STATUSES:
         return "giver_not_active"
     if giver.user_id == recipient_user.pk:
@@ -1957,6 +1963,24 @@ def _swap_held_places(
         )
 
 
+_ROLL_CALL_SEATED: frozenset[str] = frozenset(
+    {SignupStatus.APPROVED, SignupStatus.CONFIRMED}
+)
+
+
+def _roll_call_seat_status(
+    check: ReadyCheck | None, row: EventSignup, status: str
+) -> str:
+    if check is None or status not in _ROLL_CALL_SEATED:
+        return status
+    confirmed = (
+        row.pk is not None and row.status == SignupStatus.CONFIRMED
+    ) or check.entries.filter(
+        user_id=row.user_id, state=ReadyCheckEntryState.CONFIRMED
+    ).exists()
+    return SignupStatus.CONFIRMED if confirmed else SignupStatus.APPROVED
+
+
 def _counterparty_snapshot(signup: EventSignup, counterparty_id: int) -> SignupSnapshot:
     return snapshot(
         signup,
@@ -1983,8 +2007,19 @@ def transfer_spot(
     target = (
         held if held is not None else EventSignup(event=locked, user=recipient_user)
     )
+    check = (
+        live_ready_check(locked, lock=True)
+        if locked.state == EventState.ROLL_CALL
+        else None
+    )
     code = _transfer_guard(
-        locked, giver, target, recipient_user, is_staff=is_staff, swap=swap
+        locked,
+        giver,
+        target,
+        recipient_user,
+        check=check,
+        is_staff=is_staff,
+        swap=swap,
     )
     if code is not None:
         raise _refuse_transfer(
@@ -2023,6 +2058,8 @@ def transfer_spot(
         status = _member_status_cap(giver.status, _decide_signup_status(locked, result))
         if swap and _seat_status_above(target.status, status):
             status = target.status
+    giver_status = _roll_call_seat_status(check, giver, target.status)
+    status = _roll_call_seat_status(check, target, status)
     correlation_id = f"xfer:{uuid4().hex}"
 
     giver_before = _ranked_snapshot(giver)
@@ -2034,7 +2071,7 @@ def transfer_spot(
     }
     if swap:
         _swap_held_places(
-            locked, giver, target, giver_status=target.status, target_status=status
+            locked, giver, target, giver_status=giver_status, target_status=status
         )
     else:
         _hand_over_place(locked, giver, target, status)
@@ -2066,6 +2103,11 @@ def transfer_spot(
         rules_overridden=target_overridden,
         correlation_id=correlation_id,
     )
+    if check is not None:
+        in_scope = scope_statuses(check_scope(check))
+        for row in (giver, target):
+            if row.status in in_scope:
+                enrol_signup_if_live(row, actor=actor)
 
     invalidate_after_commit(giver, target, locked)
     transaction.on_commit(lambda: notify_signup_changed(locked))
