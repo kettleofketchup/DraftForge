@@ -38,7 +38,9 @@ from common.utils import isTestEnvironment
 from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
 from events.views_records import (
+    InternalSignupLedgerView,
     InternalSignupRecordsView,
+    OrgSignupLedgerView,
     OrgSignupRecordsView,
     internal_signup_records_purge,
 )
@@ -283,6 +285,11 @@ urlpatterns = [
         name="org-signup-records",
     ),
     path(
+        "api/organizations/<int:org_id>/signup-ledger/",
+        OrgSignupLedgerView.as_view(),
+        name="org-signup-ledger",
+    ),
+    path(
         "api/organizations/<int:org_id>/promoters/",
         org_promoters,
         name="org-promoters",
@@ -497,6 +504,11 @@ urlpatterns += [
         "api/internal/signup-records/",
         InternalSignupRecordsView.as_view(),
         name="internal_signup_records",
+    ),
+    path(
+        "api/internal/signup-ledger/",
+        InternalSignupLedgerView.as_view(),
+        name="internal_signup_ledger",
     ),
     path(
         "api/internal/signup-records/purge/",

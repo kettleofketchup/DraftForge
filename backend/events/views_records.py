@@ -5,6 +5,7 @@ from dataclasses import asdict
 from datetime import date, datetime
 from typing import Any
 
+from django.db.models import Q
 from django.http import QueryDict
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -24,8 +25,21 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from app.auth import InternalServiceAuth, IsInternalService
-from events.history import MAX_DB_INT
-from events.ledger import RecordsWindow, purge_expired
+from events.history import (
+    CURSOR_MESSAGE,
+    HISTORY_MAX_PAGE_SIZE,
+    HISTORY_PAGE_SIZE,
+    MAX_DB_INT,
+    LedgerCursor,
+    decode_ledger_cursor,
+)
+from events.ledger import (
+    LedgerEvent,
+    RecordsWindow,
+    purge_expired,
+    resolve_ledger_events,
+)
+from events.models import SignupLedgerEntry
 from events.records import (
     RECORD_COLUMNS,
     RecordsFilter,
@@ -36,10 +50,13 @@ from events.records import (
     guard_csv_cell,
     record_to_json,
 )
+from events.serializers import OrgSignupLedgerEntrySerializer
+from org.display_names import guild_nicknames
 from org.feature_errors import require_org_staff
 from org.models import Organization
 from org.standing.periods import local_day_start_utc
 from telemetry.logging import get_logger
+from tournament.listing import build_cursor_envelope
 
 log = get_logger(__name__)
 
@@ -133,6 +150,39 @@ def _records_params(
     return RecordsFilter(window=window, user_id=ints["user"]), {}
 
 
+def _staff_org(request: Request, org_id: int, endpoint: str) -> Organization:
+    org = get_object_or_404(Organization, pk=org_id)
+    try:
+        require_org_staff(request.user, org, None)
+    except PermissionDenied:
+        log.warning(
+            "signup_records_denied",
+            system="events",
+            subsystem="ledger",
+            org_id=org.pk,
+            user_id=request.user.pk,
+            endpoint=endpoint,
+        )
+        raise
+    return org
+
+
+def _internal_org(request: Request) -> Organization | Response:
+    text = request.query_params.get("organization")
+    if not text:
+        return Response(
+            {"organization": ["This field is required."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    org_id = _bounded_int(text, 1, MAX_DB_INT)
+    if org_id is None:
+        return Response(
+            {"organization": ["Invalid organization."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return get_object_or_404(Organization, pk=org_id)
+
+
 class _SignupRecordsBase(JSONErrorsMixin):
     renderer_classes = [JSONRenderer, SignupRecordsCSVRenderer]
     via = ""
@@ -189,20 +239,7 @@ class OrgSignupRecordsView(_SignupRecordsBase):
     via = "org"
 
     def get(self, request: Request, org_id: int) -> Response:
-        org = get_object_or_404(Organization, pk=org_id)
-        try:
-            require_org_staff(request.user, org, None)
-        except PermissionDenied:
-            log.warning(
-                "signup_records_denied",
-                system="events",
-                subsystem="ledger",
-                org_id=org.pk,
-                user_id=request.user.pk,
-                endpoint="records",
-            )
-            raise
-        return self._respond(request, org)
+        return self._respond(request, _staff_org(request, org_id, "records"))
 
 
 class InternalSignupRecordsView(_SignupRecordsBase):
@@ -211,19 +248,123 @@ class InternalSignupRecordsView(_SignupRecordsBase):
     via = "internal"
 
     def get(self, request: Request) -> Response:
-        text = request.query_params.get("organization")
-        if not text:
-            return Response(
-                {"organization": ["This field is required."]},
-                status=status.HTTP_400_BAD_REQUEST,
+        org = _internal_org(request)
+        return org if isinstance(org, Response) else self._respond(request, org)
+
+
+def _ledger_page_params(
+    params: QueryDict,
+) -> tuple[LedgerCursor | None, int | None, dict[str, list[str]]]:
+    errors: dict[str, list[str]] = {}
+    cursor: LedgerCursor | None = None
+    size: int | None = HISTORY_PAGE_SIZE
+    if token := params.get("cursor"):
+        try:
+            cursor = decode_ledger_cursor(token)
+        except ValueError:
+            errors["cursor"] = [CURSOR_MESSAGE]
+    if text := params.get("page_size"):
+        size = _bounded_int(text, 1, HISTORY_MAX_PAGE_SIZE)
+        if size is None:
+            errors["page_size"] = ["Invalid page size."]
+    return cursor, size, errors
+
+
+class _SignupLedgerBase(APIView):
+    renderer_classes = [JSONRenderer]
+    via = ""
+
+    def _respond(self, request: Request, org: Organization) -> Response:
+        flt, errors = _records_params(request.query_params, org)
+        cursor, size, page_errors = _ledger_page_params(request.query_params)
+        errors.update(page_errors)
+        if flt is None or size is None or errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+        window = flt.window
+        qs = SignupLedgerEntry.objects.nocache().filter(organization_id=org.pk)
+        windowed: dict[int, LedgerEvent] | None = None
+        if window.has_time_bounds or window.series_id is not None:
+            windowed = resolve_ledger_events(org.pk, window=window)
+            qs = qs.filter(event_id__in=list(windowed))
+        elif window.event_id is not None:
+            qs = qs.filter(event_id=window.event_id)
+        if flt.user_id is not None:
+            qs = qs.filter(
+                Q(subject_user_id=flt.user_id)
+                | Q(subject_user__isnull=True, subject_snapshot__user_id=flt.user_id)
             )
-        org_id = _bounded_int(text, 1, MAX_DB_INT)
-        if org_id is None:
-            return Response(
-                {"organization": ["Invalid organization."]},
-                status=status.HTTP_400_BAD_REQUEST,
+        count = qs.count()
+        if cursor is not None:
+            qs = qs.filter(pk__gt=cursor.pk)
+        rows = list(
+            qs.select_related(
+                "subject_user__base_profile", "actor_user__base_profile"
+            ).order_by("pk")[: size + 1]
+        )
+        next_token = LedgerCursor(rows[size - 1].pk).token if len(rows) > size else None
+        rows = rows[:size]
+        page_events = {row.event_id for row in rows}
+        if windowed is not None:
+            events = {k: v for k, v in windowed.items() if k in page_events}
+        elif page_events:
+            events = resolve_ledger_events(org.pk, event_ids=page_events)
+        else:
+            events = {}
+        user_ids = {
+            uid
+            for row in rows
+            for uid in (row.subject_user_id, row.actor_user_id)
+            if uid
+        }
+        serializer = OrgSignupLedgerEntrySerializer(
+            rows,
+            many=True,
+            context={
+                "request": request,
+                "ledger_events": events,
+                "_history_guild_nicknames": guild_nicknames(org.pk, user_ids),
+            },
+        )
+        log.info(
+            "signup_ledger_viewed",
+            system="events",
+            subsystem="ledger",
+            org_id=org.pk,
+            row_count=len(rows),
+            has_since=window.since is not None,
+            has_until=window.until is not None,
+            filter_series=window.series_id is not None,
+            filter_event=window.event_id is not None,
+            filter_user=flt.user_id is not None,
+            page_size=size,
+            has_cursor=cursor is not None,
+            via=self.via,
+        )
+        return Response(
+            build_cursor_envelope(
+                request, count=count, next_cursor=next_token, results=serializer.data
             )
-        return self._respond(request, get_object_or_404(Organization, pk=org_id))
+        )
+
+
+class OrgSignupLedgerView(_SignupLedgerBase):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [AllowAny]
+    throttle_classes = [SignupRecordsThrottle]
+    via = "org"
+
+    def get(self, request: Request, org_id: int) -> Response:
+        return self._respond(request, _staff_org(request, org_id, "ledger"))
+
+
+class InternalSignupLedgerView(_SignupLedgerBase):
+    authentication_classes = [InternalServiceAuth]
+    permission_classes = [IsInternalService]
+    via = "internal"
+
+    def get(self, request: Request) -> Response:
+        org = _internal_org(request)
+        return org if isinstance(org, Response) else self._respond(request, org)
 
 
 @api_view(["POST"])

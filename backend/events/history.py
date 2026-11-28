@@ -63,6 +63,29 @@ def decode_history_cursor(token: str) -> HistoryCursor:
     return HistoryCursor(occurred_at, pk)
 
 
+@dataclass(frozen=True)
+class LedgerCursor:
+    """Keyset position in raw ledger order (pk ascending)."""
+
+    pk: int
+
+    @property
+    def token(self) -> str:
+        return urlsafe_b64encode(str(self.pk).encode()).decode().rstrip("=")
+
+
+def decode_ledger_cursor(token: str) -> LedgerCursor:
+    if not token:
+        raise ValueError(CURSOR_MESSAGE)
+    try:
+        pk = int(urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode())
+    except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
+        raise ValueError(CURSOR_MESSAGE) from exc
+    if not 1 <= pk <= MAX_DB_INT:
+        raise ValueError(CURSOR_MESSAGE)
+    return LedgerCursor(pk)
+
+
 def history_after_q(cursor: HistoryCursor) -> Q:
     """Rows strictly after ``cursor`` in history order."""
     return Q(occurred_at__lt=cursor.occurred_at) | Q(
