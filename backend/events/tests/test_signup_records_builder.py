@@ -60,6 +60,7 @@ class SignupRecordsBuilderTest(EventTestCase):
         at: datetime,
         *,
         after: dict[str, Any] | None,
+        before: dict[str, Any] | None = None,
         action: str = SignupAction.SIGNED_UP,
         means: str = SignupMeans.DISCORD_BUTTON,
         subject_snapshot: dict[str, Any] | None = None,
@@ -81,6 +82,7 @@ class SignupRecordsBuilderTest(EventTestCase):
             actor_role=ActorRole.STAFF,
             means=means,
             action=action,
+            before=before,
             after=after,
             correlation_id=uuid.uuid4().hex,
             occurred_at=at,
@@ -294,6 +296,102 @@ class SignupRecordsBuilderTest(EventTestCase):
         self.assertEqual(invalid[0]["count"], 2)
         self.assertEqual(invalid[0]["system"], "events")
         self.assertEqual(invalid[0]["subsystem"], "ledger")
+
+    def test_group_without_valid_after_counts_every_entry(self) -> None:
+        event = self.make_event(scheduled_at=T0)
+        self._row(event, self.user, T0 - timedelta(days=2), after=None)
+        self._row(event, self.user, T0 - timedelta(days=1), after={"bogus": 1})
+        self._row(event, self.user, T0, after=None)
+
+        record = self._one()
+
+        self.assertIsNone(record.original)
+        self.assertEqual(record.change_count, 3)
+
+    def test_moved_off_event_final_is_moved(self) -> None:
+        stale = self.make_event(scheduled_at=T0)
+        target = self.make_event(scheduled_at=T0 + timedelta(days=7))
+        signed = T0 - timedelta(days=3)
+        moved_at = T0 - timedelta(days=1)
+        self._row(
+            stale,
+            self.user,
+            signed,
+            after=_after(SignupStatus.APPROVED, signed_up_at=signed, line_seq=4),
+        )
+        before = {
+            **_after(SignupStatus.APPROVED, signed_up_at=signed, line_seq=4),
+            "extra": {"event_id": stale.pk},
+        }
+        after = {
+            **_after(SignupStatus.APPROVED, signed_up_at=moved_at, line_seq=1),
+            "extra": {"event_id": target.pk},
+        }
+        self._row(
+            stale,
+            self.user,
+            moved_at,
+            before=before,
+            after=after,
+            action=SignupAction.MOVED_EVENT,
+            means=SignupMeans.SYSTEM,
+        )
+        self._row(
+            target,
+            self.user,
+            moved_at,
+            before=before,
+            after=after,
+            action=SignupAction.MOVED_EVENT,
+            means=SignupMeans.SYSTEM,
+        )
+
+        by_event = {r.event_id: r for r in build_signup_records(self.org.pk, ALL)}
+
+        old = by_event[stale.pk]
+        self.assertEqual(
+            old.final,
+            {
+                "status": "moved",
+                "commitment": "main",
+                "rsvp_class": "standard",
+                "signed_up_at": signed,
+                "line_seq": 4,
+            },
+        )
+        self.assertIsNone(old.withdrawn_at)
+        self.assertEqual(old.change_count, 1)
+        self.assertEqual(old.last_changed_at, moved_at)
+        new = by_event[target.pk]
+        assert new.final is not None and new.original is not None
+        self.assertEqual(new.final["status"], SignupStatus.APPROVED)
+        self.assertEqual(new.final["line_seq"], 1)
+        self.assertEqual(new.original["means"], SignupMeans.SYSTEM)
+
+    def test_moved_back_onto_event_is_signed_up_again(self) -> None:
+        stale = self.make_event(scheduled_at=T0)
+        target = self.make_event(scheduled_at=T0 + timedelta(days=7))
+        self._row(stale, self.user, T0 - timedelta(days=3), after=_after())
+        self._row(
+            stale,
+            self.user,
+            T0 - timedelta(days=2),
+            before={**_after(), "extra": {"event_id": stale.pk}},
+            after={**_after(), "extra": {"event_id": target.pk}},
+            action=SignupAction.MOVED_EVENT,
+        )
+        self._row(
+            stale,
+            self.user,
+            T0 - timedelta(days=1),
+            after=_after(line_seq=7),
+            action=SignupAction.RESIGNED_UP,
+        )
+
+        final = self._one().final
+        assert final is not None
+        self.assertEqual(final["status"], SignupStatus.CONFIRMED)
+        self.assertEqual(final["line_seq"], 7)
 
     def test_filters_by_live_and_snapshot_user(self) -> None:
         event = self.make_event(scheduled_at=T0)

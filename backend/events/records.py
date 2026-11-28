@@ -10,7 +10,7 @@ from django.db.models import Q
 from pydantic import ValidationError
 
 from events import ledger
-from events.constants import SignupStatus
+from events.constants import SignupAction, SignupStatus
 from events.ledger import LedgerEvent, RecordsWindow, resolve_ledger_events
 from events.models import SignupLedgerEntry
 from events.schemas import SignupSnapshot
@@ -32,6 +32,7 @@ log = get_logger(__name__)
 WITHDRAWN_STATUSES: frozenset[str] = frozenset(
     {SignupStatus.CANCELLED, SignupStatus.DROPPED}
 )
+MOVED_STATUS = "moved"
 CSV_FORMULA_PREFIXES: tuple[str, ...] = ("=", "+", "-", "@", "\t", "\r")
 ROW_ITERATOR_CHUNK = 2000
 
@@ -68,10 +69,14 @@ _ROW_FIELDS = (
     "means",
     "after",
     "occurred_at",
+    "action",
+    "before",
 )
 
 type SubjectKey = tuple[str, object]
-type LedgerRow = tuple[int, int, int | None, str | None, Any, str, Any, datetime]
+type LedgerRow = tuple[
+    int, int, int | None, str | None, Any, str, Any, datetime, str, Any
+]
 
 
 class TooManyRecords(Exception):
@@ -130,6 +135,13 @@ def _discord_id(row: LedgerRow) -> str | None:
     return None if value is None or value == "" else str(value)
 
 
+def _moved_off(event_id: int, row: LedgerRow, snap: SignupSnapshot) -> bool:
+    if row[8] != SignupAction.MOVED_EVENT:
+        return False
+    target = snap.extra.get("event_id")
+    return isinstance(target, int) and target != event_id
+
+
 class _Reducer:
     def __init__(self) -> None:
         self.invalid = 0
@@ -163,9 +175,13 @@ class _Reducer:
                 "rsvp_class": first.rsvp_class,
                 "means": first_row[5],
             }
-            last = valid[-1][2]
+            _, last_row, last = valid[-1]
+            status = last.status
+            if _moved_off(event.event_id, last_row, last):
+                status = MOVED_STATUS
+                last = self._parse(last_row[9]) or last
             final = {
-                "status": last.status,
+                "status": status,
                 "commitment": last.commitment,
                 "rsvp_class": last.rsvp_class,
                 "signed_up_at": last.signed_up_at,
