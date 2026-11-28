@@ -1,5 +1,4 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Copy } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -22,8 +21,13 @@ import type { OrgFeatureAccess } from '~/features/org-features';
 import { useIsSuperuser } from '~/hooks/usePermissions';
 import { extractApiError } from '~/lib/apiError';
 import { getLogger } from '~/lib/logger';
+import { ApiConnectionTable } from './ApiConnectionTable';
 import { ApiTokenTable } from './ApiTokenTable';
 import { ApiUsageTable, usageToday } from './ApiUsageTable';
+import { ConnectionDialog } from './ConnectionDialog';
+import { TokenSecret } from './TokenSecret';
+import { useConnectionQueryHygiene, useConnections } from './connectionQueries';
+import type { ApiConnection } from './connectionSchemas';
 import {
   useApiLimits,
   useApiTokens,
@@ -79,18 +83,42 @@ function defaultOperations(access: TokenFeatureFlags): TokenOperation[] {
   );
 }
 
+export interface ConnectionDraftState {
+  dirty: boolean;
+  /** Drops the open connection draft and closes its dialog. */
+  discard: () => void;
+}
+
 export interface ApiAccessPanelProps {
   orgId: number;
   access: OrgFeatureAccess;
   enabled?: boolean;
+  /** Reports the open connection dialog's unsaved state to the host. */
+  onConnectionDraftChange?: (state: ConnectionDraftState) => void;
 }
+
+type ConnectionTarget = { id: number | null } | null;
 
 export function ApiAccessPanel({
   orgId,
   access,
   enabled = true,
+  onConnectionDraftChange,
 }: ApiAccessPanelProps) {
   const isSiteAdmin = useIsSuperuser();
+  useConnectionQueryHygiene(orgId, access);
+  const connections = useConnections(orgId, access, enabled);
+  const [target, setTarget] = useState<ConnectionTarget>(null);
+  const onManage = useCallback(
+    (row: ApiConnection) => setTarget({ id: row.id }),
+    [],
+  );
+  const closeConnection = useCallback(() => setTarget(null), []);
+  const onConnectionDirty = useCallback(
+    (dirty: boolean) =>
+      onConnectionDraftChange?.({ dirty, discard: closeConnection }),
+    [onConnectionDraftChange, closeConnection],
+  );
   const tokens = useApiTokens(orgId, access, enabled);
   const usage = useApiUsage(orgId, access, USAGE_DAYS, enabled);
   const limits = useApiLimits(orgId, access, enabled);
@@ -123,7 +151,12 @@ export function ApiAccessPanel({
       className="flex flex-col gap-8 rounded-lg border border-border p-6"
     >
       <div>
-        <h2 className="text-lg font-semibold">API access</h2>
+        <h2 className="text-lg font-semibold">API connections</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Connect external services to this organization&apos;s members and
+          contact history. Each connection has its own scoped inbound key and
+          its own outbound settings, and every direction starts off.
+        </p>
         <p className="mt-1 text-sm text-muted-foreground">
           Personal tokens let an external service push member MMRs to{' '}
           <code className="font-mono text-xs">
@@ -151,6 +184,37 @@ export function ApiAccessPanel({
       </div>
 
       <div className="flex flex-col gap-3">
+        <h3 className="text-base font-semibold">Connections</h3>
+        {connections.isLoading && <Skeleton className="h-24 w-full" />}
+        {connections.isError && (
+          <p
+            className="text-sm text-destructive"
+            data-testid="api-connections-error"
+          >
+            {extractApiError(connections.error) ??
+              'Failed to load API connections'}
+          </p>
+        )}
+        {connections.data && (
+          <ApiConnectionTable
+            connections={connections.data}
+            onManage={onManage}
+            toolbarActions={
+              <PrimaryButton
+                type="button"
+                size="sm"
+                data-testid="api-connection-create"
+                disabled={!anyTokenFeature(access)}
+                onClick={() => setTarget({ id: null })}
+              >
+                Add connection
+              </PrimaryButton>
+            }
+          />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3">
         <h3 className="text-base font-semibold">Tokens</h3>
         {tokens.isLoading && <Skeleton className="h-24 w-full" />}
         {tokens.isError && (
@@ -168,6 +232,7 @@ export function ApiAccessPanel({
             revoking={revoke.isPending}
             toolbarActions={
               <PrimaryButton
+                type="button"
                 size="sm"
                 data-testid="api-token-create"
                 disabled={!anyTokenFeature(access)}
@@ -233,6 +298,17 @@ export function ApiAccessPanel({
           ))}
       </div>
 
+      <ConnectionDialog
+        orgId={orgId}
+        access={access}
+        connectionId={target?.id ?? null}
+        open={target !== null}
+        onOpenChange={(open) => {
+          if (!open) closeConnection();
+        }}
+        onCreated={(id) => setTarget({ id })}
+        onDirtyChange={onConnectionDirty}
+      />
       <CreateTokenDialog
         orgId={orgId}
         access={access}
@@ -274,44 +350,6 @@ export function ApiAccessPanel({
         cancelTestId="api-token-revoke-cancel"
       />
     </section>
-  );
-}
-
-function TokenSecret({ token }: { token: string }) {
-  const copy = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(token);
-      toast.success('Token copied');
-    } catch (err) {
-      log.warn('Clipboard write failed', { err });
-      toast.error('Could not copy. Select the token and copy it manually.');
-    }
-  };
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-stretch gap-2">
-        <code
-          className="min-w-0 flex-1 break-all rounded-md border border-border bg-base-900/40 p-3 font-mono text-sm select-all"
-          data-testid="api-token-secret"
-        >
-          {token}
-        </code>
-        <SecondaryButton
-          type="button"
-          size="sm"
-          className="h-auto min-h-11 self-stretch sm:min-h-8"
-          onClick={copy}
-          aria-label="Copy token"
-          data-testid="api-token-copy"
-        >
-          <Copy className="size-4" />
-        </SecondaryButton>
-      </div>
-      <p className="text-sm text-warning" data-testid="api-token-once-note">
-        This is the only time the full token is shown. Store it somewhere safe;
-        if you lose it, revoke it and create a new one.
-      </p>
-    </div>
   );
 }
 

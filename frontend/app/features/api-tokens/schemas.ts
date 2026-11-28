@@ -54,8 +54,17 @@ export const DEFAULT_TOKEN_OPERATIONS: readonly TokenOperation[] = [
   'mmr:write',
 ];
 
+/** Labels for every grant a key can hold, including connection-only grants. */
+export const OPERATION_LABELS: Record<string, string> = {
+  'mmr:read': 'Read member MMRs',
+  'mmr:write': 'Update member MMRs',
+  'promotion:read': 'Read contact receipt history',
+  'promotion:write': 'Write contact receipts and promotion points',
+  'promotion:import': 'Import external contact history and promotion points',
+};
+
 export function operationLabel(value: string): string {
-  return TOKEN_OPERATIONS.find((op) => op.value === value)?.label ?? value;
+  return OPERATION_LABELS[value] ?? value;
 }
 
 export const ApiTokenSchema = z.object({

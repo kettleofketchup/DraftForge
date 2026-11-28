@@ -32,6 +32,8 @@ import {
   putApiLimits,
   revokeApiToken,
 } from '../api';
+import { getConnection, listConnections } from '../connectionApi';
+import { apiConnection } from './connectionFixtures';
 import { apiToken, apiUsage, createdApiToken } from './fixtures';
 
 vi.mock('../api', () => ({
@@ -41,6 +43,18 @@ vi.mock('../api', () => ({
   listApiTokens: vi.fn(),
   putApiLimits: vi.fn(),
   revokeApiToken: vi.fn(),
+}));
+vi.mock('../connectionApi', () => ({
+  archiveConnection: vi.fn(),
+  createConnection: vi.fn(),
+  getConnection: vi.fn(),
+  getConnectionRun: vi.fn(),
+  issueConnectionKey: vi.fn(),
+  listConnectionDeliveries: vi.fn(),
+  listConnectionRuns: vi.fn(),
+  listConnections: vi.fn(),
+  revokeConnectionKey: vi.fn(),
+  updateConnection: vi.fn(),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -88,11 +102,21 @@ function setViewer(siteAdmin: boolean) {
   });
 }
 
-function renderPanel(a = access, onOuterSubmit?: () => void) {
+function renderPanel(
+  a = access,
+  onOuterSubmit?: () => void,
+  onConnectionDraftChange?: (state: { dirty: boolean }) => void,
+) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const panel = <ApiAccessPanel orgId={ORG} access={a} />;
+  const panel = (
+    <ApiAccessPanel
+      orgId={ORG}
+      access={a}
+      onConnectionDraftChange={onConnectionDraftChange}
+    />
+  );
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
@@ -127,6 +151,7 @@ beforeEach(() => {
   ]);
   vi.mocked(getApiUsage).mockResolvedValue(apiUsage());
   vi.mocked(getApiLimits).mockResolvedValue({ per_minute: 60, per_day: 5000 });
+  vi.mocked(listConnections).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -413,6 +438,61 @@ describe('ApiAccessPanel', () => {
     fireEvent.click(await screen.findByTestId('api-token-revoke-confirm'));
     await waitFor(() => expect(revokeApiToken).toHaveBeenCalledWith(ORG, 1));
     expect(toast.success).toHaveBeenCalledWith('Revoked MMR bot');
+  });
+});
+
+describe('API connections', () => {
+  it('lists connections under the API connections heading', async () => {
+    vi.mocked(listConnections).mockResolvedValue([
+      apiConnection(),
+      apiConnection({
+        id: 13,
+        name: 'Contact service',
+        enabled: true,
+        inbound_enabled: true,
+        promotion_push_enabled: true,
+      }),
+    ]);
+    renderPanel(fullAccess);
+    expect(
+      screen.getByRole('heading', { name: 'API connections' }),
+    ).toBeTruthy();
+    const row = await screen.findByTestId('api-connection-row-13');
+    expect(
+      within(row).getByTestId('api-connection-directions-13'),
+    ).toHaveTextContent('Inbound, Promotion push');
+    expect(
+      within(screen.getByTestId('api-connection-row-12')).getByTestId(
+        'api-connection-status-12',
+      ),
+    ).toHaveTextContent('Disabled');
+  });
+
+  it('opens the editor from Manage and reports its draft to the host', async () => {
+    vi.mocked(listConnections).mockResolvedValue([apiConnection()]);
+    vi.mocked(getConnection).mockResolvedValue(apiConnection());
+    const onDraft = vi.fn();
+    const onOuterSubmit = vi.fn();
+    renderPanel(fullAccess, onOuterSubmit, onDraft);
+    fireEvent.click(await screen.findByTestId('api-connection-manage-12'));
+    const name = await screen.findByTestId('api-connection-name');
+    fireEvent.change(name, { target: { value: 'Draft' } });
+    await waitFor(() =>
+      expect(onDraft).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dirty: true }),
+      ),
+    );
+    expect(onOuterSubmit).not.toHaveBeenCalled();
+  });
+
+  it('opens an empty create form from Add connection', async () => {
+    renderPanel(promotionOnly);
+    fireEvent.click(await screen.findByTestId('api-connection-create'));
+    expect(await screen.findByTestId('api-connection-name')).toHaveValue('');
+    expect(screen.getByTestId('api-connection-enabled')).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
   });
 });
 
