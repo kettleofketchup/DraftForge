@@ -68,6 +68,7 @@ import {
   useOrgFeatureAccess,
 } from '~/features/org-features';
 import { PromotionTab } from '~/features/promotion';
+import { ExportSignupRecordsButton } from '~/features/signup-records';
 import {
   isStandingTabValue,
   TrackTab,
@@ -300,6 +301,7 @@ export default function OrganizationDetailPage() {
   const canAddMembers = isOrgStaff;
   const canViewClaims = isOrgStaff;
   const canReviewMmr = isOrgStaff && !!pk;
+  const canExportRecords = isOrgStaff && !!pk;
   const mmrPendingCount =
     useMmrPendingCount({ org: pk ?? 0 }, canReviewMmr).data?.count ?? 0;
   const pendingClaimsCount = usePendingClaimsCount(pk, !!canViewClaims);
@@ -425,15 +427,22 @@ export default function OrganizationDetailPage() {
               <OrganizationHeaderTitle
                 name={organization.name}
                 action={
-                  settingsAccess.canOpen && (
-                    <SecondaryButton
-                      size="sm"
-                      data-testid="org-settings-button"
-                      onClick={() => settingsParam.openSettings()}
-                    >
-                      <Settings className="h-4 w-4" />
-                      Org Settings
-                    </SecondaryButton>
+                  (settingsAccess.canOpen || canExportRecords) && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canExportRecords && pk && (
+                        <ExportSignupRecordsButton orgId={pk} />
+                      )}
+                      {settingsAccess.canOpen && (
+                        <SecondaryButton
+                          size="sm"
+                          data-testid="org-settings-button"
+                          onClick={() => settingsParam.openSettings()}
+                        >
+                          <Settings className="h-4 w-4" />
+                          Org Settings
+                        </SecondaryButton>
+                      )}
+                    </div>
                   )
                 }
               />
