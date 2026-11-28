@@ -327,15 +327,36 @@ describe('TransferSpotDialog', () => {
         error: 'Sam is not eligible for this event.',
         reasons: [
           {
-            code: 'steam_missing',
-            rule: 'steam',
-            message: 'Steam friend ID missing',
+            code: 'steam_id_missing',
+            severity: 'needs_approval',
+            rule: 'require-steam-id',
+            message: 'This event requires a Steam friend ID on your profile.',
+            fix: { kind: 'update_profile', url: 'https://x/profile' },
+            params: {},
           },
-          { code: 'mmr_missing', rule: 'mmr', message: 'MMR not verified' },
+          {
+            code: 'mmr_unverified',
+            severity: 'needs_approval',
+            rule: 'require-mmr-verified',
+            message: 'This event requires staff-verified MMR.',
+            fix: null,
+            params: {},
+          },
           {
             code: 'dota_rank_undeclared',
-            rule: 'dota',
-            message: 'server label',
+            severity: 'needs_approval',
+            rule: 'dota-rank-declared',
+            message: 'Declare your rank to sign up for this event.',
+            fix: null,
+            params: {},
+          },
+          {
+            code: 'recipient_ineligible',
+            severity: 'block',
+            rule: 'eligibility',
+            message: 'Not eligible for this event',
+            fix: null,
+            params: {},
           },
         ],
       }),
@@ -347,6 +368,8 @@ describe('TransferSpotDialog', () => {
     expect(within(list).getByText('Steam friend ID missing')).toBeTruthy();
     expect(within(list).getByText('MMR not verified')).toBeTruthy();
     expect(within(list).getByText('Rank not declared')).toBeTruthy();
+    expect(within(list).getByText('Not eligible for this event')).toBeTruthy();
+    expect(within(list).queryByText(/your/i)).toBeNull();
     expect(screen.getByTestId('harness-open').textContent).toBe('true');
     expect(h.toastSuccess).not.toHaveBeenCalled();
   });

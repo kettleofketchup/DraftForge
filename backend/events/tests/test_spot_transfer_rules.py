@@ -23,9 +23,13 @@ from events.services import (
 
 GENERIC = {
     "code": "recipient_ineligible",
+    "severity": "block",
     "rule": "eligibility",
     "message": "Not eligible for this event",
+    "fix": None,
+    "params": {},
 }
+E2_KEYS = {"code", "severity", "rule", "message", "fix", "params"}
 
 
 def _row(pk: int, status: str, line_seq: int | None) -> EventSignup:
@@ -113,38 +117,40 @@ class MemberStatusCapTests(SimpleTestCase):
 
 
 class MemberSafeReasonsTests(SimpleTestCase):
-    def test_member_safe_reasons_strip_params_and_fix(self) -> None:
+    def test_member_safe_reasons_keep_e2_shape(self) -> None:
         reason = Reason(
             code=ReasonCode.STEAM_ID_MISSING,
             severity=Severity.NEEDS_APPROVAL,
             rule=Rule.REQUIRE_STEAM_ID,
             message="This event requires a Steam friend ID on your profile.",
             fix=FixAction(FixKind.UPDATE_PROFILE, url="https://x/profile"),
-            params={"secret": 1234},
         )
         out = _member_safe_reasons(EligibilityResult(reasons=(reason,)))
-        self.assertEqual(len(out), 1)
-        self.assertEqual(set(out[0]), {"code", "rule", "message"})
-        self.assertEqual(out[0]["code"], "steam_id_missing")
-        self.assertEqual(out[0]["rule"], Rule.REQUIRE_STEAM_ID)
-        self.assertNotIn("your", out[0]["message"].lower())
-        self.assertNotIn("1234", json.dumps(out))
-        self.assertNotIn("https://", json.dumps(out))
+        self.assertEqual(out, [reason.as_dict()])
+        self.assertEqual(set(out[0]), E2_KEYS)
 
-    def test_member_safe_reasons_third_person_for_every_requirement(self) -> None:
-        for code in ReasonCode:
-            if code == ReasonCode.CONDUCT_BELOW_THRESHOLD:
-                continue
-            reason = Reason(
-                code=code,
-                severity=Severity.NEEDS_APPROVAL,
-                rule="r",
-                message="Your thing.",
-            )
-            with self.subTest(code=code):
-                (entry,) = _member_safe_reasons(EligibilityResult(reasons=(reason,)))
-                self.assertNotIn("your", entry["message"].lower())
-                self.assertTrue(entry["message"])
+    def test_member_safe_reasons_redact_recipient_profile_params(self) -> None:
+        below = Reason(
+            code=ReasonCode.BELOW_MIN_MMR,
+            severity=Severity.NEEDS_APPROVAL,
+            rule=Rule.DOTA_MIN_MMR,
+            message="Your MMR is below this event's minimum.",
+            params={"min_mmr": 3000, "mmr": 2512},
+        )
+        rank_type = Reason(
+            code=ReasonCode.RANK_TYPE_DISALLOWED,
+            severity=Severity.NEEDS_APPROVAL,
+            rule=Rule.DOTA_RANK_TYPE,
+            message="This event does not accept your rank type.",
+            params={"rank_status": "never"},
+        )
+        out = _member_safe_reasons(EligibilityResult(reasons=(below, rank_type)))
+        self.assertEqual(out[0]["params"], {"min_mmr": 3000})
+        self.assertEqual(out[1]["params"], {})
+        self.assertEqual(out[0]["message"], below.message)
+        self.assertEqual(out[0]["severity"], "needs_approval")
+        self.assertNotIn("2512", json.dumps(out))
+        self.assertNotIn("never", json.dumps(out))
 
     def test_member_safe_reasons_collapse_conduct(self) -> None:
         for rule, severity in (
@@ -178,9 +184,25 @@ class MemberSafeReasonsTests(SimpleTestCase):
             )
         )
         self.assertEqual(
-            [e["code"] for e in out], ["recipient_ineligible", "steam_id_missing"]
+            [e["code"] for e in out], ["steam_id_missing", "recipient_ineligible"]
         )
         self.assertEqual(out.count(GENERIC), 1)
+
+    def test_opaque_refusal_matches_conduct_collapse(self) -> None:
+        steam = Reason(
+            code=ReasonCode.STEAM_ID_MISSING,
+            severity=Severity.NEEDS_APPROVAL,
+            rule=Rule.REQUIRE_STEAM_ID,
+            message="m",
+        )
+        conduct = _conduct(Rule.CONDUCT_BLOCK, Severity.BLOCK)
+        self.assertEqual(
+            _member_safe_reasons(EligibilityResult(reasons=(steam,)), opaque=True),
+            _member_safe_reasons(EligibilityResult(reasons=(conduct, steam))),
+        )
+        self.assertEqual(
+            _member_safe_reasons(EligibilityResult(), opaque=True), [GENERIC]
+        )
 
     def test_clean_result_gives_no_reasons(self) -> None:
         self.assertEqual(_member_safe_reasons(EligibilityResult()), [])

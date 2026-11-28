@@ -297,13 +297,31 @@ describe('spot transfer', () => {
     await expect(transferSpot(5, { recipient_user_id: 3 })).rejects.toThrow();
   });
 
-  it('reads an ineligible refusal with member-safe reasons', () => {
+  it('reads an ineligible refusal in the eligibility reason shape', () => {
     const reasons = [
-      { code: 'steam_missing', rule: 'steam', message: 'Steam missing' },
+      {
+        code: 'steam_id_missing',
+        severity: 'needs_approval',
+        rule: 'require-steam-id',
+        message: 'This event requires a Steam friend ID on your profile.',
+        fix: { kind: 'update_profile', url: 'https://x/profile' },
+        params: {},
+      },
+      {
+        code: 'below_min_mmr',
+        severity: 'needs_approval',
+        rule: 'dota-min-mmr',
+        message: "Your MMR is below this event's minimum.",
+        fix: null,
+        params: { min_mmr: 3000 },
+      },
       {
         code: 'recipient_ineligible',
+        severity: 'block',
         rule: 'eligibility',
         message: 'Not eligible for this event',
+        fix: null,
+        params: {},
       },
     ];
     expect(

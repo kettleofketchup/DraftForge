@@ -17,6 +17,7 @@ import type {
 } from '~/components/events/schemas';
 import {
   discordEventStateSchema,
+  eligibilityReasonSchema,
   eventListItemSchema,
   eventResponseSchema,
   eventSignupSchema,
@@ -316,12 +317,9 @@ export async function transferSpot(
   return spotTransferResponseSchema.parse(data);
 }
 
-// backend/events/services.py _member_safe_reasons: no severity, params or fix.
-export const spotTransferReasonSchema = z.object({
-  code: z.string(),
-  rule: z.string(),
-  message: z.string(),
-});
+// backend/events/services.py _member_safe_reasons: the eligibility reason
+// shape, with the recipient's own profile params redacted.
+export const spotTransferReasonSchema = eligibilityReasonSchema;
 export type SpotTransferReason = z.infer<typeof spotTransferReasonSchema>;
 
 const spotTransferRefusalSchema = z.object({

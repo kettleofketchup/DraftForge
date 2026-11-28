@@ -22,6 +22,7 @@ import { useUserStore } from '~/store/userStore';
 const h = vi.hoisted(() => ({
   manage: false,
   allowTransfer: true,
+  allowUserSignups: true,
   state: 'signups_open',
   transferSpot: vi.fn(),
   toastSuccess: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => ({
       ...baseEvent,
       state: h.state,
       allow_spot_transfer: h.allowTransfer,
+      allow_user_signups: h.allowUserSignups,
       user_can_manage: h.manage,
       staff_reason_policy: 'optional',
     },
@@ -227,6 +229,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.manage = false;
   h.allowTransfer = true;
+  h.allowUserSignups = true;
   h.state = 'signups_open';
 });
 afterEach(cleanup);
@@ -254,6 +257,12 @@ describe('event page member spot transfer', () => {
     expect(screen.queryByTestId('event-transfer-spot-btn')).toBeNull();
   });
 
+  it('hides Give my place when self sign-ups are off', () => {
+    h.allowUserSignups = false;
+    renderPage(21);
+    expect(screen.queryByTestId('event-transfer-spot-btn')).toBeNull();
+  });
+
   it('opens the dialog in member mode and transfers', async () => {
     h.transferSpot.mockResolvedValueOnce(transferred);
     renderPage(21);
@@ -275,6 +284,13 @@ describe('event page member spot transfer', () => {
 });
 
 describe('event page staff spot transfer', () => {
+  it('keeps the staff Transfer button when self sign-ups are off', () => {
+    h.manage = true;
+    h.allowUserSignups = false;
+    renderPage(1);
+    expect(screen.getByTestId('signup-transfer-btn')).toBeTruthy();
+  });
+
   it('toasts after an override retry with the dialog closed', async () => {
     h.manage = true;
     h.transferSpot

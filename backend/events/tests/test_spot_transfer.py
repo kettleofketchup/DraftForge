@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +17,7 @@ from events.constants import (
     StaffReasonPolicy,
 )
 from events.eligibility import EligibilityResult, Reason, ReasonCode, Rule, Severity
+from events.eligibility.checks.requirements import MESSAGES
 from events.exceptions import SpotTransferRefused
 from events.ledger import SignupActor, latest_restorable_withdrawal
 from events.models import (
@@ -50,16 +51,37 @@ from events.services import (
     transfer_spot,
 )
 from events.tests.base import EventTestCase
+from org.conduct.constants import Outcome
+from org.feature_keys import FeatureKey
+from org.features import set_org_feature
 from org.models import OrgUser
+from org.models_conduct import AttendanceOutcome
 from tournament.models import Tournament
 
 LineState = tuple[str, int | None, datetime | None, int | None]
 
 GENERIC = {
     "code": "recipient_ineligible",
+    "severity": "block",
     "rule": "eligibility",
     "message": "Not eligible for this event",
+    "fix": None,
+    "params": {},
 }
+E2_KEYS = {"code", "severity", "rule", "message", "fix", "params"}
+STEAM_REASON = Reason(
+    code=ReasonCode.STEAM_ID_MISSING,
+    severity=Severity.NEEDS_APPROVAL,
+    rule=Rule.REQUIRE_STEAM_ID,
+    message=MESSAGES[ReasonCode.STEAM_ID_MISSING],
+)
+CONDUCT_HOLD = Reason(
+    code=ReasonCode.CONDUCT_BELOW_THRESHOLD,
+    severity=Severity.NEEDS_APPROVAL,
+    rule=Rule.CONDUCT_REQUIRE_APPROVAL,
+    message="Below threshold",
+    params={"tier": "require_approval"},
+)
 
 
 def member(user: CustomUser) -> SignupActor:
@@ -172,6 +194,33 @@ class MemberTransferGuardTests(_TransferFixtures):
                 recipient = self.make_user()
                 self.set_status(self.join(event, recipient), status)
                 self.assert_refused("recipient_removed", giver, recipient)
+
+    def test_member_refused_when_user_signups_off(self) -> None:
+        event = self.transfer_event()
+        giver = self.join(event)
+        Event.objects.filter(pk=event.pk).update(allow_user_signups=False)
+        exc = self.assert_refused("user_signups_disabled", giver, self.make_user())
+        self.assertEqual(list(exc.reasons), [])
+
+    def test_staff_transfer_allowed_when_user_signups_off(self) -> None:
+        event = self.transfer_event()
+        giver = self.join(event)
+        Event.objects.filter(pk=event.pk).update(allow_user_signups=False)
+        result = transfer_spot(
+            self.row(giver), self.make_user(), actor=self.staff_actor, reason="cover"
+        )
+        self.assertEqual(result.mode, "transfer")
+
+    def test_deleted_giver_refused(self) -> None:
+        event = self.transfer_event()
+        giver = self.join(event)
+        stale = self.row(giver)
+        EventSignup.objects.filter(pk=giver.pk).delete()
+        entries = self.ledger_count(event)
+        with self.assertRaises(SpotTransferRefused) as ctx:
+            transfer_spot(stale, self.make_user(), actor=member(giver.user))
+        self.assertEqual(ctx.exception.code, "giver_not_active")
+        self.assertEqual(self.ledger_count(event), entries)
 
     def test_second_call_refused_giver_not_active(self) -> None:
         event = self.transfer_event()
@@ -405,7 +454,11 @@ class MemberTransferEligibilityTests(_TransferFixtures):
         self.assertIn(ReasonCode.STEAM_ID_MISSING, codes)
         self.assertIn(ReasonCode.MMR_UNVERIFIED, codes)
         for entry in exc.reasons:
-            self.assertEqual(set(entry), {"code", "rule", "message"})
+            self.assertEqual(set(entry), E2_KEYS)
+        steam = next(r for r in exc.reasons if r["code"] == ReasonCode.STEAM_ID_MISSING)
+        self.assertEqual(steam["severity"], Severity.NEEDS_APPROVAL)
+        self.assertEqual(steam["message"], MESSAGES[ReasonCode.STEAM_ID_MISSING])
+        self.assertEqual(steam["fix"]["kind"], "update_profile")
 
     def test_non_member_refused(self) -> None:
         event = self.transfer_event()
@@ -413,7 +466,43 @@ class MemberTransferEligibilityTests(_TransferFixtures):
         outsider = CustomUser.objects.create_user(
             username="transfer_outsider", password="x"
         )
-        self.assert_refused("not_org_member", giver, outsider)
+        with capture_logs() as logs:
+            exc = self.assert_refused("recipient_ineligible", giver, outsider)
+        self.assertEqual(list(exc.reasons), [GENERIC])
+        refused = [e for e in logs if e["event"] == "signup_spot_transfer_refused"]
+        self.assertEqual([e["code"] for e in refused], ["not_org_member"])
+        self.assertEqual(refused[0]["log_level"], "warning")
+
+    def test_non_member_indistinguishable_from_ineligible_member(self) -> None:
+        event = self.transfer_event()
+        giver = self.join(event)
+        outsider = CustomUser.objects.create_user(
+            username="transfer_outsider_2", password="x"
+        )
+        pairs = (
+            ((), (CONDUCT_HOLD,)),
+            ((STEAM_REASON,), (CONDUCT_HOLD, STEAM_REASON)),
+        )
+        for outsider_reasons, member_reasons in pairs:
+            with self.subTest(reasons=[str(r.code) for r in member_reasons]):
+                with patch(
+                    "events.services.evaluate_signup",
+                    return_value=EligibilityResult(reasons=outsider_reasons),
+                ):
+                    hidden = self.assert_refused(
+                        "recipient_ineligible", giver, outsider
+                    )
+                with patch(
+                    "events.services.evaluate_signup",
+                    return_value=EligibilityResult(reasons=member_reasons),
+                ):
+                    held = self.assert_refused(
+                        "recipient_ineligible", giver, self.make_user()
+                    )
+                self.assertEqual(
+                    (hidden.code, hidden.message, list(hidden.reasons)),
+                    (held.code, held.message, list(held.reasons)),
+                )
 
     def test_conduct_block_collapsed(self) -> None:
         event = self.transfer_event()
@@ -465,6 +554,24 @@ class MemberTransferEligibilityTests(_TransferFixtures):
                 self.give(giver, self.make_user())
         refused = [e for e in logs if e["event"] == "signup_spot_transfer_refused"]
         self.assertEqual([e["log_level"] for e in refused], ["info"])
+
+
+class TransferStandingTests(_TransferFixtures):
+    def test_giver_records_no_late_cancel(self) -> None:
+        set_org_feature(self.org, FeatureKey.CONDUCT, enabled=True, actor=None)
+        event = self.transfer_event(scheduled_at=timezone.now() + timedelta(hours=1))
+        giver = self.join(event)
+        control = self.join(event)
+        cancel_signup(self.row(control), actor=member(control.user))
+        late = AttendanceOutcome.objects.nocache().filter(event=event)
+        self.assertEqual(
+            list(late.values_list("org_user__user_id", "outcome")),
+            [(control.user_id, Outcome.LATE_CANCEL)],
+        )
+
+        self.give(giver, self.make_user())
+
+        self.assertFalse(late.filter(org_user__user=giver.user).exists())
 
 
 class MemberTransferRecordTests(_TransferFixtures):

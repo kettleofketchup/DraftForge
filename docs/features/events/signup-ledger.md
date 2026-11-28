@@ -56,10 +56,10 @@ Every restamp logs `signup_line_restamped` (`system=events`, `subsystem=line`) w
 
 With the `allow_spot_transfer` event setting on (off by default), a signup's place in line can be handed to another member while signups are open or during roll call (see [Spot transfer](../events.md#spot-transfer) for the full rules):
 
-- **Transfer:** the recipient has no place. They take the giver's `line_seq`, `signed_up_at` and status, on their existing signup if they have one or on a new one. The giver's signup is cancelled and restamped to the back of the line, so a giver who signs up again does not get the old place back.
+- **Transfer:** the recipient has no place. They take the giver's `line_seq`, `signed_up_at` and status, on their existing signup if they have one or on a new one. Their commitment follows the place (Maybe for a tentative place, Main otherwise). The giver's signup is cancelled and restamped to the back of the line, so a giver who signs up again does not get the old place back.
 - **Swap:** the recipient already holds a place. The two signups exchange `line_seq` and `signed_up_at`, and each takes the other's status, except that a member swap never lowers the recipient's own approval. Main and Maybe places can't be swapped. A member can only swap with someone whose place is behind theirs and whose status is not ahead of theirs; staff can swap in any direction.
 
-Only the two signups change. Nobody is promoted and no other place moves. Each side keeps its own commitment, RSVP class and original sign-up. The recipient must be an organization member and meet every signup requirement of the event; members get no overrides, and on a manual-approval event the recipient still needs staff approval. Staff transfers go through the staff reason policy and the staff placement overrides. Tournament membership follows the new statuses.
+Only the two signups change. Nobody is promoted and no other place moves. Each side keeps its own RSVP class and original sign-up; in a swap each also keeps its own commitment. The recipient must be an organization member and meet every signup requirement of the event; members get no overrides, and on a manual-approval event the recipient still needs staff approval. Staff transfers go through the staff reason policy and the staff placement overrides. Tournament membership follows the new statuses.
 
 A transfer is not a withdrawal: the giver's cancel writes no `withdrew` entry, so it cannot be voided, and it records no late cancel.
 

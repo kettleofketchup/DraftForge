@@ -636,7 +636,7 @@ export default function EventPage() {
                   allowUserSignups={event.allow_user_signups}
                   signupDisabled={!profileLoaded || signupMutation.isPending}
                   cancelPending={signupActions.cancel.isPending}
-                  transferOpen={transferOpen}
+                  transferOpen={transferOpen && event.allow_user_signups}
                   onSignup={trySignup}
                   onCancel={() => setShowCancelRsvpConfirm(true)}
                   onTransfer={() => {

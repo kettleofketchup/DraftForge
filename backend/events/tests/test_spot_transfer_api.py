@@ -196,6 +196,31 @@ class SpotTransferApiTests(EventTestCase):
         body = self.assert_refusal(response, "transfer_disabled")
         self.assertNotIn("reasons", body)
 
+    def test_user_signups_off_refuses_member(self) -> None:
+        event = self.transfer_event()
+        giver = self.join(event, self.user)
+        Event.objects.filter(pk=event.pk).update(allow_user_signups=False)
+
+        response = self.post(
+            giver, {"recipient_user_id": self.make_user().pk}, as_user=self.user
+        )
+
+        body = self.assert_refusal(response, "user_signups_disabled")
+        self.assertNotIn("reasons", body)
+
+    def test_deleted_giver_returns_refusal(self) -> None:
+        event = self.transfer_event()
+        giver = self.join(event, self.user)
+        stale = self.row(giver)
+        EventSignup.objects.filter(pk=giver.pk).delete()
+
+        with patch("events.views.EventSignupViewSet.get_object", return_value=stale):
+            response = self.post(
+                giver, {"recipient_user_id": self.make_user().pk}, as_user=self.user
+            )
+
+        self.assert_refusal(response, "giver_not_active")
+
     def test_recipient_not_found_shapes(self) -> None:
         event = self.transfer_event()
         giver = self.join(event, self.user)
@@ -234,7 +259,10 @@ class SpotTransferApiTests(EventTestCase):
             codes, {ReasonCode.STEAM_ID_MISSING, ReasonCode.MMR_UNVERIFIED}
         )
         for entry in body["reasons"]:
-            self.assertLessEqual(set(entry), {"code", "rule", "message"})
+            self.assertEqual(
+                set(entry), {"code", "severity", "rule", "message", "fix", "params"}
+            )
+            self.assertEqual(entry["severity"], "needs_approval")
 
         with patch("events.services.evaluate_signup", return_value=CONDUCT_BLOCK):
             response = self.post(
@@ -247,8 +275,11 @@ class SpotTransferApiTests(EventTestCase):
             [
                 {
                     "code": "recipient_ineligible",
+                    "severity": "block",
                     "rule": "eligibility",
                     "message": "Not eligible for this event",
+                    "fix": None,
+                    "params": {},
                 }
             ],
         )

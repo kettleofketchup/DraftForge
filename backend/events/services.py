@@ -49,6 +49,7 @@ from events.discord.gates import repeater_generates
 from events.eligibility import (
     EligibilityResult,
     ReasonCode,
+    Severity,
     claim_friend_id,
     clear_eligibility,
     eligibility_values,
@@ -1606,11 +1607,17 @@ _SEAT_STATUS_ORDER: tuple[str, ...] = (
 _MEMBER_OPAQUE_REASON_CODES: frozenset[str] = frozenset(
     {ReasonCode.CONDUCT_BELOW_THRESHOLD}
 )
-_MEMBER_GENERIC_REASON: dict[str, str] = {
+_MEMBER_GENERIC_REASON: dict[str, Any] = {
     "code": "recipient_ineligible",
+    "severity": str(Severity.BLOCK),
     "rule": "eligibility",
     "message": "Not eligible for this event",
+    "fix": None,
+    "params": {},
 }
+# The giver sees the recipient's reasons: drop params that describe the
+# recipient's own profile (their MMR, their rank type).
+_MEMBER_PRIVATE_PARAMS: frozenset[str] = frozenset({"mmr", "rank_status"})
 
 
 def _place_rank(signup: EventSignup) -> tuple[int, int, int]:
@@ -1633,19 +1640,25 @@ def _seat_status_above(status: str, other: str) -> bool:
     return _SEAT_STATUS_ORDER.index(status) > _SEAT_STATUS_ORDER.index(other)
 
 
-def _member_safe_reasons(result: EligibilityResult) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
+def _member_safe_reasons(
+    result: EligibilityResult, *, opaque: bool = False
+) -> list[dict[str, Any]]:
+    """Reasons a member may see about someone else. Opaque reasons (conduct,
+    and non-membership via ``opaque``) collapse into one trailing generic
+    entry, so neither can be told apart from the other."""
+    out: list[dict[str, Any]] = []
     for reason in result.reasons:
         if reason.code in _MEMBER_OPAQUE_REASON_CODES:
-            entry = dict(_MEMBER_GENERIC_REASON)
-        else:
-            entry = {
-                "code": str(reason.code),
-                "rule": reason.rule,
-                "message": ReasonCode(reason.code).label,
-            }
+            opaque = True
+            continue
+        entry = reason.as_dict()
+        entry["params"] = {
+            k: v for k, v in entry["params"].items() if k not in _MEMBER_PRIVATE_PARAMS
+        }
         if entry not in out:
             out.append(entry)
+    if opaque:
+        out.append(dict(_MEMBER_GENERIC_REASON, params={}))
     return out
 
 
@@ -1657,6 +1670,9 @@ _PROBE_REFUSAL_CODES: frozenset[str] = frozenset(
 )
 TRANSFER_REFUSAL_MESSAGES: dict[str, str] = {
     "transfer_disabled": "Spot transfer is not enabled for this event.",
+    "user_signups_disabled": (
+        "Self sign-ups are disabled for this event; ask an organizer to move places."
+    ),
     "event_state": (
         "Places can only be transferred while signups are open or during roll call."
     ),
@@ -1681,7 +1697,8 @@ def _refuse_transfer(
     event: Event,
     actor: SignupActor,
     recipient_user: CustomUser,
-    reasons: Sequence[dict[str, str]] = (),
+    reasons: Sequence[dict[str, Any]] = (),
+    shown_code: str | None = None,
 ) -> SpotTransferRefused:
     emit = log.warning if code in _PROBE_REFUSAL_CODES else log.info
     emit(
@@ -1693,12 +1710,15 @@ def _refuse_transfer(
         caller_user_id=actor.user.pk if actor.user is not None else None,
         recipient_user_id=recipient_user.pk,
     )
-    return SpotTransferRefused(code, TRANSFER_REFUSAL_MESSAGES[code], reasons)
+    shown_code = shown_code or code
+    return SpotTransferRefused(
+        shown_code, TRANSFER_REFUSAL_MESSAGES[shown_code], reasons
+    )
 
 
 def _lock_transfer_rows(
     locked: Event, giver: EventSignup, recipient_user: CustomUser
-) -> tuple[EventSignup, EventSignup | None]:
+) -> tuple[EventSignup | None, EventSignup | None]:
     held_pk = (
         EventSignup.objects.nocache()
         .filter(event=locked, user=recipient_user)
@@ -1716,7 +1736,7 @@ def _lock_transfer_rows(
     }
     for row in rows.values():
         row.event = locked
-    return rows[giver.pk], None if held_pk is None else rows[held_pk]
+    return rows.get(giver.pk), None if held_pk is None else rows.get(held_pk)
 
 
 def _transfer_guard(
@@ -1733,6 +1753,8 @@ def _transfer_guard(
         return "transfer_disabled"
     if event.state not in TRANSFER_EVENT_STATES:
         return "event_state"
+    if not is_staff and not event.allow_user_signups:
+        return "user_signups_disabled"
     if check is not None and check.phase == ReadyCheckPhase.HELD:
         return "ready_check_held"
     if giver.status in REMOVED_SIGNUP_STATUSES:
@@ -1771,20 +1793,18 @@ def _is_org_member(event: Event, user: CustomUser) -> bool:
 def _member_recipient_eligibility(
     event: Event, giver: EventSignup, recipient_user: CustomUser, actor: SignupActor
 ) -> EligibilityResult:
-    if not _is_org_member(event, recipient_user):
-        raise _refuse_transfer(
-            "not_org_member", event=event, actor=actor, recipient_user=recipient_user
-        )
+    is_member = _is_org_member(event, recipient_user)
     result = evaluate_signup(
         event, recipient_user, intent=giver.commitment, actor=actor.user
     )
-    if not result.clean:
+    if not is_member or not result.clean:
         raise _refuse_transfer(
-            "recipient_ineligible",
+            "recipient_ineligible" if is_member else "not_org_member",
             event=event,
             actor=actor,
             recipient_user=recipient_user,
-            reasons=_member_safe_reasons(result),
+            reasons=_member_safe_reasons(result, opaque=not is_member),
+            shown_code="recipient_ineligible",
         )
     return result
 
@@ -2001,7 +2021,12 @@ def transfer_spot(
     """Hand the giver's exact place in line to another member, or swap
     places when the recipient already holds one. Nobody else moves."""
     locked = lock_event(giver.event)
-    giver, held = _lock_transfer_rows(locked, giver, recipient_user)
+    found, held = _lock_transfer_rows(locked, giver, recipient_user)
+    if found is None:
+        raise _refuse_transfer(
+            "giver_not_active", event=locked, actor=actor, recipient_user=recipient_user
+        )
+    giver = found
     is_staff = actor.role == ActorRole.STAFF
     swap = held is not None and held.status not in REMOVED_SIGNUP_STATUSES
     target = (
