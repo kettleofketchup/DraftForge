@@ -50,7 +50,18 @@ Two event settings, both on by default, decide whether a signup that comes back 
 
 With both settings off, a member who returns or switches keeps their old place. If the event is full they wait on the waitlist in that place and are promoted before anyone who signed up after them.
 
-Every restamp logs `signup_line_restamped` (`system=events`, `subsystem=line`) with a `reason`: `resign_up`, `switch`, `demote`, `member_reinstate`, `staff_reinstate`, `staff_add` or `bare_decline`.
+Every restamp logs `signup_line_restamped` (`system=events`, `subsystem=line`) with a `reason`: `resign_up`, `switch`, `demote`, `member_reinstate`, `staff_reinstate`, `staff_add`, `bare_decline` or `transferred_out`.
+
+### Spot transfer
+
+With the `allow_spot_transfer` event setting on (off by default), a signup's place in line can be handed to another member while signups are open or during roll call (see [Spot transfer](../events.md#spot-transfer) for the full rules):
+
+- **Transfer:** the recipient has no place. They take the giver's `line_seq`, `signed_up_at` and status, on their existing signup if they have one or on a new one. The giver's signup is cancelled and restamped to the back of the line, so a giver who signs up again does not get the old place back.
+- **Swap:** the recipient already holds a place. The two signups exchange `line_seq` and `signed_up_at`, and each takes the other's status, except that a member swap never lowers the recipient's own approval. Main and Maybe places can't be swapped. A member can only swap with someone whose place is behind theirs and whose status is not ahead of theirs; staff can swap in any direction.
+
+Only the two signups change. Nobody is promoted and no other place moves. Each side keeps its own commitment, RSVP class and original sign-up. The recipient must be an organization member and meet every signup requirement of the event; members get no overrides, and on a manual-approval event the recipient still needs staff approval. Staff transfers go through the staff reason policy and the staff placement overrides. Tournament membership follows the new statuses.
+
+A transfer is not a withdrawal: the giver's cancel writes no `withdrew` entry, so it cannot be voided, and it records no late cancel.
 
 ## Commitment
 
@@ -109,6 +120,8 @@ Each signup change writes one entry (moving a signup to another event writes one
 | `account_merged` | A signup moves to another account in an account merge |
 | `moved_event` | The stale repeater cleanup moves a signup to another event |
 | `voice_presence_set` | An operator sets presence by hand, with a required reason; a resulting confirmation links to this entry through `caused_by` |
+| `transferred_out` / `transferred_in` | A signup's place is handed to a member who held none: `transferred_out` on the giver's signup, `transferred_in` on the recipient's (with an empty before snapshot when the signup is new) |
+| `swapped` | Two signups that both held a place swap places; each signup gets its own `swapped` entry |
 
 The role and means show who acted and how:
 
@@ -143,9 +156,14 @@ The correlation id groups entries that belong to one action:
 | Stale repeater cleanup | `cleanup-<id>`, one per run |
 | Ready check | `rc<check id>:<step>`, for example `rc12:close`, on every entry the step writes |
 | Manual voice presence | `vp<event id>:<user id>`; any resulting confirmation uses `rc<check id>:confirm` and links back through `caused_by` |
+| Spot transfer | `xfer:<random hex>`, shared by the two entries of one transfer or swap |
 | Website | Empty |
 
 Feed joins and leaves do not write ledger entries; their presence rows hold the evidence. Only confirmations and manual overrides are recorded here.
+
+### Spot transfers
+
+The two entries of a transfer or swap share an `xfer:` correlation id and are recorded as the person who acted. Each after snapshot carries `extra.counterparty_user_id`, the member on the other side. A staff transfer stores its reason on both entries, and any overridden rules on the entry of the side they applied to. During roll call, a recipient asked in the live ready check also gets the check's own `ready_check_asked` entry.
 
 ### Voided withdrawals
 

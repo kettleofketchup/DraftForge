@@ -144,6 +144,7 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 - **Waitlist** — when max players is reached, new signups are waitlisted. A signup's waitlist position is its rank among the waitlisted signups in line order, and promotion takes the next waitlisted signup in line
 - **Re-RSVP** — cancelled, declined and rejected signups can sign up again. The same signup is reused, so its history stays in one place
 - **Main/Maybe switch** — switching between RSVP (Main) and tentative (Maybe) changes the same signup. Moving from Main to Maybe frees the seat for the next waitlisted signup
+- **Spot transfer** — when the event allows it, a member can give their place in line to another eligible member, or swap places with a member who already holds one. See [Spot transfer](#spot-transfer)
 
 Each signup keeps a place in line and its original sign-up, and the signup ledger records every change to it, with who made it and how: see [Signup Ledger & Line Position](events/signup-ledger.md).
 
@@ -153,6 +154,7 @@ The **Signup Line** settings decide whether a returning or switching signup keep
 |---|---|---|---|
 | **Withdrawing gives up your place** (`line_withdraw_forfeits`) | on | A member who withdraws, declines or is rejected and signs up again goes to the back of the line | They get their old place back |
 | **Switching Main/Maybe gives up your place** (`line_switch_restamps`) | on | Moving between Main and Maybe sends the signup to the back of the line | It keeps its place |
+| **Allow spot transfer** (`allow_spot_transfer`) | off | Members can give their place to another eligible member, or swap with one who holds a place. See [Spot transfer](#spot-transfer) | The action is hidden and the API refuses it |
 
 With both on, which is the default, the order is the same as before these settings existed. Signup rows on the event page and the roll call page show **in line since**: the time the signup took its current place.
 
@@ -219,6 +221,24 @@ A void does not undo everything the withdrawal did:
 - a [late cancel](organization-conduct.md#late-cancels) recorded by the member's own withdrawal stays until the event completes. As for a member who signs up again, completion clears it while the member is still on the event. Staff can also change it in the Attendance panel.
 
 The signup's History shows the void as **Withdrawal voided**, with the reason and any overridden rule. See [Signup Ledger](events/signup-ledger.md#what-gets-recorded).
+
+#### Spot transfer
+
+With **Allow spot transfer** on, a member who holds a place can hand it to another member. It is off by default, and a series passes it on to its future events like the other Signup Line settings. Transfers work while signups are open and during roll call, but not while the ready check is held.
+
+- **Give my place** on the member's own signup card opens a dialog with a member search. When the chosen member has no place, the transfer takes effect at once: they take the giver's exact place in line (`line_seq` and `signed_up_at`) and status, and the giver's signup is cancelled.
+- When the chosen member already holds a place, the two **swap** places. A member can only swap with someone whose place is behind theirs and whose status is not ahead of theirs, so a swap never moves the other member forward against their interest. Main and Maybe places can't be swapped with each other.
+- Nobody else moves and nobody is promoted, so the number of seats taken stays the same. Tournament membership follows the new statuses.
+- Each side keeps their own commitment (Main or Maybe) and RSVP class, and their own original sign-up.
+- A giver who later signs up again goes to the back of the line.
+
+**Who the place can go to.** The recipient must be a member of the event's organization and must meet every signup requirement of the event, checked as if they signed up with the giver's commitment. A refusal lists the unmet requirements. Members never get an override. On an event with manual approval the recipient still needs staff approval ("Staff will need to approve them."), and a member transfer never gives the recipient a status their own signup would not get. During roll call, a recipient is confirmed only if they confirmed in the ready check themselves; otherwise they take the place as approved and are asked in the live ready check.
+
+**Staff.** Event staff can transfer anyone's place from the **Transfer place** button on the signup rows. A staff transfer is a placement under [Staff reasons](#staff-reasons), so the event's choice may require a reason. Unmet requirements, and a recipient who is not an organization member, go through the organization's [Staff placement](organization-settings.md#staff-placement) policy, the same as other staff overrides. Staff can also place a rejected or dropped member and swap in any direction. Staff acting on their own signup are treated as a member.
+
+The roll call page has no transfer button yet; use the event page.
+
+Both signups' History show the change as **Transferred out** / **Transferred in**, or **Swapped** on both sides. See [Signup Ledger](events/signup-ledger.md#spot-transfer).
 
 #### Web vs Discord parity
 
@@ -385,6 +405,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
 | POST | `/api/events/signups/{id}/reinstate/` | Re-enable a cancelled signup. Staff restore the exact place when the withdrawal is on record (while signups are open, only when that would not seat the member over capacity). Staff may send `acknowledged_codes`; `409` `override_required` in roll call on a full event under the Confirm or Block policy. See [Voiding a withdrawal](#voiding-a-withdrawal) |
 | POST | `/api/events/signups/{id}/void-withdrawal/` | Void the latest cancel, decline or rejection and restore the signup exactly (event staff; `403` for anyone else). Optional body `{"reason": "...", "acknowledged_codes": ["over_capacity"]}`. `400` when the signup is not cancelled or rejected, or has no recorded withdrawal; `409` `override_required` on a full event under the Confirm or Block policy. See [Voiding a withdrawal](#voiding-a-withdrawal) |
+| POST | `/api/events/signups/{id}/transfer/` | Give this signup's place to another member, or swap when they hold one. Body `{"recipient_user_id": <int>}`; staff on someone else's signup may add `reason` and `acknowledged_codes`. Returns `{mode: "transfer" \| "swap", correlation_id, giver, recipient}`. Refusals are 400 `{code, error, reasons?}` with `code` one of `transfer_disabled`, `event_state`, `ready_check_held`, `giver_not_active`, `same_user`, `recipient_not_found`, `recipient_removed`, `commitment_mismatch`, `swap_would_demote_recipient`, `gate_distance`, `not_org_member`, `recipient_ineligible`; `409` `override_required` for staff. `403` for anyone other than the signup's member or event staff. See [Spot transfer](#spot-transfer) |
 
 ### Repeaters & defaults
 
