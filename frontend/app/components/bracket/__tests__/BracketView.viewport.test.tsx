@@ -10,19 +10,20 @@ import { useTournamentStore } from '~/store/tournamentStore';
 import { BracketView } from '../BracketView';
 import type { BracketMatch } from '../types';
 
-const { getLayoutedElements, fitView, setViewport, flow } = vi.hoisted(() => ({
-  getLayoutedElements: vi.fn(),
+const { useElkLayout, fitView, setViewport, flow } = vi.hoisted(() => ({
+  useElkLayout: vi.fn().mockReturnValue({ getLayoutedElements: vi.fn() }),
   fitView: vi.fn(),
   setViewport: vi.fn(),
   flow: {
     onNodesChange: undefined as undefined | ((changes: NodeChange[]) => void),
+    nodes: [] as { id: string; position: { x: number; y: number } }[],
   },
 }));
 
 vi.mock('@xyflow/react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
   type StubProps = {
-    nodes: { id: string; type?: string }[];
+    nodes: { id: string; type?: string; position: { x: number; y: number } }[];
     onNodesChange?: (changes: NodeChange[]) => void;
   };
   return {
@@ -34,6 +35,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     }),
     ReactFlow: ({ nodes, onNodesChange }: StubProps) => {
       flow.onNodesChange = onNodesChange;
+      flow.nodes = nodes;
       return <div data-testid="flow" data-count={nodes.length} />;
     },
     Background: () => null,
@@ -53,6 +55,7 @@ vi.mock('~/store/userStore', async () => {
 vi.mock('~/store/bracketStore', async () => {
   const { create } = await import('zustand');
   const store = create(() => ({
+    tournamentId: null as number | null,
     matches: [] as BracketMatch[],
     isDirty: false,
     setMatchWinner: () => {},
@@ -83,6 +86,7 @@ vi.mock('~/hooks/useCanManageTournament', () => ({
   useCanManageCurrentTournament: () => true,
 }));
 vi.mock('~/hooks/useBracket', () => ({
+  MATCH_RESULT_MUTATION_KEY: ['bracket-match-result'],
   useBracketQuery: () => ({ isLoading: false, data: { matches: [] } }),
   usePersistMatchResult: () => ({ isPending: false, mutate: vi.fn() }),
 }));
@@ -94,7 +98,7 @@ vi.mock('~/hooks/useGameLobby', () => ({
   useGameLobby: () => ({ data: undefined }),
 }));
 vi.mock('~/components/bracket/hooks/useElkLayout', () => ({
-  useElkLayout: () => ({ getLayoutedElements }),
+  useElkLayout,
 }));
 vi.mock('~/components/bracket/controls/BracketToolbar', () => ({
   BracketToolbar: () => <div data-testid="bracket-toolbar" />,
@@ -212,5 +216,94 @@ describe.each([
       useBracketStore.setState({ matches: [baseMatch, secondMatch] });
     });
     await waitFor(() => expect(viewportSpy).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('BracketView layout', () => {
+  const winnersFinal: BracketMatch = {
+    ...baseMatch,
+    id: 'w-2-0',
+    gameId: 44,
+    round: 2,
+    position: 0,
+    nextMatchId: 'gf-1-0',
+  };
+  const losersMatch: BracketMatch = {
+    ...baseMatch,
+    id: 'l-1-0',
+    gameId: 45,
+    bracketType: 'losers',
+    nextMatchId: 'gf-1-0',
+  };
+  const grandFinal: BracketMatch = {
+    ...baseMatch,
+    id: 'gf-1-0',
+    gameId: 46,
+    bracketType: 'grand_finals',
+  };
+
+  beforeEach(() => {
+    setViewport.mockReset();
+    useElkLayout.mockClear();
+    useBracketStore.setState({
+      matches: [
+        { ...baseMatch, nextMatchId: 'w-2-0' },
+        { ...secondMatch, nextMatchId: 'w-2-0' },
+        winnersFinal,
+        losersMatch,
+        grandFinal,
+      ],
+      isDirty: false,
+    });
+  });
+
+  it('positions nodes and left-aligns the viewport on the leftmost match', async () => {
+    render(<BracketView tournamentId={7} />, { wrapper: Wrapper });
+    await waitFor(() => expect(setViewport).toHaveBeenCalledTimes(1));
+
+    const positions = Object.fromEntries(
+      flow.nodes.map((n) => [n.id, n.position]),
+    );
+    expect(positions).toMatchInlineSnapshot(`
+      {
+        "divider-winners-losers": {
+          "x": -2000,
+          "y": 350,
+        },
+        "gf-1-0": {
+          "x": 670,
+          "y": 75,
+        },
+        "l-1-0": {
+          "x": 0,
+          "y": 450,
+        },
+        "w-1-0": {
+          "x": 0,
+          "y": 0,
+        },
+        "w-1-1": {
+          "x": 0,
+          "y": 150,
+        },
+        "w-2-0": {
+          "x": 400,
+          "y": 75,
+        },
+      }
+    `);
+    expect(setViewport.mock.calls[0][0]).toMatchInlineSnapshot(`
+      {
+        "x": 40,
+        "y": 44.303797468354446,
+        "zoom": 0.8860759493670886,
+      }
+    `);
+  });
+
+  it('does not subscribe to the ELK layout hook', async () => {
+    render(<BracketView tournamentId={7} />, { wrapper: Wrapper });
+    await waitFor(() => expect(setViewport).toHaveBeenCalledTimes(1));
+    expect(useElkLayout).not.toHaveBeenCalled();
   });
 });

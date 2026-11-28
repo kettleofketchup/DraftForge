@@ -1,2 +1,0 @@
-- The announcement channel picker now appears whenever the attendance reminder, profile reminder, pre-day announcement or series new-event posts are on, and explains that the channel is shared.
-- Editing a single event from a series no longer shows the series-only new-event toggle, which had no effect there.

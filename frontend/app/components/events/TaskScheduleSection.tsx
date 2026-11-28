@@ -3,12 +3,31 @@ import { Play } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import api from '~/components/api/axios';
+import {
+  DiscordPermissionBadge,
+  type PermissionCheckResult,
+  type PermissionQuery,
+} from '~/features/discord-permissions';
+
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
+
+export const TASK_PERMISSION_KEYS: Record<string, string[]> = {
+  signup_post: ['signup_post', 'signup_fallback'],
+  announcement: ['announcement'],
+  confirm_attendance: ['attendance_reminder'],
+  profile_reminder: ['profile_reminder'],
+  start_mention: ['start_mention'],
+  signup_reminder: ['signup_reminder'],
+  scheduled_event: ['scheduled_event_create'],
+  signup_update: ['signup_edit'],
+  draft_dm: ['draft_dm'],
+  herodraft_dm: ['herodraft_dm'],
+};
 
 interface FiredByUser {
   pk: number;
@@ -73,13 +92,12 @@ function formatRelativeTime(dateStr: string): string {
   return `${prefix}${days}d ${hours % 24}h${suffix}`;
 }
 
-const isRepostTask = (task: TaskEntry) =>
-  task.status === 'fired' &&
-  (task.task === 'signup_post' || task.task === 'announcement');
+const isSignupPostTask = (task: TaskEntry) =>
+  task.task === 'signup_post' || task.task === 'announcement';
 
 export function fireConfirmDescription(task: TaskEntry): string {
-  if (isRepostTask(task)) {
-    return `This will clear the existing post tracking and create a fresh "${task.label}" in Discord. Use this if the original message was deleted or you want to push an updated version.`;
+  if (isSignupPostTask(task)) {
+    return 'This queues a fresh post. An earlier post may already exist.';
   }
   if (task.task === 'start_mention') {
     return 'This will @mention every signed-up member in replies to the signup post right now. It can only be sent once per event.';
@@ -91,12 +109,16 @@ interface TaskScheduleSectionProps {
   eventId: number;
   isAdmin?: boolean;
   eventTimezone?: string;
+  permissionResults?: Map<string, PermissionCheckResult>;
+  permissionState?: PermissionQuery['state'];
 }
 
 export function TaskScheduleSection({
   eventId,
   isAdmin,
   eventTimezone,
+  permissionResults,
+  permissionState = 'idle',
 }: TaskScheduleSectionProps) {
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
   const queryClient = useQueryClient();
@@ -109,7 +131,7 @@ export function TaskScheduleSection({
     mutationFn: (taskName: string) =>
       api.post(`/events/${eventId}/task-schedule/${taskName}/fire/`),
     onSuccess: (_data, taskName) => {
-      toast.success(`Task "${taskName}" fired`);
+      toast.success(`Task "${taskName}" queued`);
       queryClient.invalidateQueries({
         queryKey: ['event-task-schedule', eventId],
       });
@@ -120,7 +142,7 @@ export function TaskScheduleSection({
       if (err?.response?.status === 409) {
         toast.warning(msg);
       } else {
-        toast.error(`Failed to fire "${taskName}": ${msg}`);
+        toast.error(`Failed to queue "${taskName}": ${msg}`);
       }
     },
   });
@@ -191,6 +213,27 @@ export function TaskScheduleSection({
               {/* Task name + description */}
               <td className="py-2.5">
                 <div className="font-medium text-foreground">{task.label}</div>
+                {permissionResults &&
+                  (TASK_PERMISSION_KEYS[task.task] ?? []).map((key) => {
+                    const resolvedKey =
+                      key === 'signup_edit' &&
+                      !permissionResults.has(key) &&
+                      permissionResults.has('announcement_edit')
+                        ? 'announcement_edit'
+                        : key;
+                    const result = permissionResults.get(resolvedKey);
+                    if (!result) return null;
+                    return (
+                      <DiscordPermissionBadge
+                        key={resolvedKey}
+                        operationLabel={task.label}
+                        result={result}
+                        state={permissionState}
+                        disabled={task.status === 'disabled'}
+                        data-testid={`task-permission-${task.task}-${resolvedKey}`}
+                      />
+                    );
+                  })}
                 {task.description && (
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {task.description}
@@ -272,7 +315,7 @@ export function TaskScheduleSection({
                       onClick={() => setConfirmTask(task)}
                       disabled={fireMutation.isPending}
                       title={
-                        isRepostTask(task)
+                        isSignupPostTask(task)
                           ? `Repost ${task.label}`
                           : `Fire ${task.label} now`
                       }
@@ -289,16 +332,20 @@ export function TaskScheduleSection({
       </table>
 
       <ConfirmDialog
+        confirmTestId="task-fire-confirm"
+        cancelTestId="task-fire-cancel"
         open={!!confirmTask}
         onOpenChange={(open) => !open && setConfirmTask(null)}
         title={
-          confirmTask && isRepostTask(confirmTask)
+          confirmTask && isSignupPostTask(confirmTask)
             ? `Repost ${confirmTask.label}?`
             : `Fire ${confirmTask?.label}?`
         }
         description={confirmTask ? fireConfirmDescription(confirmTask) : ''}
         confirmLabel={
-          confirmTask && isRepostTask(confirmTask) ? 'Repost' : 'Fire Now'
+          confirmTask && isSignupPostTask(confirmTask)
+            ? 'Queue repost'
+            : 'Fire Now'
         }
         variant="default"
         onConfirm={() => {

@@ -1,0 +1,110 @@
+{
+  "banner": {
+    "unsaved": "Not saved yet: this preview uses the values in the form."
+  },
+  "button": {
+    "aria": "Preview {{title}}",
+    "label": "Preview"
+  },
+  "component": {
+    "select_placeholder": "Make a selection"
+  },
+  "destination": {
+    "channel": "Posts in {{channel}}.",
+    "dm": "Sent as a direct message.",
+    "fallback": "If that fails, posts in {{channel}}.",
+    "forum_thread": "Posts in {{channel}} as a new thread \"{{thread}}\".",
+    "no_channel": "No channel selected.",
+    "reply": "Replies to the signup post in {{channel}}.",
+    "reply_unknown": "Replies to the signup post.",
+    "scheduled_event": "Shows in the server's Events tab.",
+    "unset": "No channel selected"
+  },
+  "dialog": {
+    "close": "Close",
+    "description": "See how this will appear in Discord.",
+    "loading": "Loading preview"
+  },
+  "error": {
+    "generic": "Could not load the preview.",
+    "retry": "Retry"
+  },
+  "gate": {
+    "already_sent": "Already sent for this event.",
+    "no_channel": "Not sent: no channel is selected.",
+    "no_discord_server": "Not sent: this organization has no Discord server linked.",
+    "no_recipients": "No one would be mentioned right now; nothing is sent.",
+    "no_scheduled_event_yet": "Not sent: the Discord scheduled event has not been created yet.",
+    "no_signup_channel": "Not sent: no signup channel is selected.",
+    "no_signup_post_yet": "Not sent: the signup post has not been posted yet.",
+    "not_a_series": "Not sent: only events in a series have subscribers.",
+    "occurrence_collision": "Not created: this time falls on one of the series' scheduled occurrences.",
+    "series_ended": "Not sent: the series has ended.",
+    "series_paused": "Not sent: the series is paused.",
+    "start_in_past": "Not sent: the event start time has passed.",
+    "state_not_open_or_roll_call": "Not sent now: this is only sent while signups are open or during roll call.",
+    "state_not_signups_open": "Not sent yet: this posts when signups open.",
+    "toggle_off": "Off: nothing is sent until you turn this on",
+    "would_send": "Ready: this is sent at its scheduled time."
+  },
+  "kind": {
+    "announcement_notice": "Pre-day announcement",
+    "attendance_reminder": "Attendance reminder",
+    "new_event_post": "New event post",
+    "profile_reminder": "Profile update reminder",
+    "scheduled_event": "Discord scheduled event",
+    "scheduled_event_sync": "Synced scheduled event",
+    "signup_post": "Signup post",
+    "signup_reminder": "Signup reminder DM",
+    "start_mention": "Start mention"
+  },
+  "markdown": {
+    "spoiler": "Spoiler"
+  },
+  "mention": {
+    "unknown_channel": "#channel:{{id}}",
+    "unknown_role": "@role:{{id}}",
+    "unknown_user": "@user:{{id}}"
+  },
+  "message": {
+    "app_tag": "APP",
+    "bot_name": "DraftForge",
+    "reply_label": "Signup post"
+  },
+  "missing": {
+    "name": "Name",
+    "schedule": "Schedule",
+    "scheduled_at": "Date and time"
+  },
+  "note": {
+    "dm_per_subscriber": "Sent as a direct message to each series subscriber who has not signed up.",
+    "edits_refresh_embed_only": "Later signup changes update this post's embed and buttons only.",
+    "existing_event_still_posts": "The series makes no new events, but its existing upcoming event still posts.",
+    "fallback_drops_role_mentions": "If posting in the signup channel fails, it is posted in the announcement channel without role mentions.",
+    "fallback_replaces_notice": "With no signup post, the signup post goes to the announcement channel instead, and this announcement is not sent.",
+    "next_event_already_open_not_updated": "The next event already has signups open, so it is not changed.",
+    "notice_falls_back_if_signup_post_fails": "If the signup post fails, the signup post is posted here instead of this announcement.",
+    "shown_as_posted_when_signups_open": "Shown as it will be posted when signups open.",
+    "signup_link_points_to_post": "The \"Sign up here!\" link opens the signup post, which is created just before this notice.",
+    "signup_post_in_signup_channel": "The signup post goes to the signup channel.",
+    "sync_keeps_created_name_and_time": "Syncing signups changes only the description. Discord keeps the name and times the scheduled event was created with, shown here.",
+    "sync_overwrites_description": "Syncing signups replaces the Discord event description with this text.",
+    "unsaved_links": "Not saved yet: the event link opens the events list until you save."
+  },
+  "scheduled_event": {
+    "ends": "Ends",
+    "location": "Location",
+    "starts": "Starts"
+  },
+  "start_mention": {
+    "header_label": "Header used when members are mentioned"
+  },
+  "status": {
+    "needs_input": "Fill in these fields to see a preview: {{fields}}",
+    "needs_input_intro": "Fill in these fields to see a preview:",
+    "unavailable": "Previews are available when creating or editing an event, which uses these defaults."
+  },
+  "variant": {
+    "current_post": "The existing post, as it is updated now"
+  }
+}

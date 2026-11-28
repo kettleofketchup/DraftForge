@@ -16,6 +16,7 @@ Modules:
     events        event state, event reads, repeaters, due scheduled events
     steam         league sync state, matches, league stats, MMR
     ops_notices   emit/resolve operations notices
+    mmr_requests  nightly MMR screenshot retention purge
 
 The tournament client (tournament/game reads, hero-draft creation) lives in
 ``tournament.internal_client`` on the same transport. User avatar and Discord-name
@@ -29,9 +30,12 @@ on that module too.
 
 from app.internal_client import transport
 from app.internal_client.discord import (
+    begin_signup_delivery,
     check_message_log_exists,
     claim_discord_message_log,
+    claim_discord_message_log_result,
     clear_event_signup_state,
+    complete_signup_delivery,
     create_activity_notification_invite,
     create_event_dm,
     create_event_log,
@@ -44,7 +48,9 @@ from app.internal_client.discord import (
     get_fired_message_sources,
     get_first_message_log,
     get_or_create_discord_event,
+    get_signup_blocked_event_ids,
     get_sync_discord_state,
+    mark_signup_delivery_sending,
     search_message_logs,
     sweep_discord_leases,
     update_discord_event,
@@ -65,6 +71,7 @@ from app.internal_client.events import (
     get_repeater_subscribers,
     transition_event_state,
 )
+from app.internal_client.mmr_requests import purge_mmr_screenshots
 from app.internal_client.ops_notices import (
     OpsNoticeTransientError,
     emit_ops_notice,
@@ -87,10 +94,13 @@ __all__ = [
     "OpsNoticeTransientError",
     "auto_close_event",
     "batch_upsert_matches",
+    "begin_signup_delivery",
     "check_message_log_exists",
     "claim_discord_message_log",
+    "claim_discord_message_log_result",
     "create_activity_notification_invite",
     "clear_event_signup_state",
+    "complete_signup_delivery",
     "create_event_dm",
     "create_event_log",
     "create_message_log",
@@ -112,9 +122,12 @@ __all__ = [
     "get_first_message_log",
     "get_or_create_discord_event",
     "get_repeater_subscribers",
+    "get_signup_blocked_event_ids",
     "get_steam_sync_state",
     "get_sync_discord_state",
     "get_tracked_steam_league_ids",
+    "mark_signup_delivery_sending",
+    "purge_mmr_screenshots",
     "recalculate_user_mmr",
     "resolve_ops_notice",
     "search_message_logs",

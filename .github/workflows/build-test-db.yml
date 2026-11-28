@@ -16,6 +16,7 @@ on:
       # populate's direct imports; keep in step with scripts/hash-test-db-sources.sh
       - 'backend/common/game.py'
       - 'backend/config/promotion_sync.py'
+      - 'backend/discordbot/permissions/flags.py'
       - 'backend/discordbot/services/users.py'
       - 'backend/events/constants.py'
       - 'backend/events/ledger.py'

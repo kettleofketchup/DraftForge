@@ -35,6 +35,7 @@ def sync_fixture(event: SimpleNamespace) -> SimpleNamespace:
         events_with_signup=[],
         events_with_scheduled=[],
         events_with_recent_attempt=[],
+        events_with_signup_blocked=[],
     )
 
 
@@ -51,7 +52,7 @@ class SyncSignupPostEligibilityTest(SimpleTestCase):
                         "events.tasks.get_sync_discord_state",
                         return_value=sync_fixture(event),
                     ),
-                    patch("events.tasks.send_event_announcement") as send,
+                    patch("events.tasks.run_signup_post") as send,
                 ):
                     sync_discord_events()
                 if (signup[0] and signup[1]) or (announcement[0] and announcement[1]):
@@ -72,7 +73,7 @@ class SyncSignupPostEligibilityTest(SimpleTestCase):
                     state.existing_logs = [("event_announcement", event.pk)]
                 with (
                     patch("events.tasks.get_sync_discord_state", return_value=state),
-                    patch("events.tasks.send_event_announcement") as send,
+                    patch("events.tasks.run_signup_post") as send,
                 ):
                     sync_discord_events()
                 send.assert_not_called()

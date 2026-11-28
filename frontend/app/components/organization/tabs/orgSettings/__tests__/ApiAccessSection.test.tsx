@@ -28,7 +28,9 @@ afterEach(() => {
 describe('useApiAccessSection', () => {
   it('reports an open connection draft to the host and never saves it', async () => {
     const selectSection = vi.fn();
-    const ref = { current: { selectSection, sectionOfField: vi.fn() } };
+    const ref = {
+      current: { selectSection, sectionOfField: vi.fn(), revealField: vi.fn() },
+    };
     const { result } = renderHook(() => useApiAccessSection(7, true, ref));
     render(<>{result.current.content}</>);
     expect(result.current.unit.isDirty).toBe(false);

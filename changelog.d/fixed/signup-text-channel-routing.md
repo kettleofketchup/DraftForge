@@ -1,0 +1,1 @@
+- Recover deleted legacy Discord signup posts tracked only by a successful message log, without clearing replacement posts or active delivery attempts.

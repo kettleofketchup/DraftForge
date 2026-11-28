@@ -119,6 +119,10 @@ Each post that sends a channel message has its own channel field:
 | Profile reminder | `discord_profile_reminder_channel_id` | Announcement channel |
 | New-event post | `discord_new_event_channel_id` | Announcement channel, whether or not the pre-day announcement is on |
 
+Each setting shows a permission badge for the destination it would actually use (own channel, fallback or posted message), green only when the bot has every permission that action needs. See [Discord Permission Badges](events/discord-permissions.md).
+
+The signup destination receives a regular message in a text or announcement channel, or an event-titled post in a forum channel.
+
 The start mention has no channel: it replies to the signup post. Existing events and series have the three new fields blank, so they keep posting where they did before. An optional picker shows *Use announcement channel (#name)* while it is blank, has a clear button to go back to blank, and warns when neither it nor the announcement channel is set. The announcement channel picker sits in the pre-day announcement card while that post is on; otherwise it is shown at the end of the channel posts whenever a post with no channel of its own would fall back to it.
 
 The Discord section of the event, series and organization defaults forms is split into three groups:
@@ -127,7 +131,22 @@ The Discord section of the event, series and organization defaults forms is spli
 - **Channel posts**: the signup post, start mention, pre-day announcement, attendance reminder, profile reminder and (series only) new-event post. Every post except the start mention has its own channel picker.
 - **Direct messages**: the signup reminder DM to series subscribers. Single events show "Direct messages are set on recurring series." instead; in the organization defaults it is the default for new series.
 
+Each message toggle has a **Preview** button that shows exactly what Discord will receive for the values in the form, without sending or saving anything. See [Discord Message Preview](events/discord-message-preview.md).
+
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
+
+#### Signup post delivery
+
+Signup posts use the selected channel's type: ordinary text and announcement channels receive a normal message; forum channels receive a new forum post. The per-post channel choices and announcement-channel defaults above still apply.
+
+When Discord confirms a failed automatic attempt, retries wait 1, 2, 4 and 8 minutes after successive failures, stopping after 5 attempts in total. Changing the channel does not reset this limit or trigger a retry by itself. After fixing the configuration, use **Repost** in the event's **Discord Tasks** panel to start a fresh attempt budget.
+
+Repost requires confirmation and is refused while a signup post attempt is in progress. **Queue repost** queues work; a queued response does not mean the post has appeared in Discord. A queue failure means the work was not accepted, not that Discord rejected a post.
+
+!!! warning "An earlier post may already exist"
+    If an earlier attempt's result is unknown, automatic posting stops to avoid duplicates. Check the destination in Discord before explicitly reposting: an earlier post may already exist, and Repost can create a second post. This warning also applies when no successful post has been recorded yet.
+
+A failed announcement notice does not cause the signup post to be posted again. If the current signup post is deleted in Discord, it is eligible for automatic recreation when the deletion is detected; a deletion for an older, replaced post does not clear its replacement.
 
 ### RSVP & Signups
 
@@ -288,6 +307,8 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/{id}/complete/` | Complete the event from `roll_call` or `in_progress`, award host/helper points and finalize attendance outcomes (org admin). Returns the event; `400` from any other state or when another close won the race. |
 | PUT | `/api/events/{id}/staff/` | Set host and helpers (org admin). Body: `{"host_id": <int\|null>, "helper_ids": [<int>, ...]}`. Returns the event. `400` if the host is also a helper or a user doesn't exist. Writes an `OrgLog` `set_event_staff` entry. |
 | GET | `/api/events/{id}/discord-logs/` | Discord notification audit log for the event's tournament |
+| GET | `/api/events/{id}/permission-checks/` | Read-only Discord permission checks for the saved event's destinations (event staff). `?refresh=true` rechecks. See [Discord Permission Badges](events/discord-permissions.md). |
+| POST | `/api/events/{id}/permission-checks/` | Permission checks for unsaved edits to this event (event staff). Body: `{"checks": [...], "refresh": <bool>}`. |
 | GET | `/api/events/{id}/lobby-password/` | The event's lobby password. Org staff get `{mode, password, source, can_manage}`, registered players (approved or confirmed signup, or rostered) get `{password}`, anyone else `404`. Never cached. |
 | POST | `/api/events/{id}/lobby-password/regenerate/` | New random lobby password (org staff); `409` in fixed mode. Existing lobbies keep theirs. |
 
@@ -316,3 +337,4 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | GET | `/api/events/defaults/` | Get org event defaults |
 | PATCH | `/api/events/defaults/{id}/` | Update org defaults |
 | GET | `/api/discord/organizations/{id}/channels/` | List Discord channels |
+| POST | `/api/discord/organizations/{id}/permission-checks/` | Read-only Discord permission checks for draft creation, series and defaults settings (org staff). Body: `{"checks": [...], "refresh": <bool>}`. |

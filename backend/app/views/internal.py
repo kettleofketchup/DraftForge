@@ -13,7 +13,6 @@ from datetime import timedelta
 from typing import Any
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import (
@@ -26,6 +25,7 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from discordbot.delivery_types import valid_discord_id
 from discordbot.models import (
     ChannelType,
     DiscordEvent,
@@ -37,9 +37,14 @@ from discordbot.models import (
     DiscordTournamentLog,
     ScheduledEvent,
 )
+from discordbot.signup_delivery import (
+    blocked_signup_event_ids,
+    clear_signup_state_for_deleted_message,
+)
 from events.capacity import with_signup_counts
 from events.completion import close_event
-from events.constants import EventState
+from events.constants import DISCORD_SYNC_HORIZON, EventState
+from events.discord.state import load_discord_event_state, message_log_exists
 from events.ledger import SignupActor
 from events.models import Event, EventRepeater, RepeaterSubscription
 from events.ready_check import READY_CHECK_HELD_MESSAGE, transition_with_ready_check
@@ -214,12 +219,7 @@ def check_message_log_exists(request: Request) -> Response:
             {"error": "source and source_id required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    exists = (
-        DiscordMessageLog.objects.filter(source=source, source_id=source_id)
-        .filter(Q(success__isnull=True) | Q(success=True))
-        .exists()
-    )
-    return Response({"exists": exists})
+    return Response({"exists": message_log_exists(source, source_id)})
 
 
 @api_view(["GET"])
@@ -274,45 +274,8 @@ def search_message_logs(request: Request) -> Response:
 def get_discord_event_state(request: Request, event_id: int) -> Response:
     """Get DiscordEvent + related records for an event (celery reads)."""
 
-    result = {
-        "has_discord_event": False,
-        "scheduled_event_id": None,
-        "signup_posted": False,
-        "fired_actions": [],
-        "has_dms": False,
-    }
-
-    try:
-        de = DiscordEvent.objects.get(event_id=event_id)
-        result["has_discord_event"] = True
-        result["discord_event_pk"] = de.pk
-        result["scheduled_event_id"] = de.scheduled_event_id or None
-
-        result["fired_actions"] = list(
-            DiscordEventLog.objects.filter(discord_event=de, success=True).values_list(
-                "action", flat=True
-            )
-        )
-
-        result["has_dms"] = DiscordEventDM.objects.filter(discord_event=de).exists()
-    except DiscordEvent.DoesNotExist:
-        pass
-
-    signup_msg = DiscordEventMsgSignup.objects.filter(
-        event_id=event_id, has_posted=True
-    ).first()
-    result["signup_posted"] = signup_msg is not None
-    if signup_msg:
-        result["signup_message_id"] = signup_msg.message_id
-        result["signup_channel_id"] = signup_msg.channel_id
-        result["signup_thread_id"] = signup_msg.thread_id
-        # "text" | "forum" — drives explicit edit routing in
-        # events.tasks._send_signup_update_impl. Legacy rows may have ""
-        # (unset); workers fall back to a thread_id-vs-channel_id heuristic
-        # in that case and emit a `legacy_channel_type` warning.
-        result["signup_channel_type"] = signup_msg.channel_type or None
-
-    return Response(result)
+    state = load_discord_event_state(event_id)
+    return Response(state.model_dump(mode="json", exclude_unset=True))
 
 
 @api_view(["GET"])
@@ -322,7 +285,6 @@ def get_sync_discord_state(request: Request) -> Response:
     """Bulk state for sync_discord_events — all active events' Discord status.
 
     Returns event IDs that have: signup posts, scheduled events, recent log attempts.
-    Replaces 4 separate queries in sync_discord_events task.
     """
 
     now = tz.now()
@@ -336,7 +298,7 @@ def get_sync_discord_state(request: Request) -> Response:
                 EventState.ROLL_CALL,
             ],
             scheduled_at__gte=now - timedelta(days=1),
-            scheduled_at__lte=now + timedelta(days=30),
+            scheduled_at__lte=now + DISCORD_SYNC_HORIZON,
         )
         .select_related("organization", "event_repeater")
         .values(
@@ -390,6 +352,9 @@ def get_sync_discord_state(request: Request) -> Response:
             "events_with_signup": list(events_with_signup),
             "events_with_scheduled": list(events_with_scheduled),
             "events_with_recent_attempt": list(events_with_recent_attempt),
+            "events_with_signup_blocked": sorted(
+                blocked_signup_event_ids(event["pk"] for event in active_events)
+            ),
         }
     )
 
@@ -622,24 +587,45 @@ SIGNUP_MSG_UPDATE_FIELDS = {
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def clear_event_signup_state(request: Request) -> Response:
-    """Reset the signup-post dedup state so the next sync (or manual re-fire)
-    recreates the post.
+    """Reset the signup-post dedup state so the next sync recreates the post.
 
     Flips:
       - DiscordEventMsgSignup.has_posted=False (clears `events_with_signup_post`)
       - DiscordMessageLog.success=False for source=event_announcement+source_id=event_id
         (clears `existing_logs` dedup)
 
-    Called by:
-      - send_signup_update on MessageDeletedError (auto-recovery for externally
-        deleted posts)
-      - fire_event_task for task_name="signup_post" (admin "repost" button)
+    With ``expected_message_id`` (send_signup_update's MessageDeletedError
+    recovery), clears only while that message is still the current signup post
+    and no delivery is in flight, and starts a new delivery generation.
     """
 
     err = _validate_required(request.data, ["event_id"])
     if err:
         return err
     event_id = request.data["event_id"]
+    expected_message_id = request.data.get("expected_message_id")
+    if "expected_message_id" in request.data:
+        if (
+            type(event_id) is not int
+            or not 0 < event_id <= 2**63 - 1
+            or not valid_discord_id(expected_message_id)
+        ):
+            return Response(
+                {"error": "invalid_request"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if not Event.objects.nocache().filter(pk=event_id).exists():
+            return Response(
+                {"error": "event_not_found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        cleared = clear_signup_state_for_deleted_message(event_id, expected_message_id)
+        log.info(
+            "events_signup_deleted_message_cleared",
+            system="events",
+            subsystem="discord",
+            event_id=event_id,
+            cleared=cleared,
+        )
+        return Response({"event_id": event_id, "cleared": cleared})
 
     result = clear_signup_dedup_state(event_id)
     log.info(

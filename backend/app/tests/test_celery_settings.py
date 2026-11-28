@@ -141,6 +141,7 @@ class CelerySettingsBootTest(SimpleTestCase):
         registered = set(json.loads(result.stdout.strip().splitlines()[-1]))
         scheduled = set(beat_task_names("celery_light.py").values())
         self.assertIn("discordbot.tasks.sweep_stale_discord_leases", registered)
+        self.assertIn("org.tasks.purge_expired_mmr_screenshots", registered)
         self.assertEqual(scheduled - registered, set())
 
     def test_worker_registers_org_api_sync_tasks(self) -> None:

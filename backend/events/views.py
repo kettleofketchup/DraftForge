@@ -6,6 +6,7 @@ from cacheops import cached_as
 from celery import current_app
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models, transaction
 from django.db.models import (
@@ -19,7 +20,7 @@ from django.db.models import (
     QuerySet,
 )
 from django.db.models.functions import Abs, Coalesce, Now
-from django.http import QueryDict
+from django.http import Http404, QueryDict
 from django.utils import timezone
 from django.utils import timezone as tz
 from pydantic import ValidationError as PydanticValidationError
@@ -47,18 +48,30 @@ from discordbot.models import (
     DiscordMessageLog,
     DMType,
 )
+from discordbot.permissions import service as permission_service
+from discordbot.permissions.actions import EVENT_ACTIONS, PUBLIC_PREVIEW_ACTIONS
+from discordbot.permissions.schemas import PermissionChecksRequest
 from discordbot.serializers_discord_event import DiscordEventDetailSerializer
+from discordbot.services.permissions import (
+    DiscordPermissionRefreshThrottle,
+    validation_error_details,
+)
+from discordbot.signup_delivery import ResetOutcome, reset_signup_delivery
 from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
 from events.completion import close_event
 from events.constants import ActorRole, Commitment, EventState, SignupAction
-from events.discord import (
+from events.discord import notify_create_discord_event, notify_signup_changed
+from events.discord.channels import (
     attendance_reminder_channel,
-    notify_create_discord_event,
-    notify_signup_changed,
     profile_reminder_channel,
 )
+from events.discord.gates import initial_state_for_new_event
+from events.discord.permissions import preview_event_checks, saved_event_checks
+from events.discord.preview import PreviewInputError, build_discord_preview
+from events.discord.preview_schema import DiscordPreviewRequest
+from events.discord.state import signup_list_queryset
 from events.eligibility import (
     EligibilityResult,
     evaluate_signup,
@@ -129,13 +142,13 @@ from events.serializers import (
     VoicePresenceOverrideInputSerializer,
 )
 from events.services import (
+    REPEATER_SCHEDULE_FIELDS,
     OccurrenceCollision,
     apply_signup_input,
     approve_signup,
     cancel_event,
     cancel_signup,
     changed_draft_option_fields,
-    clear_signup_dedup_state,
     create_off_schedule_event,
     create_tentative_signup,
     create_tournament_for_event,
@@ -570,28 +583,15 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(repeater)
 
     def perform_update(self, serializer: EventRepeaterSerializer) -> None:
-        # Snapshot schedule fields before save so we can detect a change
-        # and tell sync_future_events to realign occurrences. Without this,
-        # editing day_of_week leaves stale UPCOMING rows on the old day
-        # while generate_events_for_repeater creates new rows on the new
-        # day — admins see duplicates. is_active is in the tuple so a plain
-        # PATCH that unpauses a series realigns exactly like the reactivate
-        # button does.
-        schedule_fields = (
-            "day_of_week",
-            "time_of_day",
-            "timezone",
-            "starts_at",
-            "frequency",
-            "is_active",
-        )
+        # A schedule change realigns occurrences; is_active is included so an
+        # unpausing PATCH realigns like the reactivate button.
         before = {
             f: getattr(serializer.instance, f)
-            for f in (*schedule_fields, *SIGNUP_OPEN_POLICY_FIELDS)
+            for f in (*REPEATER_SCHEDULE_FIELDS, *SIGNUP_OPEN_POLICY_FIELDS)
         }
         repeater = serializer.save()
         schedule_changed = any(
-            before[f] != getattr(repeater, f) for f in schedule_fields
+            before[f] != getattr(repeater, f) for f in REPEATER_SCHEDULE_FIELDS
         )
         policy_changed = any(
             before[f] != getattr(repeater, f) for f in SIGNUP_OPEN_POLICY_FIELDS
@@ -678,7 +678,10 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         except OccurrenceCollision as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
 
-        if data.get("open_signups"):
+        if (
+            initial_state_for_new_event(bool(data.get("open_signups")))
+            == EventState.SIGNUPS_OPEN
+        ):
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
@@ -853,7 +856,6 @@ class EventViewSet(viewsets.ModelViewSet):
         if org_id:
             qs = qs.filter(organization_id=org_id)
 
-        # Filter by state (single or comma-separated)
         state = params.get("state")
         states = params.get("states")
         if states:
@@ -967,7 +969,8 @@ class EventViewSet(viewsets.ModelViewSet):
         create_tournament_for_event(event)
         # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
-        if self.request.query_params.get("open_signups") == "true":
+        open_signups = self.request.query_params.get("open_signups") == "true"
+        if initial_state_for_new_event(open_signups) == EventState.SIGNUPS_OPEN:
             try:
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
@@ -1044,6 +1047,49 @@ class EventViewSet(viewsets.ModelViewSet):
         if hasattr(self, "_cascade_warning") and self._cascade_warning:
             response.data["_warning"] = self._cascade_warning
         return response
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="discord-preview",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def discord_preview(self, request: Request) -> Response:
+        """What a Discord post would contain for the given form values; sends nothing."""
+        try:
+            body = DiscordPreviewRequest.model_validate(request.data)
+        except PydanticValidationError as exc:
+            return Response(
+                {
+                    "error": "Invalid preview request.",
+                    "detail": exc.errors(
+                        include_url=False, include_context=False, include_input=False
+                    ),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            preview = build_discord_preview(
+                body.kind,
+                body.context,
+                body.values,
+                request.user,
+                open_signups=body.open_signups,
+            )
+        except ValidationError as exc:
+            detail = exc.detail
+            fields = detail if isinstance(detail, dict) else {"detail": detail}
+            return Response(
+                {"error": "Some preview values are invalid.", **fields},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except PreviewInputError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoPermissionDenied as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+        except Http404 as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        return Response(preview.model_dump(mode="json"))
 
     def check_object_permissions(self, request: Request, obj: Event) -> None:
         super().check_object_permissions(request, obj)
@@ -1670,6 +1716,50 @@ class EventViewSet(viewsets.ModelViewSet):
         )
         return Response(_event_payload(event.pk, request.user))
 
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="permission-checks",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def permission_checks(self, request: Request, pk: str | None = None) -> Response:
+        event = self.get_object()
+        if not has_event_staff_access(request.user, event):
+            return Response({"error": "Permission denied"}, status=403)
+        if request.method == "POST":
+            try:
+                body = PermissionChecksRequest.model_validate(request.data)
+            except PydanticValidationError as exc:
+                return Response(
+                    {
+                        "error": "Invalid permission check request",
+                        "detail": validation_error_details(exc),
+                    },
+                    status=400,
+                )
+            if any(
+                check.action not in EVENT_ACTIONS & PUBLIC_PREVIEW_ACTIONS
+                for check in body.checks
+            ):
+                return Response({"error": "Unsupported preview action"}, status=400)
+            checks = preview_event_checks(event, body)
+            refresh = body.refresh
+        else:
+            checks = saved_event_checks(event)
+            refresh = request.query_params.get("refresh", "").lower() == "true"
+        throttled = refresh and not DiscordPermissionRefreshThrottle().allow_request(
+            request, self
+        )
+        result = permission_service.run_checks(
+            event.organization.discord_server_id or None,
+            checks,
+            refresh=refresh and not throttled,
+        )
+        if throttled:
+            for check in result.checks:
+                check.refresh_state = "throttled"
+        return Response(result.model_dump(mode="json"))
+
     @action(detail=True, methods=["get"])
     def discord(self, request: Request, pk: str | None = None) -> Response:
         """Get Discord state for this event.
@@ -1733,23 +1823,9 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self) -> QuerySet[EventSignup]:
-        # EventSignupSerializer's `username` (display name) reads
-        # user.nickname, and it ships user.avatar — both resolve through the
-        # CustomUser @property to base_profile. Without user__base_profile this
-        # is N+1 cold-cache on busy events.
-        qs = with_user_profiles(
-            EventSignup.objects.select_related(
-                "event__tournament__league__organization", "event_team"
-            ),
-            "user",
-            steam_verified_org=True,
+        return signup_list_queryset(
+            self.request.query_params.get("event"), for_list=self.action == "list"
         )
-        event_id = self.request.query_params.get("event")
-        if event_id:
-            qs = qs.filter(event_id=event_id)
-        if self.action == "list":
-            qs = qs.annotate_line_rank()
-        return qs
 
     @action(detail=True, methods=["post"])
     def approve(self, request: Request, pk: str | None = None) -> Response:
@@ -1757,7 +1833,6 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
-        # Optional MMR override from admin
         mmr_override = None
         game_type = game_for_event(signup.event)
         if request.data:
@@ -2369,9 +2444,7 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
         )
 
     # Idempotency: prevent double-fire for one-shot tasks (DMs). Repostable
-    # tasks (signup_post, announcement) intentionally allow re-fire — the admin
-    # is asking to push a fresh post — and we clear dedup state below before
-    # invoking celery so the task recreates instead of no-opping.
+    # tasks (signup_post, announcement) start a fresh delivery generation.
     REPOSTABLE = {"signup_post", "announcement"}
     if task_name == "signup_reminder":
         if DiscordEventDM.objects.filter(
@@ -2393,15 +2466,54 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
                     status=status.HTTP_409_CONFLICT,
                 )
 
-    # Repost path: clear DiscordEventMsgSignup.has_posted and DiscordMessageLog
-    # success=True for source=event_announcement so send_event_announcement
-    # actually recreates the post instead of being blocked by sync dedup
-    # (sync_discord_events would otherwise skip; the manual-fire path bypasses
-    # that, but we still clear so the next auto-sync agrees with the new state).
-    if task_name in REPOSTABLE:
-        clear_signup_dedup_state(event_id)
-
     celery_task = FIREABLE_TASKS[task_name]
+
+    if task_name in REPOSTABLE:
+        outcome, generation = reset_signup_delivery(event_id)
+        if outcome == ResetOutcome.ACTIVE:
+            return Response(
+                {
+                    "error": "A signup post attempt is already in progress. "
+                    "Try again after it finishes."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            current_app.send_task(
+                celery_task,
+                args=[event_id],
+                kwargs={
+                    "generation": generation,
+                    "manual": True,
+                    "fired_by_user_id": request.user.pk,
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                "signup_post_enqueue_failed",
+                system="events",
+                subsystem="views",
+                task_name=task_name,
+                event_id=event_id,
+                generation=generation,
+                error_type=type(exc).__name__,
+            )
+            return Response(
+                {
+                    "error": "Could not queue the signup post. Automatic posting will retry."
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        logger.info(
+            "task_manually_fired",
+            system="events",
+            subsystem="views",
+            task_name=task_name,
+            event_id=event_id,
+            user_id=request.user.pk,
+            generation=generation,
+        )
+        return Response({"fired": task_name, "event_id": event_id})
 
     # Signup reminder → send_subscriber_notifications (DMs, takes event_id only)
     if task_name == "signup_reminder":
@@ -2456,12 +2568,7 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
                 game.dire_team.name if game.dire_team else "Dire",
             ],
         )
-    elif task_name in (
-        "announcement",
-        "signup_post",
-        "scheduled_event",
-        "signup_update",
-    ):
+    elif task_name in ("scheduled_event", "signup_update"):
         current_app.send_task(celery_task, args=[event_id])
     else:
         current_app.send_task(celery_task)

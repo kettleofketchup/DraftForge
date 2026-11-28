@@ -20,7 +20,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Add parent directory to Python path for paths module
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import logging
@@ -186,6 +185,7 @@ REST_FRAMEWORK = {
         "app.auth.InternalServiceAuth",
     ],
     "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
+    "DEFAULT_THROTTLE_RATES": {"discord_permission_refresh": "5/min"},
 }
 
 # Every entry must be async capable: one sync-only middleware makes each ASGI request
@@ -622,6 +622,11 @@ if RUNNING_TESTS:
 
 # League Stats Configuration
 LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))
+
+# Nightly purge deletes MMR request screenshots this many days after the decision.
+MMR_SCREENSHOT_RETENTION_DAYS = int(
+    os.environ.get("MMR_SCREENSHOT_RETENTION_DAYS", "7")
+)
 
 # League configuration
 LEAGUE_CHOICES = app_config.league_choices

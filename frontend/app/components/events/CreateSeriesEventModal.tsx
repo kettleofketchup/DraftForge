@@ -15,7 +15,6 @@ import {
 import { repeaterKeys } from '~/hooks/useEvent';
 import { useRepeaterLobbyPassword } from '~/hooks/useLobbyPassword';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
-import { DiscordConfigSection } from './DiscordConfigSection';
 import {
   discordResetValues,
   dotaLobbyResetValues,
@@ -36,6 +35,7 @@ import {
   refineReadyCheck,
   type CreateSeriesEventInput,
 } from './schemas';
+import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import { SignupOpenSection } from './SignupOpenSection';
 import { signupRulesFrom } from './signupRules';
@@ -248,6 +248,10 @@ export function CreateSeriesEventModal({
               isRepeater
               showNotifyNewEvents={false}
               organizationId={repeater.organization}
+              previewContext={{
+                type: 'series_one_off',
+                repeaterId: repeater.id,
+              }}
             />
           ),
         },

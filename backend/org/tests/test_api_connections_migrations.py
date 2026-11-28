@@ -12,8 +12,8 @@ from org.integration.receipts import format_timestamp
 from org.tests.test_api_tokens import LOCMEM_CACHE
 from org.tests.test_integration_contacts import GUILD, bindings
 
-BEFORE = ("org", "0030_promotion_observations_and_keys")
-AFTER = ("org", "0033_api_connection_constraints")
+BEFORE = ("org", "0031_mmrchangerequest_screenshot_purged_at")
+AFTER = ("org", "0034_api_connection_constraints")
 AT = datetime(2026, 11, 26, 12, 0, tzinfo=UTC)
 MMR_PAIR = ["mmr:read", "mmr:write"]
 
@@ -184,7 +184,7 @@ class ConnectionBackfillMigrationTest(MigratorTestCase):
 
     def test_backfilled_tokens_still_authenticate_and_import(self) -> None:
         self._migrator.apply_tested_migration(
-            ("org", "0035_api_connection_key_version")
+            ("org", "0036_api_connection_key_version")
         )
         cache.clear()
         url = f"/api/organizations/{self.org}/integration/v1/contact-receipts/"

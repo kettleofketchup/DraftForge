@@ -400,6 +400,29 @@ export class HeroDraftPage {
     await this.confirmCancel.click();
   }
 
+  async previewChatSuggestion(
+    kind: 'suggest_pick' | 'suggest_ban',
+    heroId: number,
+    isActingCaptain: boolean,
+  ): Promise<void> {
+    await this.page
+      .locator(
+        `[data-testid^="herodraft-chat-message-"][data-kind="${kind}"][data-hero-id="${heroId}"]`,
+      )
+      .last()
+      .locator('[data-testid^="herodraft-chat-suggestion-"]')
+      .click();
+    if (isActingCaptain) {
+      await expect(
+        this.page.getByTestId('herodraft-confirm-dialog'),
+      ).toBeVisible();
+      await this.cancelHeroSelection();
+    }
+    await expect(
+      this.page.getByTestId('herodraft-confirm-dialog'),
+    ).toBeHidden();
+  }
+
   async assertHeroAvailable(heroId: number): Promise<void> {
     await expect(
       this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`),

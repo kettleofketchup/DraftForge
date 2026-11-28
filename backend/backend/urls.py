@@ -35,6 +35,12 @@ from app.views.internal import (
 from app.views.ssr import EventSSRView
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
+from discordbot.internal_signup_delivery_views import (
+    begin_signup_delivery,
+    complete_signup_delivery,
+    mark_signup_delivery_sending,
+    signup_delivery_blocked,
+)
 from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
 from league.ssr import LeagueSSRView
@@ -95,6 +101,7 @@ from tournament.views.internal import (
     get_tournament_for_task,
     get_tournament_participants,
 )
+from tournament.views.member_removal import remove_tournament_member
 from tournament.views.members import add_tournament_member
 from tournament.views.team import TeamCreateView, TeamView
 from tournament.views.tournament import (
@@ -407,6 +414,11 @@ urlpatterns = [
         add_tournament_member,
         name="add_tournament_member",
     ),
+    path(
+        "api/tournaments/<int:tournament_id>/members/<int:user_id>/",
+        remove_tournament_member,
+        name="remove_tournament_member",
+    ),
     # SSR endpoints — lightweight public data for meta tags and skeletons
     path(
         "api/tournaments/<int:pk>/ssr/",
@@ -441,6 +453,22 @@ urlpatterns += [
 urlpatterns += [
     path("api/internal/discord/message-log/", create_discord_message_log),
     path("api/internal/discord/message-log/claim/", claim_discord_message_log),
+    path(
+        "api/internal/discord/signup-delivery/begin/",
+        begin_signup_delivery,
+    ),
+    path(
+        "api/internal/discord/signup-delivery/sending/",
+        mark_signup_delivery_sending,
+    ),
+    path(
+        "api/internal/discord/signup-delivery/complete/",
+        complete_signup_delivery,
+    ),
+    path(
+        "api/internal/discord/signup-delivery/blocked/",
+        signup_delivery_blocked,
+    ),
     path(
         "api/internal/discord/message-log/<int:log_id>/finalize/",
         finalize_discord_message_log,
@@ -568,6 +596,7 @@ urlpatterns += [
 
 urlpatterns += [
     path("api/internal/org-api-sync/", include("org.api_connections.internal_urls")),
+    path("api/internal/mmr-requests/", include("org.mmr_requests.internal_urls")),
 ]
 
 urlpatterns += [path("", include("opsnotices.urls"))]

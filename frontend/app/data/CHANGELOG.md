@@ -14,6 +14,254 @@ Releases made before this file was added are not listed here; see the git tags a
 
 <!-- Do not edit. Unreleased changes live in changelog.d/; `just version::set` assembles them here. -->
 
+## [0.21.0] - 2026-11-27
+
+### Upgrading
+
+This release adds Pillow, and migrations run on the host venv. On the release host,
+after `git pull`, install the new dependency before deploying:
+
+```bash
+just update::python      # or: .venv/bin/poetry sync
+just dev::release
+```
+
+MMR screenshots are stored in `backend/media`, bind-mounted into the backend container.
+`just dev::release` creates the directory and warns unless uid 1000 owns it; fix it with
+`sudo chown 1000:1000 backend/media`. Back up `backend/media` together with
+`backend/data/prod.db.sqlite3`.
+
+Migration `org.0023` marks existing Dota org MMRs that already had an active verification
+date as Official (with no verifier). Helm previews store media at `/data/media`.
+
+### Security
+
+- MMR screenshots are private: nginx serves no media path, and files are streamed only
+  to the requesting member and the staff who can review the request
+  (`private, no-store`, `nosniff`, sandboxed). Uploads are decoded, size and pixel
+  checked, and re-encoded without EXIF or other metadata under random file names.
+
+### Added
+
+- `just test::affected` runs only the backend tests and Vitest files a branch's
+  changes can reach, widening to whole apps or the full suite where imports can't
+  tell; `--plan` prints the selection and why. The full suites and CI remain the gate.
+- MMR update requests (#750): on the new **Orgs & MMR** profile tab, members see their
+  org MMR per game and their league MMRs, and can request a change with a required
+  screenshot (PNG, JPEG or WebP, up to 8 MB) and an optional note. They can cancel a
+  pending request and see the last decision, including a rejection reason.
+- Org and league staff get an **MMR requests** tab with a pending-count badge. They can
+  approve (optionally at an adjusted value) or reject with a reason. Nobody verifies
+  their own MMR, and a staff member's request needs an admin reviewer.
+- Staff can set a member's official org or league MMR directly, with an optional
+  screenshot, from the queue or the member edit dialog. Every change is kept as an
+  audited request row and an `OrgLog` / `LeagueLog` `set_mmr` entry.
+- Profiles show org and league MMRs with an Official (verifier and date) or Unverified
+  badge, within the existing member-list visibility rules. The league MMR recompute
+  no longer overwrites an Official league MMR.
+- API: `GET /api/users/<pk>/mmrs/`, `/api/mmr-requests/` (create, mine, cancel,
+  screenshot, approve, reject) and `/api/{organizations,leagues}/<id>/mmr-requests/`
+  (list, pending-count, staff-set).
+- New docs page: MMR update requests.
+- League page: a "Lobby bots" tab shows league admins which of our Dota lobby bots can
+  host lobbies in the league's Steam league, with a button to re-check access. Site
+  admins also see the bots that don't hold the league yet and each one's Steam profile
+  link to add on Valve's league admins page (#909).
+- Attendance reminders, profile reminders and series new-event posts can each go to their
+  own Discord channel; leave one blank to keep using the announcement channel. The Discord
+  settings now group the server event, channel posts and direct messages separately.
+- Event Discord settings: every message toggle (scheduled event, signup sync, signup
+  post, pre-day announcement, signup, profile and attendance reminders, start mention
+  and new-event post) has a Preview button that shows exactly what Discord will
+  receive for the values in the form, saved or not, and says when and why it would
+  not be sent. Previews never send or save anything.
+- The promotion compose and template previews now use the same Discord-style
+  renderer, including mentions and timestamps.
+- Promotion contact sync (event promotion only): the adaptor imports every contact an
+  external contact log holds for the bound guild's players, of any reason, occasion or
+  date, once per external contact ID. Edits and deletions made in the external log are
+  applied as updates and retractions on the next import, with an org log entry for each
+  update. Contacts and committed source-ID ranges retain their latest source-scan
+  timestamp, so an overlapping older import cannot overwrite, reinstate, retract or newly
+  create newer state. An imported invitation for a
+  bound event shows as a read-only "Contact recorded externally" tick in the Promotion tab,
+  marked "Delivery not verified", with no
+  undo. Message and Mark as sent are disabled for those players, Hide messaged hides
+  them, and a configured org sees a non-blocking "History may be incomplete" notice.
+  Messaging stays manual; the sync never sends a DM or creates an account, membership or
+  send. See docs/features/promotion-contact-sync.md.
+- One promotion point per event and player across both systems: an imported invitation on
+  a bound event holds the point and credits the external promoter when their Discord ID
+  belongs to an org member. If a local send already earned that point, the external
+  entry wins and the local point is voided by a new "Promotion point voided" ledger
+  entry; the send stays recorded. When the external contact changes or is deleted, the
+  point moves to the next imported contact or the local point comes back as a
+  "Promotion point restored" entry. Voids and restores are never deleted, net to zero in
+  the month of the entry they reverse, and are recorded in the org log. Restoration also
+  finds sends voided during an account merge, including sends originally made to the
+  dropped account and holders added by a later merge, follows replacement duplicate
+  holders, and waits until no external holder remains for the merged recipient.
+- Every DM marked as sent, including repeat sends that earn nothing and sends later
+  undone, gets its own retained receipt for the external contact log. The new
+  `python manage.py dispatch_promotion_contacts` command sends due receipts to the
+  adaptor (off unless `PROMOTION_ADAPTOR_ENABLED` and the adaptor's key are set); the
+  send banner shows the external state on its own line and says "Recorded externally"
+  only for a confirmed write. Writing to the external contact log is not enabled yet: the
+  adaptor answers that writeback is disabled and the receipt is kept as paused, which is
+  not a successful sync.
+- App tokens get operation grants (`mmr:read`, `mmr:write`, `promotion:import`), chosen
+  per token in Org Settings → API access. `promotion:import` ("Import external contact
+  history and promotion points") records external contacts and awards and voids
+  promotion points.
+- Integration API under `/api/organizations/<id>/integration/v1/` for the adaptor:
+  `POST contact-receipts/` imports a range of external contacts.
+- New backend settings `PROMOTION_SYNC_BINDINGS` (org to external guild, event to
+  external occasion; empty by default, and unbound orgs and events are left out) and
+  `PROMOTION_ADAPTOR_*`. After changing a binding, run a full adaptor import so stored
+  contacts move to the newly bound events.
+- Tournament changes now reach other open browsers over the tournament WebSocket
+  instead of waiting for the next poll (#964): bracket saves, setting or unsetting a
+  winner, Steam match link/unlink and hero-draft create/reset send `bracket_update`;
+  team creation and management, placements, adding/removing players, CSV import and
+  tournament settings send `tournament_update` with the kind of change. Pages refetch
+  the affected bracket, tournament and team data.
+- A staff member with unsaved bracket edits keeps them when the server bracket changes,
+  and sees a notice offering to discard the edits and load the latest bracket.
+- Per-action, per-channel Discord permission badges on event, series and organization defaults settings and Discord State show missing and granted permissions without requiring Administrator. Details keep their title visible above a padded scroll area, including in short viewports and settings dialogs.
+
+### Changed
+
+- The feature pipeline runs affected tests while iterating instead of whole apps,
+  reviewers stop repeating the implementer's suites unless something changed, tasks
+  that only touch docs, the changelog or copy skip per-task review, and the Verify
+  phase runs backend/E2E and frontend/docs checks in parallel. Spec and plan review
+  can repeat with `specCycles`/`planCycles`.
+- Local test runs share one CPU and memory budget, so several sessions testing at
+  once no longer saturate the machine. Test-stack containers, `just test::run`,
+  `just test::pw::*` and `just py::test` run inside the `df-tests.slice` systemd user
+  slice, capped at 16 cores and 40G by default (`DF_TEST_CPUS`, `DF_TEST_MEM`;
+  `DF_TEST_LIMITS=0` turns it off). `just test::limits` shows the cap and current
+  usage. `just test::run` defaults Django's `--parallel auto` to 6 workers
+  (`DJANGO_TEST_PROCESSES`), and local Vitest to 4 (`VITEST_MAX_WORKERS`). CI is
+  unchanged.
+- The Playwright `prepare` job now has its own self-hosted runner label, `draftforge-home-prepare`, so a burst of small jobs on the `draftforge-home` pool can no longer make it, and every test job waiting on it, queue. The guard and the `SELF_HOSTED_RUNNERS` kill switch are unchanged. `just ci::check-runs-on` now pins each allowlisted job to its own label and rejects `prepare` on `draftforge-home` or a small job on `draftforge-home-prepare`. The `draftforge-home-prepare` runner must be online before this ships, or home `prepare` runs queue and hold up their tests. The frontend `typecheck`, `prettier` and `shadcn-lint` jobs are back on GitHub-hosted runners: each runs `npm ci`, which made them 3-5x slower on the 1-CPU home runner and queued up the small-job pool, so only short jobs stay on `draftforge-home`. See `docs/development/ci-runners.md`.
+- The Playwright `prepare` job now checks GHCR right after checkout, with a stdlib Python script that sends manifest HEADs over the registry API, and stops there when every stack image and the test DB already exist. A run with nothing to build skips the toolchain, registry login, home-builder auth and build steps: about 52 s down to roughly 15-20 s on the `draftforge-home-prepare` runner, and a few seconds less on GitHub-hosted runners. When anything is missing, or the check itself fails, the job runs the same setup and `just ci::prepare-images` as before, so what gets built and pushed is unchanged. See `docs/development/ci-runners.md`.
+- League MMR is now the member's Dota 2 org MMR plus their best league performance
+  adjustment (#810), and it is recomputed whenever either changes: a staff edit,
+  approved request or CSV import of the org MMR, or a league stats update. New league
+  members start from the same value. Official league MMRs stay pinned, explicit
+  league-level CSV values are kept, and a member with no org MMR keeps their current
+  league MMR.
+- MMR request screenshots are deleted 7 days after the request is approved, rejected
+  or superseded; the request row stays as the audit record. A nightly task does the
+  purge, and the staff card says "Screenshot removed after N days" instead of showing
+  a broken image. Set `MMR_SCREENSHOT_RETENTION_DAYS` to change the window.
+- Undoing a promo send (`DELETE /api/organizations/<id>/promotion/sends/<send_pk>/`) now
+  returns `200` with `{"writeback": {...}}` instead of `204` with no body; external
+  callers that expect `204` must accept `200`. Undo removes the local send and its points
+  but keeps the DM's external receipt, because the message cannot be unsent.
+- `POST .../promotion/events/<event_id>/sends/` responses add `writeback`, and the
+  send is refused with `409 contact_already_recorded` when the external contact log
+  already recorded an invitation to that player for the event or holds the event's
+  promotion point for them. Candidate rows add `contact_recorded` and `external_contact`,
+  the candidate list adds `contact_sync`, and `hide_messaged` also hides players with an
+  external contact.
+- After an account merge or an approved claim request, the kept account's local point
+  for an event is voided when an imported contact holds that point for either Discord
+  ID, so the merged player has one live point. Open external receipts follow the kept
+  account, but their frozen payloads keep the user ID recorded at send time (the adaptor
+  writes from Discord IDs). Deleting the kept account later cancels those receipts and
+  redacts their payloads; a request already sent to the adaptor cannot be recalled.
+- Changing the promotion point value with "apply to past" also rescores promotion point
+  voids and restores. Deleting an event releases the promotion points its imported
+  contacts held.
+- The member contribution breakdown and the admin ledger show each entry's points with
+  their sign, so a negative entry such as a void reads `-1`. Voided entries and their reversals
+  no longer count toward a member's leaderboard entries.
+- Org Settings → API access is shown to org admins when the MMR sync API or Promotion is
+  unlocked, so an org admin can issue an adaptor token without the MMR sync API feature.
+  An org with only Contributions unlocked does not see the section.
+- Tokens that existed before operation grants keep exactly `mmr:read` and `mmr:write`.
+- The API access token list shows each token's creation time under its prefix instead of
+  in a separate Created column, so names stay readable beside their operations.
+- Playwright specs and spec directories no longer carry numeric prefixes (`16-events/03-roll-call.spec.ts` is now `events/roll-call.spec.ts`), so two PRs adding specs at once can no longer collide on "the next number". `just test::pw::spec` takes a spec file name, a path under `e2e/` or a directory, and falls back to every spec whose path contains the pattern; it no longer matches the worktree path.
+- Move user account, display-name, Steam/Discord identity, social-auth pipeline,
+  serializer, payload-cache, profile-update, search, SSR, avatar, internal-client
+  and management-command code into `backend/user/`. `is_site_admin` now lives in
+  `user.permissions`; `SOCIAL_AUTH_PIPELINE` uses `user.pipelines.*`.
+  HTTP paths, payloads and tables are unchanged; this preparation adds no migrations.
+- Install `user` deliberately in the Celery worker for serializer model references
+  and task autodiscovery, while preserving its original web app registration order.
+  Split backend migration tests into `migrations-draft` and `migrations-user` CI groups.
+- Rename six Celery tasks: `app.tasks.avatar_refresh.refresh_discord_avatars`,
+  `app.tasks.avatar_refresh.refresh_single_user_avatar`,
+  `app.tasks.avatar_refresh.refresh_avatars_batched`,
+  `app.tasks.avatar_refresh.refresh_all_discord_data`,
+  `app.tasks.discord_name_sync.sync_active_org_discord_names` and
+  `app.tasks.discord_name_sync.sync_org_discord_names` now use the corresponding
+  `user.tasks.*` names. Both beat schedules follow the new names. `just dev::release`
+  stops the worker before the backend, so `app.tasks.*` messages queued before or
+  during `down` stay in Redis and the new worker drops them as unregistered. After
+  `just dev::release`, check the new worker log for "unregistered task" naming
+  `sync_org_discord_names` and run `manage.py sync_discord_names --org <id>` for each affected
+  org. Avatar refreshes and active-org name sync recur on their schedules; inactive
+  orgs need the manual recovery.
+- Moved modules' logger names now use `user.*`, and moved views' `drf_error_response`
+  `view` fields use their new user-module paths. Update logger/view-path filters;
+  log `system` and `subsystem` values remain unchanged.
+- The `PositionsModel` and `ProfileClaimRequest` models moved from `app` into
+  the `user` Django app (`user.models`). The migrations are state-only: the
+  `app_positionsmodel` and `app_profileclaimrequest` tables, their index and
+  constraint names and the `user_dotauserprofile.positions_id` foreign key are
+  unchanged, and no schema changes on deploy.
+- The two ContentType rows are relabelled from `app` to `user` with their ids
+  kept, so the model labels `app.positionsmodel` and `app.profileclaimrequest`
+  are now `user.positionsmodel` and `user.profileclaimrequest`, and permission
+  codenames such as `app.add_positionsmodel` and
+  `app.change_profileclaimrequest` are now `user.add_positionsmodel` and
+  `user.change_profileclaimrequest`. Existing user and group grants carry over.
+- Neither model has an admin or a cacheops profile, so no admin URLs or cache
+  keys change. HTTP and WebSocket paths, payloads and table names are
+  unchanged.
+- A unit test now fails when a Playwright spec file or directory name starts with a number, so numbered spec names cannot creep back after #950.
+
+### Fixed
+
+- Logging out on an event page no longer flashes a "session expired" error while staff-only conduct panels and event controls are hidden.
+- Event pages and event lists now report an error when the server sends event data in an unexpected shape, instead of quietly showing blank or wrong details.
+- `OrgSettingsDialog.renders` tests no longer time out when the machine is busy:
+  they get a 20s budget for mounting the whole dialog (#954).
+- `just test::backend::all` now honours the local `DJANGO_TEST_PROCESSES` cap (6 by
+  default) like `just test::run`, instead of starting one worker per CPU thread for
+  each backend group (#955).
+- The Discord Activity Playwright specs no longer fail their first attempt when another
+  spec resets test data at the same time: the test stack's fake Discord instances now
+  survive the reset's cache flush, and a missing one fails without calling Discord (#977).
+- Keep closed bracket match dialogs from reopening when a delayed match URL update finishes, while preserving direct links and browser history navigation.
+- The API access tokens table no longer squashes the Name column into the Token header in organization settings.
+- `manage.py refresh_avatars --check-only` now checks the same avatar image URLs (with the `.png` or `.gif` extension) that a real refresh checks, so it no longer reports working avatars as invalid.
+- The bracket tab now shows a team's new name, captain and deputy right after they change, instead of the old ones for up to an hour (#962).
+- Moving from one tournament's bracket to another no longer shows the first tournament's matches, and unsaved bracket edits no longer stop the next tournament from loading or get saved into it. Saving a bracket with teams from another tournament is now refused (#962).
+- Keep Enter on a dialog's focused Cancel or Keep button from triggering confirmation, including nested deletion dialogs.
+- The announcement channel picker now appears whenever the attendance reminder, profile reminder, pre-day announcement or series new-event posts are on, and explains that the channel is shared.
+- Editing a single event from a series no longer shows the series-only new-event toggle, which had no effect there.
+- The profile update reminder setting now says it posts in the event's announcement channel (it never sent DMs), and the Discord Tasks panel shows it as misconfigured when it is on but no announcement channel is set.
+- Series new-event posts are no longer suppressed when the pre-day announcement is off; they still need an announcement channel, and existing series with *Post new events* on and a channel set will start posting. The setting's description no longer promises DMs or cancellation messages.
+- Team-draft picks stay listed under their team after a knocked-out team's captain takes over a live team (#923).
+- Run stale-event maintenance cancellation through shared lifecycle cleanup, preserving rollback safety and scheduling external Discord cleanup after commit.
+- Saving the bracket, correcting a result, or linking or unlinking a Steam match no longer
+  reopens a knocked-out team whose player has joined a live team (#922).
+- Fixed signup posts sent to Discord text channels while preserving forum posts as threads.
+- Unlinking a Steam match from a bracket game now returns the game to pending, so the bracket keeps loading and the game can get a lobby again. A migration also repairs games already left in the invalid "scheduled" status. (#921)
+- A bracket Save made from a copy another admin has since changed is now refused with a message and a Reload button, instead of clearing their results. Your unsaved edits stay until you reload.
+- Removing a player from a tournament no longer drops players another admin added since your page loaded.
+- Entering a second match result right after the first now saves both; the second no longer stays unsaved or disappears when the first one finishes saving.
+- Signed-in users who open the backend login page (`/login/`) are now sent to the site's home page instead of getting a server error.
+- `manage.py refresh_avatars --force` now re-fetches every Discord avatar, including ones whose current image still loads; before, the flag was accepted but ignored.
+- Opening an organization page with a missing or invalid id no longer loads every organization's events and series (#883)
+- The event series page now shows an event's new state, name, date and signup count, and drops deleted events, when you return to it after changing the event.
+- Position priorities you change while signing up for an event now show in Edit Profile, on your profile and in the next signup form without reloading the page.
+
 ## [0.20.0] - 2026-11-24
 
 ### Upgrading

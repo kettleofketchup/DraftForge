@@ -1,1 +1,0 @@
-- Opening an organization page with a missing or invalid id no longer loads every organization's events and series (#883)

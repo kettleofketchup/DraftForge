@@ -3,6 +3,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
+import { DiscordMessagePreview } from '~/components/discord';
 import {
   DestructiveButton,
   PrimaryButton,
@@ -19,10 +20,11 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
+import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import type { OrgFeatureAccess } from '~/features/org-features';
 import { getLogger } from '~/lib/logger';
-import { formatDiscordTimestamps } from './discordPreview';
-import { reportPromoError, usePreviewOptions } from './feedback';
+import { reportPromoError } from './feedback';
 import {
   useDeletePromoTemplate,
   usePromoTemplates,
@@ -214,7 +216,6 @@ function TemplateEditor({
   onDone,
 }: TemplateEditorProps) {
   const save = useSavePromoTemplate(orgId, access);
-  const previewOptions = usePreviewOptions();
   const form = useForm<PromoTemplateForm>({
     resolver: zodResolver(promoTemplateFormSchema),
     defaultValues: { name: template?.name ?? '', body: template?.body ?? '' },
@@ -226,9 +227,9 @@ function TemplateEditor({
     [sampleEvent, org, sender],
   );
   const sample = useMemo(() => renderTemplate(body, context), [body, context]);
-  const preview = useMemo(
-    () => formatDiscordTimestamps(sample.text, previewOptions),
-    [sample.text, previewOptions],
+  const previewMessages = useMemo(
+    () => [{ content: sample.text }],
+    [sample.text],
   );
   const warnings = [...sample.warnings];
   if (sample.text.length > DISCORD_DM_LIMIT) {
@@ -325,11 +326,20 @@ function TemplateEditor({
         )}
         <div className="flex flex-col gap-1">
           <span className="text-sm font-medium">Preview</span>
-          <div
-            className="min-h-16 whitespace-pre-wrap break-words rounded-md border border-border bg-base-800/60 p-3 text-sm"
-            data-testid="promo-template-preview"
-          >
-            {preview}
+          <div data-testid="promo-template-preview">
+            <DiscordMessagePreview
+              className="min-h-16"
+              messages={previewMessages}
+              author={
+                sender
+                  ? {
+                      name: DisplayName(sender),
+                      avatar: <UserAvatar user={sender} size="lg" />,
+                      bot: false,
+                    }
+                  : undefined
+              }
+            />
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

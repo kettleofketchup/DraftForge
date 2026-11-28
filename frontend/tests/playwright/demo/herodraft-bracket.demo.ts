@@ -175,18 +175,6 @@ async function memberSuggest(
   await expect(menu).toBeHidden();
 }
 
-/** Clicks the newest suggestion chip for a hero, which selects it in the grid. */
-async function selectSuggestion(
-  page: Page,
-  kind: SuggestKind,
-  heroId: number,
-): Promise<void> {
-  await suggestionRow(page, kind, heroId)
-    .last()
-    .locator('[data-testid^="herodraft-chat-suggestion-"]')
-    .click();
-}
-
 async function openChat(page: Page): Promise<void> {
   if (await chatPanel(page).isVisible()) return;
   await page.getByTestId('herodraft-chat-toggle').click();
@@ -1004,7 +992,10 @@ test.describe('HeroDraft with Bracket Demo', () => {
       by: 'cap' | 1 | 2;
       say?: string;
       suggest?: [SuggestKind, string];
-      /** Captain clicks the newest suggestion chip for this hero. */
+      /**
+       * Captain clicks the newest suggestion chip for this hero; on their
+       * turn the confirm dialog it opens is cancelled, so nothing is drafted.
+       */
       select?: [SuggestKind, string];
     }
     const SCRIPT: Record<number, Partial<Record<Side, Beat[]>>> = {
@@ -1187,7 +1178,11 @@ test.describe('HeroDraft with Bracket Demo', () => {
       },
     };
 
-    const runBeats = async (side: Side, beats: Beat[]): Promise<void> => {
+    const runBeats = async (
+      side: Side,
+      beats: Beat[],
+      actingCaptain: CaptainContext,
+    ): Promise<void> => {
       const captain = captainOf(side);
       const [m1, m2] = membersOf(side);
       for (const beat of beats) {
@@ -1212,7 +1207,11 @@ test.describe('HeroDraft with Bracket Demo', () => {
         if (beat.select) {
           const [kind, name] = beat.select;
           await openChat(captain.page);
-          await selectSuggestion(captain.page, kind, hero[name]);
+          await captain.draftPage.previewChatSuggestion(
+            kind,
+            hero[name],
+            captain === actingCaptain,
+          );
         }
         await captain.page.waitForTimeout(250);
       }
@@ -1275,8 +1274,8 @@ test.describe('HeroDraft with Bracket Demo', () => {
       if (round === 14) picksClipStart = Date.now();
       const beats = SCRIPT[round] ?? {};
       await Promise.all([
-        runBeats('F', beats.F ?? []),
-        runBeats('S', beats.S ?? []),
+        runBeats('F', beats.F ?? [], currentPicker),
+        runBeats('S', beats.S ?? [], currentPicker),
       ]);
       await currentPicker.page.waitForTimeout(200);
 

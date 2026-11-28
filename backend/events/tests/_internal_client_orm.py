@@ -20,17 +20,107 @@ Usage::
 
 from __future__ import annotations
 
+import importlib
+from collections.abc import Callable
 from datetime import datetime
+from functools import wraps
+from typing import Any, ParamSpec, TypeVar
 from unittest.mock import patch
+
+import requests
+from django.db import IntegrityError, transaction
+from django.db.models import Q
+from django.utils import timezone
+from rest_framework.test import APIRequestFactory, force_authenticate
+
+from app.auth import InternalServiceUser
+from app.internal_client import transport
+from app.internal_client.discord import (
+    begin_signup_delivery,
+    clear_event_signup_state,
+    complete_signup_delivery,
+    get_signup_blocked_event_ids,
+    mark_signup_delivery_sending,
+)
+from app.views import internal as internal_views
+from discordbot import internal_signup_delivery_views as delivery_views
+from discordbot.delivery_types import ClaimResult
+from discordbot.models import (
+    ChannelType,
+    DiscordEvent,
+    DiscordEventDM,
+    DiscordEventLog,
+    DiscordEventMsgAnnouncement,
+    DiscordEventMsgSignup,
+    DiscordMessageLog,
+)
+from discordbot.schemas import DiscordEventStateSchema, MessageLogSchema
+from events.capacity import with_signup_counts
+from events.ledger import SignupActor
+from events.models import Event, EventSignup, RepeaterSubscription
+from events.ready_check import (
+    READY_CHECK_HELD_MESSAGE,
+    transition_with_ready_check,
+)
+from events.schemas import EventSignupSchema, EventTaskSchema, RepeaterSubscriberSchema
+from events.serializers import EventSerializer, EventSignupSerializer
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+_INTERNAL_VIEWS: dict[str, Callable[..., Any]] = {
+    "/discord/signup-delivery/begin/": delivery_views.begin_signup_delivery,
+    "/discord/signup-delivery/sending/": delivery_views.mark_signup_delivery_sending,
+    "/discord/signup-delivery/complete/": delivery_views.complete_signup_delivery,
+    "/discord/signup-delivery/blocked/": delivery_views.signup_delivery_blocked,
+    "/discord/signup-message/clear/": internal_views.clear_event_signup_state,
+}
+
+
+def _call_internal_view(method: str, path: str, data: dict | None) -> requests.Response:
+    factory = APIRequestFactory()
+    url = f"/api/internal{path}"
+    request = (
+        factory.post(url, data, format="json")
+        if method == "POST"
+        else factory.get(url, data)
+    )
+    force_authenticate(request, user=InternalServiceUser())
+    drf_response = _INTERNAL_VIEWS[path](request)
+    drf_response.render()
+    response = requests.Response()
+    response.status_code = drf_response.status_code
+    response._content = drf_response.content
+    return response
+
+
+def _via_internal_views(fn: Callable[P, R]) -> Callable[P, R]:
+    """Run the real client against the real view, in-process."""
+
+    @wraps(fn)
+    def fake(*args: P.args, **kwargs: P.kwargs) -> R:
+        with (
+            patch.object(
+                transport,
+                "post",
+                lambda path, data: _call_internal_view("POST", path, data),
+            ),
+            patch.object(
+                transport,
+                "get",
+                lambda path, params=None: _call_internal_view("GET", path, params),
+            ),
+        ):
+            return fn(*args, **kwargs)
+
+    return fake
+
 
 # ---- ORM-direct reads ----
 
 
 def _get_event_signups_orm(event_id):
     """Read EventSignups directly from the ORM and return EventSignupSchema list."""
-    from events.models import EventSignup
-    from events.schemas import EventSignupSchema
-    from events.serializers import EventSignupSerializer
 
     qs = EventSignup.objects.filter(event_id=event_id).select_related("user", "event")
     return [EventSignupSchema.model_validate(EventSignupSerializer(s).data) for s in qs]
@@ -38,10 +128,6 @@ def _get_event_signups_orm(event_id):
 
 def _get_event_for_task_orm(pk):
     """Read full event data directly from the ORM and return EventTaskSchema."""
-    from events.capacity import with_signup_counts
-    from events.models import Event
-    from events.schemas import EventTaskSchema
-    from events.serializers import EventSerializer
 
     try:
         event = with_signup_counts(
@@ -59,8 +145,6 @@ def _get_event_for_task_orm(pk):
 
 def _get_event_orm(pk):
     """Read event data; mimics transport.api_get response. Returns ResponseLike or None."""
-    from events.models import Event
-    from events.serializers import EventSerializer
 
     try:
         event = Event.objects.get(pk=pk)
@@ -71,8 +155,6 @@ def _get_event_orm(pk):
 
 def _get_events_list_orm(**params):
     """Mimic the public events list endpoint, supporting the filters our tests need."""
-    from events.models import Event
-    from events.serializers import EventSerializer
 
     qs = Event.objects.all()
     states = params.get("states")
@@ -96,8 +178,6 @@ def _get_events_list_orm(**params):
 
 def _get_discord_event_state_orm(event_id):
     """Mimic /discord/event-state/<event_id>/."""
-    from discordbot.models import DiscordEvent, DiscordEventDM, DiscordEventMsgSignup
-    from discordbot.schemas import DiscordEventStateSchema
 
     result = {
         "has_discord_event": False,
@@ -129,9 +209,6 @@ def _get_discord_event_state_orm(event_id):
 def _check_message_log_exists_orm(source, source_id):
     """Match the partial unique condition: NULL pending OR True succeeded
     rows count as 'exists'; False failed rows do not (allowing retry)."""
-    from django.db.models import Q
-
-    from discordbot.models import DiscordMessageLog
 
     return (
         DiscordMessageLog.objects.filter(source=source, source_id=source_id)
@@ -143,8 +220,6 @@ def _check_message_log_exists_orm(source, source_id):
 def _search_message_logs_orm(*args, **kwargs):
     """ORM-backed replacement accepting positional args or the keyword-only
     signature of search_message_logs."""
-    from discordbot.models import DiscordMessageLog
-    from discordbot.schemas import MessageLogSchema
 
     if args:
         keys = ["source", "source_id", "success", "limit"]
@@ -191,8 +266,6 @@ def _search_message_logs_orm(*args, **kwargs):
 
 
 def _create_message_log_orm(**data):
-    from discordbot.models import DiscordMessageLog
-
     log = DiscordMessageLog.objects.create(
         channel_id=str(data.get("channel_id", "")),
         embed_data=data.get("embed_data") or {},
@@ -208,18 +281,33 @@ def _create_message_log_orm(**data):
 
 def _claim_discord_message_log_orm(
     *,
-    source,
-    source_id,
-    channel_id,
-    embed_data,
-    fired_by_user_id=None,
-    tournament_log_id=None,
-):
-    """ORM-backed lease claim — mirrors the HTTP endpoint."""
-    from django.db import IntegrityError, transaction
-    from django.utils import timezone
+    source: str,
+    source_id: int,
+    channel_id: str,
+    embed_data: dict,
+    fired_by_user_id: int | None = None,
+    tournament_log_id: int | None = None,
+) -> int | None:
+    return _claim_discord_message_log_result_orm(
+        source=source,
+        source_id=source_id,
+        channel_id=channel_id,
+        embed_data=embed_data,
+        fired_by_user_id=fired_by_user_id,
+        tournament_log_id=tournament_log_id,
+    ).log_id
 
-    from discordbot.models import DiscordMessageLog
+
+def _claim_discord_message_log_result_orm(
+    *,
+    source: str,
+    source_id: int,
+    channel_id: str,
+    embed_data: dict,
+    fired_by_user_id: int | None = None,
+    tournament_log_id: int | None = None,
+) -> ClaimResult:
+    """ORM-backed lease claim — mirrors the HTTP endpoint."""
 
     create_kwargs = {
         "source": source,
@@ -236,9 +324,9 @@ def _claim_discord_message_log_orm(
     try:
         with transaction.atomic():
             row = DiscordMessageLog.objects.create(**create_kwargs)
-        return row.pk
+        return ClaimResult("claimed", row.pk)
     except IntegrityError:
-        return None
+        return ClaimResult("held")
 
 
 def _finalize_discord_message_log_orm(
@@ -250,7 +338,6 @@ def _finalize_discord_message_log_orm(
     response_data=None,
 ):
     """ORM-backed finalize — mirrors the HTTP endpoint."""
-    from discordbot.models import DiscordMessageLog
 
     update_fields = {"success": bool(success)}
     if discord_message_id is not None:
@@ -267,8 +354,6 @@ def _finalize_discord_message_log_orm(
 
 
 def _create_event_log_orm(**data):
-    from discordbot.models import DiscordEvent, DiscordEventLog
-
     try:
         de = DiscordEvent.objects.get(pk=data["discord_event_id"])
     except DiscordEvent.DoesNotExist:
@@ -289,8 +374,6 @@ def _create_event_log_orm(**data):
 
 
 def _get_or_create_discord_event_orm(**data):
-    from discordbot.models import DiscordEvent
-
     de, created = DiscordEvent.objects.get_or_create(
         event_id=data["event_id"],
         defaults={"guild_id": data.get("guild_id", "")},
@@ -299,8 +382,6 @@ def _get_or_create_discord_event_orm(**data):
 
 
 def _update_discord_event_orm(pk, **data):
-    from discordbot.models import DiscordEvent
-
     de = DiscordEvent.objects.get(pk=pk)
     for k, v in data.items():
         if hasattr(de, k):
@@ -310,8 +391,6 @@ def _update_discord_event_orm(pk, **data):
 
 
 def _create_or_update_signup_message_orm(**data):
-    from discordbot.models import ChannelType, DiscordEventMsgSignup
-
     payload = dict(data)
     event_id = payload.pop("event_id")
     channel_id = payload.pop("channel_id")
@@ -335,12 +414,6 @@ def _create_or_update_signup_message_orm(**data):
 
 def _transition_event_state_orm(event_pk, new_state):
     """Mirror POST /api/internal/events/<pk>/transition/."""
-    from events.ledger import SignupActor
-    from events.models import Event
-    from events.ready_check import (
-        READY_CHECK_HELD_MESSAGE,
-        transition_with_ready_check,
-    )
 
     event = Event.objects.nocache().get(pk=event_pk)
     try:
@@ -356,22 +429,7 @@ def _transition_event_state_orm(event_pk, new_state):
     return _ResponseLike(200, {"id": event.pk, "state": event.state})
 
 
-def _clear_event_signup_state_orm(event_id):
-    """ORM shim mirroring POST /api/internal/discord/signup-message/clear/.
-
-    Delegates to the same service the real endpoint calls so the shim and the
-    HTTP path can't drift — if the route's behavior changes, the shim updates
-    for free.
-    """
-    from events.services import clear_signup_dedup_state
-
-    result = clear_signup_dedup_state(event_id)
-    return _ResponseLike(200, {"event_id": event_id, **result})
-
-
 def _create_or_update_announcement_orm(**data):
-    from discordbot.models import ChannelType, DiscordEventMsgAnnouncement
-
     payload = dict(data)
     event_id = payload.pop("event_id")
     channel_id = payload.pop("channel_id")
@@ -393,8 +451,6 @@ def _get_repeater_subscribers_orm(repeater_id):
     Mirrors what app/views/internal.py exposes — only subscribers with a
     non-empty discord_id are returned (DM target has to exist).
     """
-    from events.models import RepeaterSubscription
-    from events.schemas import RepeaterSubscriberSchema
 
     qs = RepeaterSubscription.objects.filter(
         event_repeater_id=repeater_id
@@ -448,12 +504,17 @@ _PATCH_MAP = {
     "search_message_logs": _search_message_logs_orm,
     "create_message_log": _create_message_log_orm,
     "claim_discord_message_log": _claim_discord_message_log_orm,
+    "claim_discord_message_log_result": _claim_discord_message_log_result_orm,
     "finalize_discord_message_log": _finalize_discord_message_log_orm,
     "create_event_log": _create_event_log_orm,
     "get_or_create_discord_event": _get_or_create_discord_event_orm,
     "update_discord_event": _update_discord_event_orm,
     "create_or_update_signup_message": _create_or_update_signup_message_orm,
-    "clear_event_signup_state": _clear_event_signup_state_orm,
+    "clear_event_signup_state": _via_internal_views(clear_event_signup_state),
+    "begin_signup_delivery": _via_internal_views(begin_signup_delivery),
+    "mark_signup_delivery_sending": _via_internal_views(mark_signup_delivery_sending),
+    "complete_signup_delivery": _via_internal_views(complete_signup_delivery),
+    "get_signup_blocked_event_ids": _via_internal_views(get_signup_blocked_event_ids),
     "create_or_update_announcement": _create_or_update_announcement_orm,
     "get_repeater_subscribers": _get_repeater_subscribers_orm,
     "transition_event_state": _transition_event_state_orm,
@@ -484,8 +545,6 @@ class DiscordTestMixin:
             self._patches.append(p)
 
         for module_path in _CALLSITE_MODULES:
-            import importlib
-
             try:
                 module = importlib.import_module(module_path)
             except ImportError:
