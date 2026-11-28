@@ -218,9 +218,76 @@ moderator.
 | Public leaderboard | off | |
 | Require staff release | off | |
 | Auto-release after (hours) | empty (never) | 1–720 |
+| Send review DMs | off | |
+| Show captains their feedback | on | |
 
 The max age must stay at least the half-life. The minimum reviews for points can never
 go below 2.
+
+## Review DMs
+
+With **Send review DMs** on, closing an event also DMs every teammate of each captain
+on Discord, so they can score their captain without opening the site. The captain is
+never DMed about their own review.
+
+Each DM lists the active traits, one row of 1–5 buttons per trait:
+
+```text
+Rate your captain: Ava (Thursday Inhouse)
+Reviews close in 3 days
+Communication
+[ 1 ] [ 2 ] [ 3 ] [ 4 ] [ 5 ]
+Drafting
+[ 1 ] [ 2 ] [ 3 ] [ 4 ] [ 5 ]
+...
+2 of 4 scored
+[ Review on site ]
+```
+
+- A message holds up to 5 traits. An org with 6–8 active traits sends two messages,
+  headed "Part 1 of 2" and "Part 2 of 2", and each says "Your review saves once both
+  messages are complete."
+- A click stores that score; the chosen button turns blue and the status line counts
+  the traits scored in that message. When every active trait has a score, the review
+  is submitted exactly as if it came from the site, and the message says "Review
+  saved. You can change it until ...". Clicking again changes the score until the
+  window closes.
+- Scores on the site and in the DM are the same review. A review edited on the site
+  is picked up by the next click.
+- Partial scores never count. They are thrown away when the review is withdrawn or
+  voided, or the event is reopened or cancelled.
+- The same checks as the site apply to every click. A click after the window closed or
+  after the event was reopened gets "Reviews for this event are closed for now."; a
+  teammate no longer in the review pool gets "You cannot review this captain."; a
+  deactivated trait gets "That trait is no longer used. Finish on the site."; a trait
+  added after the DM was sent shows "Traits changed. Finish on the site."
+- **Review on site** opens the event page, which lists the captains you can still rate.
+
+**DMs are sent once.** Each teammate gets the DM the first time the event closes, and
+never again for that captain:
+
+- Turning the setting on applies to events closed afterwards.
+- Reopening and re-closing an event sends nothing new. The old DMs work again for the
+  new window, and teammates added on the re-close review on the site.
+- A teammate with DMs closed or no Discord account reviews on the site.
+
+Every DM is recorded in the [Discord DM ledger](../development/discord-dm-ledger.md)
+with its status and click count.
+
+## Private captain feedback
+
+With **Show captains their feedback** off, captains see nothing review-derived about
+themselves: their rating, trait ratings, per-event results and captain rating points
+are hidden, and they see "Your org keeps captain feedback private." instead.
+
+- Their own row is left out of every rating leaderboard. On the points leaderboard
+  their own row shows only points that do not come from reviews (such as captained
+  points), and the organization total they see leaves out their rating points.
+- On the event page their own captain entry shows no aggregate or release state.
+- Staff who captain get no exemption.
+- Staff views of other members and other members' view of a public ranking are
+  unchanged, including the captain's own row and rating.
+- Points that do not come from reviews stay visible.
 
 ## Using Leadership
 
@@ -332,6 +399,9 @@ Org admins edit Leadership under **Settings → Leadership**:
   waiting.") and when staff release is on with no fallback, naming the sole-moderator
   case. A save refused with `would_release_own_results` shows the reason under the
   group instead of a toast;
+- **Send review DMs** (in the Reviews group) and **Show captains their feedback** (in
+  the Visibility group), described in [Review DMs](#review-dms) and
+  [Private captain feedback](#private-captain-feedback);
 - the trait list: add a trait, rename it, move it up or down, and switch it active or
   inactive. At least one trait stays active, and at most 8 can be. **Delete** asks
   for confirmation on a saved trait; a trait added since the last save is simply
@@ -375,6 +445,14 @@ The moderation response carries `require_staff_release` and, per captain,
 state is `released` or `hidden`, the counts, floor and auto-release time are `null`,
 `can_release` is false and `reviews` is `null`.
 
+Every captain entry also carries `feedback_private`. When it is true (your own entry
+while **Show captains their feedback** is off), the aggregate is `null` and the release
+fields read `hidden`. The member summary (`members/<org_user_id>/`) carries
+`feedback_private` too; when it is true, `rating` and every trait rating are `null`,
+`status` is `new`, `reviews` is `null`, `events` is omitted and `points` leaves out
+captain rating points. Standing leaderboards and the org's standing tracks carry
+`own_private` for the same case.
+
 A release answers `200 {"released": [org_user_id, ...], "skipped": [{"org_user_id",
 "code"}]}`. A list of captains is all or nothing: the first refusal in the order own,
 voided, window open, too few reviews, already released is returned and nothing is
@@ -397,6 +475,11 @@ carries `can_review_captains` and `pending_captain_reviews` for the signed-in me
 number of captains on that event they can still rate. A review staff voided is not
 pending; a withdrawn one is. Both fields come from the one query that resolves the
 viewer's membership.
+
+Review DM clicks go through the internal endpoint
+`POST /api/internal/discord/leadership/review-click/` (bot only, 30 a minute per
+Discord user), and the send task plans its messages with
+`POST /api/internal/leadership/review-dms/plan/`.
 
 ## Logging
 
