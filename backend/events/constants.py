@@ -1,4 +1,10 @@
+from datetime import timedelta
+from typing import Final
+
 from django.db import models
+
+# sync_discord_events only reconciles events starting within this window.
+DISCORD_SYNC_HORIZON: Final[timedelta] = timedelta(days=30)
 
 
 class EventState(models.TextChoices):

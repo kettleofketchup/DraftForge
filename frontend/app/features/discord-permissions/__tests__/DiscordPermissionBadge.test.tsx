@@ -409,6 +409,108 @@ it('keeps a grouped expired or disabled result neutral', () => {
   );
   expect(screen.getByRole('button')).not.toHaveClass('text-success');
 });
+it('explains which settings work, are blocked, or cannot be verified', () => {
+  render(
+    <DiscordPermissionBadge
+      operationLabel="Announcement channel"
+      channel
+      result={undefined}
+      state="ready"
+      checks={[
+        {
+          operationLabel: 'Pre-day announcement',
+          result: result({
+            status: 'missing_permissions',
+            missing: ['EMBED_LINKS'],
+          }),
+        },
+        {
+          operationLabel: 'Post new events',
+          result: result({ key: 'new_event_notice' }),
+        },
+        {
+          operationLabel: 'Post attendance reminder in Discord',
+          result: result({ key: 'attendance_reminder', status: 'unknown' }),
+        },
+      ]}
+    />,
+  );
+  const trigger = screen.getByRole('button');
+  expect(trigger).toHaveTextContent('1 setting blocked');
+  expect(trigger).not.toHaveClass('text-success');
+  fireEvent.click(trigger);
+  for (const name of ['Working', 'Blocked', 'Unable to verify'])
+    expect(screen.getByRole('heading', { name })).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Pre-day announcement won't post here — missing Embed Links.",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText('Post new events can post here.'),
+  ).toBeInTheDocument();
+  expect(screen.getAllByText('Required permissions')).toHaveLength(3);
+});
+it.each([
+  undefined,
+  result({ expired: true }),
+  result({ status: 'unknown' }),
+  result({ status: 'unsupported' }),
+  result({ status: 'unconfigured' }),
+])('never makes a channel green with an unverified use: %j', (unverified) => {
+  render(
+    <DiscordPermissionBadge
+      operationLabel="Channel"
+      channel
+      result={undefined}
+      state="ready"
+      checks={[
+        { operationLabel: 'Signup', result: result() },
+        { operationLabel: 'Other setting', result: unverified },
+      ]}
+    />,
+  );
+  expect(screen.getByRole('button')).not.toHaveClass('text-success');
+});
+it('counts a setting with two blocked uses once', () => {
+  render(
+    <DiscordPermissionBadge
+      operationLabel="Channel"
+      channel
+      result={undefined}
+      state="ready"
+      checks={[
+        {
+          operationLabel: 'Post event signup embed',
+          settingLabel: 'Post event signup embed',
+          result: result({ status: 'missing_permissions' }),
+        },
+        {
+          operationLabel: 'Post event signup embed (announcement fallback)',
+          settingLabel: 'Post event signup embed',
+          result: result({
+            key: 'signup_fallback',
+            status: 'missing_permissions',
+          }),
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByRole('button')).toHaveTextContent('1 setting blocked');
+});
+it('keeps a channel with no enabled uses neutral', () => {
+  render(
+    <DiscordPermissionBadge
+      operationLabel="Channel"
+      channel
+      result={undefined}
+      checks={[]}
+      state="ready"
+    />,
+  );
+  expect(screen.getByRole('button')).toHaveTextContent('No enabled settings');
+  expect(screen.getByRole('button')).not.toHaveClass('text-success');
+});
 it('bounds and focuses its scrollable details within available viewport space', () => {
   fireEvent.click(mountBadge());
   const panel = screen.getByRole('dialog');

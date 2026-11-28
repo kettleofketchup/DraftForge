@@ -15,9 +15,25 @@ transport layer.
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Optional
+from datetime import datetime
+from typing import Annotated, Literal, Optional, Self
+from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+from discordbot.delivery_types import (
+    ChannelKind,
+    DeliveryFailure,
+    DeliveryReceipt,
+    FailureCategory,
+    FailurePhase,
+)
 
 DiscordId = Annotated[str, StringConstraints(pattern=r"^[0-9]{1,20}$")]
 
@@ -30,6 +46,7 @@ class SyncDiscordStateSchema(BaseModel):
     events_with_signup: list[int]
     events_with_scheduled: list[int]
     events_with_recent_attempt: list[int]
+    events_with_signup_blocked: list[int] = []
 
     model_config = {"extra": "ignore"}
 
@@ -308,4 +325,118 @@ class VoicePresenceResponse(BaseModel):
     confirmed: int = 0
     unknown_users: int = 0
     not_signed_up: int = 0
+    model_config = {"extra": "ignore"}
+
+
+# ---------------------------------------------------------------------------
+# Signup delivery reservations (``discordbot/internal_signup_delivery_views.py``).
+# ---------------------------------------------------------------------------
+
+PositiveId = Annotated[int, Field(strict=True, gt=0, le=2**63 - 1)]
+Generation = Annotated[int, Field(strict=True, ge=0)]
+HttpStatus = Annotated[int, Field(strict=True, ge=100, le=599)]
+StrictCode = Annotated[int, Field(strict=True)]
+BeginOutcomeName = Literal[
+    "reserved",
+    "already_delivered",
+    "in_flight",
+    "deferred",
+    "exhausted",
+    "uncertain",
+    "stale_generation",
+]
+CompletionOutcomeName = Literal["recorded", "idempotent", "stale"]
+
+
+class SignupDeliveryBeginRequest(BaseModel):
+    event_id: PositiveId
+    generation: Generation | None = None
+    model_config = {"extra": "forbid"}
+
+
+class SignupDeliverySendingRequest(BaseModel):
+    event_id: PositiveId
+    generation: Generation
+    attempt_token: UUID
+    log_id: PositiveId
+    model_config = {"extra": "forbid"}
+
+
+class SignupDeliveryReceiptPayload(BaseModel):
+    parent_channel_id: str
+    message_id: str
+    thread_id: str | None
+    kind: ChannelKind
+    model_config = {"extra": "forbid"}
+
+    def to_receipt(self) -> DeliveryReceipt:
+        return DeliveryReceipt.from_json(self.model_dump(mode="json"))
+
+
+class SignupDeliveryFailurePayload(BaseModel):
+    phase: FailurePhase
+    category: FailureCategory
+    status: HttpStatus | None = None
+    code: StrictCode | None = None
+    model_config = {"extra": "forbid"}
+
+    def to_failure(self) -> DeliveryFailure:
+        return DeliveryFailure(self.phase, self.category, self.status, self.code)
+
+
+class SignupDeliveryCompleteRequest(BaseModel):
+    event_id: PositiveId
+    generation: Generation
+    attempt_token: UUID
+    outcome: Literal["delivered", "failed", "uncertain"]
+    receipt: SignupDeliveryReceiptPayload | None = None
+    failure: SignupDeliveryFailurePayload | None = None
+    log_id: PositiveId | None = None
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def _evidence_matches_outcome(self) -> Self:
+        if self.outcome == "delivered":
+            if self.receipt is None or self.failure is not None:
+                raise ValueError("delivered requires a receipt and no failure")
+            self.receipt.to_receipt()
+        elif self.receipt is not None:
+            raise ValueError("only delivered accepts a receipt")
+        return self
+
+
+class SignupDeliveryBeginReply(BaseModel):
+    outcome: BeginOutcomeName
+    generation: Generation
+    attempt_token: str | None = None
+    attempt: PositiveId | None = None
+    next_attempt_at: datetime | None = None
+    model_config = {"extra": "ignore"}
+
+    @model_validator(mode="after")
+    def _reservation_has_identity(self) -> Self:
+        if self.outcome == "reserved":
+            if self.attempt_token is None or self.attempt is None:
+                raise ValueError("a reservation requires an attempt identity")
+            UUID(self.attempt_token)
+        elif self.attempt_token is not None or self.attempt is not None:
+            raise ValueError("only a reservation carries an attempt identity")
+        return self
+
+
+class SignupDeliverySendingReply(BaseModel):
+    outcome: Literal["ok", "stale"]
+    model_config = {"extra": "ignore"}
+
+
+class SignupDeliveryCompleteReply(BaseModel):
+    outcome: CompletionOutcomeName
+    persisted: Annotated[bool, Field(strict=True)]
+    next_attempt_at: datetime | None = None
+    state: str | None = None
+    model_config = {"extra": "ignore"}
+
+
+class SignupDeliveryBlockedReply(BaseModel):
+    event_ids: list[PositiveId]
     model_config = {"extra": "ignore"}

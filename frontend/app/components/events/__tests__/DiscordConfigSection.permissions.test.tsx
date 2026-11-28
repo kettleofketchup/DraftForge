@@ -122,11 +122,7 @@ it('batches every visible operation, renders diagnostics and never blocks saving
   ])
     expect(screen.getByTestId(`discord-preview-${kind}`)).toBeInTheDocument();
   for (const key of [
-    'signup_post',
     'announcement',
-    'attendance_reminder',
-    'profile_reminder',
-    'new_event_notice',
     'start_mention',
     'scheduled_event_create',
     'scheduled_event_update',
@@ -141,9 +137,19 @@ it('batches every visible operation, renders diagnostics and never blocks saving
       screen.getByTestId('discord-permission-badge-scheduled_event_create'),
     ).toHaveTextContent('Missing permissions'),
   );
-  fireEvent.click(
-    screen.getByTestId('discord-permission-badge-attendance_reminder'),
-  );
+  for (const key of [
+    'announcement',
+    'signup_post',
+    'attendance_reminder',
+    'profile_reminder',
+    'new_event_notice',
+  ])
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(`discord-permission-badge-${key}`),
+      ).toHaveTextContent('5 settings blocked'),
+    );
+  fireEvent.click(screen.getByTestId('discord-permission-badge-announcement'));
   expect(submit).not.toHaveBeenCalled();
   fireEvent.click(screen.getByText('Save'));
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
@@ -240,7 +246,7 @@ it('does not request without a configured scope and shows no server', () => {
   mount({ scope: null });
   expect(post).not.toHaveBeenCalled();
   expect(
-    screen.getByTestId('discord-permission-badge-attendance_reminder'),
+    screen.getByTestId('discord-permission-badge-announcement'),
   ).toHaveTextContent('No server configured');
 });
 it('does not request without staff access', () => {
@@ -261,6 +267,12 @@ it('keeps disabled operations neutral even when their effective permissions veri
     },
   }));
   mount();
+  act(() =>
+    form.setValue(
+      'discord_confirm_attendance_channel_id',
+      '900000000000000008',
+    ),
+  );
   await waitFor(() =>
     expect(
       screen.getByTestId('discord-permission-badge-attendance_reminder'),
@@ -268,46 +280,101 @@ it('keeps disabled operations neutral even when their effective permissions veri
   );
   act(() => form.setValue('discord_confirm_attendance', false));
   expect(
-    screen.getByTestId('discord-permission-badge-attendance_reminder'),
-  ).not.toHaveClass('text-success');
+    screen.queryByTestId('discord-permission-badge-attendance_reminder'),
+  ).toBeNull();
 });
 
-it('groups primary and fallback checks under one signup badge without hiding fallback failures', async () => {
+function respond(blocked: string[]) {
   post.mockImplementation(async (_path, body) => ({
     data: {
       guild_id: '900000000000000001',
       checks: body.checks.map((d: { key: string; action: string }) => ({
         ...fixture.checks[0],
         ...d,
-        status:
-          d.key === 'signup_fallback' ? 'missing_permissions' : 'verified',
-        missing: d.key === 'signup_fallback' ? ['EMBED_LINKS'] : [],
+        status: blocked.includes(d.key) ? 'missing_permissions' : 'verified',
+        missing: blocked.includes(d.key) ? ['EMBED_LINKS'] : [],
         checked_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 60000).toISOString(),
       })),
     },
   }));
+}
+it('shows a signup fallback failure on the announcement channel, not the signup channel', async () => {
+  respond(['signup_fallback']);
   mount();
   act(() =>
     form.setValue('discord_post_signups_channel_id', '900000000000000007'),
   );
-  await waitFor(() =>
-    expect(
-      post.mock.calls.some(([, body]) =>
-        body.checks.some((d: { key: string }) => d.key === 'signup_post'),
-      ),
-    ).toBe(true),
+  const signup = await screen.findByTestId(
+    'discord-permission-badge-signup_post',
   );
-  const trigger = screen.getByTestId('discord-permission-badge-signup_post');
-  await waitFor(() => expect(trigger).toHaveTextContent('Missing permissions'));
+  await waitFor(() => expect(signup).toHaveTextContent('Permissions verified'));
+  const announcement = screen.getByTestId(
+    'discord-permission-badge-announcement',
+  );
+  expect(announcement).toHaveTextContent('1 setting blocked');
+  fireEvent.click(signup);
+  expect(screen.queryByText(/announcement fallback/)).toBeNull();
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+  fireEvent.click(announcement);
   expect(
-    screen.queryByTestId('discord-permission-badge-signup_fallback'),
-  ).toBeNull();
-  fireEvent.click(trigger);
-  expect(
-    screen.getByRole('heading', { name: 'Primary signup permissions' }),
+    screen.getByText(
+      "Post event signup embed (announcement fallback) won't post here — missing Embed Links.",
+    ),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole('heading', { name: 'Announcement fallback permissions' }),
+    screen.getByText('Pre-day announcement can post here.'),
   ).toBeInTheDocument();
+});
+it('repeats the shared channel badge under every picker that uses it', async () => {
+  respond(['new_event_notice']);
+  mount();
+  act(() =>
+    form.setValue('discord_post_signups_channel_id', '900000000000000003'),
+  );
+  await waitFor(() =>
+    expect(post.mock.calls.at(-1)?.[1].checks).toContainEqual(
+      expect.objectContaining({
+        key: 'signup_post',
+        channel_id: '900000000000000003',
+      }),
+    ),
+  );
+  const requests = post.mock.calls.length;
+  const pickers = [
+    'signup_post',
+    'announcement',
+    'attendance_reminder',
+    'profile_reminder',
+    'new_event_notice',
+  ];
+  for (const picker of pickers)
+    await waitFor(() =>
+      expect(
+        screen.getByTestId(`discord-permission-badge-${picker}`),
+      ).toHaveTextContent('1 setting blocked'),
+    );
+  expect(post).toHaveBeenCalledTimes(requests);
+  expect(
+    post.mock.calls
+      .at(-1)?.[1]
+      .checks.filter((c: { key: string }) => c.key === 'signup_post'),
+  ).toHaveLength(1);
+  expect(screen.queryByText(/Permissions shown on/)).toBeNull();
+  fireEvent.click(
+    screen.getByTestId('discord-permission-badge-attendance_reminder'),
+  );
+  expect(
+    screen.getByText(
+      'Post attendance reminder in Discord (no channel of its own; uses the announcement channel) can post here.',
+    ),
+  ).toBeInTheDocument();
+});
+it('drops a disabled setting from its channel badge', async () => {
+  respond(['new_event_notice']);
+  mount();
+  const badge = screen.getByTestId('discord-permission-badge-announcement');
+  await waitFor(() => expect(badge).toHaveTextContent('1 setting blocked'));
+  act(() => form.setValue('discord_notify_new_events', false));
+  await waitFor(() => expect(badge).toHaveTextContent('Permissions verified'));
 });

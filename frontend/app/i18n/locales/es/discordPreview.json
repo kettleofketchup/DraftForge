@@ -101,6 +101,7 @@
   },
   "status": {
     "needs_input": "Completa estos campos para ver una vista previa: {{fields}}",
+    "needs_input_intro": "Completa estos campos para ver una vista previa:",
     "unavailable": "Las vistas previas están disponibles al crear o editar un evento, que usa estos valores."
   },
   "variant": {

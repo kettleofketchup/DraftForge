@@ -5,7 +5,42 @@ import requests
 from django.test import TestCase, override_settings
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
+from app import internal_client
 from app.internal_client.transport import headers as transport_headers
+
+
+class ClaimResultTest(TestCase):
+    def test_claim_result_conflict_vs_unavailable(self) -> None:
+        kwargs = {
+            "source": "synthetic",
+            "source_id": 1,
+            "channel_id": "100000000000000001",
+            "embed_data": {},
+        }
+        for status, body, kind, log_id in (
+            (201, b'{"id": 7}', "claimed", 7),
+            (409, b"{}", "held", None),
+            (500, b"{}", "unavailable", None),
+            (200, b'{"id": 7}', "unavailable", None),
+            (201, b"[]", "unavailable", None),
+            (201, b"{}", "unavailable", None),
+            (201, b'{"id": true}', "unavailable", None),
+            (201, b"not json", "unavailable", None),
+            (None, b"", "unavailable", None),
+        ):
+            with self.subTest(status=status, body=body):
+                resp = None
+                if status is not None:
+                    resp = requests.Response()
+                    resp.status_code = status
+                    resp._content = body
+                with patch("app.internal_client.transport.post", return_value=resp):
+                    result = internal_client.claim_discord_message_log_result(**kwargs)
+                    self.assertEqual(result.kind, kind)
+                    self.assertEqual(result.log_id, log_id)
+                    self.assertEqual(
+                        internal_client.claim_discord_message_log(**kwargs), log_id
+                    )
 
 
 class InternalClientHeadersTest(TestCase):

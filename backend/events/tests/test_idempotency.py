@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from django.db import IntegrityError, transaction
@@ -6,6 +5,8 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 
 from discordbot.models import DiscordMessageLog
+from events.tasks import send_event_announcement
+from events.tests.test_discord_tasks import _discord_http, _DiscordTaskTestCase
 
 
 def _row(**overrides):
@@ -58,9 +59,6 @@ class DiscordMessageLogLeaseSchemaTest(TransactionTestCase):
         _row(source="attendance_reminder", source_id=6, success=True)
 
 
-from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
-
-
 class ConcurrentReminderTasksProduceOneSendTest(_DiscordTaskTestCase):
     """End-to-end verification that the lease pattern prevents duplicate
     Discord HTTP sends, not just duplicate audit rows.
@@ -81,21 +79,18 @@ class ConcurrentReminderTasksProduceOneSendTest(_DiscordTaskTestCase):
 
     @patch("discordbot.utils._rate_limited_request")
     def test_two_invocations_send_to_discord_exactly_once(self, mock_req):
-        mock_req.return_value = _ok_response({"id": "msg_real"})
+        mock_req.side_effect = _discord_http("100000000000000006")
         self.event.discord_announcement = True
         self.event.discord_announcement_channel_id = "1482767177063858216"
         self.event.state = "signups_open"
         self.event.save()
 
-        from events.tasks import send_event_announcement
-
         # Two sequential invocations — second hits the lease and exits
         send_event_announcement(self.event.pk)
         send_event_announcement(self.event.pk)
 
-        # Exactly one Discord send (the second invocation's claim returns
-        # None — the wrapper exits before sync_send_embed_with_components_no_log)
-        self.assertEqual(mock_req.call_count, 1)
+        # The second invocation sees the delivered signup and makes no POST.
+        self.assertEqual(len(self.posts(mock_req)), 1)
 
         # Exactly one success log row
         success_rows = DiscordMessageLog.objects.filter(

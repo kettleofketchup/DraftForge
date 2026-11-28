@@ -56,6 +56,16 @@ Notes under the message explain behaviour that is easy to miss. For example, lat
 
 When the event is not saved yet, a banner says so. Links to the event page point to the events list until the event exists. If a required field is empty (such as the date and time, or a series' schedule), the dialog lists the fields to fill in instead of showing a message.
 
+Each missing field in that list is a button. Choosing one closes the preview and moves to that field in the editor, which stays open:
+
+| Missing field | Where it goes |
+|---------------|---------------|
+| Name | **Event Name** on the **Event** tab |
+| Date and time | **Scheduled Date & Time** on the **Event** tab |
+| Schedule | The series' **Frequency** control on the **Event** tab (there is no separate Schedule tab) |
+
+Nothing is saved, and your unsaved edits stay in the form. Fill in the field, go back to the Discord tab and open the preview again. Closing the preview with **Close** or Escape leaves you on the Discord tab.
+
 For a series, the preview follows what saving would do. If you change the schedule, the preview uses the event that matches the new schedule. If the series is paused or ended, its existing upcoming event still posts, and the dialog says so.
 
 ## Organization defaults

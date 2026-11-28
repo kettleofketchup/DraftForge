@@ -9,6 +9,7 @@ import {
   type DiscordResolver,
 } from '~/components/discord';
 import { Alert, AlertDescription } from '~/components/ui/alert';
+import { SecondaryButton } from '~/components/ui/buttons';
 import type {
   DiscordPreviewResponse,
   GateCode,
@@ -62,12 +63,16 @@ function noteText(t: T): Record<NoteCode, () => string> {
 }
 
 function missingText(t: T, field: string): string {
-  const known: Record<string, () => string> = {
-    name: () => t('missing.name'),
-    scheduled_at: () => t('missing.scheduled_at'),
-    schedule: () => t('missing.schedule'),
-  };
-  return known[field]?.() ?? field;
+  switch (field) {
+    case 'name':
+      return t('missing.name');
+    case 'scheduled_at':
+      return t('missing.scheduled_at');
+    case 'schedule':
+      return t('missing.schedule');
+    default:
+      return field;
+  }
 }
 
 function channelLabel(
@@ -135,12 +140,56 @@ function DestinationLine({
   );
 }
 
+export type MissingFieldAction = (code: string) => (() => void) | undefined;
+
+function MissingFields({
+  missing,
+  action,
+}: {
+  missing: string[];
+  action: MissingFieldAction;
+}) {
+  const { t } = useTranslation('discordPreview');
+  return (
+    <div
+      data-testid="discord-preview-needs-input"
+      className="flex flex-col gap-2 text-sm"
+    >
+      <p>{t('status.needs_input_intro')}</p>
+      <ul className="flex flex-wrap gap-2">
+        {missing.map((code) => {
+          const onSelect = action(code);
+          const label = missingText(t, code);
+          return (
+            <li key={code}>
+              {onSelect ? (
+                <SecondaryButton
+                  type="button"
+                  size="sm"
+                  data-testid={`discord-preview-missing-${code}`}
+                  onClick={onSelect}
+                >
+                  {label}
+                </SecondaryButton>
+              ) : (
+                label
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function EventPreviewBody({
   data,
   organizationId,
+  missingFieldAction,
 }: {
   data: DiscordPreviewResponse;
   organizationId: number;
+  missingFieldAction?: MissingFieldAction;
 }) {
   const { t } = useTranslation('discordPreview');
   const orgResolve = useOrgDiscordResolver(organizationId, { enabled: true });
@@ -158,6 +207,10 @@ export function EventPreviewBody({
   }
 
   if (data.status === 'needs_input') {
+    if (missingFieldAction)
+      return (
+        <MissingFields missing={data.missing} action={missingFieldAction} />
+      );
     return (
       <p data-testid="discord-preview-needs-input" className="text-sm">
         {t('status.needs_input', {

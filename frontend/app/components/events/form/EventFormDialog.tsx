@@ -11,6 +11,10 @@ import {
   type SettingsDialogHandle,
 } from '~/components/patterns/SettingsDialog';
 import { Form } from '~/components/ui/form';
+import {
+  EventFormNavigationProvider,
+  type EventFormNavigation,
+} from './EventFormNavigation';
 import { EVENT_SECTION_FIELDS } from './settingsFields';
 import {
   EVENT_TAB_META,
@@ -87,6 +91,22 @@ export function EventFormDialog<
     return tabs.some((t) => t.value === mapped) ? mapped : first;
   };
 
+  const openRef = React.useRef(open);
+  const tabForRef = React.useRef(tabFor);
+  React.useLayoutEffect(() => {
+    openRef.current = open;
+    tabForRef.current = tabFor;
+  });
+  const navigation = React.useMemo<EventFormNavigation>(
+    () => ({
+      navigateToField: (field) => {
+        if (!openRef.current) return;
+        sections.current?.revealField(field, tabForRef.current(field));
+      },
+    }),
+    [],
+  );
+
   const onInvalid = (errors: FieldErrors<TIn>) => {
     const [key, error] = Object.entries(errors)[0] ?? [];
     if (!key) return;
@@ -99,27 +119,29 @@ export function EventFormDialog<
 
   return (
     <Form {...form}>
-      <SettingsDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        title={title}
-        description={description}
-        submitLabel={submitLabel}
-        isSubmitting={isSubmitting}
-        // Opening should not pop the search keyboard on phones; / and Ctrl/Cmd+K reach it.
-        autoFocus={false}
-        onSubmit={form.handleSubmit(onValid, onInvalid)}
-        loading={loading}
-        sectionRef={sections}
-        testIdPrefix={tabTestIdPrefix}
-        data-testid={dataTestId}
-        sections={tabs.map((t) => ({
-          ...t,
-          ...EVENT_TAB_META[t.value],
-          fields: EVENT_SECTION_FIELDS[t.value],
-          invalid: errorKeys.some((k) => tabFor(k) === t.value),
-        }))}
-      />
+      <EventFormNavigationProvider value={navigation}>
+        <SettingsDialog
+          open={open}
+          onOpenChange={onOpenChange}
+          title={title}
+          description={description}
+          submitLabel={submitLabel}
+          isSubmitting={isSubmitting}
+          // Opening should not pop the search keyboard on phones; / and Ctrl/Cmd+K reach it.
+          autoFocus={false}
+          onSubmit={form.handleSubmit(onValid, onInvalid)}
+          loading={loading}
+          sectionRef={sections}
+          testIdPrefix={tabTestIdPrefix}
+          data-testid={dataTestId}
+          sections={tabs.map((t) => ({
+            ...t,
+            ...EVENT_TAB_META[t.value],
+            fields: EVENT_SECTION_FIELDS[t.value],
+            invalid: errorKeys.some((k) => tabFor(k) === t.value),
+          }))}
+        />
+      </EventFormNavigationProvider>
     </Form>
   );
 }

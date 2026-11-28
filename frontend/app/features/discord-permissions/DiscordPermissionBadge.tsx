@@ -9,7 +9,7 @@ import {
 } from '~/components/ui/popover';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
-import { VERIFICATION_LIMITATION } from './copy';
+import { BLOCKER_TEXT, permissionLabel, VERIFICATION_LIMITATION } from './copy';
 import { PermissionDetails } from './PermissionDetails';
 import type { PermissionQuery } from './queries';
 import { isExpired, type PermissionCheckResult } from './schemas';
@@ -75,6 +75,121 @@ export function badgeView(
   return disabled ? { ...view, tone: 'neutral', icon: 'help' } : view;
 }
 
+const plural = (count: number, noun: string) =>
+  `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+function channelView(
+  views: readonly BadgeView[],
+  settings: readonly string[],
+  state: PermissionQuery['state'],
+  now: Date,
+): BadgeView {
+  if (state === 'checking' || state === 'error')
+    return badgeView(undefined, state, now);
+  if (!views.length)
+    return { tone: 'neutral', label: 'No enabled settings', icon: 'help' };
+  const blocked = new Set(
+    settings.filter((_, index) => views[index].tone === 'error'),
+  ).size;
+  if (blocked)
+    return {
+      tone: 'error',
+      label: `${plural(blocked, 'setting')} blocked`,
+      icon: 'x',
+    };
+  const unverified = views.filter((view) => view.tone !== 'success');
+  if (!unverified.length) return views[0];
+  if (new Set(unverified.map((view) => view.label)).size === 1)
+    return unverified[0];
+  const count = new Set(
+    settings.filter((_, index) => views[index].tone !== 'success'),
+  ).size;
+  return {
+    tone: unverified.some((view) => view.tone === 'warning')
+      ? 'warning'
+      : 'neutral',
+    label: `${plural(count, 'setting')} unverified`,
+    icon: 'help',
+  };
+}
+
+function missingSummary(result: PermissionCheckResult | undefined): string {
+  if (!result) return '';
+  const names = [
+    ...result.missing
+      .filter(
+        (flag) => !result.required_any.some((group) => group.includes(flag)),
+      )
+      .map(permissionLabel),
+    ...result.required_any
+      .filter((group) => !group.some((flag) => result.granted?.includes(flag)))
+      .map((group) => group.map(permissionLabel).join(' or ')),
+  ];
+  if (names.length) return `missing ${names.join(', ')}`;
+  const blocker = result.blockers[0];
+  return blocker ? BLOCKER_TEXT[blocker.code] : 'see the details below';
+}
+
+type Outcome = {
+  operationLabel: string;
+  result: PermissionCheckResult | undefined;
+  view: BadgeView;
+};
+
+const OUTCOME_GROUPS: {
+  title: string;
+  match: (view: BadgeView) => boolean;
+  text: (entry: Outcome) => string;
+}[] = [
+  {
+    title: 'Blocked',
+    match: (view) => view.tone === 'error',
+    text: ({ operationLabel, result }) =>
+      `${operationLabel} won't post here — ${missingSummary(result)}.`,
+  },
+  {
+    title: 'Working',
+    match: (view) => view.tone === 'success',
+    text: ({ operationLabel }) => `${operationLabel} can post here.`,
+  },
+  {
+    title: 'Unable to verify',
+    match: (view) => view.tone !== 'error' && view.tone !== 'success',
+    text: ({ operationLabel, view }) =>
+      `${operationLabel}: ${view.label}. Not confirmed either way.`,
+  },
+];
+
+function ChannelOutcomes({ entries }: { entries: readonly Outcome[] }) {
+  if (!entries.length)
+    return (
+      <p className="text-sm text-muted-foreground">
+        No enabled setting sends to this channel.
+      </p>
+    );
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      {OUTCOME_GROUPS.map(({ title, match, text }) => {
+        const items = entries.filter((entry) => match(entry.view));
+        if (!items.length) return null;
+        return (
+          <section key={title} className="flex flex-col gap-1">
+            <h3 className="font-semibold">{title}</h3>
+            <ul className="list-inside list-disc">
+              {items.map((entry) => (
+                <li key={entry.operationLabel}>{text(entry)}</li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+      <h3 className="border-t pt-3 font-semibold text-muted-foreground">
+        Permission details
+      </h3>
+    </div>
+  );
+}
+
 const tones = {
   success: 'bg-success/20 text-success border-success/30',
   warning: 'bg-warning/20 text-warning',
@@ -94,6 +209,7 @@ export function DiscordPermissionBadge({
   result,
   checks,
   state,
+  channel = false,
   disabled = false,
   'data-testid': testId,
 }: {
@@ -101,9 +217,13 @@ export function DiscordPermissionBadge({
   result: PermissionCheckResult | undefined;
   checks?: readonly {
     operationLabel: string;
+    /** The option this check belongs to; uses of one option count once. */
+    settingLabel?: string;
     result: PermissionCheckResult | undefined;
   }[];
   state: PermissionQuery['state'];
+  /** Summarise `checks` as the settings that send to one channel. */
+  channel?: boolean;
   disabled?: boolean;
   'data-testid'?: string;
 }) {
@@ -165,11 +285,21 @@ export function DiscordPermissionBadge({
   const now = new Date();
   const entries = checks ?? [{ operationLabel, result }];
   const views = entries.map((entry) => badgeView(entry.result, state, now));
-  const aggregate =
-    views.find((item) => item.tone === 'error') ??
-    views.find((item) => item.tone !== 'success') ??
-    views[0] ??
-    badgeView(undefined, state, now);
+  const aggregate = channel
+    ? channelView(
+        views,
+        entries.map((entry) =>
+          'settingLabel' in entry && entry.settingLabel
+            ? entry.settingLabel
+            : entry.operationLabel,
+        ),
+        state,
+        now,
+      )
+    : (views.find((item) => item.tone === 'error') ??
+      views.find((item) => item.tone !== 'success') ??
+      views[0] ??
+      badgeView(undefined, state, now));
   const view: BadgeView = disabled
     ? { ...aggregate, tone: 'neutral', icon: 'help' }
     : aggregate;
@@ -302,6 +432,14 @@ export function DiscordPermissionBadge({
                 This option is disabled. The check is diagnostic only.
               </p>
             )}
+            {channel && (state === 'ready' || state === 'idle') && (
+              <ChannelOutcomes
+                entries={entries.map((entry, index) => ({
+                  ...entry,
+                  view: views[index],
+                }))}
+              />
+            )}
             <div className="flex flex-col gap-4">
               {entries.map((entry, index) => {
                 const visible =
@@ -321,6 +459,7 @@ export function DiscordPermissionBadge({
                     operationLabel={entry.operationLabel}
                     statusLabel={status}
                     historical={isExpired(visible, now)}
+                    showRequired={channel}
                   />
                 ) : (
                   <section
