@@ -154,10 +154,47 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 
 - **Auto-approve** — signups go directly to Approved status
 - **Manual approval** — admin reviews and approves each signup
-- **Waitlist** — when max players is reached, new signups are waitlisted with position tracking
-- **Re-RSVP** — cancelled signups can re-register
+- **Waitlist** — when max players is reached, new signups are waitlisted. A signup's waitlist position is its rank among the waitlisted signups in line order, and promotion takes the next waitlisted signup in line
+- **Re-RSVP** — cancelled, declined and rejected signups can sign up again. The same signup is reused, so its history stays in one place
+- **Main/Maybe switch** — switching between RSVP (Main) and tentative (Maybe) changes the same signup. Moving from Main to Maybe frees the seat for the next waitlisted signup
 
 Each signup keeps a place in line and its original sign-up, and the signup ledger records every change to it, with who made it and how: see [Signup Ledger & Line Position](events/signup-ledger.md).
+
+The **Signup Line** settings decide whether a returning or switching signup keeps its place in line. They sit on the event's approval tab, on the series' event tab and in the organization's New Event Defaults, and a series passes them on to its future events:
+
+| Setting | Default | When on | When off |
+|---|---|---|---|
+| **Withdrawing gives up your place** (`line_withdraw_forfeits`) | on | A member who withdraws, declines or is rejected and signs up again goes to the back of the line | They get their old place back |
+| **Switching Main/Maybe gives up your place** (`line_switch_restamps`) | on | Moving between Main and Maybe sends the signup to the back of the line | It keeps its place |
+
+With both on, which is the default, the order is the same as before these settings existed. Signup rows on the event page and the roll call page show **in line since**: the time the signup took its current place.
+
+#### Staff reasons
+
+The **Staff reasons** setting (`staff_reason_policy`) decides when staff must say why they changed someone's signup. It sits next to the Signup Line settings, and a series passes it on to its future events like the other event settings. Past events keep the setting they had.
+
+| Choice | Value | A reason is required for |
+|---|---|---|
+| **Optional** (default) | `optional` | nothing; staff can still give one |
+| **Required for placements** | `placements` | placements only |
+| **Required for every staff change** | `all_staff_changes` | every staff change to a signup |
+
+Placements are the changes that decide who gets a seat: adding a member, approving a waitlisted signup, demoting to the waitlist and reinstating. Approving a pending signup, rejecting, confirming, unconfirming and removing are not placements.
+
+No reason is ever needed for:
+
+- a member changing their own signup, staff included;
+- system changes such as waitlist promotions, series cascades and scheduled tasks;
+- Discord buttons and commands, which are all member actions on the member's own signup. No staff Discord action exists. One added later would be refused under a strict policy until it collects a reason;
+- event-level transitions: starting roll call, reopening signups, starting the tournament, cancelling, restarting and closing;
+- ready check open, escalate and close. These apply the ready check rules to everyone at once, so no single member's change needs justifying. To remove one member with a reason, use Remove;
+- voice presence and ready check resolve, which already require their own reason.
+
+A reason that is given is saved with the change under every choice. Staff see it in the signup's **History**. Reasons are not shown to members, are not sent in live updates or Discord posts, and are not written to logs.
+
+Under **Optional** the one-click buttons stay one-click. The actions that already open a dialog (the MMR approval recap, Remove, and the roll call confirm, reject and remove dialogs) get an optional reason field. When the choice requires a reason, a one-click action opens a short reason dialog first, and the dialog-based actions mark their field as required.
+
+**API:** each staff signup action (`admin-signup`, `approve`, `demote`, `reinstate`, `reject`, `confirm`, `unconfirm`, `cancel_signup` and `ready-check/confirm`) accepts an optional `reason` in the body, at most 500 characters after trimming. When the event's choice requires one and none is sent, the endpoint returns 400 `{"error": "reason_required"}`. Status errors come first: a request on a signup in the wrong state gets the usual status error, not `reason_required`. `ready-check/recheck` writes no history, so it ignores `reason`.
 
 #### Web vs Discord parity
 
@@ -320,7 +357,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/event-signups/{id}/reject/` | Reject a signup |
 | POST | `/api/event-signups/{id}/confirm/` | Confirm attendance (roll-call) |
 | POST | `/api/event-signups/{id}/unconfirm/` | Reverse a confirm |
-| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the end of the waitlist. Nobody is promoted into the freed seat; staff fill it by hand |
+| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the waitlist; it moves to the back of the line. Nobody is promoted into the freed seat; staff fill it by hand |
 | POST | `/api/event-signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
 | POST | `/api/event-signups/{id}/reinstate/` | Re-enable a cancelled signup |
 

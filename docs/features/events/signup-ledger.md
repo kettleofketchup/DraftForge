@@ -13,8 +13,42 @@ Signups are listed in line order (`line_seq`, then id). The signup API also retu
 
 Moving a signup to another event gives it a new place at the end of that event's line.
 
-!!! note "Waitlist tab order"
-    The website's waitlist tab lists signups in line order. The upgrade reorders existing waitlists to match waitlist order, which is the order Discord shows and promotion uses. Until the waitlist rework lands, a member that a staff member moves to the waitlist afterwards keeps their place in line on the website, so the website and Discord can show that member in different places.
+### One signup per member
+
+A member has one signup per event, and every change happens on that signup. Signing up again after a cancel, a decline or a rejection, and switching between Main and Maybe, update the existing signup: its id, its original sign-up and its ledger history stay the same. The only things that delete a signup are deleting its event and an [account merge](#account-merges) that finds both accounts signed up.
+
+### The line is the queue
+
+The line is the only queue an event has:
+
+- **Promotion** takes the next waitlisted signup in line order. Its role, member class and commitment don't change the order.
+- **`waitlist_position`** in the signup API is worked out on each read: the signup's 1-based rank among the event's waitlisted signups, in line order. It is empty for a signup that is not waitlisted. The website's waitlist tab and the Discord signup post both use it, so they show the same order.
+- **Moving a signup to the waitlist** (demote) sends it to the back of the line.
+
+The upgrade that made the line the queue reorders any waitlist whose line order differed from its old stored waitlist order, so every waitlist keeps the order it showed before. It changes only `line_seq`, never `signed_up_at`, and writes no ledger entries.
+
+### Line rules
+
+Two event settings, both on by default, decide whether a signup that comes back or switches goes to the back of the line ("restamp": a new `line_seq` and `signed_up_at`) or keeps its place. See [RSVP & Signups](../events.md#rsvp-signups) for where staff set them.
+
+| From | Action | Setting read | Back of the line when | Ledger action |
+|---|---|---|---|---|
+| No signup | RSVP or Maybe | none | new place at the back | `signed_up` |
+| Cancelled or rejected, after a real sign-up | RSVP or Maybe | `line_withdraw_forfeits` | the setting is on | `resigned_up` |
+| Declined without ever signing up | RSVP or Maybe | none | always | `signed_up` |
+| Cancelled, after a real sign-up | Member reinstate | `line_withdraw_forfeits` | the setting is on | `reinstated` |
+| Dropped | Member reinstate | none | refused: "You were dropped from this event" | none |
+| Cancelled or dropped, signups open, event full | Staff reinstate | none | always | `reinstated` |
+| Cancelled or dropped with signups open and a free seat; or cancelled, rejected or dropped during roll call | Staff reinstate | none | never | `reinstated` |
+| Declined without ever signing up | Any reinstate | none | always | `reinstated` |
+| Cancelled, rejected or Maybe | Staff add | none | always | `staff_added` |
+| Maybe | RSVP | `line_switch_restamps` | the setting is on | `switched_commitment` |
+| Holding a seat or waitlisted | Maybe | `line_switch_restamps` | the setting is on | `switched_commitment`, plus `promoted` entries if a seat was freed |
+| Holding a seat | Demote | none | always | `demoted` |
+
+With both settings off, a member who returns or switches keeps their old place. If the event is full they wait on the waitlist in that place and are promoted before anyone who signed up after them.
+
+Every restamp logs `signup_line_restamped` (`system=events`, `subsystem=line`) with a `reason`: `resign_up`, `switch`, `demote`, `member_reinstate`, `staff_reinstate`, `staff_add` or `bare_decline`.
 
 ## Commitment
 
@@ -30,7 +64,7 @@ Each signup remembers when and how the member first signed up for the event:
 | `first_commitment` | Their commitment at that first sign-up |
 | `first_rsvp_class` | Their RSVP class at that first sign-up |
 
-These fields never change once set. If a member cancels and signs up again, or switches between tentative and RSVP, the new signup keeps the original values while its place in line moves to the end. The app refuses any change to them, and the Django admin shows them as read-only.
+These fields never change once set. If a member cancels and signs up again, or switches between tentative and RSVP, the signup keeps the original values while the [line rules](#line-rules) decide its place in line. The app refuses any change to them, and the Django admin shows them as read-only.
 
 A member who declines without having signed up has a declined signup with these fields empty, because a decline is not a sign-up. They are filled in the first time that member signs up, goes tentative or is reinstated. The upgrade treats an existing cancelled signup as a decline of this kind when it was never changed after it was created.
 
@@ -89,7 +123,7 @@ A staff member acting on their own signup is recorded as `member`. When they use
 
 ### Promotions
 
-When a cancel, decline, rejection, switch to tentative or account merge frees a seat, the waitlisted signups that take it each get their own `promoted` entry. Moving a signup to the waitlist promotes nobody; staff fill that seat by hand. Its `caused_by` points at the entry for the change that freed the seat, and it shares that entry's correlation id. Promotions from the `rebalance_event_waitlists` command have no cause.
+When a cancel, decline, rejection, switch to tentative or account merge frees a seat, the waitlisted signups that take it, in line order, each get their own `promoted` entry. Moving a signup to the waitlist promotes nobody; staff fill that seat by hand. Its `caused_by` points at the entry for the change that freed the seat, and it shares that entry's correlation id. Promotions from the `rebalance_event_waitlists` command have no cause.
 
 When a ready check close or resolve drops members, the promotions into their seats point at the step's first `dropped` entry and are recorded as the operator who ran the step, not the system. Every other promotion is a system entry.
 
@@ -152,8 +186,8 @@ The tab has two filters, **member** and **action**. **Clear filters** resets bot
 !!! note "Signups without history"
     Signups created by test data population or fixtures have no entries, and signups from before the ledger start at their `backfilled` entry ("Starting record"). A member with no entries shows "No changes recorded for this member".
 
-!!! info "Reasons and overridden rules"
-    Staff cannot give a reason for most changes yet, so `reason` is usually empty, and nothing fills `rules_overridden` yet. The page shows both as soon as later work records them.
+!!! info "Reasons"
+    Staff signup actions on the website fill `reason` with the text staff give. The event's [Staff reasons](../events.md#staff-reasons) setting decides when a reason is required. Members acting on their own signup and system changes are exempt, as are one-click staff actions when the setting does not require a reason.
 
 ## For developers
 
@@ -161,6 +195,8 @@ The tab has two filters, **member** and **action**. **Clear filters** resets bot
 - Build the actor with `SignupActor.for_request_on(request, subject, event)` on the website (pass `staff_only=True` on staff-only endpoints), `SignupActor.discord(user)` in Discord flows (it picks up the bound interaction id), or `SignupActor.system()` where no person acts.
 - A new signup mutation must record exactly one entry with `record_signup_change`, inside its own `transaction.atomic` block, after its guards. Take `before = snapshot(signup)` from a row read with `.nocache()` inside the transaction.
 - A mutation that frees a seat passes its entry to `_promote_from_waitlist(event, cause=entry)`.
+- A staff signup mutation calls `require_staff_reason(...)` from `events/ledger.py` after its state checks and before any write, and records the returned trimmed reason. It raises `StaffReasonRequired` (400 `{"error": "reason_required"}`) when the event's policy needs a reason and none was given.
+- `PLACEMENT_ACTIONS` in `events/ledger.py` lists the ledger actions that count as placements: `staff_added`, `demoted`, `reinstated`, plus `voided_withdrawal`, `transferred_out`, `transferred_in` and `swapped` for future staff actions. `is_placement(action, from_status=...)` also counts `approved` from `waitlisted`. This is the extension point for later placement work; the frontend copy in `components/events/staffReasonPolicy.ts` must match.
 
 ### History API
 
@@ -182,7 +218,7 @@ Each item has:
 | `id`, `occurred_at`, `action`, `means`, `on_behalf`, `reason` | As stored on the entry |
 | `subject` | `user_id`, `username`, `nickname`, `discordNickname`, `guildNickname`, `avatarUrl`, `discord_id` of the member. A deleted user falls back to the snapshot's name and Discord ID |
 | `actor` | The same user fields without `discord_id`, plus `role` (`member`, `staff` or `system`). All user fields are `null` for the system |
-| `before`, `after` | The signup snapshot (`status`, `commitment`, `rsvp_class`, `signed_up_at`, `line_seq`, `waitlist_position`, `event_team_id`, `extra`), or `null` when there is none or the stored snapshot cannot be read |
+| `before`, `after` | The signup snapshot (`status`, `commitment`, `rsvp_class`, `signed_up_at`, `line_seq`, `waitlist_position`, `event_team_id`, `extra`), or `null` when there is none or the stored snapshot cannot be read. `waitlist_position` is the computed waitlist rank at that moment |
 | `rules_overridden` | A list of rule names, empty today. A stored value that is not a list of strings comes back as `[]` and logs `signup_history_rules_invalid` |
 | `caused_by` | The id of the causing entry, or `null` |
 
@@ -195,6 +231,10 @@ Errors:
 - **400** for a bad param: `{"user": ["Invalid user."]}`, `{"action": ["Invalid action."]}`, `{"cursor": ["Invalid cursor."]}` or `{"page_size": ["Invalid page size."]}`.
 
 The frontend reads it with `getEventSignupHistory` and the `useSignupHistory` hook (query key `['event-signup-history', eventId, filters]`). Every staff signup mutation invalidates that key for the event.
+
+### Stored waitlist position
+
+The `waitlist_position` database column is still written (the next number at the end when a signup joins the waitlist, empty when it leaves) so that rolling back to an older release keeps a sensible waitlist order. Nothing orders signups by it any more, and a signup's Django admin page shows the computed rank next to it. A follow-up will drop the column and these writes once a release with the line rules has run without a rollback.
 
 ## After deploying
 
@@ -210,4 +250,4 @@ Use `docker exec` rather than `just dev::run`, which starts a container on the d
 
 ## Coming later
 
-A member's own view of their signup records, and the reasons staff give for their changes, will build on this ledger. This page will describe them when they land.
+A member's own view of their signup records will build on this ledger. This page will describe them when they land.

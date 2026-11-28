@@ -77,6 +77,27 @@ class SignupHistoryPopulateTest(TestCase):
         self.assertTrue(promoted)
         self.assertTrue(all(e.caused_by_id is not None for e in promoted))
 
+    def test_resign_up_reuses_row(self) -> None:
+        withdrawer = self.data["withdrawer_pk"]
+        rows = list(
+            EventSignup.objects.nocache().filter(
+                event_id=self.data["event_pk"], user_id=withdrawer
+            )
+        )
+        self.assertEqual(len(rows), 1)
+        own = [
+            e
+            for e in self._entries()
+            if e.subject_user_id == withdrawer
+            and e.action
+            in {SignupAction.SIGNED_UP, SignupAction.WITHDREW, SignupAction.RESIGNED_UP}
+        ]
+        self.assertEqual(
+            [e.action for e in own],
+            [SignupAction.SIGNED_UP, SignupAction.WITHDREW, SignupAction.RESIGNED_UP],
+        )
+        self.assertEqual({e.signup_id for e in own}, {rows[0].pk})
+
     def test_means_and_roles(self) -> None:
         means = {e.means for e in self._entries()}
         self.assertTrue(

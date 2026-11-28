@@ -3,15 +3,21 @@
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework.test import APIClient
 
 from app.internal_client import InternalAPIUnavailable
+from events.constants import SignupStatus
 from events.discord.embeds import (
     _signup_counts,
     build_announcement_embeds,
     build_announcement_v2,
     build_signup_reminder_embed,
 )
+from events.models import EventSignup
 from events.schemas import EventSignupSchema
+from events.services import process_rsvp
+from events.tests.actors import SYSTEM
 from events.tests.base import EventTestCase
 
 
@@ -153,3 +159,32 @@ class SignupReadUnavailableEmbedTest(EventTestCase):
                 with self.subTest(builder=builder.__name__):
                     with self.assertRaises(InternalAPIUnavailable):
                         builder(self.event)
+
+
+class WaitlistOrderFromApiTest(EventTestCase):
+    def test_embed_lists_waitlist_by_computed_rank(self) -> None:
+        event = self.make_event(max_players=1)
+        names = ["seated", "alpha", "bravo", "charlie"]
+        signups: list[EventSignup] = []
+        for name in names:
+            user = self.make_user()
+            user.nickname = name
+            user.save()
+            signups.append(process_rsvp(event, user, actor=SYSTEM))
+        waiting = signups[1:]
+        for signup in waiting:
+            self.assertEqual(signup.status, SignupStatus.WAITLISTED)
+        for signup, stale in zip(waiting, (3, 1, 2), strict=True):
+            EventSignup.objects.filter(pk=signup.pk).update(waitlist_position=stale)
+
+        response = APIClient().get(reverse("event-signup-list"), {"event": event.pk})
+        self.assertEqual(response.status_code, 200)
+        rows = [EventSignupSchema.model_validate(d) for d in response.json()]
+
+        with patch("events.discord.embeds.get_event_signups", return_value=rows):
+            fields = build_announcement_v2(event)["embeds"][1]["fields"]
+        waitlist = next(f for f in fields if "Waitlisted" in f["name"])
+        self.assertEqual(
+            waitlist["value"].splitlines(),
+            ["> 1. alpha", "> 2. bravo", "> 3. charlie"],
+        )

@@ -5,8 +5,11 @@ import {
   getOverrideRequired,
   isOverrideReasonRequiredError,
   isOverrideRequiredError,
+  isStaffReasonRequiredError,
   OverrideReasonFormSchema,
   overrideReasonFormSchema,
+  responseBody,
+  staffReasonFormSchema,
 } from '../overridesAPI';
 
 function axiosError(status: number, data: unknown): AxiosError {
@@ -103,5 +106,56 @@ describe('overrideReasonFormSchema', () => {
   it('keeps the required message at a minimum of one', () => {
     const result = overrideReasonFormSchema(1).safeParse({ reason: ' ' });
     expect(result.error?.issues[0].message).toBe('A reason is required');
+  });
+});
+
+describe('staff reason guard', () => {
+  it('detects the 400 reason_required body', () => {
+    expect(
+      isStaffReasonRequiredError(axiosError(400, { error: 'reason_required' })),
+    ).toBe(true);
+  });
+
+  it('ignores other bodies, statuses and errors', () => {
+    expect(
+      isStaffReasonRequiredError(axiosError(400, { error: 'other' })),
+    ).toBe(false);
+    expect(
+      isStaffReasonRequiredError(
+        axiosError(409, { code: 'override_reason_required' }),
+      ),
+    ).toBe(false);
+    expect(
+      isStaffReasonRequiredError(axiosError(409, { error: 'reason_required' })),
+    ).toBe(false);
+    expect(isStaffReasonRequiredError(new Error('boom'))).toBe(false);
+  });
+
+  it('exposes the body for a matching status only', () => {
+    expect(responseBody(axiosError(400, { a: 1 }), 400)).toEqual({ a: 1 });
+    expect(responseBody(axiosError(400, { a: 1 }), 409)).toBeUndefined();
+  });
+});
+
+describe('staffReasonFormSchema', () => {
+  it('accepts an empty reason when optional', () => {
+    expect(staffReasonFormSchema(false).safeParse({ reason: '' }).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects whitespace when required', () => {
+    const result = staffReasonFormSchema(true).safeParse({ reason: '   ' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe('A reason is required');
+  });
+
+  it.each([false, true])('bounds the reason at 500 (required=%s)', (req) => {
+    expect(
+      staffReasonFormSchema(req).safeParse({ reason: 'x'.repeat(501) }).success,
+    ).toBe(false);
+    expect(
+      staffReasonFormSchema(req).parse({ reason: ` ${'x'.repeat(500)} ` }),
+    ).toEqual({ reason: 'x'.repeat(500) });
   });
 });

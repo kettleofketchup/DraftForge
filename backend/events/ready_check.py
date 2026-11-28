@@ -23,8 +23,10 @@ from events.ledger import (
     SignupActor,
     record_ready_check_transition,
     record_signup_change,
+    require_staff_reason,
     snapshot,
 )
+from events.line import ranks_if_waitlisted, waitlist_rank
 from events.models import (
     Event,
     EventSignup,
@@ -299,6 +301,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
         entries.append(entry)
     ReadyCheckEntry.objects.bulk_create(entries)
 
+    ranks = ranks_if_waitlisted(locked, signups)
     for signup in signups:
         record_signup_change(
             event=locked,
@@ -306,7 +309,7 @@ def open_ready_check(event: Event, *, actor: SignupActor) -> OpenResult:
             actor=actor,
             action=SignupAction.READY_CHECK_ASKED,
             signup=signup,
-            after=snapshot(signup),
+            after=snapshot(signup, waitlist_rank=ranks.get(signup.pk)),
             reason="ready_check_opened",
             correlation_id=correlation_id,
         )
@@ -420,6 +423,7 @@ def confirm_ready(
     via: ReadyCheckConfirmVia | str,
     actor: SignupActor,
     caused_by: SignupLedgerEntry | None = None,
+    reason: str = "",
 ) -> ConfirmResult:
     locked = lock_event(event)
     check = live_ready_check(locked, lock=True)
@@ -438,9 +442,11 @@ def confirm_ready(
     if signup.status not in scope_statuses(check_scope(check)):
         return _log_refused(locked, check, user, ConfirmResult.NOT_IN_CHECK)
 
-    before = snapshot(signup)
+    rank = waitlist_rank(signup)
+    before = snapshot(signup, waitlist_rank=rank)
     entry_changed = False
-    if entry.state == ReadyCheckEntryState.PENDING:
+    pending = entry.state == ReadyCheckEntryState.PENDING
+    if pending:
         staff_on_held = (
             via == ReadyCheckConfirmVia.STAFF and check.phase == ReadyCheckPhase.HELD
         )
@@ -449,10 +455,23 @@ def confirm_ready(
             and check.phase == ReadyCheckPhase.CLOSED
             and signup.status == SignupStatus.APPROVED
         ):
-            _confirm_after_close(locked, check, signup, actor=actor)
+            _confirm_after_close(locked, check, signup, actor=actor, reason=reason)
             return ConfirmResult.CONFIRMED
         if check.phase not in ACCEPTING_PHASES and not staff_on_held:
             return _log_refused(locked, check, user, ConfirmResult.CLOSED)
+    if via == ReadyCheckConfirmVia.STAFF and (
+        pending or signup.status == SignupStatus.APPROVED
+    ):
+        reason = require_staff_reason(
+            event_id=locked.pk,
+            policy=locked.staff_reason_policy,
+            actor=actor,
+            subject_id=signup.user_id,
+            action=SignupAction.CONFIRMED,
+            from_status=signup.status,
+            reason=reason,
+        )
+    if pending:
         entry_changed = _confirm_entry(entry, via)
         if not entry_changed and entry.state != ReadyCheckEntryState.CONFIRMED:
             return _log_refused(locked, check, user, ConfirmResult.CLOSED)
@@ -474,8 +493,8 @@ def confirm_ready(
         action=SignupAction.CONFIRMED,
         signup=signup,
         before=before,
-        after=snapshot(signup),
-        reason="ready_check_confirmed",
+        after=snapshot(signup, waitlist_rank=rank),
+        reason=reason or "ready_check_confirmed",
         caused_by=caused_by,
         correlation_id=f"rc{check.pk}:confirm",
     )
@@ -571,9 +590,15 @@ def _record_member_rows(
     seat: bool = False,
 ) -> list[EventSignup]:
     seated: list[EventSignup] = []
+    ranks = ranks_if_waitlisted(locked, [entry.signup for entry in entries])
     for entry in entries:
         signup = entry.signup
-        before = snapshot(signup) if seat and signup is not None else None
+        rank = ranks.get(signup.pk) if signup is not None else None
+        before = (
+            snapshot(signup, waitlist_rank=rank)
+            if seat and signup is not None
+            else None
+        )
         if seat and signup is not None and _sync_signup_confirmed(locked, signup):
             seated.append(signup)
         record_signup_change(
@@ -583,7 +608,7 @@ def _record_member_rows(
             action=action,
             signup=signup,
             before=before,
-            after=snapshot(signup) if signup is not None else None,
+            after=snapshot(signup, waitlist_rank=rank) if signup is not None else None,
             reason=reason,
             correlation_id=correlation_id,
         )
@@ -706,6 +731,8 @@ def _drop(
     dropped_user_ids: list[int] = []
     dropped_signups: list[EventSignup] = []
     first_drop: SignupLedgerEntry | None = None
+    ranks = ranks_if_waitlisted(locked, [entry.signup for entry in entries])
+    dropped_ranks: list[int] = []
     for entry in entries:
         signup = entry.signup
         if signup is None:
@@ -717,7 +744,11 @@ def _drop(
         )
         if not updated:
             continue
-        before = snapshot(signup)
+        rank = ranks.get(signup.pk)
+        if rank is not None:
+            dropped_ranks.append(rank)
+            rank -= sum(1 for gone in dropped_ranks if gone < rank)
+        before = snapshot(signup, waitlist_rank=rank)
         signup.status = SignupStatus.DROPPED
         signup.waitlist_position = None
         signup.event = locked
@@ -734,7 +765,7 @@ def _drop(
             action=SignupAction.DROPPED,
             signup=signup,
             before=before,
-            after=snapshot(signup),
+            after=snapshot(signup, waitlist_rank=None),
             reason=reason,
             correlation_id=correlation_id,
         )
@@ -1027,7 +1058,9 @@ def close_for_start(event: Event, *, actor: SignupActor) -> bool:
 
 
 @transaction.atomic
-def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def staff_confirm_signup(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     locked = lock_event(signup.event)
     check = live_ready_check(locked, lock=True)
     if (
@@ -1036,7 +1069,11 @@ def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSig
         and check.entries.filter(signup_id=signup.pk).exists()
     ):
         result = confirm_ready(
-            locked, signup.user, via=ReadyCheckConfirmVia.STAFF, actor=actor
+            locked,
+            signup.user,
+            via=ReadyCheckConfirmVia.STAFF,
+            actor=actor,
+            reason=reason,
         )
         if result in (ConfirmResult.CONFIRMED, ConfirmResult.ALREADY_CONFIRMED):
             return (
@@ -1046,24 +1083,31 @@ def staff_confirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSig
             )
 
     if check is not None and check.phase == ReadyCheckPhase.CLOSED:
-        _confirm_after_close(locked, check, signup, actor=actor)
+        _confirm_after_close(locked, check, signup, actor=actor, reason=reason)
         return signup
     confirm_signup(
         signup,
         actor=actor,
-        reason="staff_confirmed",
+        reason=reason,
+        fallback_reason="staff_confirmed",
         correlation_id=f"rc{check.pk}:confirm" if check is not None else "",
     )
     return signup
 
 
 def _confirm_after_close(
-    locked: Event, check: ReadyCheck, signup: EventSignup, *, actor: SignupActor
+    locked: Event,
+    check: ReadyCheck,
+    signup: EventSignup,
+    *,
+    actor: SignupActor,
+    reason: str = "",
 ) -> None:
     confirm_signup(
         signup,
         actor=actor,
-        reason="staff_confirmed",
+        reason=reason,
+        fallback_reason="staff_confirmed",
         rules_overridden=["ready_check_closed"],
         correlation_id=f"rc{check.pk}:confirm",
     )

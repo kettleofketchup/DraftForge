@@ -7,6 +7,7 @@ from django.db import transaction
 from events.capacity import seat_holding_statuses
 from events.constants import SignupAction
 from events.ledger import SignupActor, record_signup_change, snapshot
+from events.line import waitlist_rank
 from events.models import EventSignup, SignupLedgerEntry
 from events.services import _promote_from_waitlist
 
@@ -39,7 +40,7 @@ def merge_user_signups(
         freed_seat = False
         seats = seat_holding_statuses(event)
         if kept is None:
-            before = snapshot(row, extra=origin)
+            before = snapshot(row, extra=origin, waitlist_rank=waitlist_rank(row))
         else:
             # A seat beats a row that holds none, whichever account it is on.
             seated_drop = row.status in seats and kept.status not in seats
@@ -51,6 +52,7 @@ def merge_user_signups(
                     "discarded_signup_id": discarded.pk,
                     "discarded_duplicate": True,
                 },
+                waitlist_rank=waitlist_rank(discarded),
             )
             freed_seat = discarded.status in seats
             discarded.delete()
@@ -59,9 +61,12 @@ def merge_user_signups(
         if kept is None:
             row.user = keep
             row.save(update_fields=["user", "updated_at"])
-            signup, after = row, snapshot(row, extra=origin)
+            signup, after = (
+                row,
+                snapshot(row, extra=origin, waitlist_rank=waitlist_rank(row)),
+            )
         else:
-            signup, after = kept, snapshot(kept)
+            signup, after = kept, snapshot(kept, waitlist_rank=waitlist_rank(kept))
         entry = record_signup_change(
             event=event,
             subject=keep,

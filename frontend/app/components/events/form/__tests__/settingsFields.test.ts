@@ -61,6 +61,14 @@ describe('EVENT_SECTION_FIELDS', () => {
     expect(stale).toEqual([]);
   });
 
+  it('lists the staff reason policy under Approval with search keywords', () => {
+    const entry = EVENT_SECTION_FIELDS.approval.staff_reason_policy;
+    expect(entry.label).toBe('Staff reasons');
+    expect(entry.keywords).toEqual(
+      expect.arrayContaining(['reason', 'audit', 'staff', 'placement']),
+    );
+  });
+
   it('describes the Friend ID requirement without naming one game', () => {
     expect(
       EVENT_SECTION_FIELDS.approval.require_steam_id.description,

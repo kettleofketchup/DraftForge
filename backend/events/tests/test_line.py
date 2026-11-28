@@ -15,14 +15,20 @@ from app.models import CustomUser
 from events import line
 from events.constants import Commitment, EventState, RsvpClass, SignupStatus
 from events.exceptions import ImmutableFieldError
+from events.ledger import snapshot
 from events.line import (
     EventSignupQuerySet,
+    forfeits_on_withdraw,
     line_order_by,
     next_line_seq,
+    restamp_to_back,
+    restamps_on_switch,
     restore_place,
     same_gate_distance,
     stamp,
     swap_places,
+    waitlist_rank,
+    waitlist_ranks,
 )
 from events.models import Event, EventSignup
 from events.schemas import SignupSnapshot
@@ -426,7 +432,7 @@ class LineMutatorTests(LineTestBase):
         self.assertEqual(row.rsvp_class, RsvpClass.STANDARD)
         self.assertEqual(row.signed_up_at, at)
         self.assertEqual(row.line_seq, 7)
-        self.assertEqual(row.waitlist_position, 2)
+        self.assertIsNone(row.waitlist_position)
         self.assertEqual(
             (row.first_signed_up_at, row.first_commitment, row.first_rsvp_class),
             before_first,
@@ -546,3 +552,100 @@ class LineMutatorTests(LineTestBase):
                 (row.line_seq, row.signed_up_at), (s.line_seq, s.signed_up_at)
             )
         self.assertEqual((a.line_seq, b.line_seq), (1, 1))
+
+
+class RestampTests(LineTestBase):
+    def test_restamp_to_back_moves_after_all_rows(self) -> None:
+        rows = [self.signup(i) for i in range(3)]
+        first = rows[0]
+        old_at = first.signed_up_at
+        with capture_logs() as logs, self.captureOnCommitCallbacks(execute=True):
+            fields = restamp_to_back(first, reason="resign_up")
+            first.save(update_fields=[*fields, "updated_at"])
+        self.assertEqual(fields, ["line_seq", "signed_up_at"])
+        row = EventSignup.objects.nocache().get(pk=first.pk)
+        others = [EventSignup.objects.nocache().get(pk=r.pk) for r in rows[1:]]
+        self.assertGreater(row.line_seq, max(o.line_seq for o in others))
+        self.assertGreater(row.signed_up_at, old_at)
+        restamped = [e for e in logs if e["event"] == "signup_line_restamped"]
+        self.assertEqual(len(restamped), 1)
+        self.assertEqual(restamped[0]["system"], "events")
+        self.assertEqual(restamped[0]["subsystem"], "line")
+        self.assertEqual(restamped[0]["reason"], "resign_up")
+        self.assertEqual(restamped[0]["signup_id"], first.pk)
+        self.assertEqual(restamped[0]["line_seq"], row.line_seq)
+
+    def test_rule_readers_follow_event_settings(self) -> None:
+        for value in (True, False):
+            self.event.line_withdraw_forfeits = value
+            self.event.line_switch_restamps = not value
+            self.assertIs(forfeits_on_withdraw(self.event), value)
+            self.assertIs(restamps_on_switch(self.event), not value)
+
+
+class WaitlistRankTests(LineTestBase):
+    def _line(self) -> dict[str, EventSignup]:
+        rows = {
+            "A": self.signup(0, status=SignupStatus.RSVP),
+            "B": self.signup(1, status=SignupStatus.WAITLISTED, waitlist_position=1),
+            "C": self.signup(2, status=SignupStatus.WAITLISTED, waitlist_position=2),
+            "D": self.signup(3, status=SignupStatus.WAITLISTED, waitlist_position=3),
+        }
+        EventSignup.objects.filter(pk=rows["B"].pk).update(line_seq=10)
+        return {k: EventSignup.objects.nocache().get(pk=v.pk) for k, v in rows.items()}
+
+    def test_waitlist_ranks_in_line_order(self) -> None:
+        rows = self._line()
+        with self.assertNumQueries(1):
+            ranks = waitlist_ranks(self.event)
+        self.assertEqual(ranks, {rows["C"].pk: 1, rows["D"].pk: 2, rows["B"].pk: 3})
+
+    def test_waitlist_rank_single(self) -> None:
+        rows = self._line()
+        ranks = waitlist_ranks(self.event)
+        for key in ("B", "C", "D"):
+            self.assertEqual(waitlist_rank(rows[key]), ranks[rows[key].pk])
+        self.assertIsNone(waitlist_rank(rows["A"]))
+
+    def test_annotate_waitlist_rank(self) -> None:
+        rows = self._line()
+        other = [
+            self.signup(i, event=self.other_event, status=SignupStatus.WAITLISTED)
+            for i in range(2)
+        ]
+        ranks = waitlist_ranks(self.event)
+        annotated = dict(
+            EventSignup.objects.nocache()
+            .annotate_waitlist_rank()
+            .values_list("pk", "waitlist_rank")
+        )
+        for key in ("B", "C", "D"):
+            self.assertEqual(annotated[rows[key].pk], ranks[rows[key].pk])
+        self.assertIsNone(annotated[rows["A"].pk])
+        self.assertEqual([annotated[o.pk] for o in other], [1, 2])
+
+
+class SnapshotRankTests(LineTestBase):
+    def test_snapshot_records_supplied_rank(self) -> None:
+        s = self.signup(0, status=SignupStatus.WAITLISTED, waitlist_position=7)
+        self.assertEqual(snapshot(s, waitlist_rank=2).waitlist_position, 2)
+        self.assertEqual(snapshot(s).waitlist_position, 7)
+        self.assertIsNone(snapshot(s, waitlist_rank=None).waitlist_position)
+
+    def test_restore_place_ignores_waitlist_position(self) -> None:
+        self.assertNotIn("waitlist_position", line.RESTORED_FIELDS)
+        s = self.signup(0, status=SignupStatus.WAITLISTED, waitlist_position=4)
+        snap = SignupSnapshot(
+            status=SignupStatus.WAITLISTED,
+            commitment=s.commitment,
+            rsvp_class=s.rsvp_class,
+            signed_up_at=s.signed_up_at,
+            line_seq=s.line_seq,
+            waitlist_position=9,
+        )
+        with mock.patch.object(EventSignup, "save", autospec=True) as save:
+            restore_place(s, snap)
+        save.assert_not_called()
+        self.assertEqual(
+            EventSignup.objects.nocache().get(pk=s.pk).waitlist_position, 4
+        )

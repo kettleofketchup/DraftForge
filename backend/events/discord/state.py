@@ -38,7 +38,7 @@ def signup_list_queryset(
     if event_id:
         qs = qs.filter(event_id=event_id)
     if for_list:
-        qs = qs.annotate_line_rank()
+        qs = qs.annotate_line_rank().annotate_waitlist_rank()
     return qs
 
 

@@ -40,7 +40,7 @@ class SignupSelfMadeTests(EventTestCase):
         self.assertFalse(staff_row.self_made)
         cancel_signup(staff_row, actor=SYSTEM)
         signup = process_rsvp(self.open_event, self.member, actor=SYSTEM)
-        self.assertNotEqual(signup.pk, staff_row.pk)
+        self.assertEqual(signup.pk, staff_row.pk)
         self.assertTrue(self._row().self_made)
 
     def test_waitlisted_signup_self_made(self) -> None:

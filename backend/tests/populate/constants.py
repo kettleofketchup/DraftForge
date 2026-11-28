@@ -131,6 +131,9 @@ MOCK_USERNAMES = [
 NAME_SYNC_USERNAME: Final[str] = "name_sync_dragonclaw"
 NAME_SYNC_GLOBAL_ONLY_USERNAME: Final[str] = "name_sync_globalonly"
 
+# populate_events_data: both line rules off, for the keep-place E2E.
+LINE_ORDER_KEEP_PLACE_EVENT_NAME: Final[str] = "Line Order Keep Place Event"
+
 # populate_steam_verification_data; mirrored in frontend fixtures/constants.ts.
 STEAM_VERIFY_EVENT_NAME: Final[str] = "Steam Friend ID Verify Event"
 STEAM_VERIFY_UNVERIFIED_USERNAME: Final[str] = "steam_verify_unverified"

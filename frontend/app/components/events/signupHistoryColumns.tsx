@@ -35,7 +35,7 @@ export interface MakeSignupHistoryColumnsOptions {
   originalId: number | null;
 }
 
-function HistoryTime({
+export function HistoryTime({
   iso,
   eventTimezone,
 }: {

@@ -10,8 +10,15 @@ from django.http import HttpRequest
 from django.utils import timezone as tz
 from structlog.contextvars import get_contextvars
 
-from events.constants import ActorRole, SignupAction, SignupMeans
+from events.constants import (
+    ActorRole,
+    SignupAction,
+    SignupMeans,
+    SignupStatus,
+    StaffReasonPolicy,
+)
 from events.models import Event, EventSignup, ReadyCheck, SignupLedgerEntry
+from events.overrides import StaffReasonRequired
 from events.permissions import has_event_staff_access
 from events.schemas import SignupSnapshot
 from telemetry.logging import get_logger
@@ -27,15 +34,27 @@ __all__ = [
     "SignupMeans",
     "current_interaction_id",
     "event_snapshot",
+    "is_placement",
     "record_ready_check_transition",
     "record_signup_change",
+    "require_staff_reason",
     "snapshot",
     "user_snapshot",
 ]
 
 log = get_logger(__name__)
 
-PLACEMENT_ACTIONS: frozenset[str] = frozenset()
+PLACEMENT_ACTIONS: frozenset[str] = frozenset(
+    {
+        SignupAction.STAFF_ADDED,
+        SignupAction.DEMOTED,
+        SignupAction.REINSTATED,
+        SignupAction.VOIDED_WITHDRAWAL,
+        SignupAction.TRANSFERRED_OUT,
+        SignupAction.TRANSFERRED_IN,
+        SignupAction.SWAPPED,
+    }
+)
 
 CORRELATION_ID_MAX_LENGTH = 64
 
@@ -121,12 +140,62 @@ class SignupActor:
         )
 
 
+def is_placement(action: str, *, from_status: str | None = None) -> bool:
+    if action in PLACEMENT_ACTIONS:
+        return True
+    return action == SignupAction.APPROVED and from_status == SignupStatus.WAITLISTED
+
+
+def require_staff_reason(
+    *,
+    event_id: int,
+    policy: str,
+    actor: SignupActor,
+    subject_id: int,
+    action: str,
+    from_status: str | None,
+    reason: str,
+) -> str:
+    """Return the trimmed reason; raise StaffReasonRequired when the policy needs one."""
+    trimmed = reason.strip()
+    if (
+        trimmed
+        or actor.role != ActorRole.STAFF
+        or actor.user is None
+        or actor.user.pk == subject_id
+        or policy == StaffReasonPolicy.OPTIONAL
+    ):
+        return trimmed
+    placement = is_placement(action, from_status=from_status)
+    if policy == StaffReasonPolicy.PLACEMENTS and not placement:
+        return trimmed
+    log.warning(
+        "staff_reason_refused",
+        system="events",
+        subsystem="staff_reason",
+        event_id=event_id,
+        actor_id=actor.user.pk,
+        subject_id=subject_id,
+        action=action,
+        from_status=from_status,
+        placement=placement,
+        policy=policy,
+    )
+    raise StaffReasonRequired()
+
+
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+_UNSET: Any = object()
+
+
 def snapshot(
-    signup: EventSignup, *, extra: dict[str, Any] | None = None
+    signup: EventSignup,
+    *,
+    extra: dict[str, Any] | None = None,
+    waitlist_rank: int | None = _UNSET,
 ) -> SignupSnapshot:
     return SignupSnapshot(
         status=signup.status,
@@ -134,7 +203,9 @@ def snapshot(
         rsvp_class=signup.rsvp_class,
         signed_up_at=signup.signed_up_at,
         line_seq=signup.line_seq,
-        waitlist_position=signup.waitlist_position,
+        waitlist_position=(
+            signup.waitlist_position if waitlist_rank is _UNSET else waitlist_rank
+        ),
         event_team_id=signup.event_team_id,
         extra=dict(extra) if extra else {},
     )

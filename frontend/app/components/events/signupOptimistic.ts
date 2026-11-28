@@ -48,7 +48,7 @@ export function isSignupAction(value: unknown): value is SignupAction {
   return (SIGNUP_ACTIONS as readonly unknown[]).includes(value);
 }
 
-/** Mutation variables are either a signup id or `{ id, mmr }` (approve). */
+/** Signup id from mutation variables; null for `{ userId }` (admin add). */
 export function signupIdOf(variables: unknown): number | null {
   if (typeof variables === 'number') return variables;
   if (

@@ -43,6 +43,8 @@ import {
   utcToLocalInput,
 } from './schemas';
 import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
+import { signupLineFrom } from './signupLine';
+import { SignupLineConfigSection } from './SignupLineConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import {
   SERIES_EVENT_POLICY_HELP,
@@ -139,6 +141,7 @@ export function EditEventModal({
         tournament_league: event.tournament_league,
         ...discordResetValues(event),
         ...signupRulesFrom(event),
+        ...signupLineFrom(event),
         // Single events have no subscriber list — force signup_reminder off
         // for them so the superRefine in eventSchema doesn't reject.
         // Repeater-occurrence events keep the persisted value.
@@ -315,6 +318,7 @@ export function EditEventModal({
             <div className="space-y-6">
               <ApprovalConfigSection control={form.control} />
               <SignupRulesSection control={form.control} />
+              <SignupLineConfigSection control={form.control} />
             </div>
           ),
         },

@@ -56,7 +56,7 @@ export const NO_ACKNOWLEDGEMENT: OverrideAcknowledgement = {
   acknowledged_codes: [],
 };
 
-function responseBody(err: unknown, status: number): unknown {
+export function responseBody(err: unknown, status: number): unknown {
   if (!isAxiosError(err) || err.response?.status !== status) return undefined;
   return err.response.data;
 }
@@ -72,4 +72,16 @@ export function isOverrideRequiredError(err: unknown): boolean {
 
 export function isOverrideReasonRequiredError(err: unknown): boolean {
   return OverrideReasonRequiredSchema.safeParse(responseBody(err, 400)).success;
+}
+
+export const StaffReasonRequiredSchema = z.object({
+  error: z.literal('reason_required'),
+});
+
+export function isStaffReasonRequiredError(err: unknown): boolean {
+  return StaffReasonRequiredSchema.safeParse(responseBody(err, 400)).success;
+}
+
+export function staffReasonFormSchema(required: boolean) {
+  return overrideReasonFormSchema(required ? 1 : 0);
 }
