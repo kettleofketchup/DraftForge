@@ -6,6 +6,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.models import AnonymousUser
@@ -56,6 +57,7 @@ from events.eligibility import (
     stamp_eligibility,
     validate_friend_id,
 )
+from events.exceptions import SpotTransferRefused
 from events.ledger import (
     SignupActor,
     latest_restorable_withdrawal,
@@ -68,6 +70,7 @@ from events.line import (
     restamp_to_back,
     restamps_on_switch,
     restore_place,
+    same_gate_distance,
     start_first_fields,
     waitlist_rank,
 )
@@ -1634,6 +1637,252 @@ def _member_safe_reasons(result: EligibilityResult) -> list[dict[str, str]]:
         if entry not in out:
             out.append(entry)
     return out
+
+
+_STAFF_REMOVED_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.REJECTED, SignupStatus.DROPPED}
+)
+_PROBE_REFUSAL_CODES: frozenset[str] = frozenset(
+    {"recipient_ineligible", "not_org_member"}
+)
+TRANSFER_REFUSAL_MESSAGES: dict[str, str] = {
+    "transfer_disabled": "Spot transfer is not enabled for this event.",
+    "event_state": (
+        "Places can only be transferred while signups are open or during roll call."
+    ),
+    "ready_check_held": "The ready check is paused; resume it to transfer places.",
+    "giver_not_active": "This signup no longer holds a place.",
+    "same_user": "A place can't be transferred to the member who holds it.",
+    "recipient_not_found": "That member could not be found.",
+    "recipient_removed": "Staff removed that member from this event.",
+    "commitment_mismatch": "Main and Maybe places can't be swapped.",
+    "swap_would_demote_recipient": (
+        "You can only swap with someone whose place is behind yours"
+    ),
+    "gate_distance": "That place is too far from this one to transfer.",
+    "not_org_member": "That member is not part of this organization.",
+    "recipient_ineligible": "That member is not eligible for this event.",
+}
+
+
+def _refuse_transfer(
+    code: str,
+    *,
+    event: Event,
+    actor: SignupActor,
+    recipient_user: CustomUser,
+    reasons: Sequence[dict[str, str]] = (),
+) -> SpotTransferRefused:
+    emit = log.warning if code in _PROBE_REFUSAL_CODES else log.info
+    emit(
+        "signup_spot_transfer_refused",
+        system="events",
+        subsystem="line",
+        event_id=event.pk,
+        code=code,
+        caller_user_id=actor.user.pk if actor.user is not None else None,
+        recipient_user_id=recipient_user.pk,
+    )
+    return SpotTransferRefused(code, TRANSFER_REFUSAL_MESSAGES[code], reasons)
+
+
+def _lock_transfer_rows(
+    locked: Event, giver: EventSignup, recipient_user: CustomUser
+) -> tuple[EventSignup, EventSignup | None]:
+    held_pk = (
+        EventSignup.objects.nocache()
+        .filter(event=locked, user=recipient_user)
+        .values_list("pk", flat=True)
+        .first()
+    )
+    pks = {giver.pk} if held_pk is None else {giver.pk, held_pk}
+    rows = {
+        row.pk: row
+        for row in EventSignup.objects.select_for_update()
+        .nocache()
+        .select_related("user__base_profile")
+        .filter(pk__in=pks)
+        .order_by("pk")
+    }
+    for row in rows.values():
+        row.event = locked
+    return rows[giver.pk], None if held_pk is None else rows[held_pk]
+
+
+def _transfer_guard(
+    event: Event,
+    giver: EventSignup,
+    target: EventSignup,
+    recipient_user: CustomUser,
+    *,
+    is_staff: bool,
+) -> str | None:
+    if not event.allow_spot_transfer:
+        return "transfer_disabled"
+    if event.state not in TRANSFER_EVENT_STATES:
+        return "event_state"
+    if giver.status in REMOVED_SIGNUP_STATUSES:
+        return "giver_not_active"
+    if giver.user_id == recipient_user.pk:
+        return "same_user"
+    if not is_staff and target.status in _STAFF_REMOVED_STATUSES:
+        return "recipient_removed"
+    if not same_gate_distance(giver, target):
+        return "gate_distance"
+    return None
+
+
+def _member_recipient_eligibility(
+    event: Event, giver: EventSignup, recipient_user: CustomUser, actor: SignupActor
+) -> EligibilityResult:
+    if (
+        event.organization_id is not None
+        and not OrgUser.objects.nocache()
+        .filter(user=recipient_user, organization_id=event.organization_id)
+        .exists()
+    ):
+        raise _refuse_transfer(
+            "not_org_member", event=event, actor=actor, recipient_user=recipient_user
+        )
+    result = evaluate_signup(
+        event, recipient_user, intent=giver.commitment, actor=actor.user
+    )
+    if not result.clean:
+        raise _refuse_transfer(
+            "recipient_ineligible",
+            event=event,
+            actor=actor,
+            recipient_user=recipient_user,
+            reasons=_member_safe_reasons(result),
+        )
+    return result
+
+
+def _hand_over_place(
+    event: Event, giver: EventSignup, target: EventSignup, status: str
+) -> None:
+    target.status = status
+    target.line_seq = giver.line_seq
+    target.signed_up_at = giver.signed_up_at
+    target.waitlist_position = giver.waitlist_position
+    target.commitment = (
+        Commitment.MAYBE if status == SignupStatus.TENTATIVE else Commitment.MAIN
+    )
+    eligibility = _restored_eligibility(target, event)
+    if target.pk is None:
+        target.first_signed_up_at = timezone.now()
+        target.save()
+    else:
+        target.save(
+            update_fields=[
+                "status",
+                "line_seq",
+                "signed_up_at",
+                "waitlist_position",
+                "commitment",
+                *eligibility,
+                "updated_at",
+            ]
+        )
+    giver.status = SignupStatus.CANCELLED
+    giver.waitlist_position = None
+    restamped = restamp_to_back(giver, reason="transferred_out")
+    giver.save(update_fields=["status", "waitlist_position", *restamped, "updated_at"])
+
+
+def _counterparty_snapshot(signup: EventSignup, counterparty_id: int) -> SignupSnapshot:
+    return snapshot(
+        signup,
+        extra={"counterparty_user_id": counterparty_id},
+        waitlist_rank=waitlist_rank(signup),
+    )
+
+
+@transaction.atomic
+def transfer_spot(
+    giver: EventSignup,
+    recipient_user: CustomUser,
+    *,
+    actor: SignupActor,
+    reason: str = "",
+    acknowledged: Collection[str] = (),
+) -> SpotTransferResult:
+    """Hand the giver's exact place in line to another member, or swap
+    places when the recipient already holds one. Nobody else moves."""
+    locked = lock_event(giver.event)
+    giver, held = _lock_transfer_rows(locked, giver, recipient_user)
+    is_staff = actor.role == ActorRole.STAFF
+    swap = held is not None and held.status not in REMOVED_SIGNUP_STATUSES
+    target = (
+        held if held is not None else EventSignup(event=locked, user=recipient_user)
+    )
+    code = _transfer_guard(locked, giver, target, recipient_user, is_staff=is_staff)
+    if code is not None:
+        raise _refuse_transfer(
+            code, event=locked, actor=actor, recipient_user=recipient_user
+        )
+    if swap:
+        raise NotImplementedError("spot swap")
+    if is_staff:
+        raise NotImplementedError("staff spot transfer")
+
+    result = _member_recipient_eligibility(locked, giver, recipient_user, actor)
+    status = _member_status_cap(giver.status, _decide_signup_status(locked, result))
+    correlation_id = f"xfer:{uuid4().hex}"
+    reason = reason.strip()
+
+    giver_before = _ranked_snapshot(giver)
+    target_before = _ranked_snapshot(target) if target.pk is not None else None
+    target_was_seated = (
+        target.pk is not None and target.status in _STAFF_SEATED_STATUSES
+    )
+    _hand_over_place(locked, giver, target, status)
+    for row in (giver, target):
+        _roster_add_if_joins(row)
+        _roster_remove_if_left(row)
+
+    record_signup_change(
+        event=locked,
+        subject=giver.user,
+        actor=actor,
+        action=SignupAction.TRANSFERRED_OUT,
+        signup=giver,
+        before=giver_before,
+        after=_counterparty_snapshot(giver, recipient_user.pk),
+        reason=reason,
+        correlation_id=correlation_id,
+    )
+    record_signup_change(
+        event=locked,
+        subject=recipient_user,
+        actor=actor,
+        action=SignupAction.TRANSFERRED_IN,
+        signup=target,
+        before=target_before,
+        after=_counterparty_snapshot(target, giver.user_id),
+        reason=reason,
+        correlation_id=correlation_id,
+    )
+
+    invalidate_after_commit(giver, target, locked)
+    transaction.on_commit(lambda: notify_signup_changed(locked))
+    if target.status in _STAFF_SEATED_STATUSES and not target_was_seated:
+        recipient_pk = recipient_user.pk
+        transaction.on_commit(lambda: notify_mark_interested(locked, recipient_pk))
+    context: dict[str, Any] = {
+        "system": "events",
+        "subsystem": "line",
+        "event_id": locked.pk,
+        "mode": "transfer",
+        "giver_signup_id": giver.pk,
+        "recipient_signup_id": target.pk,
+        "correlation_id": correlation_id,
+        "actor_role": str(actor.role),
+    }
+    transaction.on_commit(lambda: log.info("signup_spot_transferred", **context))
+    return SpotTransferResult(
+        mode="transfer", giver=giver, recipient=target, correlation_id=correlation_id
+    )
 
 
 # ---------------------------------------------------------------------------
