@@ -79,6 +79,7 @@ function leadershipTrack(overrides: Partial<TrackInfo> = {}): TrackInfo {
     board_open: true,
     can_manage: false,
     can_moderate: false,
+    own_private: false,
     ...overrides,
   };
 }
@@ -113,6 +114,7 @@ function respond(base: Partial<StandingLeaderboard> = {}) {
       rows: [row(1, 4.5), row(2, 4.1)],
       rows_visible: true,
       own_row: row(2, 4.1),
+      own_private: false,
       ...base,
     }),
   );
@@ -210,6 +212,16 @@ describe('TrackTab leadership', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByTestId('leadership-mine-toggle')).toBeInTheDocument();
+  });
+
+  it('shows the private-feedback note when the own row is private', async () => {
+    respond({ rows: [row(1, 4.5)], own_row: null, own_private: true });
+    renderTab(leadershipTrack({ own_private: true }));
+    expect(await screen.findByTestId('standing-own-private')).toHaveTextContent(
+      'Your org keeps captain feedback private.',
+    );
+    expect(screen.getByTestId('leadership-row-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('leadership-row-2')).toBeNull();
   });
 
   it('keeps the board closed for members when not public', async () => {

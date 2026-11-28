@@ -3,7 +3,7 @@ import { useMemo, type HTMLAttributes, type KeyboardEvent } from 'react';
 import { DataTable } from '~/components/ui/data-table';
 import { DisplayName } from '~/components/user/avatar';
 import { cn } from '~/lib/utils';
-import { formatTotal } from './format';
+import { FEEDBACK_PRIVATE_NOTE, formatTotal } from './format';
 import type { StandingLeaderboard as StandingLeaderboardData } from './schemas';
 import {
   makeStandingLeaderboardColumns,
@@ -138,12 +138,22 @@ export function StandingLeaderboard({
         </div>
       )}
 
+      {board.own_private && (
+        <p
+          className="flex items-center gap-2 text-sm text-muted-foreground"
+          data-testid="standing-own-private"
+        >
+          <Lock className="size-4" aria-hidden="true" />
+          {FEEDBACK_PRIVATE_NOTE}
+        </p>
+      )}
+
       {boardOpen && !board.rows_visible && (
         <HiddenRowsNote
           testIdPrefix={testIdPrefix}
           membersPrivate={membersPrivate}
           signedIn={viewerPk != null}
-          hasOwnRow={board.own_row != null}
+          hasOwnRow={board.own_row != null && !board.own_private}
         />
       )}
 

@@ -277,6 +277,51 @@ describe('MemberLeadershipPanel', () => {
     );
   });
 
+  it('shows only the private note and points when the org keeps feedback private', async () => {
+    const { events: _events, ...rest } = memberLeadership();
+    vi.mocked(getMemberLeadership).mockResolvedValue({
+      ...rest,
+      rating: null,
+      status: 'new',
+      reviews: null,
+      traits: rest.traits.map((t) => ({ ...t, rating: null })),
+      points: { all_time: 40, this_month: 10 },
+      feedback_private: true,
+    });
+    renderPanel();
+    expect(
+      await screen.findByTestId('leadership-member-feedback-private'),
+    ).toHaveTextContent('Your org keeps captain feedback private.');
+    expect(
+      screen.getByTestId('leadership-member-points-all'),
+    ).toHaveTextContent('40');
+    expect(
+      screen.getByTestId('leadership-member-points-month'),
+    ).toHaveTextContent('10');
+    for (const id of [
+      'leadership-member-rating',
+      'leadership-member-reviews',
+      'leadership-member-new',
+      'leadership-member-unreleased',
+      'leadership-member-trait-communication',
+    ]) {
+      expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText('Rated events')).not.toBeInTheDocument();
+    const note = screen.getByTestId('leadership-member-own-note');
+    expect(note).not.toHaveTextContent('Members can see your rating');
+    expect(note).toHaveTextContent('Who rated you is never shown.');
+  });
+
+  it('shows no private note when feedback is visible', async () => {
+    vi.mocked(getMemberLeadership).mockResolvedValue(memberLeadership());
+    renderPanel();
+    await screen.findByTestId('leadership-member-rating');
+    expect(
+      screen.queryByTestId('leadership-member-feedback-private'),
+    ).not.toBeInTheDocument();
+  });
+
   it('renders no events block for another member', async () => {
     const { events: _events, ...rest } = memberLeadership();
     vi.mocked(getMemberLeadership).mockResolvedValue(rest);

@@ -28,6 +28,7 @@ const conduct: TrackInfo = {
   board_open: true,
   can_manage: false,
   can_moderate: false,
+  own_private: false,
 };
 
 const board: StandingLeaderboard = {
@@ -38,6 +39,7 @@ const board: StandingLeaderboard = {
   rows: [],
   rows_visible: true,
   own_row: null,
+  own_private: false,
 };
 
 function setup(): {

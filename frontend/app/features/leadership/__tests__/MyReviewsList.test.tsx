@@ -37,6 +37,7 @@ const LEADERSHIP: TrackInfo = {
   board_open: true,
   can_manage: false,
   can_moderate: false,
+  own_private: false,
 };
 
 const access: OrgFeatureAccess = makeOrgFeatureAccess({

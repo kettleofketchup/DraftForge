@@ -54,6 +54,7 @@ const TRACK: TrackInfo = {
   board_open: true,
   can_manage: false,
   can_moderate: false,
+  own_private: false,
 };
 
 const access: OrgFeatureAccess = makeOrgFeatureAccess({
@@ -93,6 +94,7 @@ function board(
     rows_visible: true,
     rows: [],
     own_row: null,
+    own_private: false,
     ...overrides,
   };
 }

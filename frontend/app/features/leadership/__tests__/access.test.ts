@@ -17,7 +17,16 @@ describe('leadershipAccess', () => {
       canManage: true,
       canModerate: false,
       boardOpen: false,
+      feedbackPrivate: false,
     });
+  });
+
+  it('reads own_private as feedbackPrivate', () => {
+    expect(
+      leadershipAccess(
+        leadershipFeatureAccess({ track: { own_private: true } }),
+      ).feedbackPrivate,
+    ).toBe(true);
   });
 
   it('a non-member admin is not a member', () => {
@@ -37,6 +46,7 @@ describe('leadershipAccess', () => {
       canManage: false,
       canModerate: false,
       boardOpen: false,
+      feedbackPrivate: false,
     });
   });
 

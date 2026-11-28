@@ -32,6 +32,7 @@ const board = {
   rows: [],
   rows_visible: true,
   own_row: null,
+  own_private: false,
 };
 
 beforeEach(() => {
