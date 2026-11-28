@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DISCORD_CONFIG_DEFAULTS } from '~/components/events/schemas';
-import { settingsDescriptors } from '../descriptors';
+import { channelPermissionGroups, settingsDescriptors } from '../descriptors';
 
 const cases: {
   name: string;
@@ -16,6 +16,81 @@ const cases: {
     'utf8',
   ),
 );
+
+describe('channelPermissionGroups', () => {
+  const opts = { isRepeater: true, showNotifyNewEvents: true };
+  const values = {
+    ...DISCORD_CONFIG_DEFAULTS,
+    discord_post_signups: true,
+    discord_post_signups_channel_id: '111',
+    discord_announcement: true,
+    discord_announcement_channel_id: '222',
+    discord_notify_new_events: true,
+  };
+  it('keeps primary signup separate from all announcement channel uses', () => {
+    const groups = channelPermissionGroups(
+      values,
+      settingsDescriptors(values, opts),
+    );
+    expect(groups.get('signup_post')?.checks.map((d) => d.key)).toEqual([
+      'signup_post',
+    ]);
+    expect(groups.get('announcement')?.checks.map((d) => d.key)).toEqual([
+      'signup_fallback',
+      'announcement',
+      'new_event_notice',
+    ]);
+  });
+  it('assigns shared destinations to one visible picker', () => {
+    const shared = {
+      ...values,
+      discord_post_signups_channel_id: '222',
+      discord_confirm_attendance: true,
+      discord_confirm_attendance_channel_id: '222',
+    };
+    const groups = channelPermissionGroups(
+      shared,
+      settingsDescriptors(shared, opts),
+    );
+    expect(groups.size).toBe(1);
+    expect(groups.get('announcement')?.checks.map((d) => d.key)).toContain(
+      'attendance_reminder',
+    );
+  });
+  it('excludes disabled settings even when their descriptors exist', () => {
+    const disabled = {
+      ...values,
+      discord_notify_new_events: false,
+      discord_post_signups: false,
+    };
+    const groups = channelPermissionGroups(
+      disabled,
+      settingsDescriptors(disabled, opts),
+    );
+    expect(groups.get('announcement')?.checks.map((d) => d.key)).toEqual([
+      'announcement',
+    ]);
+    expect(groups.has('signup_post')).toBe(false);
+  });
+  it('keeps an unused fallback channel neutral and excludes option-only checks', () => {
+    const unused = {
+      ...values,
+      discord_announcement: false,
+      discord_post_signups: false,
+      discord_notify_new_events: true,
+      discord_new_event_channel_id: '333',
+      discord_start_mention: true,
+    };
+    const groups = channelPermissionGroups(
+      unused,
+      settingsDescriptors(unused, opts),
+    );
+    expect(groups.has('announcement')).toBe(false);
+    expect(
+      [...groups.values()].flatMap((g) => g.checks).map((d) => d.key),
+    ).toEqual(['new_event_notice']);
+  });
+});
 
 describe('settingsDescriptors', () => {
   it.each(cases)(

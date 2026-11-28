@@ -107,7 +107,11 @@ export function DiscordChannelPicker({
             </div>
           )}
           {channels.map((ch) => (
-            <SelectItem key={ch.id} value={ch.id}>
+            <SelectItem
+              key={ch.id}
+              value={ch.id}
+              data-testid={testId ? `${testId}-option-${ch.id}` : undefined}
+            >
               <span className="flex items-center gap-1.5">
                 {kind === 'voice' ? (
                   <Volume2
