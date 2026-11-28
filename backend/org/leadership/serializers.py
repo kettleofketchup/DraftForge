@@ -59,6 +59,7 @@ class SettingsUpdateSerializer(serializers.Serializer):
     max_age_days = _int_field("max_age_days")
     leaderboard_public = serializers.BooleanField(required=False)
     require_staff_release = serializers.BooleanField(required=False)
+    captain_feedback_visible = serializers.BooleanField(required=False)
     auto_release_after_hours = _nullable_int_field("auto_release_after_hours")
     points = serializers.DictField(
         child=serializers.IntegerField(

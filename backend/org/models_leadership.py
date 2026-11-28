@@ -63,6 +63,9 @@ class OrgLeadershipSettings(models.Model):
     require_staff_release = models.BooleanField(
         default=SETTINGS_DEFAULTS["require_staff_release"]
     )
+    captain_feedback_visible = models.BooleanField(
+        default=SETTINGS_DEFAULTS["captain_feedback_visible"]
+    )
     auto_release_after_hours = models.PositiveSmallIntegerField(
         null=True,
         blank=True,

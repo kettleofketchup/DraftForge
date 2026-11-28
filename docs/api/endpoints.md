@@ -931,6 +931,12 @@ they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are
 throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go through the
 [standing endpoints](#organization-standing).
 
+`GET/PATCH settings/` includes `captain_feedback_visible` (default `true`). While it
+is off, a captain's own `members/{org_user_id}/` summary and own entry in
+`events/{event_id}/reviews/` carry `feedback_private: true` with the review-derived
+fields `null` (`reviews` is nullable), and leaderboards plus `standing_tracks[]` carry
+`own_private: true` for that viewer.
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/organizations/{id}/leadership/events/{event_id}/release/` | Release an event's captain review results when the org requires staff release. Body `{"captains": [org_user_id, ...]}` (1–64 ids, all or nothing) or `{}` (every pending captain except your own). `200 {"released": [ids], "skipped": [{"org_user_id", "code"}]}` (skip codes: `own_snapshot`, `voided`, `window_open`, `not_enough_reviews`, `already_released`); `400` malformed body, `403 not_permitted` / `cannot_release_own_reviews`, `404` event or captain not in the org, `409 release_not_required` / `already_released` / `window_open` / `not_enough_reviews` / `snapshot_voided` / `nothing_to_release` |

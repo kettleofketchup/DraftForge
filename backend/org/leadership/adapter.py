@@ -22,11 +22,17 @@ from org.contributions.serializers import member_summary
 from org.feature_keys import FeatureKey
 from org.leadership import lifecycle, maintenance
 from org.leadership.constants import VoidKind
-from org.leadership.queries import CaptainRating, points_board, rating_board
+from org.leadership.queries import (
+    CaptainRating,
+    points_board,
+    rating_board,
+    released_points_q,
+)
 from org.leadership.rating import display
 from org.leadership.settings import get_leadership_settings
 from org.leadership.summary import member_payload
 from org.leadership.traits import effective_traits
+from org.leadership.visibility import REVIEW_DERIVED_KINDS, own_feedback_hidden
 from org.models import Organization, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
 from org.standing import ledger
@@ -62,6 +68,14 @@ def _close_output(
         orglog={"captains_snapshotted": snapshotted, "leadership_awarded": awarded},
         log={"captain_reviews_voided": voided, "leadership_revoked": revoked},
     )
+
+
+def _without(
+    rows: list[LeaderboardRow], own: LeaderboardRow | None
+) -> list[LeaderboardRow]:
+    if own is None:
+        return rows
+    return [r for r in rows if r.org_user_id != own.org_user_id]
 
 
 class LeadershipTrack(TrackBase):
@@ -195,13 +209,15 @@ class LeadershipTrack(TrackBase):
         roles: ViewerRoles,
     ) -> TrackAccess:
         member = _is_member(viewer, org_id)
-        public = get_leadership_settings(org_id).leaderboard_public
+        settings = get_leadership_settings(org_id)
+        public = settings.leaderboard_public
         board_open = public or roles.is_staff
         return TrackAccess(
             can_view_rows=roles.is_staff or (public and roles.can_view_members),
             can_view_own=member,
             allowed=board_open or member,
             board_open=board_open,
+            own_private=own_feedback_hidden(settings, own=member),
         )
 
     @override
@@ -241,18 +257,36 @@ class LeadershipTrack(TrackBase):
         )
         total: int | None = None
         settings = get_leadership_settings(org)
+        hide_own = own_user_id is not None and own_feedback_hidden(
+            settings, own=access.can_view_own
+        )
         if metric.key == "points":
             rows, own_row = self._points_rows(
                 org, period, own_user_id, now=now, settings=settings
             )
+            if hide_own:
+                rows = _without(rows, own_row)
+                own_row = self._own_points_row(
+                    org, period, own_user_id, now=now, settings=settings
+                )
             total = sum(int(r.value or 0) for r in rows)
+            if hide_own and own_row is not None:
+                total += int(own_row.value or 0)
             label = period.label
         else:
             rows, own_row = self._rating_rows(
                 org, metric, own_user_id, now=now, settings=settings
             )
+            if hide_own:
+                rows = _without(rows, own_row)
+                own_row = None
             label = "current"
-        if own_row is None and access.can_view_own and own_user_id is not None:
+        if (
+            own_row is None
+            and not hide_own
+            and access.can_view_own
+            and own_user_id is not None
+        ):
             own_row = self._unrated_row(org, own_user_id)
         return Leaderboard(
             track=self.key,
@@ -262,6 +296,7 @@ class LeadershipTrack(TrackBase):
             total=total,
             own_row=own_row if access.can_view_own else None,
             rows_visible=access.can_view_rows,
+            own_private=hide_own,
         )
 
     @staticmethod
@@ -276,6 +311,36 @@ class LeadershipTrack(TrackBase):
             member=member_summary(member),
             value=None,
             sample=0,
+            status="new",
+        )
+
+    @staticmethod
+    def _own_points_row(
+        org: Organization,
+        period: Period,
+        user_id: int,
+        *,
+        now: datetime,
+        settings: OrgLeadershipSettings,
+    ) -> LeaderboardRow | None:
+        member = with_user_profiles(
+            OrgUser.objects.filter(organization=org, user_id=user_id), "user"
+        ).first()
+        if member is None:
+            return None
+        where = (
+            Q(org_user=member)
+            & released_points_q(org.pk, now=now, settings=settings)
+            & ~Q(kind__in=list(REVIEW_DERIVED_KINDS))
+        )
+        found = ledger.sum_by_member(
+            org.pk, track="leadership", period=period, where=where
+        ).first()
+        return LeaderboardRow(
+            org_user_id=member.pk,
+            member=member_summary(member),
+            value=int(found["total"]) if found else None,
+            sample=int(found["entries"]) if found else 0,
             status="new",
         )
 

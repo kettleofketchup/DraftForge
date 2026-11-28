@@ -135,6 +135,7 @@ def member_points(
     now: datetime,
     settings: OrgLeadershipSettings,
     include_unreleased: bool,
+    exclude_kinds: Collection[str] = (),
 ) -> dict[str, int]:
     org_id = org_user.organization_id
     tz = resolve_org_tz(org_user.organization)
@@ -142,6 +143,8 @@ def member_points(
     where = Q(org_user=org_user)
     if not include_unreleased:
         where &= released_points_q(org_id, now=now, settings=settings)
+    if exclude_kinds:
+        where &= ~Q(kind__in=list(exclude_kinds))
     all_time = Period(start=None, end=None, label=ALL_TIME)
     this_month = month_period(tz, local_now.year, local_now.month)
     return {

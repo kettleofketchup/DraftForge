@@ -72,6 +72,7 @@ from org.leadership.traits import (
     effective_traits,
     upsert_traits,
 )
+from org.leadership.visibility import own_feedback_hidden
 from org.models import Organization, OrgUser
 from org.models_leadership import (
     CaptainReview,
@@ -434,9 +435,10 @@ def _release_fields(
     floor: int,
     settings: OrgLeadershipSettings,
     now: datetime,
+    hidden: bool = False,
 ) -> ReleaseFields:
     state = release_state(snap, live=snap.live, settings=settings, now=now)
-    released = state == "released"
+    released = state == "released" and not hidden
     if own:
         return {
             "released": released,
@@ -489,8 +491,11 @@ def leadership_event_reviews(request: Request, org_id: int, event_id: int) -> Re
     captains = []
     for snap in snapshots:
         own = snap.captain.user_id == request.user.pk
+        hidden = own_feedback_hidden(settings, own=own)
         aggregate = (
-            _own_aggregate(org, snap, now=now, settings=settings) if own else None
+            _own_aggregate(org, snap, now=now, settings=settings)
+            if own and not hidden
+            else None
         )
         captains.append(
             {
@@ -500,9 +505,15 @@ def leadership_event_reviews(request: Request, org_id: int, event_id: int) -> Re
                 "window_closes_at": snap.window_closes_at,
                 "voided_at": snap.voided_at,
                 **_release_fields(
-                    snap, own=own, floor=floor, settings=settings, now=now
+                    snap,
+                    own=own,
+                    floor=floor,
+                    settings=settings,
+                    now=now,
+                    hidden=hidden,
                 ),
                 "own_snapshot": own,
+                "feedback_private": hidden,
                 "reviews": None if own else by_snapshot[snap.pk],
                 "aggregate": aggregate,
             }
