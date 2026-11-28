@@ -1,4 +1,5 @@
 import {
+  Archive,
   ClipboardCheck,
   Crown,
   KeyRound,
@@ -15,6 +16,7 @@ import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { useApiAccessSection } from './ApiAccessSection';
 import { useConductSection } from './ConductSection';
 import { useLeadershipSection } from './LeadershipSection';
+import { useSignupRecordsRetentionSection } from './SignupRecordsRetentionSection';
 import { useStaffPlacementSection } from './StaffPlacementSection';
 
 export interface OrgSettingsSection {
@@ -56,6 +58,15 @@ export const ORG_SETTINGS_SECTIONS: readonly OrgSettingsSection[] = [
     keywords: ['staff', 'override', 'policy', 'codes'],
     group: 'Organization',
     useSection: useStaffPlacementSection,
+    useVisible: useIsOrganizationAdmin,
+  },
+  {
+    id: 'signup-records',
+    label: 'Sign-up records',
+    icon: Archive,
+    keywords: ['retention', 'records', 'purge', 'rsvp', 'sign-up'],
+    group: 'Organization',
+    useSection: useSignupRecordsRetentionSection,
     useVisible: useIsOrganizationAdmin,
   },
   {

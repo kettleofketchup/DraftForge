@@ -298,7 +298,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('OrgSettingsDialog', () => {
-  it('admin sees both group headings and all eleven sections in order', async () => {
+  it('admin sees both group headings and all twelve sections in order', async () => {
     renderDialog();
     expect(screen.getByTestId('org-settings-modal')).toBeInTheDocument();
     expect(
@@ -318,6 +318,7 @@ describe('OrgSettingsDialog', () => {
       'org-settings-tab-rules',
       'org-settings-tab-admins',
       'org-settings-tab-staff-placement',
+      'org-settings-tab-signup-records',
       'org-settings-tab-defaults-event',
       'org-settings-tab-defaults-tournament',
       'org-settings-tab-defaults-lobby',
