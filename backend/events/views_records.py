@@ -54,7 +54,7 @@ from events.serializers import OrgSignupLedgerEntrySerializer
 from org.display_names import guild_nicknames
 from org.feature_errors import require_org_staff
 from org.models import Organization
-from org.standing.periods import local_day_start_utc
+from org.standing.api import local_day_start_utc
 from telemetry.logging import get_logger
 from tournament.listing import build_cursor_envelope
 
@@ -297,9 +297,9 @@ class _SignupLedgerBase(APIView):
         if cursor is not None:
             qs = qs.filter(pk__gt=cursor.pk)
         rows = list(
-            qs.select_related(
-                "subject_user__base_profile", "actor_user__base_profile"
-            ).order_by("pk")[: size + 1]
+            qs.select_related("subject_user__base_profile", "actor_user__base_profile")
+            .nocache()
+            .order_by("pk")[: size + 1]
         )
         next_token = LedgerCursor(rows[size - 1].pk).token if len(rows) > size else None
         rows = rows[:size]

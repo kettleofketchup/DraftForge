@@ -28,7 +28,7 @@ from org.standing.errors import (
     UnknownMetric,
     UnknownTrack,
 )
-from org.standing.periods import Period
+from org.standing.periods import Period, local_day_start_utc
 from org.standing.serializers import track_info_data
 from org.standing.types import (
     CloseSource,
@@ -56,6 +56,7 @@ __all__ = [
     "UnknownTrack",
     "deletion_blockers",
     "leaderboard",
+    "local_day_start_utc",
     "member_standing",
     "merge_users",
     "on_event_changed",

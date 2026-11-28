@@ -922,6 +922,15 @@ class OrgSettingsInertTest(SimpleTestCase):
         }
     )
 
+    # #499 retention purge reads each org's signup_record_retention_days.
+    RETENTION: frozenset[str] = frozenset(
+        {
+            "events/ledger.py",
+            "events/tests/test_purge_expired_signup_records.py",
+            "events/tests/test_signup_records_purge_task.py",
+        }
+    )
+
     def test_policy_inert_until_524(self) -> None:
         """#524 removes this test and replaces it with block/confirm enforcement tests."""
         base = Path(settings.BASE_DIR)
@@ -930,7 +939,7 @@ class OrgSettingsInertTest(SimpleTestCase):
             parts = path.relative_to(base).parts
             if parts[0] in ("org", "tests") or "migrations" in parts:
                 continue
-            if "/".join(parts) in self.CONTRACT:
+            if "/".join(parts) in self.CONTRACT | self.RETENTION:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             offenders.extend(
