@@ -177,6 +177,11 @@ export async function getEventSignups(
   return data;
 }
 
+export interface VoidWithdrawalBody {
+  reason?: string;
+  acknowledged_codes?: string[];
+}
+
 function reasonPayload(reason?: string): { reason: string } | undefined {
   const trimmed = reason?.trim();
   return trimmed ? { reason: trimmed } : undefined;
@@ -252,13 +257,35 @@ export async function demoteSignup(
   return eventSignupSchema.parse(data);
 }
 
+function acknowledgedPayload(
+  codes: string[] = [],
+): { acknowledged_codes: string[] } | undefined {
+  return codes.length ? { acknowledged_codes: codes } : undefined;
+}
+
 export async function reinstateSignup(
   signupId: number,
   reason?: string,
+  acknowledgedCodes: string[] = [],
 ): Promise<EventSignupType> {
+  const body = {
+    ...reasonPayload(reason),
+    ...acknowledgedPayload(acknowledgedCodes),
+  };
   const { data } = await axios.post(
     `/events/signups/${signupId}/reinstate/`,
-    reasonPayload(reason),
+    Object.keys(body).length ? body : undefined,
+  );
+  return eventSignupSchema.parse(data);
+}
+
+export async function voidWithdrawal(
+  signupId: number,
+  { reason, acknowledged_codes }: VoidWithdrawalBody = {},
+): Promise<EventSignupType> {
+  const { data } = await axios.post(
+    `/events/signups/${signupId}/void-withdrawal/`,
+    { ...reasonPayload(reason), ...acknowledgedPayload(acknowledged_codes) },
   );
   return eventSignupSchema.parse(data);
 }

@@ -50,6 +50,7 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => {
     confirm: mutation(),
     unconfirm: mutation(),
     reinstate: mutation(),
+    voidWithdrawal: mutation(),
     cancel: mutation(),
   };
   return {

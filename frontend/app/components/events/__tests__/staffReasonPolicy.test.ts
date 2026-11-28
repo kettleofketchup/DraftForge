@@ -17,6 +17,7 @@ const ACTIONS: StaffSignupAction[] = [
   'cancel',
   'demote',
   'reinstate',
+  'void_withdrawal',
 ];
 
 const FROM_STATUSES = ['waitlisted', 'rsvp', 'pending'] as const;
@@ -30,7 +31,7 @@ function expected(
   if (policy === 'all_staff_changes') return 'required';
   if (policy === 'optional') return 'optional';
   const placement =
-    ['admin_add', 'demote', 'reinstate'].includes(action) ||
+    ['admin_add', 'demote', 'reinstate', 'void_withdrawal'].includes(action) ||
     (action === 'approve' && fromStatus === 'waitlisted');
   return placement ? 'required' : 'optional';
 }
@@ -69,6 +70,7 @@ describe('staffReasonMode', () => {
       cancel: 'withdrew',
       demote: 'demoted',
       reinstate: 'reinstated',
+      void_withdrawal: 'voided_withdrawal',
     });
   });
 
@@ -97,6 +99,15 @@ describe('staffReasonMode', () => {
         isSelf: false,
       }),
     ).toBe('optional');
+  });
+
+  it('void withdrawal needs a reason under placements', () => {
+    expect(
+      staffReasonMode('placements', 'void_withdrawal', {
+        fromStatus: 'cancelled',
+        isSelf: false,
+      }),
+    ).toBe('required');
   });
 
   it('approve without a known status is not a placement', () => {

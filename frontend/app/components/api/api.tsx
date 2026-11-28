@@ -177,6 +177,7 @@ export {
   updateEvent,
   updateEventRepeater,
   updateOrgEventDefaults,
+  voidWithdrawal,
 } from './eventsAPI';
 
 export type {
@@ -194,6 +195,7 @@ export type {
   OrgEventDefaultsType,
   RepeaterSubscriber,
   SignupBody,
+  VoidWithdrawalBody,
 } from './eventsAPI';
 
 // Org settings

@@ -13,6 +13,7 @@ import {
   reinstateSignup,
   rejectSignup,
   unconfirmSignup,
+  voidWithdrawal,
 } from '../eventsAPI';
 
 const signup = {
@@ -79,6 +80,7 @@ const steamOnlySignup = {
 const SIGNUP_ACTIONS = [
   ...SINGLE_REASON,
   ['approve', (id: number) => approveSignup(id)],
+  ['void-withdrawal', (id: number) => voidWithdrawal(id)],
   ['admin add', () => adminAddSignup(1, 2)],
 ] as const;
 
@@ -180,5 +182,60 @@ describe('signup action reasons', () => {
     expect(post).toHaveBeenLastCalledWith('/events/1/admin-signup/', {
       user_id: 2,
     });
+  });
+});
+
+describe('void withdrawal and restore acknowledgements', () => {
+  it('void sends no reason or codes when none are given', async () => {
+    await expect(voidWithdrawal(5, {})).resolves.toEqual(signup);
+    expect(post).toHaveBeenCalledWith('/events/signups/5/void-withdrawal/', {});
+  });
+
+  it('void drops a blank reason and empty codes', async () => {
+    await voidWithdrawal(5, { reason: '  ', acknowledged_codes: [] });
+    expect(post).toHaveBeenCalledWith('/events/signups/5/void-withdrawal/', {});
+  });
+
+  it('void sends the trimmed reason and acknowledged codes', async () => {
+    await voidWithdrawal(5, {
+      reason: ' r ',
+      acknowledged_codes: ['over_capacity'],
+    });
+    expect(post).toHaveBeenCalledWith('/events/signups/5/void-withdrawal/', {
+      reason: 'r',
+      acknowledged_codes: ['over_capacity'],
+    });
+  });
+
+  it('void rejects a malformed response', async () => {
+    post.mockResolvedValue({ data: { id: 5 } });
+    await expect(voidWithdrawal(5, { reason: 'r' })).rejects.toThrow();
+  });
+
+  it('reinstate sends acknowledged codes with the reason', async () => {
+    await reinstateSignup(5, 'r', ['over_capacity']);
+    expect(post).toHaveBeenCalledWith('/events/signups/5/reinstate/', {
+      reason: 'r',
+      acknowledged_codes: ['over_capacity'],
+    });
+  });
+
+  it('reinstate sends codes without a reason', async () => {
+    await reinstateSignup(5, undefined, ['over_capacity']);
+    expect(post).toHaveBeenCalledWith('/events/signups/5/reinstate/', {
+      acknowledged_codes: ['over_capacity'],
+    });
+  });
+
+  it('reinstate omits empty codes', async () => {
+    await reinstateSignup(5, 'r', []);
+    expect(post).toHaveBeenCalledWith('/events/signups/5/reinstate/', {
+      reason: 'r',
+    });
+    await reinstateSignup(5);
+    expect(post).toHaveBeenLastCalledWith(
+      '/events/signups/5/reinstate/',
+      undefined,
+    );
   });
 });

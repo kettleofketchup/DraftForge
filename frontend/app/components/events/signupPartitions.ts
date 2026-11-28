@@ -23,6 +23,10 @@ export function canRestoreSignup(status: string): boolean {
   return restorableStatuses.has(status);
 }
 
+export function canVoidWithdrawal(status: string): boolean {
+  return restorableStatuses.has(status);
+}
+
 /** Seat-holding is the server's call (holds_seat); removed rows go by status. */
 export function partitionSignups(signups: EventSignupType[]): SignupPartitions {
   const parts: SignupPartitions = {

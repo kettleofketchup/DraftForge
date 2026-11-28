@@ -32,6 +32,7 @@ const h = vi.hoisted(() => ({
       'confirm',
       'unconfirm',
       'reinstate',
+      'voidWithdrawal',
       'cancel',
       'adminAdd',
     ].map((name) => [

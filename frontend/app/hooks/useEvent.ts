@@ -49,6 +49,7 @@ import {
   updateEvent as updateEventAPI,
   updateEventRepeater as updateEventRepeaterAPI,
   updateOrgEventDefaults,
+  voidWithdrawal as voidWithdrawalAPI,
 } from '~/components/api/api';
 import type {
   EventListItem,
@@ -492,6 +493,7 @@ export const signupActionKey = (eventId: number) =>
 export interface SignupActionVars {
   id: number;
   reason?: string;
+  acknowledged_codes?: string[];
 }
 
 export interface AdminAddVars {
@@ -575,8 +577,17 @@ export function useSignupActionMutations(eventId: number) {
       ),
     ),
     reinstate: useMutation(
-      options('reinstate', ({ id, reason }: SignupActionVars) =>
-        reinstateSignupAPI(id, reason),
+      options(
+        'reinstate',
+        ({ id, reason, acknowledged_codes }: SignupActionVars) =>
+          reinstateSignupAPI(id, reason, acknowledged_codes),
+      ),
+    ),
+    voidWithdrawal: useMutation(
+      options(
+        'void_withdrawal',
+        ({ id, reason, acknowledged_codes }: SignupActionVars) =>
+          voidWithdrawalAPI(id, { reason, acknowledged_codes }),
       ),
     ),
     adminAdd: useMutation({

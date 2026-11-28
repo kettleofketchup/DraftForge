@@ -13,7 +13,14 @@ const h = vi.hoisted(() => ({
   event: {} as EventType,
   signups: [] as EventSignupType[],
   actions: Object.fromEntries(
-    ['approve', 'reject', 'confirm', 'cancel', 'reinstate'].map((name) => [
+    [
+      'approve',
+      'reject',
+      'confirm',
+      'cancel',
+      'reinstate',
+      'voidWithdrawal',
+    ].map((name) => [
       name,
       { mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false },
     ]),
