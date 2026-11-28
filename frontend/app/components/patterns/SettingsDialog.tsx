@@ -119,11 +119,6 @@ function isTypingTarget(t: HTMLElement): boolean {
   );
 }
 
-/**
- * Full-screen settings form: a searchable category sidebar (a tab strip on
- * phones) beside the active category's fields. Search matches category names,
- * keywords and the labels and headings rendered in each mounted category.
- */
 interface SettingsLayoutOptions<V extends string> {
   /** Resets to the first section each time this turns true. */
   open: boolean;
@@ -131,7 +126,7 @@ interface SettingsLayoutOptions<V extends string> {
   testIdPrefix: string;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
-  /** Requested section, e.g. from the URL; falls back to the first when unknown or hidden. */
+  /** Requested section, e.g. from the URL; falls back to the first when unknown or null. */
   value?: string | null;
   onValueChange?: (value: V) => void;
 }
@@ -756,7 +751,8 @@ function useSettingsLayout<V extends string>({
 
 /**
  * Full-screen settings form: a searchable category sidebar (a tab strip on
- * phones) beside the active category's fields.
+ * phones) beside the active category's fields. Search matches category names,
+ * keywords and the labels and headings rendered in each mounted category.
  */
 export function SettingsDialog<V extends string>({
   open,

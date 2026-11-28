@@ -809,6 +809,37 @@ test.describe('@cicd HeroDraft chat', () => {
         };
   }
 
+  test('demo suggestion preview leaves chat closable without drafting', async ({
+    browser,
+  }) => {
+    test.setTimeout(120000);
+    await setUp(browser);
+    const { firstCaptain, firstMember, secondCaptain, secondMember } =
+      await turnRoles(browser);
+
+    for (const [captain, member, isActingCaptain] of [
+      [firstCaptain, firstMember, true],
+      [secondCaptain, secondMember, false],
+    ] as const) {
+      await suggestHero(member, AVAILABLE_HERO, 'ban');
+      await openChatPanel(captain.page);
+      await captain.draftPage.previewChatSuggestion(
+        'suggest_ban',
+        AVAILABLE_HERO,
+        isActingCaptain,
+      );
+      await expect(
+        captain.page.getByTestId('herodraft-confirm-dialog'),
+      ).toBeHidden();
+      await captain.page.getByTestId('herodraft-chat-toggle').click();
+      await expect(
+        captain.page.getByTestId('herodraft-chat-panel'),
+      ).toBeHidden();
+      await captain.draftPage.assertHeroAvailable(AVAILABLE_HERO);
+      await captain.draftPage.assertRoundActive(1);
+    }
+  });
+
   test('captain on turn confirms a chat suggestion', async ({ browser }) => {
     test.setTimeout(120000);
     await setUp(browser);
