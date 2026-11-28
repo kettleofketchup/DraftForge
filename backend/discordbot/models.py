@@ -213,6 +213,39 @@ class DiscordEventMsgSignup(DiscordEventMsgMixin):
         return f"Signup msg for event {self.event_id} (posted={self.has_posted})"
 
 
+class SignupDeliveryStatus(models.TextChoices):
+    READY = "ready", "Ready"
+    RESERVED = "reserved", "Reserved"
+    SENDING = "sending", "Sending"
+    DELIVERED = "delivered", "Delivered"
+    EXHAUSTED = "exhausted", "Exhausted"
+    UNCERTAIN = "uncertain", "Uncertain"
+
+
+class SignupPostDeliveryState(models.Model):
+    event = models.OneToOneField(
+        "events.Event",
+        on_delete=models.CASCADE,
+        related_name="signup_delivery_state",
+    )
+    generation = models.PositiveIntegerField(default=0)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True)
+    state = models.CharField(
+        max_length=16,
+        choices=SignupDeliveryStatus.choices,
+        default=SignupDeliveryStatus.READY,
+    )
+    attempt_token = models.UUIDField(null=True)
+    reserved_at = models.DateTimeField(null=True)
+    active_log_id = models.IntegerField(null=True)
+    receipt = models.JSONField(null=True)
+    last_failure_category = models.CharField(max_length=32, null=True)
+    last_failure_status = models.IntegerField(null=True)
+    last_failure_code = models.IntegerField(null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class DiscordEventMsgAnnouncement(DiscordEventMsgMixin):
     """The announcement post for a Discord event."""
 

@@ -39,6 +39,7 @@ def _sync_state(scheduled_at: datetime) -> SimpleNamespace:
         events_with_signup=[],
         events_with_scheduled=[],
         events_with_recent_attempt=[],
+        events_with_signup_blocked=[],
     )
 
 

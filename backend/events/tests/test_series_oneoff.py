@@ -1,9 +1,11 @@
 """One-off (off-schedule) events attached to a series, and series reactivation."""
 
 from datetime import time, timedelta
+from typing import Any
 from unittest.mock import ANY, MagicMock, patch
 
 from django.utils import timezone as tz
+from requests import Response
 from rest_framework.test import APIClient
 
 from discordbot.models import DiscordEvent, DiscordMessageLog
@@ -21,7 +23,7 @@ from events.services import (
 )
 from events.tasks import send_new_event_notification
 from events.tests.base import EventTestCase
-from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
+from events.tests.test_discord_tasks import _configured_response, _DiscordTaskTestCase
 from league.models import League
 from org.models import Organization
 
@@ -581,27 +583,30 @@ class CancelDeletesDiscordEventTest(EventTestCase):
 
 
 class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
-    """The 🆕 embed must be leased before the HTTP send, like every other
-    Discord notification in events.tasks."""
+    """New-event posts must be leased before the HTTP create."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
+        self.org.discord_server_id = "200000000000000001"
+        self.org.save()
         self.target = Event.objects.create(
             organization=self.org,
             name="Announce Me",
             scheduled_at=tz.now() + timedelta(days=3),
             state=EventState.UPCOMING,
             discord_announcement=True,
-            discord_announcement_channel_id="1482767177063858216",
+            discord_announcement_channel_id="100000000000000003",
         )
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_second_dispatch_does_not_resend(self, mock_req):
-        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+    def test_second_dispatch_does_not_resend(self, mock_req: MagicMock) -> None:
+        mock_req.side_effect = _configured_response
         send_new_event_notification(self.target.pk)
         second = send_new_event_notification(self.target.pk)
 
-        self.assertEqual(mock_req.call_count, 1)
+        self.assertEqual(
+            sum(call.args[0] == "POST" for call in mock_req.call_args_list), 1
+        )
         rows = DiscordMessageLog.objects.filter(
             source="new_event", source_id=self.target.pk
         )
@@ -610,14 +615,15 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
         self.assertIn("lease", second.lower())
 
     @patch("discordbot.utils._rate_limited_request")
-    def test_claim_happens_before_send(self, mock_req):
-        pending_at_send = {}
+    def test_claim_happens_before_send(self, mock_req: MagicMock) -> None:
+        pending_at_send: dict[str, int] = {}
 
-        def _capture(method, url, **kwargs):
-            pending_at_send["count"] = DiscordMessageLog.objects.filter(
-                source="new_event", source_id=self.target.pk, success=None
-            ).count()
-            return _ok_response({"id": "msg_new_event"})
+        def _capture(method: str, url: str, **kwargs: Any) -> Response:
+            if method == "POST":
+                pending_at_send["count"] = DiscordMessageLog.objects.filter(
+                    source="new_event", source_id=self.target.pk, success=None
+                ).count()
+            return _configured_response(method, url, **kwargs)
 
         mock_req.side_effect = _capture
         send_new_event_notification(self.target.pk)
@@ -630,12 +636,14 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
     ) -> None:
         self.target.discord_announcement = False
         self.target.save(update_fields=["discord_announcement"])
-        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+        mock_req.side_effect = _configured_response
 
         send_new_event_notification(self.target.pk)
         send_new_event_notification(self.target.pk)
 
-        self.assertEqual(mock_req.call_count, 1)
+        self.assertEqual(
+            sum(call.args[0] == "POST" for call in mock_req.call_args_list), 1
+        )
         rows = DiscordMessageLog.objects.filter(
             source="new_event", source_id=self.target.pk
         )
@@ -665,7 +673,7 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
     def test_posts_to_new_event_channel_when_set(self, mock_req: MagicMock) -> None:
         self.target.discord_new_event_channel_id = "333333333333333333"
         self.target.save(update_fields=["discord_new_event_channel_id"])
-        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+        mock_req.side_effect = _configured_response
 
         send_new_event_notification(self.target.pk)
 
@@ -686,11 +694,13 @@ class NewEventNotificationLeaseTest(_DiscordTaskTestCase):
                 "discord_new_event_channel_id",
             ]
         )
-        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+        mock_req.side_effect = _configured_response
 
         send_new_event_notification(self.target.pk)
 
-        mock_req.assert_called_once()
+        self.assertEqual(
+            [call.args[0] for call in mock_req.call_args_list], ["GET", "POST"]
+        )
         log = DiscordMessageLog.objects.get(
             source="new_event", source_id=self.target.pk, success=True
         )
@@ -705,7 +715,7 @@ class NotifyNewEventDispatchTest(EventTestCase):
             scheduled_at=tz.now() + timedelta(days=3),
             state=EventState.UPCOMING,
             discord_announcement=False,
-            discord_announcement_channel_id="1482767177063858216",
+            discord_announcement_channel_id="100000000000000003",
         )
 
     @patch("events.tasks.send_new_event_notification")
@@ -750,6 +760,8 @@ class NotifyNewEventDispatchTest(EventTestCase):
 class NewEventProducerTest(_DiscordTaskTestCase):
     def setUp(self) -> None:
         super().setUp()
+        self.org.discord_server_id = "200000000000000001"
+        self.org.save()
         self.repeater = EventRepeater.objects.create(
             organization=self.org,
             name="Sunday Turbo",
@@ -760,7 +772,7 @@ class NewEventProducerTest(_DiscordTaskTestCase):
             created_by=self.admin,
             discord_notify_new_events=True,
             discord_announcement=False,
-            discord_announcement_channel_id="1482767177063858216",
+            discord_announcement_channel_id="100000000000000003",
             discord_create_event=False,
         )
 
@@ -780,7 +792,7 @@ class NewEventProducerTest(_DiscordTaskTestCase):
         _create: MagicMock,
         mock_req: MagicMock,
     ) -> None:
-        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+        mock_req.side_effect = _configured_response
 
         created = generate_events_for_repeater(self.repeater)
 
@@ -799,7 +811,7 @@ class NewEventProducerTest(_DiscordTaskTestCase):
         _create: MagicMock,
         mock_req: MagicMock,
     ) -> None:
-        mock_req.return_value = _ok_response({"id": "msg_new_event"})
+        mock_req.side_effect = _configured_response
 
         event = create_off_schedule_event(
             self.repeater,
