@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest import mock
 
 from django.core.exceptions import ValidationError
@@ -13,13 +14,20 @@ from org.leadership import reviews as reviews_module
 from org.leadership.errors import ReviewRefused
 from org.leadership.lifecycle import void_event
 from org.leadership.reviews import (
+    check_rater_writable,
+    delete_drafts,
     unvoid_review,
     void_review,
     withdraw_review,
 )
 from org.leadership.traits import upsert_traits
 from org.models import ContributionEntry, Organization
-from org.models_leadership import CaptainReview, CaptainTrait, EventCaptain
+from org.models_leadership import (
+    CaptainReview,
+    CaptainReviewDraft,
+    CaptainTrait,
+    EventCaptain,
+)
 from org.tests.leadership_base import LeadershipTestCase, scores
 
 
@@ -499,3 +507,125 @@ class ReviewBudgetTest(ReviewTestCase):
         )
         eight = self.submit_queries(self.mates_b[0], self.cap_b, [*scores(4), *extra])
         self.assertEqual(four, eight)
+
+
+class RaterWritableTest(ReviewTestCase):
+    def code_of(self, fn: Callable[[], object]) -> str:
+        with self.assertRaises(ReviewRefused) as ctx:
+            fn()
+        return ctx.exception.code
+
+    def check(
+        self, rater: CustomUser, captain: CustomUser, *, now: datetime | None = None
+    ) -> CaptainReview | None:
+        return check_rater_writable(
+            self.snapshot(captain), self.ou(rater), now=now or tz.now()
+        )
+
+    def test_check_rater_writable_codes(self) -> None:
+        moderated = self.review(self.mates_a[0], self.cap_a)
+        self.void(moderated)
+        closes = self.snapshot(self.cap_a).window_closes_at
+        cases: list[tuple[str, CustomUser, datetime | None]] = [
+            ("not_in_pool", self.mates_b[0], None),
+            ("not_in_pool", self.cap_a, None),
+            ("review_moderated", self.mates_a[0], None),
+            ("review_window_closed", self.mates_a[1], closes),
+        ]
+        for code, rater, now in cases:
+            with self.subTest(code=code, rater=rater.username):
+                self.assertEqual(
+                    self.code_of(
+                        lambda r=rater, n=now: self.check(r, self.cap_a, now=n)
+                    ),
+                    code,
+                )
+                self.assertEqual(
+                    self.code_of(
+                        lambda r=rater, n=now: self.review(r, self.cap_a, now=n)
+                    ),
+                    code,
+                )
+        void_event(self.event, now=tz.now())
+        with self.subTest(code="snapshot_voided"):
+            self.assertEqual(
+                self.code_of(lambda: self.check(self.mates_a[1], self.cap_a)),
+                "snapshot_voided",
+            )
+            self.assertEqual(
+                self.code_of(lambda: self.review(self.mates_a[1], self.cap_a)),
+                "snapshot_voided",
+            )
+
+    def test_check_rater_writable_returns_existing_review(self) -> None:
+        self.assertIsNone(self.check(self.mates_a[0], self.cap_a))
+        review = self.review(self.mates_a[0], self.cap_a)
+        self.assertEqual(self.check(self.mates_a[0], self.cap_a), review)
+
+    def test_submit_review_uses_check_rater_writable(self) -> None:
+        with mock.patch.object(
+            reviews_module,
+            "check_rater_writable",
+            side_effect=ReviewRefused("not_in_pool", 403, "nope"),
+        ) as patched:
+            self.refused(
+                "not_in_pool", lambda: self.review(self.mates_a[0], self.cap_a)
+            )
+        patched.assert_called_once()
+
+
+class DraftDeletionTest(ReviewTestCase):
+    def draft(self, rater: CustomUser, captain: CustomUser) -> CaptainReviewDraft:
+        return CaptainReviewDraft.objects.create(
+            event_captain=self.snapshot(captain), rater=self.ou(rater), scores={"1": 4}
+        )
+
+    def test_withdraw_deletes_draft(self) -> None:
+        self.review(self.mates_a[0], self.cap_a)
+        self.draft(self.mates_a[0], self.cap_a)
+        kept = self.draft(self.mates_a[1], self.cap_a)
+        self.withdraw(self.mates_a[0], self.cap_a)
+        self.assertEqual(list(CaptainReviewDraft.objects.all()), [kept])
+
+    def test_withdraw_refused_keeps_draft(self) -> None:
+        draft = self.draft(self.mates_a[0], self.cap_a)
+        self.refused("not_found", lambda: self.withdraw(self.mates_a[0], self.cap_a))
+        self.assertEqual(list(CaptainReviewDraft.objects.all()), [draft])
+
+    def test_void_review_deletes_draft(self) -> None:
+        review = self.review(self.mates_a[0], self.cap_a)
+        self.draft(self.mates_a[0], self.cap_a)
+        kept = self.draft(self.mates_a[1], self.cap_a)
+        self.void(review)
+        self.assertEqual(list(CaptainReviewDraft.objects.all()), [kept])
+
+    def test_delete_drafts_filters(self) -> None:
+        self.draft(self.mates_a[0], self.cap_a)
+        a1 = self.draft(self.mates_a[1], self.cap_a)
+        self.draft(self.mates_b[0], self.cap_b)
+        with self.assertRaises(ValueError):
+            delete_drafts()
+        self.assertEqual(delete_drafts(rater_ids=[self.ou(self.mates_a[0]).pk]), 1)
+        self.assertEqual(
+            delete_drafts(
+                snapshot_ids=[self.snapshot(self.cap_a).pk],
+                rater_ids=[self.ou(self.mates_b[0]).pk],
+            ),
+            0,
+        )
+        self.assertEqual(delete_drafts(snapshot_ids=[self.snapshot(self.cap_b).pk]), 1)
+        self.assertEqual(
+            set(CaptainReviewDraft.objects.values_list("pk", flat=True)), {a1.pk}
+        )
+
+    def test_drafts_not_read_by_queries(self) -> None:
+        org_dir = Path(__file__).resolve().parents[1]
+        files = [
+            org_dir / "leadership" / name
+            for name in ("queries.py", "release.py", "rating.py", "summary.py")
+        ] + sorted((org_dir / "standing").glob("*.py"))
+        for path in files:
+            source = path.read_text()
+            for needle in ("CaptainReviewDraft", "captainreviewdraft", "review_drafts"):
+                with self.subTest(path=path.name, needle=needle):
+                    self.assertNotIn(needle, source)

@@ -63,6 +63,9 @@ class OrgLeadershipSettings(models.Model):
     require_staff_release = models.BooleanField(
         default=SETTINGS_DEFAULTS["require_staff_release"]
     )
+    review_dms_enabled = models.BooleanField(
+        default=SETTINGS_DEFAULTS["review_dms_enabled"]
+    )
     captain_feedback_visible = models.BooleanField(
         default=SETTINGS_DEFAULTS["captain_feedback_visible"]
     )
@@ -255,3 +258,26 @@ class CaptainTraitScore(models.Model):
 
     def __str__(self) -> str:
         return f"{self.trait_id}={self.score} on review {self.review_id}"
+
+
+class CaptainReviewDraft(models.Model):
+    event_captain = models.ForeignKey(
+        EventCaptain, on_delete=models.CASCADE, related_name="review_drafts"
+    )
+    rater = models.ForeignKey(
+        "org.OrgUser", on_delete=models.CASCADE, related_name="captain_review_drafts"
+    )
+    scores = models.JSONField(default=dict)
+    seeded_from_review_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event_captain", "rater"], name="uniq_captain_review_draft"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"draft by {self.rater_id} for snapshot {self.event_captain_id}"

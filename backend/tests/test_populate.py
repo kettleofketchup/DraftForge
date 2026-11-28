@@ -934,6 +934,7 @@ class OrgFeaturesEndpointsTest(TestCase):
         assert row is not None
         self.assertFalse(row.captain_feedback_visible)
         self.assertTrue(row.require_staff_release)
+        self.assertFalse(row.review_dms_enabled)
 
         response = reset_org_features(
             self.factory.post(
