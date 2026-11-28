@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 from structlog.testing import capture_logs
 
 from app.models import CustomUser
+from discordbot.models import LiveDiscordMessage
 from events.completion import close_event
 from events.constants import EventState
 from events.models import Event
@@ -141,12 +142,20 @@ class _ParityBase(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(self.admin)
 
-    def measure(self, expected: int, fn: Callable[[], Any]) -> Any:
+    def measure(
+        self, expected: int, fn: Callable[[], Any], *, live_updates: int = 0
+    ) -> Any:
         ContentType.objects.clear_cache()
         with CaptureQueriesContext(connection) as ctx:
             result = fn()
         self.queries = ctx.captured_queries
-        self.assertEqual(len(ctx.captured_queries), expected)
+        # The displayed event fields and event state transitions each mark the
+        # live reminders dirty once. Keep the original budget for all other SQL.
+        live_update = f'UPDATE "{LiveDiscordMessage._meta.db_table}"'
+        self.assertEqual(
+            sum(q["sql"].startswith(live_update) for q in self.queries), live_updates
+        )
+        self.assertEqual(len(self.queries), expected + live_updates)
         return result
 
     def assertDetails(self, action: str, expected: dict[str, Any]) -> None:
@@ -200,7 +209,7 @@ class _ParityBase(TestCase):
 class CloseParityTest(_ParityBase):
     def test_admin_complete_awards_staff(self) -> None:
         with capture_logs() as logs:
-            self.measure(CLOSE_ADMIN_COMPLETE_QUERIES, self._complete)
+            self.measure(CLOSE_ADMIN_COMPLETE_QUERIES, self._complete, live_updates=1)
         self.assertEqual(
             ledger(self.org),
             self._staff_rows(self.host, [self.helper_a, self.helper_b]),
@@ -229,6 +238,7 @@ class CloseParityTest(_ParityBase):
             self.measure(
                 CLOSE_AUTO_CANCEL_QUERIES,
                 lambda: self._close(EventState.CANCELLED, "auto"),
+                live_updates=1,
             )
         self.assertEqual(
             ledger(self.org),
@@ -252,6 +262,7 @@ class CloseParityTest(_ParityBase):
             self.measure(
                 CLOSE_ADMIN_CANCEL_QUERIES,
                 lambda: self._close(EventState.CANCELLED, "admin"),
+                live_updates=1,
             )
         self.assertEqual(ledger(self.org), [])
         closed = one_log(logs, "event_closed")
@@ -276,6 +287,7 @@ class CloseParityTest(_ParityBase):
             self.measure(
                 CLOSE_AUTO_CANCEL_NO_STAFF_QUERIES,
                 lambda: self._close(EventState.CANCELLED, "auto"),
+                live_updates=1,
             )
         self.assertEqual(ledger(self.org), [])
         closed = one_log(logs, "event_closed")
@@ -293,7 +305,9 @@ class ReopenParityTest(_ParityBase):
         self._entry(self.helper_b, "promo_message", 1, event=self.event)
         with capture_logs() as logs:
             self.measure(
-                REOPEN_QUERIES, lambda: reopen_event(self.event, actor=self.admin)
+                REOPEN_QUERIES,
+                lambda: reopen_event(self.event, actor=self.admin),
+                live_updates=1,
             )
         updates = [
             q["sql"]
@@ -351,7 +365,7 @@ class EventEditParityTest(_ParityBase):
     def test_patch_name_resyncs_completed_event(self) -> None:
         self._complete()
         response = self.measure(
-            PATCH_NAME_QUERIES, lambda: self._patch({"name": "Renamed"})
+            PATCH_NAME_QUERIES, lambda: self._patch({"name": "Renamed"}), live_updates=1
         )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(
@@ -365,7 +379,9 @@ class EventEditParityTest(_ParityBase):
             event_name="Stale"
         )
         response = self.measure(
-            PATCH_UNRELATED_QUERIES, lambda: self._patch({"description": "New text"})
+            PATCH_UNRELATED_QUERIES,
+            lambda: self._patch({"description": "New text"}),
+            live_updates=1,
         )
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(

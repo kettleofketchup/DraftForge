@@ -60,4 +60,5 @@ jobs:
             discordbot.tests.test_dm_ledger discordbot.tests.test_dm_send \
             discordbot.tests.test_internal_dm_views discordbot.tests.test_dm_choke_point \
             events.tests.test_discord_tasks events.tests.test_discord_preview \
+            events.tests.test_signup_ledger_contract org.tests.test_standing_contribution_parity \
             app.tests.test_celery_settings tests.test_app_boundaries --parallel 2
