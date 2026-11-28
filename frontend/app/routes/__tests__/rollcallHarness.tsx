@@ -78,8 +78,11 @@ export { h };
 export function signup(
   id = 101,
   status: EventSignupType['status'] = 'approved',
+  extra: Partial<EventSignupType> = {},
 ): EventSignupType {
   return {
+    can_void_withdrawal: true,
+    ...extra,
     id,
     user: id + 100,
     username: `player_${id}`,

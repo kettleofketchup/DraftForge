@@ -555,6 +555,7 @@ export const eventSignupSchema = z.object({
   signup_type: z.string(),
   status: z.string(),
   holds_seat: z.boolean().optional(),
+  can_void_withdrawal: z.boolean().optional(),
   unmet_requirements: z.array(z.string()).optional(),
   eligibility_reasons: z.array(eligibilityReasonSchema).optional(),
   can_verify_steam_account: z.boolean().optional(),

@@ -266,15 +266,10 @@ function acknowledgedPayload(
 export async function reinstateSignup(
   signupId: number,
   reason?: string,
-  acknowledgedCodes: string[] = [],
 ): Promise<EventSignupType> {
-  const body = {
-    ...reasonPayload(reason),
-    ...acknowledgedPayload(acknowledgedCodes),
-  };
   const { data } = await axios.post(
     `/events/signups/${signupId}/reinstate/`,
-    Object.keys(body).length ? body : undefined,
+    reasonPayload(reason),
   );
   return eventSignupSchema.parse(data);
 }

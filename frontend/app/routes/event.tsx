@@ -1289,14 +1289,11 @@ function SignupsTab({
                       size="sm"
                       data-testid="event-restore-btn"
                       onClick={() =>
-                        void run(
-                          'reinstate',
-                          signup,
-                          signupOverride.fire(
-                            'reinstate',
-                            signup.id,
-                            DisplayName(signup),
-                          ),
+                        void run('reinstate', signup, (reason) =>
+                          signupActions.reinstate.mutateAsync({
+                            id: signup.id,
+                            ...(reason === undefined ? {} : { reason }),
+                          }),
                         )
                       }
                       disabled={signupActions.reinstate.isPending}
@@ -1310,7 +1307,7 @@ function SignupsTab({
                   </TooltipContent>
                 </Tooltip>
               )}
-              {canVoidWithdrawal(signup.status) && (
+              {canVoidWithdrawal(signup) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SecondaryButton
@@ -1321,11 +1318,7 @@ function SignupsTab({
                         void run(
                           'void_withdrawal',
                           signup,
-                          signupOverride.fire(
-                            'void_withdrawal',
-                            signup.id,
-                            DisplayName(signup),
-                          ),
+                          signupOverride.fire(signup.id, DisplayName(signup)),
                           {
                             title: 'Void withdrawal',
                             actionLabel: 'Void withdrawal',

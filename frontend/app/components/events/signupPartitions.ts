@@ -23,8 +23,13 @@ export function canRestoreSignup(status: string): boolean {
   return restorableStatuses.has(status);
 }
 
-export function canVoidWithdrawal(status: string): boolean {
-  return restorableStatuses.has(status);
+/** The server sets can_void_withdrawal when a void would be accepted. */
+export function canVoidWithdrawal(
+  signup: Pick<EventSignupType, 'can_void_withdrawal'> & { status: string },
+): boolean {
+  return (
+    restorableStatuses.has(signup.status) && signup.can_void_withdrawal === true
+  );
 }
 
 /** Seat-holding is the server's call (holds_seat); removed rows go by status. */

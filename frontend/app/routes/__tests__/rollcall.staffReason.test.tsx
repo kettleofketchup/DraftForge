@@ -401,19 +401,20 @@ const voidButton = (id: number) =>
     'rollcall-void-withdrawal-btn',
   );
 
-describe('Void withdrawal and override-aware Restore', () => {
-  it('shows Void on cancelled and rejected rows only', () => {
+describe('Void withdrawal and capacity-safe Restore', () => {
+  it('shows Void only on removed rows the server can void', () => {
     renderRollCall({
       signups: [
         signup(101, 'cancelled'),
         signup(102, 'rejected'),
         signup(103, 'approved'),
         signup(104, 'dropped'),
+        signup(105, 'cancelled', { can_void_withdrawal: false }),
       ],
     });
     expect(voidButton(101)).toHaveTextContent('Void');
     expect(voidButton(102)).toBeInTheDocument();
-    for (const id of [103, 104])
+    for (const id of [103, 104, 105])
       expect(
         within(screen.getByTestId(`rollcall-row-${id}`)).queryByTestId(
           'rollcall-void-withdrawal-btn',
@@ -478,20 +479,24 @@ describe('Void withdrawal and override-aware Restore', () => {
     expect(h.toastError).not.toHaveBeenCalled();
   });
 
-  it('keyboard 1 Restore with a 409 opens the override dialog', async () => {
+  it('keyboard 1 Restore at capacity toasts the refusal without an override dialog', async () => {
+    const refusal =
+      'Event is at capacity; use Void withdrawal to restore this member over capacity.';
     renderRollCall({ signups: [signup(101, 'cancelled')] });
-    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
+    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(
+      axiosError(400, { error: refusal }),
+    );
     key('1');
-    expect(
-      await screen.findByTestId('override-warning-dialog'),
-    ).toHaveTextContent('Event is at capacity');
+    await waitFor(() =>
+      expect(h.toastError).toHaveBeenCalledExactlyOnceWith(refusal),
+    );
     expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledExactlyOnceWith({
       id: 101,
     });
-    expect(h.toastError).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('override-warning-dialog')).toBeNull();
   });
 
-  it('Restore 409 leaves the row in its Removed group and blocks keys while the override dialog is open', async () => {
+  it('Void 409 leaves the row in its Removed group and blocks keys while the override dialog is open', async () => {
     renderRollCall({
       signups: [
         signup(101, 'cancelled'),
@@ -499,11 +504,8 @@ describe('Void withdrawal and override-aware Restore', () => {
         signup(103, 'approved'),
       ],
     });
-    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
-    key('End');
-    key('k');
-    focused(101);
-    key('1');
+    h.actions.voidWithdrawal.mutateAsync.mockRejectedValueOnce(overCapacity());
+    fireEvent.click(voidButton(101));
     await screen.findByTestId('override-warning-dialog');
     await waitFor(() => focused(102));
     const removed = screen.getByText(/^Other \(/).parentElement!;
@@ -514,8 +516,14 @@ describe('Void withdrawal and override-aware Restore', () => {
     expect(within(awaiting).queryByTestId('rollcall-row-101')).toBeNull();
     for (const k of ['k', 'ArrowUp', 'Home', '1', '2', 's']) key(k);
     focused(102);
-    expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledTimes(1);
-    for (const action of ['approve', 'confirm', 'reject', 'cancel'] as const)
+    expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenCalledTimes(1);
+    for (const action of [
+      'approve',
+      'confirm',
+      'reject',
+      'cancel',
+      'reinstate',
+    ] as const)
       expect(h.actions[action].mutateAsync).not.toHaveBeenCalled();
     expect(screen.queryByTestId('rollcall-start-dialog-confirm')).toBeNull();
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -532,26 +540,24 @@ describe('Void withdrawal and override-aware Restore', () => {
     expect(voidButton(101).querySelector('kbd')).toBeNull();
   });
 
-  it('retries the row whose in-flight Restore hit the 409, not the later row', async () => {
+  it('retries the row whose in-flight Void hit the 409, not the later row', async () => {
     renderRollCall({
       signups: [signup(101, 'cancelled'), signup(102, 'cancelled')],
     });
     let rejectFirst!: (err: unknown) => void;
-    h.actions.reinstate.mutateAsync
+    h.actions.voidWithdrawal.mutateAsync
       .mockImplementationOnce(
         () => new Promise((_, reject) => (rejectFirst = reject)),
       )
       .mockResolvedValueOnce({});
-    focused(101);
-    key('1');
-    await waitFor(() => focused(102));
-    key('1');
+    fireEvent.click(voidButton(101));
+    fireEvent.click(voidButton(102));
     await waitFor(() =>
-      expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledTimes(2),
+      expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenCalledTimes(2),
     );
     await act(async () => rejectFirst(overCapacity()));
     const dialog = await screen.findByTestId('override-warning-dialog');
-    expect(dialog).toHaveTextContent('player_101');
+    expect(dialog).toHaveTextContent("voiding player_101's withdrawal");
     expect(dialog).not.toHaveTextContent('player_102');
     fireEvent.change(within(dialog).getByRole('textbox'), {
       target: { value: 'seat them' },
@@ -561,7 +567,7 @@ describe('Void withdrawal and override-aware Restore', () => {
         within(dialog).getByRole('button', { name: /override/i }),
       );
     });
-    expect(h.actions.reinstate.mutateAsync.mock.calls).toEqual([
+    expect(h.actions.voidWithdrawal.mutateAsync.mock.calls).toEqual([
       [{ id: 101 }],
       [{ id: 102 }],
       [{ id: 101, reason: 'seat them', acknowledged_codes: ['over_capacity'] }],
@@ -572,21 +578,18 @@ describe('Void withdrawal and override-aware Restore', () => {
     expect(h.toastError).not.toHaveBeenCalled();
   });
 
-  it('queues a second 409 behind the first and retries each with its own kind', async () => {
+  it('queues a second 409 behind the first and retries each row with its own reason', async () => {
     renderRollCall({
       signups: [signup(101, 'cancelled'), signup(102, 'cancelled')],
     });
-    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
-    h.actions.voidWithdrawal.mutateAsync.mockRejectedValueOnce(overCapacity());
+    h.actions.voidWithdrawal.mutateAsync
+      .mockRejectedValueOnce(overCapacity())
+      .mockRejectedValueOnce(overCapacity());
     fireEvent.click(voidButton(102));
-    fireEvent.click(
-      within(screen.getByTestId('rollcall-row-101')).getByTestId(
-        'rollcall-restore-btn',
-      ),
-    );
+    fireEvent.click(voidButton(101));
     let dialog = await screen.findByTestId('override-warning-dialog');
     await waitFor(() =>
-      expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledTimes(1),
+      expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenCalledTimes(2),
     );
     expect(dialog).toHaveTextContent("voiding player_102's withdrawal");
     fireEvent.change(within(dialog).getByRole('textbox'), {
@@ -604,7 +607,7 @@ describe('Void withdrawal and override-aware Restore', () => {
     });
     dialog = await screen.findByTestId('override-warning-dialog');
     await waitFor(() =>
-      expect(dialog).toHaveTextContent('restoring player_101'),
+      expect(dialog).toHaveTextContent("voiding player_101's withdrawal"),
     );
     expect(within(dialog).getByRole('textbox')).toHaveValue('');
     fireEvent.change(within(dialog).getByRole('textbox'), {
@@ -615,7 +618,7 @@ describe('Void withdrawal and override-aware Restore', () => {
         within(dialog).getByRole('button', { name: /override/i }),
       );
     });
-    expect(h.actions.reinstate.mutateAsync).toHaveBeenLastCalledWith({
+    expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenLastCalledWith({
       id: 101,
       reason: 'second',
       acknowledged_codes: ['over_capacity'],
@@ -623,6 +626,7 @@ describe('Void withdrawal and override-aware Restore', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('override-warning-dialog')).toBeNull(),
     );
+    expect(h.actions.reinstate.mutateAsync).not.toHaveBeenCalled();
   });
 
   it('names the void in the fallback toast when an acknowledged retry fails', async () => {

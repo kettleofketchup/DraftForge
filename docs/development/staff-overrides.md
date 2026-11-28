@@ -152,6 +152,6 @@ const retry = useOverrideRetry((ack) =>
 - [Voiding a withdrawal](../features/events.md#voiding-a-withdrawal)
   (`/api/events/signups/{id}/void-withdrawal/`): raises `over_capacity` when the restored
   status holds a seat on a full event, and records the overridden codes in the signup
-  ledger's `rules_overridden`. Staff `reinstate/` delegates to the void when the withdrawal
-  is on record and accepts `acknowledged_codes`. In roll call it answers `409` like the void;
-  while signups are open it skips the void when that would seat the member over capacity.
+  ledger's `rules_overridden`. Staff `reinstate/` takes no `acknowledged_codes` and never
+  answers `409`: it delegates to the void only when the restore fits under capacity. Otherwise
+  it falls back to the plain reinstate while signups are open and answers `400` in roll call.

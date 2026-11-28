@@ -212,27 +212,13 @@ describe('void withdrawal and restore acknowledgements', () => {
     await expect(voidWithdrawal(5, { reason: 'r' })).rejects.toThrow();
   });
 
-  it('reinstate sends acknowledged codes with the reason', async () => {
-    await reinstateSignup(5, 'r', ['over_capacity']);
-    expect(post).toHaveBeenCalledWith('/events/signups/5/reinstate/', {
-      reason: 'r',
-      acknowledged_codes: ['over_capacity'],
-    });
-  });
-
-  it('reinstate sends codes without a reason', async () => {
-    await reinstateSignup(5, undefined, ['over_capacity']);
-    expect(post).toHaveBeenCalledWith('/events/signups/5/reinstate/', {
-      acknowledged_codes: ['over_capacity'],
-    });
-  });
-
-  it('reinstate omits empty codes', async () => {
-    await reinstateSignup(5, 'r', []);
+  it('reinstate never sends acknowledged codes', async () => {
+    const untyped = reinstateSignup as (...args: unknown[]) => Promise<unknown>;
+    await untyped(5, 'r', ['over_capacity']);
     expect(post).toHaveBeenCalledWith('/events/signups/5/reinstate/', {
       reason: 'r',
     });
-    await reinstateSignup(5);
+    await untyped(5, undefined, ['over_capacity']);
     expect(post).toHaveBeenLastCalledWith(
       '/events/signups/5/reinstate/',
       undefined,

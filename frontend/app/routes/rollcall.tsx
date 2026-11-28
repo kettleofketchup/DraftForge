@@ -206,6 +206,7 @@ export default function RollCallPage() {
     [],
   );
 
+  const { mutateAsync: reinstate } = signupActions.reinstate;
   const handleRestore = useCallback(
     async (signup: EventSignupType) => {
       const next = nextFocusFrom(signup);
@@ -213,16 +214,18 @@ export default function RollCallPage() {
         await dispatch(
           'reinstate',
           signup,
-          fire('reinstate', signup.id, DisplayName(signup)),
-          {
-            errorLabel: `restore ${DisplayName(signup)}`,
-          },
+          (reason) =>
+            reinstate({
+              id: signup.id,
+              ...(reason === undefined ? {} : { reason }),
+            }),
+          { errorLabel: `restore ${DisplayName(signup)}` },
         )
       ) {
         setFocusedId(next);
       }
     },
-    [dispatch, fire, nextFocusFrom],
+    [dispatch, reinstate, nextFocusFrom],
   );
   const handleVoid = useCallback(
     async (signup: EventSignupType) => {
@@ -231,7 +234,7 @@ export default function RollCallPage() {
         await dispatch(
           'void_withdrawal',
           signup,
-          fire('void_withdrawal', signup.id, DisplayName(signup)),
+          fire(signup.id, DisplayName(signup)),
           {
             title: 'Void withdrawal',
             actionLabel: 'Void withdrawal',
@@ -928,7 +931,7 @@ const SignupStrip = memo(function SignupStrip({
           <span className="hidden sm:inline ml-1">Restore</span>
         </SecondaryButton>
       )}
-      {canVoidWithdrawal(signup.status) && (
+      {canVoidWithdrawal(signup) && (
         <Tooltip>
           <TooltipTrigger asChild>
             <SecondaryButton

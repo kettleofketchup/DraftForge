@@ -2,6 +2,8 @@ from collections.abc import Sequence
 from typing import Any
 from unittest.mock import patch
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework.response import Response
 from rest_framework.test import APIClient
@@ -15,11 +17,16 @@ from events.constants import (
     SignupStatus,
     StaffReasonPolicy,
 )
-from events.ledger import SignupActor
+from events.ledger import SignupActor, record_signup_change, snapshot
 from events.models import Event, EventSignup, SignupLedgerEntry
 from events.overrides import REASON_MAX_LENGTH
 from events.schemas import SignupSnapshot
-from events.services import VOID_NO_HISTORY_MESSAGE, cancel_signup, process_rsvp
+from events.services import (
+    RESTORE_OVER_CAPACITY_MESSAGE,
+    VOID_NO_HISTORY_MESSAGE,
+    cancel_signup,
+    process_rsvp,
+)
 from events.tests.base import EventTestCase
 from org.models import Organization
 from org.settings_constants import StaffOverridePolicy
@@ -267,53 +274,48 @@ class ReinstateDelegationApiTests(_VoidApiFixtures):
                 self.assertEqual(self._void_entries(signup), [])
                 self.assertEqual(self._actions(signup)[-1], SignupAction.REINSTATED)
 
-    def test_staff_reinstate_roll_call_full_event_needs_override(
+    def test_staff_reinstate_roll_call_full_event_refused_for_every_policy(
+        self, _notify: Any
+    ) -> None:
+        for policy in StaffOverridePolicy:
+            with self.subTest(policy=policy):
+                self._set_policy(policy)
+                signup, _withdrew = self._full_after_withdrawal()
+                Event.objects.filter(pk=signup.event_id).update(
+                    state=EventState.ROLL_CALL
+                )
+
+                response = self._post(
+                    signup,
+                    {"reason": "x", "acknowledged_codes": ["over_capacity"]},
+                    as_user=self.admin,
+                    endpoint="event-signup-reinstate",
+                )
+
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertEqual(
+                    response.data, {"error": RESTORE_OVER_CAPACITY_MESSAGE}
+                )
+                self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
+                self.assertEqual(self._void_entries(signup), [])
+                self.assertEqual(self._actions(signup)[-1], SignupAction.WITHDREW)
+
+    def test_void_still_seats_roll_call_full_event_with_override(
         self, _notify: Any
     ) -> None:
         signup, withdrew = self._full_after_withdrawal()
-        Event.objects.filter(pk=signup.event_id).update(state=EventState.ROLL_CALL)
-
-        first = self._post(
-            signup,
-            {"reason": "x"},
-            as_user=self.admin,
-            endpoint="event-signup-reinstate",
-        )
-
-        self.assertEqual(first.status_code, 409, first.content)
-        self.assertEqual(first.data["code"], "override_required")
-        self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
-
-        second = self._post(
-            signup,
-            {"reason": "x", "acknowledged_codes": ["over_capacity"]},
-            as_user=self.admin,
-            endpoint="event-signup-reinstate",
-        )
-
-        self.assertEqual(second.status_code, 200, second.content)
-        snap = SignupSnapshot.model_validate(withdrew.before)
-        self.assertEqual(second.data["status"], snap.status)
-        [entry] = self._void_entries(signup)
-        self.assertEqual(entry.rules_overridden, ["over_capacity"])
-        self.assertEqual(entry.caused_by_id, withdrew.pk)
-
-    def test_staff_reinstate_roll_call_full_event_blocked(self, _notify: Any) -> None:
-        self._set_policy(StaffOverridePolicy.BLOCK)
-        signup, _withdrew = self._full_after_withdrawal()
         Event.objects.filter(pk=signup.event_id).update(state=EventState.ROLL_CALL)
 
         response = self._post(
             signup,
             {"reason": "x", "acknowledged_codes": ["over_capacity"]},
             as_user=self.admin,
-            endpoint="event-signup-reinstate",
         )
 
-        self.assertEqual(response.status_code, 409, response.content)
-        self.assertIs(response.data["blocked"], True)
-        self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
-        self.assertEqual(self._actions(signup)[-1], SignupAction.WITHDREW)
+        self.assertEqual(response.status_code, 200, response.content)
+        [entry] = self._void_entries(signup)
+        self.assertEqual(entry.rules_overridden, ["over_capacity"])
+        self.assertEqual(entry.caused_by_id, withdrew.pk)
 
     def test_member_reinstate_never_delegates(self, _notify: Any) -> None:
         signup, _withdrew = self._withdrawn()
@@ -328,3 +330,96 @@ class ReinstateDelegationApiTests(_VoidApiFixtures):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(self._void_entries(signup), [])
         self.assertEqual(self._actions(signup)[-1], SignupAction.REINSTATED)
+
+
+@patch("events.services.notify_signup_changed")
+class CanVoidWithdrawalFieldTests(_VoidApiFixtures):
+    def _list(self, event: Event, *, as_user: CustomUser) -> dict[int, bool]:
+        self.client.force_authenticate(as_user)
+        response = self.client.get(reverse("event-signup-list"), {"event": event.pk})
+        self.assertEqual(response.status_code, 200, response.content)
+        return {row["id"]: row["can_void_withdrawal"] for row in response.data}
+
+    def _moved_away(self, signup: EventSignup) -> None:
+        row = self._row(signup)
+        record_signup_change(
+            event=row.event,
+            subject=row.user,
+            actor=SignupActor(
+                user=self.admin, role=ActorRole.STAFF, means=SignupMeans.WEB
+            ),
+            action=SignupAction.MOVED_EVENT,
+            signup=row,
+            before=snapshot(row),
+            after=snapshot(row),
+        )
+
+    def test_staff_sees_which_rows_the_void_accepts(self, _notify: Any) -> None:
+        event = self.make_event()
+        withdrawn = self._join(event, self.user)
+        self._withdraw(withdrawn)
+        backfilled = EventSignup.objects.create(
+            event=event, user=self.make_user(), status=SignupStatus.CANCELLED
+        )
+        moved = self._join(event)
+        self._withdraw(moved)
+        self._moved_away(moved)
+        active = self._join(event)
+
+        flags = self._list(event, as_user=self.admin)
+
+        self.assertEqual(
+            flags,
+            {
+                withdrawn.pk: True,
+                backfilled.pk: False,
+                moved.pk: False,
+                active.pk: False,
+            },
+        )
+
+    def test_member_never_sees_voidable(self, _notify: Any) -> None:
+        signup, _withdrew = self._withdrawn()
+
+        flags = self._list(signup.event, as_user=self.user)
+
+        self.assertEqual(flags, {signup.pk: False})
+
+    def test_event_past_roll_call_is_not_voidable(self, _notify: Any) -> None:
+        signup, _withdrew = self._withdrawn()
+        Event.objects.filter(pk=signup.event_id).update(state=EventState.IN_PROGRESS)
+
+        flags = self._list(signup.event, as_user=self.admin)
+
+        self.assertEqual(flags, {signup.pk: False})
+
+    def test_flag_matches_void_outcome(self, _notify: Any) -> None:
+        event = self.make_event()
+        withdrawn = self._join(event, self.user)
+        self._withdraw(withdrawn)
+        backfilled = EventSignup.objects.create(
+            event=event, user=self.make_user(), status=SignupStatus.CANCELLED
+        )
+        flags = self._list(event, as_user=self.admin)
+
+        for signup in (withdrawn, backfilled):
+            with self.subTest(signup=signup.pk):
+                response = self._post(signup, {"reason": "x"}, as_user=self.admin)
+                self.assertEqual(response.status_code == 200, flags[signup.pk])
+
+    def test_list_query_count_does_not_grow_with_removed_rows(
+        self, _notify: Any
+    ) -> None:
+        event = self.make_event()
+        self._withdraw(self._join(event))
+        self._list(event, as_user=self.admin)
+
+        with CaptureQueriesContext(connection) as one:
+            self._list(event, as_user=self.admin)
+        for _ in range(3):
+            self._withdraw(self._join(event))
+        with CaptureQueriesContext(connection) as four:
+            flags = self._list(event, as_user=self.admin)
+
+        self.assertEqual(sum(flags.values()), 4)
+        self.assertEqual(len(four), len(one))

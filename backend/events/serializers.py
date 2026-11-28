@@ -14,6 +14,7 @@ from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState, SignupStatus
 from events.history import reduce_history_rules, reduce_history_snapshot
+from events.ledger import restorable_withdrawals
 from events.line import waitlist_ranks
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
@@ -40,6 +41,8 @@ from events.services import (
     DOTA_LOBBY_CONFIG_FIELDS,
     EVENT_CONFIG_FIELDS,
     TOURNAMENT_TEMPLATE_FIELDS,
+    VOIDABLE_EVENT_STATES,
+    VOIDABLE_STATUSES,
 )
 from events.signup_schedule import (
     MAX_SIGNUPS_OPEN_HOURS_BEFORE,
@@ -1009,6 +1012,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     line_rank = serializers.SerializerMethodField()
     waitlist_position = serializers.SerializerMethodField()
     can_verify_steam_account = serializers.SerializerMethodField()
+    can_void_withdrawal = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -1037,6 +1041,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "unmet_requirements",
             "eligibility_reasons",
             "can_verify_steam_account",
+            "can_void_withdrawal",
             "created_at",
             "updated_at",
             "signed_up_at",
@@ -1210,6 +1215,24 @@ class EventSignupSerializer(serializers.ModelSerializer):
             return True
         return signup.self_made and signup.status not in VOUCH_EXCLUDED_STATUSES
 
+    def get_can_void_withdrawal(self, signup: EventSignup) -> bool:
+        if (
+            signup.status not in VOIDABLE_STATUSES
+            or signup.event.state not in VOIDABLE_EVENT_STATES
+            or not self._viewer_is_event_staff(signup)
+        ):
+            return False
+        memo: dict[int, bool] = self.context.setdefault("_signup_voidable", {})
+        if signup.pk not in memo:
+            batch = [
+                row
+                for row in self._batch(signup)
+                if row.status in VOIDABLE_STATUSES and row.pk not in memo
+            ]
+            for pk, entry in restorable_withdrawals(batch).items():
+                memo[pk] = entry is not None
+        return memo[signup.pk]
+
     def get_holds_seat(self, signup: EventSignup) -> bool:
         return signup.status in seat_holding_statuses(signup.event)
 
@@ -1223,6 +1246,13 @@ class EventSignupSerializer(serializers.ModelSerializer):
             return False
         if user.pk == signup.user_id:
             return True
+        return self._viewer_is_event_staff(signup)
+
+    def _viewer_is_event_staff(self, signup: EventSignup) -> bool:
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return False
+        user = request.user
         cache: dict[int, bool] = self.context.setdefault("_event_staff", {})
         if signup.event_id not in cache:
             cache[signup.event_id] = has_event_staff_access(user, signup.event)

@@ -102,14 +102,31 @@ describe('canRestoreSignup', () => {
 });
 
 describe('canVoidWithdrawal', () => {
-  it.each(['cancelled', 'rejected'])('%s can be voided', (status) => {
-    expect(canVoidWithdrawal(status)).toBe(true);
-  });
+  it.each(['cancelled', 'rejected'])(
+    '%s can be voided when the server allows it',
+    (status) => {
+      expect(canVoidWithdrawal({ status, can_void_withdrawal: true })).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each(['cancelled', 'rejected'])(
+    '%s cannot be voided when the server refuses or does not say',
+    (status) => {
+      expect(canVoidWithdrawal({ status, can_void_withdrawal: false })).toBe(
+        false,
+      );
+      expect(canVoidWithdrawal({ status })).toBe(false);
+    },
+  );
 
   it.each(['dropped', 'approved', 'waitlisted', 'tentative'])(
     '%s cannot be voided',
     (status) => {
-      expect(canVoidWithdrawal(status)).toBe(false);
+      expect(canVoidWithdrawal({ status, can_void_withdrawal: true })).toBe(
+        false,
+      );
     },
   );
 });

@@ -29,8 +29,4 @@ export {
 } from './SignupHistorySection';
 export { SubscriberList } from './SubscriberList';
 export { useOverrideRetry } from './useOverrideRetry';
-export {
-  useSignupOverride,
-  type SignupOverride,
-  type SignupOverrideKind,
-} from './useSignupOverride';
+export { useSignupOverride, type SignupOverride } from './useSignupOverride';

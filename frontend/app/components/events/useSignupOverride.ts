@@ -12,33 +12,19 @@ import {
 
 const log = getLogger('events.void');
 
-export type SignupOverrideKind = 'void_withdrawal' | 'reinstate';
-
 type SignupOverrideContext = {
-  kind: SignupOverrideKind;
   id: number;
   name?: string;
   reason?: string;
 };
 
-const FAILURE: Record<SignupOverrideKind, string> = {
-  void_withdrawal: 'Failed to void withdrawal',
-  reinstate: 'Failed to restore signup',
-};
-
 function subjectFor(ctx: SignupOverrideContext): string | undefined {
-  if (!ctx.name) return undefined;
-  return ctx.kind === 'void_withdrawal'
-    ? `voiding ${ctx.name}'s withdrawal`
-    : `restoring ${ctx.name}`;
+  return ctx.name ? `voiding ${ctx.name}'s withdrawal` : undefined;
 }
 
+/** Void withdrawal with the capacity override retry; Restore never overrides. */
 export interface SignupOverride {
-  fire: (
-    kind: SignupOverrideKind,
-    id: number,
-    name?: string,
-  ) => (reason?: string) => Promise<void>;
+  fire: (id: number, name?: string) => (reason?: string) => Promise<void>;
   dialogProps: OverrideDialogBinding & {
     defaultReason: string;
     subject?: string;
@@ -49,12 +35,11 @@ export function useSignupOverride(
   signupActions: ReturnType<typeof useSignupActionMutations>,
 ): SignupOverride {
   const voidWithdrawal = signupActions.voidWithdrawal.mutateAsync;
-  const reinstate = signupActions.reinstate.mutateAsync;
 
   const action = useCallback(
     (ack: OverrideAcknowledgement, ctx: SignupOverrideContext) => {
       const reason = ack.reason ?? ctx.reason;
-      return (ctx.kind === 'void_withdrawal' ? voidWithdrawal : reinstate)({
+      return voidWithdrawal({
         id: ctx.id,
         ...(reason ? { reason } : {}),
         ...(ack.acknowledged_codes.length
@@ -62,26 +47,24 @@ export function useSignupOverride(
           : {}),
       });
     },
-    [voidWithdrawal, reinstate],
+    [voidWithdrawal],
   );
 
   const { run, dialogProps, context } = useOverrideRetry(action, {
     rethrow: true,
     onError: (error, ctx) => {
       log.warn('Signup override retry failed', {
-        kind: ctx.kind,
         signupId: ctx.id,
         error: extractApiError(error),
       });
-      toast.error(extractApiError(error) ?? FAILURE[ctx.kind]);
+      toast.error(extractApiError(error) ?? 'Failed to void withdrawal');
     },
   });
 
   const fire = useCallback(
-    (kind: SignupOverrideKind, id: number, name?: string) =>
+    (id: number, name?: string) =>
       async (reason?: string): Promise<void> => {
         await run({
-          kind,
           id,
           ...(name ? { name } : {}),
           ...(reason ? { reason } : {}),

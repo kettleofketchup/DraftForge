@@ -493,6 +493,9 @@ export const signupActionKey = (eventId: number) =>
 export interface SignupActionVars {
   id: number;
   reason?: string;
+}
+
+export interface VoidWithdrawalVars extends SignupActionVars {
   acknowledged_codes?: string[];
 }
 
@@ -577,16 +580,14 @@ export function useSignupActionMutations(eventId: number) {
       ),
     ),
     reinstate: useMutation(
-      options(
-        'reinstate',
-        ({ id, reason, acknowledged_codes }: SignupActionVars) =>
-          reinstateSignupAPI(id, reason, acknowledged_codes),
+      options('reinstate', ({ id, reason }: SignupActionVars) =>
+        reinstateSignupAPI(id, reason),
       ),
     ),
     voidWithdrawal: useMutation(
       options(
         'void_withdrawal',
-        ({ id, reason, acknowledged_codes }: SignupActionVars) =>
+        ({ id, reason, acknowledged_codes }: VoidWithdrawalVars) =>
           voidWithdrawalAPI(id, { reason, acknowledged_codes }),
       ),
     ),

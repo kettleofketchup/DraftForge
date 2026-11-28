@@ -3,6 +3,7 @@ import datetime
 import re
 from collections.abc import Collection, Sequence
 from datetime import timedelta
+from enum import Enum
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
@@ -1220,7 +1221,6 @@ def reinstate_signup(
     actor: SignupActor,
     for_staff_placement: bool = True,
     reason: str = "",
-    acknowledged_codes: Collection[str] = (),
 ) -> EventSignup:
     """Bring a removed signup back into the active list.
 
@@ -1232,9 +1232,10 @@ def reinstate_signup(
                       can re-confirm without leaving the rollcall screen.
     DROPPED is reinstated like CANCELLED, by staff only; a DROPPED entry in
     the live ready check becomes EXCUSED.
-    Staff reinstate with withdrawal history delegates to ``void_withdrawal``;
-    while signups are open it skips that when the restore would seat the
-    member over capacity.
+    Staff reinstate with withdrawal history delegates to ``void_withdrawal``
+    when the restore fits under capacity. Otherwise, while signups are open
+    it falls back to the plain reinstate (waitlisted when full); in roll call
+    it refuses, because only an explicit void may seat over capacity.
     """
     _reread_signup(signup)
     event = signup.event
@@ -1249,15 +1250,11 @@ def reinstate_signup(
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
-        if _delegates_to_void(
-            signup, for_staff_placement=for_staff_placement, over_capacity_ok=True
-        ):
-            return void_withdrawal(
-                signup,
-                actor=actor,
-                reason=reason,
-                acknowledged_codes=acknowledged_codes,
-            )
+        delegate = _void_delegation(signup, for_staff_placement=for_staff_placement)
+        if delegate == _VoidDelegation.OVER_CAPACITY:
+            raise ValueError(RESTORE_OVER_CAPACITY_MESSAGE)
+        if delegate == _VoidDelegation.VOID:
+            return void_withdrawal(signup, actor=actor, reason=reason)
         reason = _require_reason(
             signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
         )
@@ -1301,12 +1298,11 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
-    if _delegates_to_void(
-        signup, for_staff_placement=for_staff_placement, over_capacity_ok=False
+    if (
+        _void_delegation(signup, for_staff_placement=for_staff_placement)
+        == _VoidDelegation.VOID
     ):
-        return void_withdrawal(
-            signup, actor=actor, reason=reason, acknowledged_codes=acknowledged_codes
-        )
+        return void_withdrawal(signup, actor=actor, reason=reason)
     reason = _require_reason(
         signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
     )
@@ -1398,6 +1394,9 @@ VOIDABLE_EVENT_STATES: frozenset[str] = frozenset(
 VOID_OVER_CAPACITY_MESSAGE = (
     "Event is at capacity; restoring seats this member over capacity."
 )
+RESTORE_OVER_CAPACITY_MESSAGE = (
+    "Event is at capacity; use Void withdrawal to restore this member over capacity."
+)
 _STAFF_SEATED_STATUSES: frozenset[str] = frozenset(
     {SignupStatus.APPROVED, SignupStatus.CONFIRMED}
 )
@@ -1455,18 +1454,24 @@ def _restored_eligibility(signup: EventSignup, event: Event) -> list[str]:
     )
 
 
-def _delegates_to_void(
-    signup: EventSignup, *, for_staff_placement: bool, over_capacity_ok: bool
-) -> bool:
+class _VoidDelegation(Enum):
+    NONE = "none"
+    VOID = "void"
+    OVER_CAPACITY = "over_capacity"
+
+
+def _void_delegation(
+    signup: EventSignup, *, for_staff_placement: bool
+) -> _VoidDelegation:
     if not for_staff_placement:
-        return False
+        return _VoidDelegation.NONE
     locked = lock_event(signup.event)
     voided = latest_restorable_withdrawal(signup)
     if voided is None:
-        return False
-    if over_capacity_ok:
-        return True
-    return not _void_violations(locked, SignupSnapshot.model_validate(voided.before))
+        return _VoidDelegation.NONE
+    if _void_violations(locked, SignupSnapshot.model_validate(voided.before)):
+        return _VoidDelegation.OVER_CAPACITY
+    return _VoidDelegation.VOID
 
 
 def _voided_extra(voided: SignupLedgerEntry) -> dict[str, Any]:

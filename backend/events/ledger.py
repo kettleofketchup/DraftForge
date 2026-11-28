@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
+from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils import timezone as tz
 from structlog.contextvars import get_contextvars
@@ -39,6 +40,7 @@ __all__ = [
     "event_snapshot",
     "is_placement",
     "latest_restorable_withdrawal",
+    "restorable_withdrawals",
     "record_ready_check_transition",
     "record_signup_change",
     "require_staff_reason",
@@ -233,13 +235,10 @@ def _after_status(entry: SignupLedgerEntry) -> str | None:
     return REMOVED_STATUS_FOR.get(entry.action)
 
 
-def latest_restorable_withdrawal(signup: EventSignup) -> SignupLedgerEntry | None:
-    """The withdrawal, decline or rejection that still describes the row, if any."""
-    entries = list(
-        SignupLedgerEntry.objects.filter(
-            event_id=signup.event_id, subject_user_id=signup.user_id, signup=signup
-        ).order_by("-occurred_at", "-pk")
-    )
+def _restorable_in(
+    signup: EventSignup, entries: Sequence[SignupLedgerEntry]
+) -> SignupLedgerEntry | None:
+    """``entries`` are this signup's ledger entries, newest first."""
     index = next(
         (i for i, e in enumerate(entries) if e.action in RESTORABLE_ACTIONS), None
     )
@@ -260,6 +259,33 @@ def latest_restorable_withdrawal(signup: EventSignup) -> SignupLedgerEntry | Non
         if later_status is not None and later_status != removed_status:
             return None
     return candidate
+
+
+def _signup_entries(signups: Sequence[EventSignup]) -> QuerySet[SignupLedgerEntry]:
+    return SignupLedgerEntry.objects.filter(
+        signup__in=[s.pk for s in signups]
+    ).order_by("-occurred_at", "-pk")
+
+
+def latest_restorable_withdrawal(signup: EventSignup) -> SignupLedgerEntry | None:
+    """The withdrawal, decline or rejection that still describes the row, if any."""
+    entries = _signup_entries([signup]).filter(
+        event_id=signup.event_id, subject_user_id=signup.user_id
+    )
+    return _restorable_in(signup, list(entries))
+
+
+def restorable_withdrawals(
+    signups: Sequence[EventSignup],
+) -> dict[int, SignupLedgerEntry | None]:
+    """``latest_restorable_withdrawal`` for many signups in one query."""
+    by_signup: dict[int, list[SignupLedgerEntry]] = {s.pk: [] for s in signups}
+    keys = {s.pk: (s.event_id, s.user_id) for s in signups}
+    if signups:
+        for entry in _signup_entries(signups):
+            if keys[entry.signup_id] == (entry.event_id, entry.subject_user_id):
+                by_signup[entry.signup_id].append(entry)
+    return {s.pk: _restorable_in(s, by_signup[s.pk]) for s in signups}
 
 
 def event_snapshot(event: Event) -> dict[str, Any]:

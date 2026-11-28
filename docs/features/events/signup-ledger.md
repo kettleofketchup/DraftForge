@@ -39,7 +39,7 @@ Two event settings, both on by default, decide whether a signup that comes back 
 | Cancelled, after a real sign-up | Member reinstate | `line_withdraw_forfeits` | the setting is on | `reinstated` |
 | Dropped | Member reinstate | none | refused: "You were dropped from this event" | none |
 | Cancelled or rejected, with the withdrawal on record | Void withdrawal | none | never: the old place is restored | `voided_withdrawal` |
-| Cancelled or rejected during roll call with the withdrawal on record (the Staff placement policy decides on a full event), or cancelled with signups open with the withdrawal on record when restoring would not seat the member over capacity | Staff reinstate | none | never: the old place is restored | `voided_withdrawal` |
+| Cancelled or rejected during roll call, or cancelled with signups open, with the withdrawal on record when restoring would not seat the member over capacity (in roll call a Restore that would is refused) | Staff reinstate | none | never: the old place is restored | `voided_withdrawal` |
 | Cancelled or dropped, signups open, event full, and no restorable withdrawal or the restored status would hold a seat | Staff reinstate | none | always | `reinstated` |
 | Cancelled or dropped with signups open and a free seat, no restorable withdrawal; or cancelled, rejected or dropped during roll call with no restorable withdrawal | Staff reinstate | none | never | `reinstated` |
 | Declined without ever signing up | Any reinstate | none | always | `reinstated` |

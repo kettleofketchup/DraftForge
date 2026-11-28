@@ -26,6 +26,7 @@ const h = vi.hoisted(() => ({
   policy: 'optional' as StaffReasonPolicy,
   manage: true,
   status: 'rsvp',
+  canVoid: true,
   actions: Object.fromEntries(
     [
       'approve',
@@ -70,6 +71,7 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => ({
         user_data: null,
         dota_profile: null,
         status: h.status,
+        can_void_withdrawal: h.canVoid,
         holds_seat: true,
         org_user_mmr: null,
         suggested_mmr: 3200,
@@ -273,6 +275,7 @@ beforeEach(() => {
   h.policy = 'optional';
   h.manage = true;
   h.status = 'rsvp';
+  h.canVoid = true;
   useUserStore.setState({
     currentUser: { pk: 1, username: 'viewer' } as UserType,
   } as never);
@@ -555,6 +558,14 @@ describe('event page void withdrawal', () => {
     },
   );
 
+  it('Void withdrawal is hidden when the server would refuse the void', () => {
+    h.status = 'cancelled';
+    h.canVoid = false;
+    renderPage();
+    expect(screen.queryByTestId('event-void-withdrawal-btn')).toBeNull();
+    expect(rowButton('Restore')).toBeTruthy();
+  });
+
   it('Void withdrawal is hidden from members', () => {
     h.status = 'cancelled';
     h.manage = false;
@@ -655,19 +666,22 @@ describe('event page void withdrawal', () => {
     expect(screen.queryByTestId('override-warning-dialog')).toBeNull();
   });
 
-  it('Restore on a full event 409 opens the override dialog', async () => {
+  it('Restore refused at capacity toasts once and never asks to override', async () => {
+    const refusal =
+      'Event is at capacity; use Void withdrawal to restore this member over capacity.';
     h.status = 'cancelled';
-    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
+    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(
+      axiosError(400, { error: refusal }),
+    );
     renderPage();
     fireEvent.click(rowButton('Restore'));
-    await confirmOverride('back in');
     await waitFor(() =>
-      expect(h.actions.reinstate.mutateAsync).toHaveBeenLastCalledWith({
-        id: 101,
-        reason: 'back in',
-        acknowledged_codes: ['over_capacity'],
-      }),
+      expect(h.toastError).toHaveBeenCalledExactlyOnceWith(refusal),
     );
+    expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledExactlyOnceWith({
+      id: 101,
+    });
+    expect(screen.queryByTestId('override-warning-dialog')).toBeNull();
     expect(h.actions.voidWithdrawal.mutateAsync).not.toHaveBeenCalled();
   });
 
