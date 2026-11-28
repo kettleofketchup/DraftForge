@@ -371,6 +371,16 @@ class InternalSignupLedgerView(_SignupLedgerBase):
 @authentication_classes([InternalServiceAuth])
 @permission_classes([IsInternalService])
 def internal_signup_records_purge(request: Request) -> Response:
-    body: dict[str, Any] = asdict(purge_expired())
+    resume = request.data.get("resume_org_id")
+    if resume is not None and (
+        not isinstance(resume, int)
+        or isinstance(resume, bool)
+        or not 1 <= resume <= MAX_DB_INT
+    ):
+        return Response(
+            {"resume_org_id": ["Invalid organization."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    body: dict[str, Any] = asdict(purge_expired(resume_org_id=resume))
     body["per_org"] = {str(org_id): n for org_id, n in body["per_org"].items()}
     return Response(body)

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from structlog.testing import capture_logs
 
+from events import ledger
 from events.constants import ActorRole, SignupAction, SignupMeans
 from events.ledger import (
     SignupActor,
@@ -264,16 +265,18 @@ class PurgeExpiredTest(EventTestCase):
         clock = FakeClock()
 
         with patch("events.ledger.time", clock), patch("events.models.time", clock):
-            first = purge_expired(now=NOW, batch_size=1, time_budget_s=3.5)
+            first = purge_expired(now=NOW, batch_size=1, time_budget_s=1.5)
 
         self.assertTrue(first.more)
+        self.assertEqual(first.resume_org_id, self.org.pk)
         self.assertEqual(first.events, 2)
         for event_id, n in self._remaining().items():
             self.assertEqual(n, sizes[event_id])
         self.assertEqual(len(self._remaining()), 1)
 
-        second = purge_expired(now=NOW, batch_size=1)
+        second = purge_expired(now=NOW, batch_size=1, resume_org_id=first.resume_org_id)
         self.assertFalse(second.more)
+        self.assertIsNone(second.resume_org_id)
         self.assertEqual(second.events, 1)
         self.assertFalse(SignupLedgerEntry.objects.exists())
 
@@ -281,22 +284,85 @@ class PurgeExpiredTest(EventTestCase):
         self.assertEqual(third.purged, 0)
         self.assertFalse(third.more)
 
-    def test_zero_budget_deletes_nothing(self) -> None:
+    def test_zero_budget_still_deletes_one_batch(self) -> None:
         self._event(400)
+        self._event(401)
 
-        result = purge_expired(now=NOW, time_budget_s=0.0)
+        result = purge_expired(now=NOW, batch_size=1, time_budget_s=0.0)
 
         self.assertTrue(result.more)
-        self.assertEqual(result.purged, 0)
+        self.assertEqual(result.purged, 1)
         self.assertEqual(SignupLedgerEntry.objects.count(), 1)
 
     def test_default_budget_read_at_call_time(self) -> None:
         self._event(400)
+        self._event(401)
 
         with self.settings(SIGNUP_RECORDS_PURGE_BUDGET_S=0.0):
-            result = purge_expired(now=NOW)
+            result = purge_expired(now=NOW, batch_size=1)
 
         self.assertTrue(result.more)
+        self.assertEqual(result.purged, 1)
+
+    def test_slow_resolution_does_not_spend_budget(self) -> None:
+        quiet = self._org("Quiet Org", 30)
+        busy = self._org("Busy Org", 30)
+        self._event(10, organization=quiet)
+        expired = self._event(400, rows=2, organization=busy)
+        clock = FakeClock(step=0.0)
+        real_resolve = ledger.resolve_ledger_events
+
+        def slow_resolve(org_id: int, **kwargs: Any) -> Any:
+            clock.t += 1000.0
+            return real_resolve(org_id, **kwargs)
+
+        with (
+            patch("events.ledger.time", clock),
+            patch("events.models.time", clock),
+            patch("events.ledger.resolve_ledger_events", side_effect=slow_resolve),
+        ):
+            result = purge_expired(now=NOW, time_budget_s=20.0)
+
+        self.assertNotIn(expired.pk, self._remaining())
+        self.assertEqual(result.per_org.get(busy.pk), 2)
+
+    def test_budget_limited_runs_reach_later_orgs(self) -> None:
+        later = self._org("Later Org", 30)
+        backlog = [self._event(400 + i) for i in range(3)]
+        tail = self._event(400, rows=2, organization=later)
+        clock = FakeClock(step=100.0)
+        runs: list[SignupPurgeResult] = []
+        resume: int | None = None
+
+        with patch("events.ledger.time", clock), patch("events.models.time", clock):
+            for _ in range(10):
+                result = purge_expired(
+                    now=NOW, batch_size=1, time_budget_s=1.0, resume_org_id=resume
+                )
+                runs.append(result)
+                if not result.more:
+                    break
+                resume = result.resume_org_id
+
+        self.assertFalse(runs[-1].more)
+        self.assertTrue(all(run.purged > 0 for run in runs[:-1]))
+        self.assertTrue(any(later.pk in run.per_org for run in runs))
+        self.assertFalse(
+            SignupLedgerEntry.objects.filter(
+                event_id__in=[e.pk for e in (*backlog, tail)]
+            ).exists()
+        )
+
+    def test_resume_skips_earlier_orgs(self) -> None:
+        later = self._org("Resume Org", 30)
+        mine = self._event(400)
+        theirs = self._event(400, organization=later)
+
+        result = purge_expired(now=NOW, resume_org_id=later.pk)
+
+        self.assertEqual(self._remaining(), Counter({mine.pk: 1}))
+        self.assertNotIn(theirs.pk, self._remaining())
+        self.assertEqual(result.per_org, {later.pk: 1})
 
     def test_expired_ids_chunked(self) -> None:
         events = [self._event(400) for _ in range(5)]

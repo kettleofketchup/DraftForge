@@ -1023,6 +1023,7 @@ class SignupLedgerEntryQuerySet(models.QuerySet):
         event_ids: Collection[int] | None = None,
         batch_size: int = PURGE_BATCH_SIZE,
         deadline: float | None = None,
+        min_batches: int = 0,
         extra_log: dict[str, Any] | None = None,
     ) -> LedgerPurgeOutcome:
         batches: list[list[int]] = []
@@ -1036,8 +1037,12 @@ class SignupLedgerEntryQuerySet(models.QuerySet):
 
         count = events = done = 0
         complete = True
-        for batch in batches:
-            if deadline is not None and time.monotonic() >= deadline:
+        for index, batch in enumerate(batches):
+            if (
+                index >= min_batches
+                and deadline is not None
+                and time.monotonic() >= deadline
+            ):
                 complete = False
                 break
             with transaction.atomic():

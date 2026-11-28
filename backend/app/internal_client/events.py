@@ -130,8 +130,9 @@ def get_due_scheduled_events() -> list["ScheduledEventDueSchema"]:
 SIGNUP_RECORDS_PURGE_PATH = "/signup-records/purge/"
 
 
-def purge_signup_records() -> dict[str, Any] | None:
-    resp = transport.post(SIGNUP_RECORDS_PURGE_PATH, {})
+def purge_signup_records(resume_org_id: int | None = None) -> dict[str, Any] | None:
+    body = {} if resume_org_id is None else {"resume_org_id": resume_org_id}
+    resp = transport.post(SIGNUP_RECORDS_PURGE_PATH, body)
     if resp is None or not resp.ok:
         return None
     try:

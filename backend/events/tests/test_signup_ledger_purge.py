@@ -105,6 +105,14 @@ class LedgerPurgeTest(EventTestCase):
         )
         self.assertEqual(SignupLedgerEntry.objects.count(), 9)
 
+    def test_min_batches_run_past_deadline(self) -> None:
+        with patch("events.models.time.monotonic", return_value=100.0):
+            outcome = self._qs().purge(batch_size=3, deadline=50.0, min_batches=1)
+        self.assertEqual(
+            outcome, LedgerPurgeOutcome(count=3, events=1, batches=1, complete=False)
+        )
+        self._assert_events_whole()
+
     def test_empty_queryset(self) -> None:
         with capture_logs() as logs:
             outcome = SignupLedgerEntry.objects.filter(pk=-1).purge()

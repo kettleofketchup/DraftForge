@@ -287,8 +287,9 @@ def _update_signup_msg(
 @shared_task(ignore_result=True, soft_time_limit=300, time_limit=360)
 def purge_expired_signup_records() -> None:
     max_calls: int = settings.SIGNUP_RECORDS_PURGE_MAX_CALLS
+    resume: int | None = None
     for _ in range(max_calls):
-        result = purge_signup_records()
+        result = purge_signup_records(resume_org_id=resume)
         if result is None:
             log.warning(
                 "signup_records_purge_failed", system="events", subsystem="ledger"
@@ -296,6 +297,7 @@ def purge_expired_signup_records() -> None:
             return
         if not result.get("more"):
             return
+        resume = result.get("resume_org_id")
     log.info(
         "signup_records_purge_incomplete",
         system="events",

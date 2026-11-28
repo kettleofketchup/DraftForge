@@ -817,7 +817,7 @@ Guide: [Organization Settings](../features/organization-settings.md). Sign-up re
 | GET | `/api/organizations/{id}/signup-ledger/` | Raw ledger entries, oldest first, in the cursor envelope (`cursor`, `page_size`) with the same filters. Session login only, shares the records throttle. | Org staff |
 | GET | `/api/internal/signup-records/?organization={id}` | Same as the org records endpoint, for BI tools. | Internal token |
 | GET | `/api/internal/signup-ledger/?organization={id}` | Same as the org ledger endpoint. | Internal token |
-| POST | `/api/internal/signup-records/purge/` | One purge pass for every organization with a retention period, at most 20 seconds. Returns `{purged, organizations, events, skipped_unknown_end, per_org, more}`. Called by the nightly beat task. | Internal token |
+| POST | `/api/internal/signup-records/purge/` | One purge pass over the organizations with a retention period, from the optional body `{"resume_org_id": <id>}` on; at most 20 seconds of deletion, and at least one batch when anything has expired. Returns `{purged, organizations, events, skipped_unknown_end, per_org, more, resume_org_id}`. Called by the nightly beat task. | Internal token |
 
 "Org admin" means org admin, org owner or site admin; "Org staff" on the sign-up records rows adds org staff, but not league staff. Other callers get `403` with
 `{"code": "not_permitted", "detail": ...}` and anonymous callers the usual uncoded

@@ -514,6 +514,7 @@ class SignupPurgeResult:
     skipped_unknown_end: int
     per_org: dict[int, int]
     more: bool
+    resume_org_id: int | None = None
 
 
 def purge_expired(
@@ -521,26 +522,36 @@ def purge_expired(
     now: datetime | None = None,
     batch_size: int = PURGE_BATCH_SIZE,
     time_budget_s: float | None = None,
+    resume_org_id: int | None = None,
 ) -> SignupPurgeResult:
+    """Delete expired ledger entries, org by org from ``resume_org_id``.
+
+    The budget covers deletion only, and each call deletes at least one batch
+    when anything has expired, so successive calls always reach later orgs.
+    """
     now = now or tz.now()
     budget = (
         settings.SIGNUP_RECORDS_PURGE_BUDGET_S
         if time_budget_s is None
         else time_budget_s
     )
-    deadline = time.monotonic() + budget
+    spent = 0.0
+    deleted_any = False
     purged = events = skipped = 0
     per_org: dict[int, int] = {}
     more = False
+    resume: int | None = None
     retention = (
         OrgSettings.objects.nocache()
         .filter(signup_record_retention_days__isnull=False)
         .order_by("organization_id")
         .values_list("organization_id", "signup_record_retention_days")
     )
+    if resume_org_id is not None:
+        retention = retention.filter(organization_id__gte=resume_org_id)
     for org_id, days in retention:
-        if time.monotonic() >= deadline:
-            more = True
+        if deleted_any and spent >= budget:
+            more, resume = True, org_id
             break
         cutoff = now - timedelta(days=days)
         expired: list[int] = []
@@ -552,6 +563,7 @@ def purge_expired(
                 expired.append(event_id)
         if not expired:
             continue
+        started = time.monotonic()
         outcome = (
             SignupLedgerEntry.objects.nocache()
             .filter(organization_id=org_id)
@@ -559,15 +571,18 @@ def purge_expired(
                 organization_id=org_id,
                 event_ids=expired,
                 batch_size=batch_size,
-                deadline=deadline,
+                deadline=started + max(budget - spent, 0.0),
+                min_batches=0 if deleted_any else 1,
                 extra_log={"retention_days": days},
             )
         )
+        spent += time.monotonic() - started
+        deleted_any = deleted_any or outcome.batches > 0
         per_org[org_id] = outcome.count
         purged += outcome.count
         events += outcome.events
         if not outcome.complete:
-            more = True
+            more, resume = True, org_id
             break
 
     result = SignupPurgeResult(
@@ -577,6 +592,7 @@ def purge_expired(
         skipped_unknown_end=skipped,
         per_org=per_org,
         more=more,
+        resume_org_id=resume,
     )
     log.info(
         "signup_records_purge_completed",
@@ -587,5 +603,6 @@ def purge_expired(
         events=events,
         skipped_unknown_end=skipped,
         more=more,
+        resume_org_id=resume,
     )
     return result

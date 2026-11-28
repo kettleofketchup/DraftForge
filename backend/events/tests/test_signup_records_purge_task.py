@@ -13,7 +13,7 @@ from structlog.testing import capture_logs
 import app.internal_client as internal_client
 from app.models import CustomUser
 from events.constants import ActorRole, SignupAction, SignupMeans
-from events.ledger import event_snapshot
+from events.ledger import event_snapshot, purge_expired
 from events.models import SignupLedgerEntry
 from events.tasks import purge_expired_signup_records
 from events.tests.base import EventTestCase
@@ -30,6 +30,7 @@ RESULT_KEYS = {
     "skipped_unknown_end",
     "per_org",
     "more",
+    "resume_org_id",
 }
 
 
@@ -83,7 +84,34 @@ class InternalPurgeEndpointTest(EventTestCase):
         self.assertEqual(body["purged"], 1)
         self.assertEqual(body["per_org"], {str(self.org.pk): 1})
         self.assertFalse(body["more"])
+        self.assertIsNone(body["resume_org_id"])
         self.assertEqual(SignupLedgerEntry.objects.count(), 0)
+
+    def test_resume_org_id_passed_through(self) -> None:
+        with mock.patch(
+            "events.views_records.purge_expired", wraps=purge_expired
+        ) as spy:
+            resp = self.client.post(
+                self.url,
+                {"resume_org_id": self.org.pk},
+                content_type="application/json",
+                HTTP_X_INTERNAL_TOKEN=TOKEN,
+            )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        spy.assert_called_once_with(resume_org_id=self.org.pk)
+
+    def test_invalid_resume_org_id_rejected(self) -> None:
+        for bad in ("x", 0, True, 2**63):
+            with self.subTest(bad=bad):
+                resp = self.client.post(
+                    self.url,
+                    {"resume_org_id": bad},
+                    content_type="application/json",
+                    HTTP_X_INTERNAL_TOKEN=TOKEN,
+                )
+                self.assertEqual(resp.status_code, 400, resp.content)
+                self.assertIn("resume_org_id", resp.json())
+        self.assertEqual(SignupLedgerEntry.objects.count(), 1)
 
 
 class PurgeClientTest(SimpleTestCase):
@@ -96,6 +124,15 @@ class PurgeClientTest(SimpleTestCase):
             result = internal_client.purge_signup_records()
         post.assert_called_once_with("/signup-records/purge/", {})
         self.assertEqual(result, {"purged": 0, "more": False})
+
+    def test_sends_resume_org_id(self) -> None:
+        response = mock.Mock(ok=True)
+        response.json.return_value = {"purged": 0, "more": False}
+        with mock.patch.object(
+            internal_client.transport, "post", return_value=response
+        ) as post:
+            internal_client.purge_signup_records(resume_org_id=7)
+        post.assert_called_once_with("/signup-records/purge/", {"resume_org_id": 7})
 
     def test_transport_failure_returns_none(self) -> None:
         with mock.patch.object(internal_client.transport, "post", return_value=None):
@@ -140,8 +177,21 @@ class PurgeTaskTest(SimpleTestCase):
         self.assertEqual(self.events_named(logs, "signup_records_purge_incomplete"), [])
         self.assertEqual(self.events_named(logs, "signup_records_purge_failed"), [])
 
+    def test_threads_resume_org_id(self) -> None:
+        call, _ = self.run_task(
+            [
+                {"more": True, "resume_org_id": 5},
+                {"more": True, "resume_org_id": 9},
+                {"more": False, "resume_org_id": None},
+            ]
+        )
+        self.assertEqual(
+            [c.kwargs for c in call.call_args_list],
+            [{"resume_org_id": None}, {"resume_org_id": 5}, {"resume_org_id": 9}],
+        )
+
     def test_stops_at_max_calls(self) -> None:
-        call, logs = self.run_task(lambda: {"more": True})
+        call, logs = self.run_task(lambda **_: {"more": True})
         self.assertEqual(call.call_count, 12)
         lines = self.events_named(logs, "signup_records_purge_incomplete")
         self.assertEqual(len(lines), 1)
@@ -150,7 +200,7 @@ class PurgeTaskTest(SimpleTestCase):
 
     @override_settings(SIGNUP_RECORDS_PURGE_MAX_CALLS=3)
     def test_max_calls_setting_respected(self) -> None:
-        call, logs = self.run_task(lambda: {"more": True})
+        call, logs = self.run_task(lambda **_: {"more": True})
         self.assertEqual(call.call_count, 3)
         self.assertEqual(
             len(self.events_named(logs, "signup_records_purge_incomplete")), 1
