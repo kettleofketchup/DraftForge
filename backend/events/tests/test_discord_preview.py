@@ -59,12 +59,12 @@ from events.signup_schedule import compute_signups_open_at
 from events.start_mention import build_start_mention_header
 from events.tasks import (
     _create_discord_scheduled_event_impl,
-    _send_event_announcement_impl,
     _send_new_event_notification_impl,
     _send_signup_update_impl,
     _send_start_mention_impl,
     _sync_discord_event_signups_impl,
     send_attendance_reminder,
+    send_event_announcement,
     send_profile_reminder,
     send_subscriber_notifications,
 )
@@ -72,9 +72,9 @@ from events.tests.test_discord_tasks import _DiscordTaskTestCase, _ok_response
 from org.models import Organization, OrgUser
 
 BACKEND = str(Path(__file__).resolve().parents[2])
-GUILD = "734185035623825559"
-SIGNUP_CHANNEL = "5550001"
-ANNOUNCE_CHANNEL = "5550009"
+GUILD = "200000000000000001"
+SIGNUP_CHANNEL = "100000000000000001"
+ANNOUNCE_CHANNEL = "100000000000000009"
 START = datetime(2030, 1, 5, 18, 0, tzinfo=timezone.utc)
 ALL_KINDS: tuple[PreviewKind, ...] = (
     "scheduled_event",
@@ -180,14 +180,30 @@ class _PreviewTestCase(_DiscordTaskTestCase):
 
         def fake_request(method: str, url: str, **kwargs: Any) -> MagicMock:
             body = kwargs.get("json")
+            if method == "GET" and "/channels/" in url:
+                channel_id = url.rsplit("/", 1)[-1]
+                return _ok_response(
+                    {
+                        "id": channel_id,
+                        "guild_id": GUILD,
+                        "type": 15 if channel_id == SIGNUP_CHANNEL else 0,
+                    }
+                )
             if url.endswith("/users/@me/channels"):
                 return _ok_response({"id": "dm-chan"})
             if method == "POST" and ("/messages" in url or url.endswith("/threads")):
                 captured.messages.append(body)
                 captured.message_urls.append(url)
+                if url.endswith("/threads"):
+                    return _ok_response(
+                        {
+                            "id": "100000000000000004",
+                            "message": {"id": "100000000000000003"},
+                        }
+                    )
             elif method == "PATCH":
                 captured.edits.append(body)
-            return _ok_response({"id": "m1"})
+            return _ok_response({"id": "100000000000000003"})
 
         dm_ids = itertools.count(700)
 
@@ -218,9 +234,6 @@ class _PreviewTestCase(_DiscordTaskTestCase):
                     "discordbot.dm._rate_limited_request", side_effect=fake_dm_request
                 )
             )
-            stack.enter_context(
-                patch("events.tasks.resolve_signup_channel_type", return_value=15)
-            )
             stack.enter_context(patch("events.tasks.req.post", side_effect=fake_post))
             stack.enter_context(patch("events.tasks.req.patch", side_effect=fake_patch))
             for target in ("events.tasks", "events.discord.embeds"):
@@ -240,7 +253,7 @@ class _PreviewTestCase(_DiscordTaskTestCase):
 class PreviewParityTest(_PreviewTestCase):
     def test_parity_signup_post(self) -> None:
         response = self.preview("signup_post")
-        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+        sent = self.run_task(lambda: send_event_announcement(self.ev.pk))
 
         thread = sent.messages[0]
         self.assertTrue(sent.message_urls[0].endswith(f"{SIGNUP_CHANNEL}/threads"))
@@ -252,13 +265,13 @@ class PreviewParityTest(_PreviewTestCase):
         self.assertTrue(response.gate.would_send, response.gate.reasons)
 
     def test_parity_announcement_notice(self) -> None:
-        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+        sent = self.run_task(lambda: send_event_announcement(self.ev.pk))
         response = self.preview("announcement_notice")
 
         self.assertEqual(len(sent.messages), 2)
         self.assertEqual([_dump(m) for m in response.messages], [sent.messages[1]])
         self.assertIn(
-            f"https://discord.com/channels/{GUILD}/{SIGNUP_CHANNEL}/m1",
+            f"https://discord.com/channels/{GUILD}/100000000000000004/100000000000000003",
             response.messages[0].embeds[0].description,
         )
         self.assertEqual(response.destination.channel_id, ANNOUNCE_CHANNEL)
@@ -470,7 +483,7 @@ class PreviewBranchTest(_PreviewTestCase):
         self.assertIn("shown_as_posted_when_signups_open", response.notes)
 
         Event.objects.filter(pk=self.ev.pk).update(state=EventState.SIGNUPS_OPEN)
-        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+        sent = self.run_task(lambda: send_event_announcement(self.ev.pk))
 
         self.assertEqual(len(sent.messages), 1)
         self.assertEqual(
@@ -491,7 +504,7 @@ class PreviewBranchTest(_PreviewTestCase):
         Event.objects.filter(pk=self.ev.pk).update(discord_post_signups=False)
         notice = self.preview("announcement_notice")
         signup = self.preview("signup_post")
-        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+        sent = self.run_task(lambda: send_event_announcement(self.ev.pk))
 
         self.assertEqual(len(sent.messages), 1)
         self.assertTrue(sent.message_urls[0].endswith(f"{ANNOUNCE_CHANNEL}/messages"))
@@ -504,10 +517,10 @@ class PreviewBranchTest(_PreviewTestCase):
 
     def test_announcement_notice_before_signup_post_matches_send(self) -> None:
         response = self.preview("announcement_notice")
-        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+        sent = self.run_task(lambda: send_event_announcement(self.ev.pk))
 
         self.assertEqual(len(sent.messages), 2)
-        sent_link = f"https://discord.com/channels/{GUILD}/{SIGNUP_CHANNEL}/m1"
+        sent_link = f"https://discord.com/channels/{GUILD}/100000000000000004/100000000000000003"
         preview_link = f"https://discord.com/channels/{GUILD}/{SIGNUP_CHANNEL}/0"
         self.assertIn(sent_link, sent.messages[1]["embeds"][0]["description"])
         self.assertEqual(
@@ -573,7 +586,7 @@ class PreviewBranchTest(_PreviewTestCase):
         title = "T" * 130
         Event.objects.filter(pk=self.ev.pk).update(discord_event_title=title)
         response = self.preview("signup_post")
-        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+        sent = self.run_task(lambda: send_event_announcement(self.ev.pk))
         self.assertEqual(response.destination.thread_name, "T" * 100)
         self.assertEqual(response.destination.thread_name, sent.messages[0]["name"])
 
@@ -587,7 +600,7 @@ class PreviewBranchTest(_PreviewTestCase):
         event = Event.objects.get(pk=self.ev.pk)
         event.description = "Snacks & <b>drinks</b>"
         event.save()
-        sent = self.run_task(lambda: _send_event_announcement_impl(self.ev.pk))
+        sent = self.run_task(lambda: send_event_announcement(self.ev.pk))
         self.assertEqual(
             [_dump(m) for m in response.messages], [sent.messages[0]["message"]]
         )

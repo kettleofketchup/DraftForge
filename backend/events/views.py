@@ -56,6 +56,7 @@ from discordbot.services.permissions import (
     DiscordPermissionRefreshThrottle,
     validation_error_details,
 )
+from discordbot.signup_delivery import ResetOutcome, reset_signup_delivery
 from draft.models import Draft, HeroDraft
 from events.admission import SignupRefused, ensure_self_serve
 from events.capacity import with_signup_counts
@@ -148,7 +149,6 @@ from events.services import (
     cancel_event,
     cancel_signup,
     changed_draft_option_fields,
-    clear_signup_dedup_state,
     create_off_schedule_event,
     create_tentative_signup,
     create_tournament_for_event,
@@ -2444,9 +2444,7 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
         )
 
     # Idempotency: prevent double-fire for one-shot tasks (DMs). Repostable
-    # tasks (signup_post, announcement) intentionally allow re-fire — the admin
-    # is asking to push a fresh post — and we clear dedup state below before
-    # invoking celery so the task recreates instead of no-opping.
+    # tasks (signup_post, announcement) start a fresh delivery generation.
     REPOSTABLE = {"signup_post", "announcement"}
     if task_name == "signup_reminder":
         if DiscordEventDM.objects.filter(
@@ -2468,15 +2466,54 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
                     status=status.HTTP_409_CONFLICT,
                 )
 
-    # Repost path: clear DiscordEventMsgSignup.has_posted and DiscordMessageLog
-    # success=True for source=event_announcement so send_event_announcement
-    # actually recreates the post instead of being blocked by sync dedup
-    # (sync_discord_events would otherwise skip; the manual-fire path bypasses
-    # that, but we still clear so the next auto-sync agrees with the new state).
-    if task_name in REPOSTABLE:
-        clear_signup_dedup_state(event_id)
-
     celery_task = FIREABLE_TASKS[task_name]
+
+    if task_name in REPOSTABLE:
+        outcome, generation = reset_signup_delivery(event_id)
+        if outcome == ResetOutcome.ACTIVE:
+            return Response(
+                {
+                    "error": "A signup post attempt is already in progress. "
+                    "Try again after it finishes."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            current_app.send_task(
+                celery_task,
+                args=[event_id],
+                kwargs={
+                    "generation": generation,
+                    "manual": True,
+                    "fired_by_user_id": request.user.pk,
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                "signup_post_enqueue_failed",
+                system="events",
+                subsystem="views",
+                task_name=task_name,
+                event_id=event_id,
+                generation=generation,
+                error_type=type(exc).__name__,
+            )
+            return Response(
+                {
+                    "error": "Could not queue the signup post. Automatic posting will retry."
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        logger.info(
+            "task_manually_fired",
+            system="events",
+            subsystem="views",
+            task_name=task_name,
+            event_id=event_id,
+            user_id=request.user.pk,
+            generation=generation,
+        )
+        return Response({"fired": task_name, "event_id": event_id})
 
     # Signup reminder → send_subscriber_notifications (DMs, takes event_id only)
     if task_name == "signup_reminder":
@@ -2531,12 +2568,7 @@ def fire_event_task(request: Request, event_id: int, task_name: str) -> Response
                 game.dire_team.name if game.dire_team else "Dire",
             ],
         )
-    elif task_name in (
-        "announcement",
-        "signup_post",
-        "scheduled_event",
-        "signup_update",
-    ):
+    elif task_name in ("scheduled_event", "signup_update"):
         current_app.send_task(celery_task, args=[event_id])
     else:
         current_app.send_task(celery_task)

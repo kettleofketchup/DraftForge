@@ -9,7 +9,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('discordbot', '0015_retarget_tournament_models'),
+        ('discordbot', '0016_signup_post_delivery_state'),
         ('org', '0023_api_tokens'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

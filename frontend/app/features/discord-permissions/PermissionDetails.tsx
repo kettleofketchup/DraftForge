@@ -12,11 +12,13 @@ export function PermissionDetails({
   operationLabel,
   statusLabel,
   historical = false,
+  showRequired = false,
 }: {
   result: PermissionCheckResult;
   operationLabel: string;
   statusLabel?: string;
   historical?: boolean;
+  showRequired?: boolean;
 }) {
   const alternatives =
     result.status === 'missing_permissions'
@@ -56,6 +58,24 @@ export function PermissionDetails({
         </p>
       )}
       {result.reason && <p>{REASON_TEXT[result.reason]}</p>}
+      {showRequired && (
+        <section aria-label="Required permissions">
+          <h4 className="font-medium">Required permissions</h4>
+          <ul className="list-inside list-disc">
+            {result.required_all.map((flag) => (
+              <li key={flag}>{permissionLabel(flag)}</li>
+            ))}
+            {result.required_any.map((group) => (
+              <li key={group.join('|')}>
+                {group.map(permissionLabel).join(' or ')}
+              </li>
+            ))}
+          </ul>
+          {!result.required_all.length && !result.required_any.length && (
+            <p>No permission requirements returned for this check.</p>
+          )}
+        </section>
+      )}
       {(missing.length > 0 || alternatives.length > 0) && (
         <section
           aria-label="Missing permissions"

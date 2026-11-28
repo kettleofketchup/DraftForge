@@ -19,8 +19,6 @@ from app.internal_client import (
     create_event_dm,
     create_event_log,
     create_message_log,
-    create_or_update_announcement,
-    create_or_update_signup_message,
     finalize_discord_message_log,
     generate_repeater_events,
     get_active_repeaters,
@@ -46,7 +44,7 @@ from discordbot.utils import (
     MessageDeletedError,
     _get_headers,
     sync_edit_message,
-    sync_send_embed_with_components,
+    sync_send_configured_channel,
     sync_send_embed_with_components_no_log,
 )
 from events.discord import (
@@ -60,25 +58,21 @@ from events.discord import (
     reminder_channel,
 )
 from events.discord.embeds import (
-    build_announcement_notice,
     build_announcement_v2,
     build_scheduled_event_payload,
     build_scheduled_event_sync_payload,
     build_subscriber_dm_embed,
 )
 from events.discord.gates import (
-    announcement_branch,
     attendance_reminder_gate,
     new_event_post_gate,
     profile_reminder_gate,
     scheduled_event_gate,
     scheduled_event_sync_gate,
     signup_post_channel,
-    signup_post_gate,
     signup_reminder_gate,
     start_mention_gate,
 )
-from events.discord.signup_destination import resolve_signup_channel_type
 from events.scheduling.fire import fire_due_reminders
 from events.signup_post_lock import (
     acquire_lock,
@@ -88,6 +82,7 @@ from events.signup_post_lock import (
     now_ms,
     release_lock,
 )
+from events.signup_post_send import run_signup_post
 from events.start_mention import build_start_mention_messages, start_mention_payload
 from events.utils import starts_in_future
 from telemetry.logging import get_logger
@@ -226,65 +221,6 @@ def _discord_error_message(data: object, status_code: int) -> str:
     return f"{message}: {'; '.join(details)}" if details else message
 
 
-def _build_signup_message_link(
-    guild_id: str, channel_id: str, post_result: dict[str, Any]
-) -> str | None:
-    """Construct a discord.com message permalink from a sync_send_embed result."""
-    if not guild_id:
-        return None
-    if post_result.get("message"):
-        thread_id = post_result["id"]
-        msg_id = post_result["message"]["id"]
-        return f"https://discord.com/channels/{guild_id}/{thread_id}/{msg_id}"
-    msg_id = post_result["id"]
-    return f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
-
-
-def _update_signup_msg(
-    event_id: int,
-    discord_event_pk: int | None,
-    channel_id: str,
-    post_result: dict[str, Any],
-) -> str | None:
-    """Update signup message record via internal API after Discord post.
-
-    Returns the resolved message_id (or None if the post had no id).
-    """
-    update_data = {
-        "event_id": event_id,
-        "channel_id": channel_id,
-        "has_posted": True,
-        "message_last_updated": datetime.now(tz.utc).isoformat(),
-    }
-    # post_result shape tells us forum-vs-text:
-    #   forum: {"id": <thread_id>, "message": {"id": <msg_id>}, ...}
-    #   text:  {"id": <msg_id>}
-    # channel_type is the contract that downstream edit/modify paths read;
-    # always set it explicitly so the worker doesn't have to infer.
-    if post_result.get("message"):
-        update_data["thread_id"] = post_result["id"]
-        update_data["message_id"] = post_result["message"]["id"]
-        update_data["channel_type"] = "forum"
-    else:
-        update_data["thread_id"] = None
-        update_data["message_id"] = post_result.get("id")
-        update_data["channel_type"] = "text"
-
-    msg_resp = create_or_update_signup_message(**update_data)
-    signup_msg_pk = msg_resp.json().get("id") if msg_resp and msg_resp.ok else None
-
-    if signup_msg_pk:
-        update_discord_event(discord_event_pk, signup_message_id=signup_msg_pk)
-        create_event_log(
-            discord_event_id=discord_event_pk,
-            action="send_signup_post",
-            target_type="DiscordEventMsgSignup",
-            message_id=update_data.get("message_id"),
-            success=True,
-        )
-    return update_data.get("message_id")
-
-
 @shared_task
 def generate_upcoming_events() -> str:
     """Generate upcoming events for all active repeaters. Runs hourly.
@@ -410,7 +346,7 @@ def open_scheduled_signups() -> str:
 def sync_discord_events() -> str:
     """Reconciliation task: ensure Discord matches the DB for all active events.
 
-    Runs every 5 minutes via celery beat. All reads via internal HTTP API.
+    Runs every 60 seconds via celery beat. All reads via internal HTTP API.
     """
     structured_log = get_logger(__name__)
 
@@ -427,6 +363,7 @@ def sync_discord_events() -> str:
     events_with_signup_post = set(state.events_with_signup)
     events_with_scheduled = set(state.events_with_scheduled)
     events_with_recent_attempt = set(state.events_with_recent_attempt)
+    events_with_signup_blocked = set(state.events_with_signup_blocked)
 
     signup_posts_created = 0
     notices_created = 0
@@ -440,6 +377,7 @@ def sync_discord_events() -> str:
         events_with_signup_post=len(events_with_signup_post),
         events_with_scheduled=len(events_with_scheduled),
         events_with_recent_attempt=len(events_with_recent_attempt),
+        events_with_signup_blocked=len(events_with_signup_blocked),
     )
 
     for event in state.active_events:
@@ -459,6 +397,7 @@ def sync_discord_events() -> str:
             event["state"] == "signups_open"
             and (signup_available or announcement_available)
             and not has_signup
+            and pk not in events_with_signup_blocked
         )
         if signup_eligible:
             structured_log.info(
@@ -473,14 +412,33 @@ def sync_discord_events() -> str:
                 ),
             )
             try:
-                send_event_announcement(pk)
-                signup_posts_created += 1
-                structured_log.info(
-                    "sync_signup_post_created",
-                    system="events",
-                    subsystem="discord",
-                    event_id=pk,
-                )
+                result = run_signup_post(pk)
+                if result.newly_delivered():
+                    signup_posts_created += 1
+                if result.newly_delivered() and result.persisted:
+                    structured_log.info(
+                        "sync_signup_post_created",
+                        system="events",
+                        subsystem="discord",
+                        event_id=pk,
+                        destination=result.destination,
+                    )
+                elif result.newly_delivered():
+                    structured_log.warning(
+                        "sync_signup_post_delivered_unrecorded",
+                        system="events",
+                        subsystem="discord",
+                        event_id=pk,
+                        destination=result.destination,
+                    )
+                else:
+                    structured_log.info(
+                        "sync_signup_post_not_created",
+                        system="events",
+                        subsystem="discord",
+                        event_id=pk,
+                        outcome=result.outcome.value,
+                    )
             except Exception as e:
                 structured_log.exception(
                     "sync_signup_post_failed",
@@ -548,153 +506,28 @@ def sync_discord_events() -> str:
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
-def send_event_announcement(event_id: int, interaction_id: str | None = None) -> str:
-    """Create an event signup post and an optional announcement.
+def send_event_announcement(
+    event_id: int,
+    interaction_id: str | None = None,
+    generation: int | None = None,
+    manual: bool = False,
+    fired_by_user_id: int | None = None,
+) -> str:
+    """Create an event signup post and an optional announcement notice.
 
-    1. Signup post: full embed + buttons in the signups channel (forum thread
-       or regular message). This is where users sign up. Updated on changes.
-    2. Announcement: lightweight message in the announcement channel linking
-       to the signup post. Posted once, not updated.
-
-    If no signup destination is available, use the enabled announcement
-    destination instead (no separate announcement needed).
-
-    All DB writes go through the internal HTTP API — no direct ORM access.
+    Returns a summary rendered from the typed signup outcome.
     """
     return _run_with_bookends(
         "send_event_announcement",
         event_id,
         interaction_id,
-        lambda: _send_event_announcement_impl(event_id),
+        lambda: run_signup_post(
+            event_id,
+            generation=generation,
+            manual=manual,
+            fired_by_user_id=fired_by_user_id,
+        ).summary(),
     )
-
-
-def _send_event_announcement_impl(event_id: int) -> str:
-    event = get_event_for_task(event_id)
-    if not event:
-        return f"Failed: event {event_id} not found"
-    if "state_not_signups_open" in signup_post_gate(event).reasons:
-        return f"Skipped: event state is {event.state}, not signups_open"
-    branch = announcement_branch(event)
-    if branch == "none":
-        return "Skipped: no signup or announcement destination"
-    signup_available = branch in ("signup_post_only", "signup_post_and_notice")
-    announcement_available = branch in (
-        "signup_post_and_notice",
-        "fallback_signup_post",
-    )
-
-    try:
-        result = build_announcement_v2(event)
-    except InternalAPIUnavailable as exc:
-        return _skip_signup_list_unavailable("send_event_announcement", event_id, exc)
-    embeds = result["embeds"]
-    components = result["components"]
-    signup_content = result.get("content")
-    signup_mentions = result.get("allowed_mentions")
-    thread_name = event.discord_event_title or event.name
-    guild_id = event.organization.discord_server_id
-
-    de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id or "")
-    if not de_resp or not de_resp.ok:
-        logger.error(
-            "discord_event_get_or_create_failed",
-            system="events",
-            subsystem="tasks",
-            event_id=event.pk,
-        )
-        return "Failed: could not get/create DiscordEvent"
-    discord_event_pk = de_resp.json().get("id")
-
-    signup_post_result = None
-    signup_message_link = None
-
-    channel_type = (
-        resolve_signup_channel_type(
-            event.discord_post_signups_channel_id, guild_id or ""
-        )
-        if signup_available
-        else None
-    )
-    if channel_type is not None:
-        # DiscordMessageLog is written by sync_send_embed_with_components via HTTP
-        signup_post_result = sync_send_embed_with_components(
-            channel_id=event.discord_post_signups_channel_id,
-            embed=embeds,
-            components=components,
-            source="event_announcement",
-            source_id=event.pk,
-            forum_thread_name=thread_name if channel_type == 15 else None,
-            content=signup_content,
-            allowed_mentions=signup_mentions,
-        )
-
-        if signup_post_result:
-            _update_signup_msg(
-                event.pk,
-                discord_event_pk,
-                event.discord_post_signups_channel_id,
-                signup_post_result,
-            )
-            signup_message_link = _build_signup_message_link(
-                guild_id, event.discord_post_signups_channel_id, signup_post_result
-            )
-
-    if not signup_post_result:
-        if not announcement_available:
-            return f"Signup post for event {event.pk}: no send result"
-        # No signups channel or it failed — post to announcement channel
-        fallback_result = sync_send_embed_with_components(
-            channel_id=event.discord_announcement_channel_id,
-            embed=embeds,
-            components=components,
-            source="event_announcement",
-            source_id=event.pk,
-        )
-
-        if fallback_result:
-            _update_signup_msg(
-                event.pk,
-                discord_event_pk,
-                event.discord_announcement_channel_id,
-                fallback_result,
-            )
-
-        return f"Announced event {event.pk}"
-
-    if not announcement_available:
-        return f"Posted signup for event {event.pk}"
-
-    notice_result = build_announcement_notice(event, signup_message_link)
-    notice_api_result = sync_send_embed_with_components(
-        channel_id=event.discord_announcement_channel_id,
-        embed=notice_result["embed"],
-        source="event_notice",
-        source_id=event.pk,
-        content=notice_result.get("content"),
-        allowed_mentions=notice_result.get("allowed_mentions"),
-    )
-
-    if notice_api_result:
-        ann_resp = create_or_update_announcement(
-            event_id=event.pk,
-            channel_id=event.discord_announcement_channel_id,
-            has_posted=True,
-            message_id=notice_api_result.get("id"),
-            message_last_updated=datetime.now(tz.utc).isoformat(),
-        )
-        ann_pk = ann_resp.json().get("id") if ann_resp and ann_resp.ok else None
-        if ann_pk:
-            update_discord_event(discord_event_pk, announcement_id=ann_pk)
-            create_event_log(
-                discord_event_id=discord_event_pk,
-                action="send_announcement_notice",
-                target_type="DiscordEventMsgAnnouncement",
-                message_id=notice_api_result.get("id"),
-                success=True,
-            )
-
-    return f"Announced event {event.pk} (signup: {signup_message_link})"
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
@@ -703,7 +536,7 @@ def send_attendance_reminder(event_id: int) -> str:
 
     A blank channel falls back to the announcement channel.
 
-    Idempotency via sync_send_embed_with_components's claim/finalize lease:
+    Idempotency via sync_send_configured_channel's claim/finalize lease:
     one HTTP send per (source, source_id).
     """
 
@@ -721,8 +554,10 @@ def send_attendance_reminder(event_id: int) -> str:
         result = build_attendance_reminder_embed(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("send_attendance_reminder", event_id, exc)
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=result["embed"],
         components=result.get("components"),
         source="attendance_reminder",
@@ -740,7 +575,7 @@ def send_attendance_reminder(event_id: int) -> str:
                 discord_event_id=de_resp.json().get("id"),
                 action="attendance_reminder",
                 target_type="DiscordMessageLog",
-                message_id=response.get("id"),
+                message_id=response.get("message", response).get("id"),
                 message_log_id=response.get("_message_log_id"),
                 success=True,
             )
@@ -754,7 +589,7 @@ def send_profile_reminder(event_id: int) -> str:
 
     A blank channel falls back to the announcement channel.
 
-    Idempotency via sync_send_embed_with_components's lease pattern.
+    Idempotency via sync_send_configured_channel's lease pattern.
     """
 
     event = get_event_for_task(event_id)
@@ -771,8 +606,10 @@ def send_profile_reminder(event_id: int) -> str:
         result = build_profile_reminder_embed(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("send_profile_reminder", event_id, exc)
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=result["embed"],
         components=result.get("components"),
         source="profile_reminder",
@@ -789,7 +626,7 @@ def send_profile_reminder(event_id: int) -> str:
                 discord_event_id=de_resp.json().get("id"),
                 action="profile_reminder",
                 target_type="DiscordMessageLog",
-                message_id=response.get("id"),
+                message_id=response.get("message", response).get("id"),
                 message_log_id=response.get("_message_log_id"),
                 success=True,
             )
@@ -1073,6 +910,19 @@ def _log_signup_post_edit_applied(
     )
 
 
+def _deleted_signup_message_cleared(event_id: int, message_id: str) -> bool:
+    resp = clear_event_signup_state(event_id=event_id, expected_message_id=message_id)
+    if resp is None or resp.status_code != 200:
+        raise InternalAPIUnavailable("signup-recovery")
+    try:
+        body = resp.json()
+    except ValueError as exc:
+        raise InternalAPIUnavailable("signup-recovery") from exc
+    if not isinstance(body, dict) or type(body.get("cleared")) is not bool:
+        raise InternalAPIUnavailable("signup-recovery")
+    return body["cleared"]
+
+
 def _send_signup_update_impl(
     event_id: int, interaction_id: str | None, dirty_since_ms: int | None = None
 ) -> str:
@@ -1139,7 +989,15 @@ def _send_signup_update_impl(
             components=result["components"],
         )
     except MessageDeletedError:
-        clear_event_signup_state(event_id=event.pk)
+        if not _deleted_signup_message_cleared(event.pk, str(message_id)):
+            log.warning(
+                "signup_message_orphan_not_current",
+                channel_id=str(edit_channel_id),
+                message_id=str(message_id),
+                reason="discord_404_unknown_message",
+                **fields,
+            )
+            return f"Skipped: deleted message is not the current signup post for event {event.pk}"
         log.warning(
             "signup_message_orphaned_recovered",
             channel_id=str(edit_channel_id),
@@ -1179,8 +1037,10 @@ def _send_new_event_notification_impl(event_id: int) -> str:
     embed = build_new_event_embed(event)
     # Lease-wrapped send: claims (new_event, event_id) before the HTTP POST, so a
     # retry or double dispatch can't double-post the embed.
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=embed,
         source="new_event",
         source_id=event.pk,
@@ -1524,8 +1384,10 @@ def fire_event_reminder(
         result = builder(event)
     except InternalAPIUnavailable as exc:
         return _skip_signup_list_unavailable("fire_event_reminder", event_id, exc)
-    response = sync_send_embed_with_components(
+    response = sync_send_configured_channel(
         channel_id=channel,
+        expected_guild_id=event.organization.discord_server_id,
+        title=event.discord_event_title or event.name,
         embed=result["embed"],
         components=result.get("components"),
         source=source,
@@ -1539,7 +1401,7 @@ def fire_event_reminder(
         de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
         if de_resp and de_resp.ok:
             discord_event_pk = de_resp.json().get("id")
-            msg_id = response.get("id") if response else None
+            msg_id = response.get("message", response).get("id") if response else None
             msg_log_id = response.get("_message_log_id") if response else None
             create_event_log(
                 discord_event_id=discord_event_pk,

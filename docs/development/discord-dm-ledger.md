@@ -152,7 +152,7 @@ cannot be tracked.
 
 ## Backfill
 
-Migration `discordbot/0017_backfill_discord_dm_ledger` copied the old tables. Source
+Migration `discordbot/0018_backfill_discord_dm_ledger` copied the old tables. Source
 rows were not changed.
 
 - Each `DiscordEventDM` became a `signup_reminder` row with key

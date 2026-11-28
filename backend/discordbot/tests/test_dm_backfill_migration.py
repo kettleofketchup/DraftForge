@@ -49,13 +49,13 @@ MESSAGE_LOG_FIELDS = (
 
 def _migration_module() -> ModuleType:
     return importlib.import_module(
-        "discordbot.migrations.0017_backfill_discord_dm_ledger"
+        "discordbot.migrations.0018_backfill_discord_dm_ledger"
     )
 
 
 class DiscordDMBackfillMigrationTest(MigratorTestCase):
-    migrate_from = ("discordbot", "0016_discord_dm_ledger")
-    migrate_to = ("discordbot", "0017_backfill_discord_dm_ledger")
+    migrate_from = ("discordbot", "0017_discord_dm_ledger")
+    migrate_to = ("discordbot", "0018_backfill_discord_dm_ledger")
 
     def prepare(self) -> None:
         apps = self.old_state.apps

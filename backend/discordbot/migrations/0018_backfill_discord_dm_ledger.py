@@ -195,7 +195,7 @@ def noop(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("discordbot", "0016_discord_dm_ledger"),
+        ("discordbot", "0017_discord_dm_ledger"),
         ("events", "0040_retarget_tournament_to_tournament"),
         ("league", "0003_move_league_models_from_app"),
         ("tournament", "0001_initial"),
