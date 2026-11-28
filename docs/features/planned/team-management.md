@@ -165,7 +165,8 @@ build on it.
 ### TeamLog
 
 `tournament.TeamLog` records one row per team change. It is read-only in the Django admin, not
-cached, and the app never deletes rows (the retention purge, #499, will).
+cached, and the app never deletes rows. A retention purge for it is a follow-up; #499's
+nightly purge deletes sign-up ledger entries only.
 
 | Field | Description |
 |-------|-------------|

@@ -135,7 +135,7 @@ Approving a profile claim used to delete the claimed profile's signups; it now m
 
 ### Moved signups
 
-When the stale repeater cleanup script moves a signup to another event, it writes a `moved_event` entry on each event. The entry on the old event closes that signup's history there, and the entry on the new event starts it, with `caused_by` pointing at the old event's entry. The before and after snapshots carry `extra.event_id` for the old and new event.
+When the stale repeater cleanup script moves a signup to another event, it writes a `moved_event` entry on each event. The entry on the old event closes that signup's history there (the [sign-up records](#exporting-sign-up-records) show it with final status `moved`), and the entry on the new event starts it, with `caused_by` pointing at the old event's entry. The before and after snapshots carry `extra.event_id` for the old and new event.
 
 ### What is not recorded
 
@@ -184,9 +184,9 @@ The file has one row per event and member. Cancelled events are included, and so
 | `event_state` | The event's state, `deleted` for a deleted event, or `moved` for an event now in another organization |
 | `user_id`, `discord_id` | The member. A deleted user falls back to the snapshot. Only the member's Discord ID is included, never the ID of whoever made a change |
 | `original_signed_up_at`, `original_commitment`, `original_rsvp_class`, `original_means` | The member's first recorded sign-up for the event |
-| `final_status`, `final_commitment`, `final_rsvp_class`, `final_signed_up_at`, `final_line_seq` | The member's signup as of their last recorded change |
+| `final_status`, `final_commitment`, `final_rsvp_class`, `final_signed_up_at`, `final_line_seq` | The member's signup as of their last recorded change. When that change moved the signup to another event (`moved_event`), `final_status` is `moved` and the other columns hold the signup as it was on this event just before the move |
 | `withdrawn_at` | When the member withdrew, if their signup ends cancelled or dropped. Empty otherwise |
-| `change_count` | The number of entries after the original sign-up |
+| `change_count` | The number of the member's entries after the original sign-up. When none of their entries holds a readable signup snapshot, there is no original sign-up and every entry counts |
 | `last_changed_at` | The time of the member's last entry for the event |
 
 Times in the file are UTC. Rows are ordered by the event's scheduled time, then event, then member. A member whose entries hold no readable signup snapshot still gets a row, with the original and final columns empty.
@@ -213,7 +213,7 @@ Every night at 04:30 a job deletes the ledger entries of events that ended longe
 !!! danger "Purged records cannot be recovered"
     Lowering the retention period takes effect at the next nightly run. Entries deleted by the purge are gone for good; export them first if you need them.
 
-The job runs through the internal API in requests limited to 20 seconds each, up to 12 per night. A large backlog that does not fit finishes on the following nights.
+The job runs through the internal API in up to 12 requests per night, each spending at most 20 seconds deleting. Each request picks up at the organization where the previous one stopped and deletes something whenever anything has expired, so a large backlog in one organization delays later organizations but never blocks them. A backlog that does not fit finishes on the following nights.
 
 !!! info "Operator settings"
     Two environment variables on the backend tune this feature:
@@ -293,12 +293,9 @@ Both endpoints take the same filters. Empty values count as absent.
 
 **Raw ledger.** `signup-ledger/` returns the ledger entries themselves, oldest first by `id`, including ready-check entries (with `subject: null`). It takes `cursor` and `page_size` (1 to 100, default 50) as well as the filters, and returns the cursor envelope `{count, next, previous, results}` like the [history API](#history-api). Each item has the history fields plus `event_id`, `organization_id` and `event: {name, state, scheduled_at}`, where `state` is `deleted` or `moved` for an event resolved from its snapshot. The member keeps `discord_id`; the actor never has it.
 
-The cursor is keyed on `id` alone, so a sync can save `next` and resume from it later. Entries written after a page was read always appear on a later page.
+The cursor is keyed on `id` alone, so a sync can save `next` and resume from it later. Entries written after a page was read always appear on a later page. Ids are never reused: the ledger table's `id` is an `AUTOINCREMENT` key, so a purge that deletes the newest entries does not hand their ids out again. Entries the purge deletes after a sync read them simply drop out of later counts.
 
-!!! warning "Re-read a small overlap"
-    SQLite reuses the highest `id` if the newest row in the table is deleted. If the nightly purge deletes the newest entry, the next entry can get an `id` a consumer has already passed. This needs a late change to an event old enough to be purged that same night, so it is rare. Consumers that need every entry should restart a little before their last cursor and dedupe on `id`.
-
-**Purge.** `POST /api/internal/signup-records/purge/` (internal token) runs one purge pass of at most 20 seconds and returns `{purged, organizations, events, skipped_unknown_end, per_org, more}`. `per_org` maps organization ids (as strings) to deleted entry counts, and `more` is true when the time ran out before every organization was done. The Celery task `events.tasks.purge_expired_signup_records` calls it in a loop while `more` is true, up to 12 times. Each organization's purge logs `signup_records_purged` and each pass logs `signup_records_purge_completed` (`system="events"`, `subsystem="ledger"`).
+**Purge.** `POST /api/internal/signup-records/purge/` (internal token) runs one purge pass and returns `{purged, organizations, events, skipped_unknown_end, per_org, more, resume_org_id}`. The pass spends at most 20 seconds deleting; finding the expired events does not count against that budget, and every pass deletes at least one batch when anything has expired, so each pass makes progress. `per_org` maps organization ids (as strings) to deleted entry counts. `more` is true when the time ran out before every organization was done, and `resume_org_id` is then the organization to continue from (otherwise `null`). The body may carry `{"resume_org_id": <id>}` to start at that organization and skip lower ids; a value that is not a positive id is 400 `{"resume_org_id": ["Invalid organization."]}`. The Celery task `events.tasks.purge_expired_signup_records` calls it in a loop while `more` is true, passing each `resume_org_id` on, up to 12 times. Each organization's purge logs `signup_records_purged` and each pass logs `signup_records_purge_completed` (`system="events"`, `subsystem="ledger"`).
 
 The code is in `events/ledger.py` (event resolution and purge), `events/records.py` (records and CSV cells) and `events/views_records.py` (views). The frontend reads the records with `getSignupRecords` and downloads the CSV with `downloadSignupRecordsCsv` in `frontend/app/components/api/eventsAPI.ts`.
 
