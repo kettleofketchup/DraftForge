@@ -1624,6 +1624,12 @@ def _member_status_cap(giver_status: str, decided: str) -> str:
     return min(giver_status, decided, key=_SEAT_STATUS_ORDER.index)
 
 
+def _seat_status_above(status: str, other: str) -> bool:
+    if status not in _SEAT_STATUS_ORDER or other not in _SEAT_STATUS_ORDER:
+        return False
+    return _SEAT_STATUS_ORDER.index(status) > _SEAT_STATUS_ORDER.index(other)
+
+
 def _member_safe_reasons(result: EligibilityResult) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for reason in result.reasons:
@@ -1733,7 +1739,14 @@ def _transfer_guard(
         target.status == SignupStatus.TENTATIVE
     ):
         return "commitment_mismatch"
-    if swap and not is_staff and _place_rank(giver) >= _place_rank(target):
+    if (
+        swap
+        and not is_staff
+        and (
+            _place_rank(giver) >= _place_rank(target)
+            or _seat_status_above(target.status, giver.status)
+        )
+    ):
         return "swap_would_demote_recipient"
     if not same_gate_distance(giver, target):
         return "gate_distance"
@@ -1857,6 +1870,8 @@ def transfer_spot(
 
     result = _member_recipient_eligibility(locked, giver, recipient_user, actor)
     status = _member_status_cap(giver.status, _decide_signup_status(locked, result))
+    if swap and _seat_status_above(target.status, status):
+        status = target.status
     correlation_id = f"xfer:{uuid4().hex}"
     reason = reason.strip()
 

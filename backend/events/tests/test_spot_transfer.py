@@ -657,6 +657,31 @@ class MemberSwapTests(_TransferFixtures):
             approved = self.set_status(approved, SignupStatus.APPROVED)
             self.assert_refused("swap_would_demote_recipient", rsvp, approved.user)
 
+    def test_member_swap_keeps_recipient_approval(self) -> None:
+        event = self.transfer_event(auto_approve=False)
+        giver = self.set_status(self.join(event), SignupStatus.APPROVED)
+        recipient = self.set_status(self.join(event), SignupStatus.APPROVED)
+
+        self.give(giver, recipient.user)
+
+        self.assertEqual(self.row(giver).status, SignupStatus.APPROVED)
+        self.assertEqual(self.row(recipient).status, SignupStatus.APPROVED)
+        self.assertEqual(self.row(recipient).line_seq, giver.line_seq)
+
+    def test_member_swap_cannot_raise_giver_status(self) -> None:
+        cases = (
+            (SignupStatus.APPROVED, SignupStatus.CONFIRMED),
+            (SignupStatus.RSVP, SignupStatus.PENDING_APPROVAL),
+        )
+        for giver_status, recipient_status in cases:
+            with self.subTest(giver=giver_status, recipient=recipient_status):
+                event = self.transfer_event(auto_approve=False)
+                giver = self.set_status(self.join(event), giver_status)
+                recipient = self.set_status(self.join(event), recipient_status)
+                self.assert_refused(
+                    "swap_would_demote_recipient", giver, recipient.user
+                )
+
     def test_swap_moves_tournament_membership(self) -> None:
         event = self.transfer_event(
             max_players=1, auto_confirm=False, roll_call_enabled=False
