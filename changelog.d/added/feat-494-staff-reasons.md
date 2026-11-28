@@ -1,0 +1,2 @@
+- Staff reasons for events, series and organization event defaults: choose optional reasons, require them for placements, or require them for every staff signup change. Reasons are saved in staff-only signup History; self-actions and automatic changes stay exempt (#494).
+- Reason fields on the approval recap and roll-call dialogs, with keyboard submission and server-enforced validation. Optional one-click actions stay one-click (#494).

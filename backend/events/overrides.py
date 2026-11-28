@@ -21,6 +21,7 @@ ViolationCategory = Literal["seating", "eligibility", "team"]
 REASON_MAX_LENGTH: int = 500
 OVERRIDE_REQUIRED_CODE: str = "override_required"
 OVERRIDE_REASON_REQUIRED_CODE: str = "override_reason_required"
+STAFF_REASON_REQUIRED_CODE: str = "reason_required"
 
 _ALL_CODES: frozenset[str] = frozenset(ALL_CODES)
 
@@ -60,6 +61,14 @@ class OverrideReasonRequired(Exception):
         return {"code": OVERRIDE_REASON_REQUIRED_CODE}
 
 
+class StaffReasonRequired(Exception):
+    def __init__(self, message: str = "This staff change needs a reason.") -> None:
+        super().__init__(message)
+
+    def as_response_data(self) -> dict[str, str]:
+        return {"error": STAFF_REASON_REQUIRED_CODE}
+
+
 @dataclass(frozen=True)
 class OverrideResult:
     overridden: list[str]
@@ -97,6 +106,32 @@ def parse_override_request(data: Mapping[str, Any]) -> OverrideRequest:
         acknowledged_codes=list(serializer.validated_data["acknowledged_codes"]),
         reason=serializer.validated_data["reason"] or "",
     )
+
+
+class StaffReasonSerializer(OverrideRequestSerializer):
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default="",
+        max_length=REASON_MAX_LENGTH,
+        trim_whitespace=True,
+    )
+
+
+def parse_staff_reason(data: Mapping[str, Any]) -> str:
+    """Read the trimmed staff `reason` from a request body (400 if malformed)."""
+    serializer = StaffReasonSerializer(data=data)
+    serializer.is_valid(raise_exception=True)
+    return serializer.validated_data["reason"] or ""
+
+
+def org_override_settings(organization_id: int) -> OrgSettings:
+    """The organization's settings row that ``check_overrides`` reads its policy from."""
+    # Deferred: this module must import no models (test_module_loads_no_models).
+    from org.settings_service import get_org_settings
+
+    return get_org_settings(organization_id)
 
 
 def _policy(org_settings: OrgSettings | None) -> str:

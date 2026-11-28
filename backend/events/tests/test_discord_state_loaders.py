@@ -54,8 +54,17 @@ class DiscordStateLoaderTest(DiscordStateFixture):
             [s.line_rank for s in signup_list_queryset(event.pk, for_list=True)],
             [1, 2, 3, None],
         )
+        self.assertEqual(
+            [s.waitlist_rank for s in signup_list_queryset(event.pk, for_list=True)],
+            [None, None, 1, None],
+        )
         self.assertFalse(
             hasattr(signup_list_queryset(event.pk, for_list=False).first(), "line_rank")
+        )
+        self.assertFalse(
+            hasattr(
+                signup_list_queryset(event.pk, for_list=False).first(), "waitlist_rank"
+            )
         )
 
     def test_load_discord_event_state_matches_endpoint(self) -> None:

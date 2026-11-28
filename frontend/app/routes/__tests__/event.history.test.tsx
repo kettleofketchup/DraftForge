@@ -58,6 +58,7 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => {
     confirm: mutation(),
     unconfirm: mutation(),
     reinstate: mutation(),
+    voidWithdrawal: mutation(),
     cancel: mutation(),
   };
   return {
@@ -66,7 +67,10 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => {
     useEventSignups: () => ({ data: h.signups }),
     useEventSignupUsers: () => undefined,
     useEventActionMutation: () => new Proxy({}, { get: () => mutation() }),
-    useSignupActionMutations: () => signupActions,
+    useSignupActionMutations: (eventId: number) => ({
+      ...signupActions,
+      adminAdd: actual.useSignupActionMutations(eventId).adminAdd,
+    }),
     useSignupMutation: () => mutation(),
   };
 });
@@ -349,7 +353,7 @@ describe('EventPage history wiring', () => {
     fireEvent.click(screen.getByTestId('mock-add-user'));
 
     await waitFor(() =>
-      expect(h.adminAddSignup).toHaveBeenCalledWith(EVENT_ID, 5),
+      expect(h.adminAddSignup).toHaveBeenCalledWith(EVENT_ID, 5, undefined),
     );
     await waitFor(() =>
       expect(historyQueries(client).every((q) => q.state.isInvalidated)).toBe(

@@ -4,12 +4,17 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventSignupType } from '~/components/events/schemas';
+import { orgUsersQueryKey } from '~/components/organization/hooks/useOrgUsersQuery';
+import { conductKeys } from '~/features/org-features/queryKeys';
 
 const api = vi.hoisted(() => ({
   getEventSignups: vi.fn(),
   confirmSignup: vi.fn(),
   rejectSignup: vi.fn(),
   signupForEvent: vi.fn(),
+  demoteSignup: vi.fn(),
+  approveSignup: vi.fn(),
+  adminAddSignup: vi.fn(),
 }));
 
 vi.mock('~/components/api/api', async (importOriginal) => ({
@@ -69,6 +74,87 @@ describe('signup actions update rows before the server answers', () => {
     ]);
   });
 
+  it.each(['demote', 'approve'] as const)(
+    'forwards the reason for %s',
+    async (action) => {
+      const { hook } = setup();
+      api.demoteSignup.mockResolvedValue(signup(3, 'waitlisted'));
+      api.approveSignup.mockResolvedValue(signup(3, 'approved'));
+      await act(async () => {
+        if (action === 'approve') {
+          await hook.result.current.actions.approve.mutateAsync({
+            id: 3,
+            mmr: 4000,
+            reason: 'r',
+          });
+        } else {
+          await hook.result.current.actions.demote.mutateAsync({
+            id: 3,
+            reason: 'r',
+          });
+        }
+      });
+      if (action === 'approve')
+        expect(api.approveSignup).toHaveBeenCalledWith(3, {
+          mmr: 4000,
+          reason: 'r',
+        });
+      else expect(api.demoteSignup).toHaveBeenCalledWith(3, 'r');
+    },
+  );
+
+  it('admin add invalidates shared keys and org members without replacing cached rows', async () => {
+    const { client, hook } = setup();
+    await waitFor(() =>
+      expect(hook.result.current.list.signups).toHaveLength(3),
+    );
+    client.setQueryData(['event', EVENT_ID], { organization: 7 });
+    const keys = [
+      ['event-signups', EVENT_ID],
+      ['event', EVENT_ID],
+      ['events', { organization: 7 }],
+      signupHistoryKey(EVENT_ID, {}),
+      signupHistoryKey(EVENT_ID, { user: 9 }),
+      ['event-lobby-password', EVENT_ID],
+      conductKeys.forecast(7, 1, EVENT_ID),
+      orgUsersQueryKey(7),
+    ];
+    for (const key of keys.slice(2)) client.setQueryData(key, []);
+    const cached = client.getQueryData(['event-signups', EVENT_ID]);
+    const added = deferred<EventSignupType>();
+    const refetch = deferred<EventSignupType[]>();
+    api.adminAddSignup.mockReturnValueOnce(added.promise);
+    api.getEventSignups.mockReturnValueOnce(refetch.promise);
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = hook.result.current.actions.adminAdd.mutateAsync({
+        userId: 9,
+        reason: 'r',
+      });
+    });
+    await waitFor(() =>
+      expect(api.adminAddSignup).toHaveBeenCalledWith(EVENT_ID, 9, 'r'),
+    );
+    expect(hook.result.current.list.pendingIds.size).toBe(0);
+    expect(client.getQueryData(['event-signups', EVENT_ID])).toBe(cached);
+    await act(async () => {
+      added.resolve(signup(9, 'approved'));
+      await pending;
+    });
+    for (const key of keys)
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(client.getQueryData(['event-signups', EVENT_ID])).toBe(cached);
+    await act(async () =>
+      refetch.resolve([
+        ...(cached as EventSignupType[]),
+        signup(9, 'approved'),
+      ]),
+    );
+    await waitFor(() =>
+      expect(hook.result.current.list.signups).toHaveLength(4),
+    );
+  });
+
   it('applies several in-flight actions at once and refetches only after the last', async () => {
     const { hook } = setup();
     await waitFor(() =>
@@ -83,8 +169,8 @@ describe('signup actions update rows before the server answers', () => {
       .mockReturnValueOnce(second.promise);
 
     act(() => {
-      hook.result.current.actions.confirm.mutate(1);
-      hook.result.current.actions.confirm.mutate(2);
+      hook.result.current.actions.confirm.mutate({ id: 1 });
+      hook.result.current.actions.confirm.mutate({ id: 2 });
     });
 
     await waitFor(() =>
@@ -132,8 +218,8 @@ describe('signup actions update rows before the server answers', () => {
     api.confirmSignup.mockReturnValueOnce(holds.promise);
 
     act(() => {
-      hook.result.current.actions.reject.mutate(1);
-      hook.result.current.actions.confirm.mutate(2);
+      hook.result.current.actions.reject.mutate({ id: 1 });
+      hook.result.current.actions.confirm.mutate({ id: 2 });
     });
     await waitFor(() =>
       expect(statuses(hook.result.current.list.signups)).toEqual([
@@ -187,7 +273,7 @@ describe('signup mutations refresh the signup history', () => {
     api.confirmSignup.mockResolvedValueOnce(signup(1, 'confirmed'));
 
     await act(async () => {
-      await hook.result.current.actions.confirm.mutateAsync(1);
+      await hook.result.current.actions.confirm.mutateAsync({ id: 1 });
     });
 
     await waitFor(() => expect(invalid(historyKeys.all)).toBe(true));
@@ -202,7 +288,7 @@ describe('signup mutations refresh the signup history', () => {
 
     await act(async () => {
       await hook.result.current.actions.reject
-        .mutateAsync(1)
+        .mutateAsync({ id: 1 })
         .catch(() => undefined);
     });
 

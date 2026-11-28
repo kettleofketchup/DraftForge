@@ -54,7 +54,7 @@ describe('useOverrideRetry', () => {
       acknowledged_codes: ['a'],
       reason: 'why',
     });
-    expect(onSuccess).toHaveBeenCalledWith('done');
+    expect(onSuccess).toHaveBeenCalledWith('done', undefined);
     expect(result.current.dialogProps.open).toBe(false);
   });
 
@@ -139,6 +139,173 @@ describe('useOverrideRetry', () => {
     expect(result.current.dialogProps.open).toBe(false);
 
     await act(() => result.current.run());
-    expect(onError).toHaveBeenCalledWith(boom);
+    expect(onError).toHaveBeenCalledWith(boom, undefined);
+  });
+
+  it('passes the run ctx to the action', async () => {
+    const action = vi
+      .fn<
+        (ack: OverrideAcknowledgement, ctx: { id: number }) => Promise<string>
+      >()
+      .mockResolvedValueOnce('done');
+    const { result } = renderHook(() => useOverrideRetry(action));
+
+    await act(() => result.current.run({ id: 1 }));
+    expect(action).toHaveBeenCalledWith({ acknowledged_codes: [] }, { id: 1 });
+  });
+
+  it('retries on confirm with the stored ctx', async () => {
+    const action = vi
+      .fn<
+        (ack: OverrideAcknowledgement, ctx: { id: number }) => Promise<string>
+      >()
+      .mockRejectedValueOnce(axiosError(409, overrideBody(['a'])))
+      .mockResolvedValueOnce('done');
+    const { result } = renderHook(() => useOverrideRetry(action));
+
+    await act(() => result.current.run({ id: 1 }));
+    await act(() => result.current.dialogProps.onConfirm('why'));
+    expect(action).toHaveBeenLastCalledWith(
+      { acknowledged_codes: ['a'], reason: 'why' },
+      { id: 1 },
+    );
+  });
+
+  it("resolves run with 'override' on 409 and 'done' on success", async () => {
+    const action = vi
+      .fn<(ack: OverrideAcknowledgement) => Promise<string>>()
+      .mockRejectedValueOnce(axiosError(409, overrideBody(['a'])))
+      .mockResolvedValueOnce('ok');
+    const { result } = renderHook(() => useOverrideRetry(action));
+
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.run();
+    });
+    expect(outcome).toBe('override');
+
+    act(() => result.current.dialogProps.onOpenChange(false));
+    await act(async () => {
+      outcome = await result.current.run();
+    });
+    expect(outcome).toBe('done');
+  });
+
+  it("resolves run with 'override' on a blocked 409", async () => {
+    const action = vi
+      .fn<(ack: OverrideAcknowledgement) => Promise<string>>()
+      .mockRejectedValueOnce(axiosError(409, overrideBody(['a'], true)));
+    const { result } = renderHook(() => useOverrideRetry(action));
+
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await result.current.run();
+    });
+    expect(outcome).toBe('override');
+    expect(result.current.dialogProps.override?.blocked).toBe(true);
+  });
+
+  it('rethrow rejects run and skips onError', async () => {
+    const err = axiosError(400, { code: 'reason_required' });
+    const action = vi
+      .fn<(ack: OverrideAcknowledgement) => Promise<string>>()
+      .mockRejectedValueOnce(err);
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useOverrideRetry(action, { onError, rethrow: true }),
+    );
+
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await result.current.run();
+      } catch (e) {
+        caught = e;
+      }
+    });
+    expect(caught).toBe(err);
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.pending).toBe(false);
+  });
+
+  it('errors after confirm still go to onError with rethrow', async () => {
+    const boom = axiosError(500, {});
+    const action = vi
+      .fn<(ack: OverrideAcknowledgement) => Promise<string>>()
+      .mockRejectedValueOnce(axiosError(409, overrideBody(['a'])))
+      .mockRejectedValueOnce(boom);
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useOverrideRetry(action, { onError, rethrow: true }),
+    );
+
+    await act(() => result.current.run());
+    await act(() => result.current.dialogProps.onConfirm('why'));
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(boom, undefined);
+  });
+
+  it('retries the run that hit the 409 when a later run overlaps it', async () => {
+    let rejectFirst!: (err: unknown) => void;
+    const action = vi
+      .fn<
+        (ack: OverrideAcknowledgement, ctx: { id: number }) => Promise<string>
+      >()
+      .mockImplementationOnce(
+        () => new Promise((_, reject) => (rejectFirst = reject)),
+      )
+      .mockResolvedValueOnce('second')
+      .mockResolvedValueOnce('first');
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() =>
+      useOverrideRetry(action, { onSuccess }),
+    );
+
+    let first!: Promise<string>;
+    act(() => {
+      first = result.current.run({ id: 1 });
+    });
+    await act(() => result.current.run({ id: 2 }));
+    await act(async () => {
+      rejectFirst(axiosError(409, overrideBody(['a'])));
+      await first;
+    });
+    expect(result.current.context).toEqual({ id: 1 });
+
+    await act(() => result.current.dialogProps.onConfirm('why'));
+    expect(action).toHaveBeenLastCalledWith(
+      { acknowledged_codes: ['a'], reason: 'why' },
+      { id: 1 },
+    );
+    expect(onSuccess).toHaveBeenLastCalledWith('first', { id: 1 });
+    expect(result.current.dialogProps.open).toBe(false);
+  });
+
+  it('queues a second 409 behind the open one with its own acknowledgements', async () => {
+    const action = vi
+      .fn<
+        (ack: OverrideAcknowledgement, ctx: { id: number }) => Promise<string>
+      >()
+      .mockRejectedValueOnce(axiosError(409, overrideBody(['a'])))
+      .mockRejectedValueOnce(axiosError(409, overrideBody(['b'])))
+      .mockResolvedValue('ok');
+    const { result } = renderHook(() => useOverrideRetry(action));
+
+    await act(() => result.current.run({ id: 1 }));
+    await act(() => result.current.run({ id: 2 }));
+    expect(result.current.context).toEqual({ id: 1 });
+    expect(result.current.dialogProps.override?.violations[0].code).toBe('a');
+
+    act(() => result.current.dialogProps.onOpenChange(false));
+    expect(result.current.dialogProps.open).toBe(true);
+    expect(result.current.context).toEqual({ id: 2 });
+
+    await act(() => result.current.dialogProps.onConfirm('why'));
+    expect(action).toHaveBeenLastCalledWith(
+      { acknowledged_codes: ['b'], reason: 'why' },
+      { id: 2 },
+    );
+    expect(result.current.dialogProps.open).toBe(false);
+    expect(result.current.context).toBeNull();
   });
 });

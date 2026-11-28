@@ -3,8 +3,10 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from unittest import mock
 
+from django.db import connection
 from django.dispatch import Signal
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 
 from app.models import CustomUser
 from events import capacity, ready_check_core, ready_check_signals
@@ -184,6 +186,56 @@ class OpenTests(ReadyCheckServiceTestCase):
         self.assertNotIn(rsvp.pk, asked)
         waitlisted.refresh_from_db()
         self.assertEqual(waitlisted.status, SignupStatus.WAITLISTED)
+
+    def _stale_waitlist(self, event: Event, count: int) -> list[EventSignup]:
+        waiting = [
+            self._signup(SignupStatus.WAITLISTED, event=event) for _ in range(count)
+        ]
+        for i, signup in enumerate(waiting):
+            EventSignup.objects.filter(pk=signup.pk).update(waitlist_position=50 - i)
+        return waiting
+
+    def test_open_records_computed_waitlist_rank(self) -> None:
+        event = self.make_event(ready_check_scope=ReadyCheckScope.MAIN_AND_FILL)
+        approved = self._signup(SignupStatus.APPROVED, event=event)
+        waiting = self._stale_waitlist(event, 3)
+        self._open(event)
+        asked = {
+            r.signup_id: r.after["waitlist_position"]
+            for r in self._rows(SignupAction.READY_CHECK_ASKED, event)
+        }
+        self.assertEqual([asked[s.pk] for s in waiting], [1, 2, 3])
+        self.assertIsNone(asked[approved.pk])
+
+    def test_cancel_records_computed_waitlist_rank(self) -> None:
+        event = self.make_event(ready_check_scope=ReadyCheckScope.MAIN_AND_FILL)
+        approved = self._signup(SignupStatus.APPROVED, event=event)
+        waiting = self._stale_waitlist(event, 3)
+        self._open(event)
+        with mock.patch(NOTIFY):
+            cancel_ready_check(event, actor=self.staff_actor, reason="test")
+        withdrawn = {
+            r.signup_id: r.after["waitlist_position"]
+            for r in self._rows(SignupAction.READY_CHECK_WITHDRAWN, event)
+        }
+        self.assertEqual([withdrawn[s.pk] for s in waiting], [1, 2, 3])
+        self.assertIsNone(withdrawn[approved.pk])
+
+    def _open_query_count(self, approved: int, waitlisted: int) -> int:
+        event = self.make_event(ready_check_scope=ReadyCheckScope.MAIN_AND_FILL)
+        for _ in range(approved):
+            self._signup(SignupStatus.APPROVED, event=event)
+        self._stale_waitlist(event, waitlisted)
+        with mock.patch(NOTIFY), CaptureQueriesContext(connection) as ctx:
+            self._open(event)
+        self.assertEqual(
+            len(self._rows(SignupAction.READY_CHECK_ASKED, event)),
+            approved + waitlisted,
+        )
+        return len(ctx.captured_queries)
+
+    def test_ready_check_open_query_count_flat_in_waitlist_size(self) -> None:
+        self.assertEqual(self._open_query_count(6, 2), self._open_query_count(2, 6))
 
     def test_main_only_skips_waitlisted(self) -> None:
         waitlisted = self._signup(SignupStatus.WAITLISTED)
@@ -729,6 +781,54 @@ class CloseTests(LifecycleTestCase):
         self.assertEqual([r.signup_id for r in kept], [mismatched.pk])
         self.assertEqual(kept[0].reason, "signup_confirmed")
         self.assertEqual(kept[0].correlation_id, f"rc{result.check.pk}:close")
+
+    def _fill_event(self) -> tuple[Event, list[EventSignup], list[EventSignup]]:
+        event = self.make_event(
+            roll_call_enabled=True,
+            roll_call_mode=AUTO,
+            ready_check_scope=ReadyCheckScope.MAIN_AND_FILL,
+        )
+        event.helpers.add(self.helper)
+        approved = [self._signup(SignupStatus.APPROVED, event=event) for _ in range(10)]
+        waiting = [self._signup(SignupStatus.WAITLISTED, event=event) for _ in range(3)]
+        for i, signup in enumerate(waiting):
+            EventSignup.objects.filter(pk=signup.pk).update(waitlist_position=50 - i)
+        self._open(event)
+        return event, approved, waiting
+
+    def test_drop_records_rank_at_each_drop(self) -> None:
+        event, approved, waiting = self._fill_event()
+        for signup in approved:
+            self.assertEqual(self._confirm_member(signup), ConfirmResult.CONFIRMED)
+        result = self._close(event)
+        assert result.check is not None
+        self.assertEqual(result.check.outcome, ReadyCheckOutcome.BINDING)
+        dropped = self._rows(SignupAction.DROPPED, event)
+        self.assertEqual({r.signup_id for r in dropped}, {s.pk for s in waiting})
+        remaining = [s.pk for s in waiting]
+        for row in dropped:
+            self.assertEqual(
+                row.before["waitlist_position"], remaining.index(row.signup_id) + 1
+            )
+            self.assertIsNone(row.after["waitlist_position"])
+            remaining.remove(row.signup_id)
+
+    def test_escalate_records_computed_waitlist_rank(self) -> None:
+        event, approved, waiting = self._fill_event()
+        self._escalate(event)
+        nudged = {
+            r.signup_id: r.after["waitlist_position"]
+            for r in self._rows(SignupAction.READY_CHECK_NUDGED, event)
+        }
+        self.assertEqual([nudged[s.pk] for s in waiting], [1, 2, 3])
+        self.assertIsNone(nudged[approved[0].pk])
+
+    def test_confirm_fill_member_records_computed_rank(self) -> None:
+        event, _, waiting = self._fill_event()
+        self.assertEqual(self._confirm_member(waiting[1]), ConfirmResult.CONFIRMED)
+        (row,) = self._rows(SignupAction.CONFIRMED, event)
+        self.assertEqual(row.before["waitlist_position"], 2)
+        self.assertEqual(row.after["waitlist_position"], 2)
 
     def test_manual_below_min_hold_for_staff_closes_staff_verified(self) -> None:
         event, _ = self._setup(MANUAL, 6, 10, HOLD)

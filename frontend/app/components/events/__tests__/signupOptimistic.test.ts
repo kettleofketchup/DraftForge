@@ -23,11 +23,13 @@ describe('optimisticSignupStatus', () => {
     expect(optimisticSignupStatus(action, 'signups_open')).toBe(status);
   });
 
-  it('only predicts reinstate during roll call', () => {
-    expect(optimisticSignupStatus('reinstate', 'roll_call')).toBe('approved');
-    expect(optimisticSignupStatus('reinstate', 'signups_open')).toBeNull();
-    expect(optimisticSignupStatus('reinstate', undefined)).toBeNull();
-  });
+  it.each(['roll_call', 'signups_open', undefined])(
+    'leaves reinstate and void_withdrawal to the server in %s',
+    (state) => {
+      expect(optimisticSignupStatus('reinstate', state)).toBeNull();
+      expect(optimisticSignupStatus('void_withdrawal', state)).toBeNull();
+    },
+  );
 });
 
 describe('signupIdOf', () => {
@@ -82,6 +84,19 @@ describe('overlayPendingSignups', () => {
       'signups_open',
     );
     expect(out[0].status).toBe('cancelled');
+  });
+
+  it('keeps a voided or restored row in place during roll call', () => {
+    const rows = [signup(4, 'cancelled'), signup(5, 'rejected')];
+    const out = overlayPendingSignups(
+      rows,
+      [
+        { action: 'reinstate', id: 4 },
+        { action: 'void_withdrawal', id: 5 },
+      ],
+      'roll_call',
+    );
+    expect(out).toBe(rows);
   });
 });
 

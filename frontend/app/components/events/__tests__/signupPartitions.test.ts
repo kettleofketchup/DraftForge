@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EventSignupType } from '../schemas';
 import {
   canRestoreSignup,
+  canVoidWithdrawal,
   isRemovedSignup,
   partitionSignups,
 } from '../signupPartitions';
@@ -98,4 +99,34 @@ describe('canRestoreSignup', () => {
   ])('%s has no restore action', (status) => {
     expect(canRestoreSignup(status)).toBe(false);
   });
+});
+
+describe('canVoidWithdrawal', () => {
+  it.each(['cancelled', 'rejected'])(
+    '%s can be voided when the server allows it',
+    (status) => {
+      expect(canVoidWithdrawal({ status, can_void_withdrawal: true })).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each(['cancelled', 'rejected'])(
+    '%s cannot be voided when the server refuses or does not say',
+    (status) => {
+      expect(canVoidWithdrawal({ status, can_void_withdrawal: false })).toBe(
+        false,
+      );
+      expect(canVoidWithdrawal({ status })).toBe(false);
+    },
+  );
+
+  it.each(['dropped', 'approved', 'waitlisted', 'tentative'])(
+    '%s cannot be voided',
+    (status) => {
+      expect(canVoidWithdrawal({ status, can_void_withdrawal: true })).toBe(
+        false,
+      );
+    },
+  );
 });

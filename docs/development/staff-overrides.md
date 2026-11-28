@@ -149,3 +149,9 @@ const retry = useOverrideRetry((ack) =>
   Only `standins/` and `replace-captain/` can answer `409`. Both check the event eligibility
   codes; the stand-in limit (`team_standin_cap`) applies only to `standins/`, and
   `replace-captain/` checks eligibility only for a new captain who is not already on the team.
+- [Voiding a withdrawal](../features/events.md#voiding-a-withdrawal)
+  (`/api/events/signups/{id}/void-withdrawal/`): raises `over_capacity` when the restored
+  status holds a seat on a full event, and records the overridden codes in the signup
+  ledger's `rules_overridden`. Staff `reinstate/` takes no `acknowledged_codes` and never
+  answers `409`: it delegates to the void only when the restore fits under capacity. Otherwise
+  it falls back to the plain reinstate while signups are open and answers `400` in roll call.

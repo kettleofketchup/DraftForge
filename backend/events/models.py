@@ -29,6 +29,7 @@ from events.constants import (  # noqa: F401 — re-exported for backward compat
     SignupOpenMode,
     SignupStatus,
     SignupType,
+    StaffReasonPolicy,
     StartMentionScope,
     VoicePresenceSource,
 )
@@ -214,6 +215,23 @@ class EventConfigMixin(models.Model):
         choices=PostCullFillMode.choices,
         default=PostCullFillMode.LINE_ORDER,
         help_text="How freed seats are filled after drops",
+    )
+    line_withdraw_forfeits = models.BooleanField(
+        default=True,
+        db_default=True,
+        help_text="A member who withdraws, declines or is rejected and signs up again goes to the back of the line.",
+    )
+    line_switch_restamps = models.BooleanField(
+        default=True,
+        db_default=True,
+        help_text="Switching between Main and Maybe moves the signup to the back of the line.",
+    )
+    staff_reason_policy = models.CharField(
+        max_length=20,
+        choices=StaffReasonPolicy.choices,
+        default=StaffReasonPolicy.OPTIONAL,
+        db_default=StaffReasonPolicy.OPTIONAL,
+        help_text="When staff must give a reason for a signup change.",
     )
     # Approval Requirements — which rank types are allowed
     allow_active_mmr = models.BooleanField(

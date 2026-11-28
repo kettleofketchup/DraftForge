@@ -100,6 +100,7 @@ from events.models import (
     ReadyCheckEntry,
     RepeaterSubscription,
 )
+from events.overrides import parse_override_request, parse_staff_reason
 from events.permissions import has_event_operator_access, has_event_staff_access
 from events.ready_check import (
     READY_CHECK_HELD_MESSAGE,
@@ -173,6 +174,7 @@ from events.services import (
     teardown_event_repeater,
     unconfirm_signup,
 )
+from events.services import void_withdrawal as void_withdrawal_service
 from events.signup_schedule import SIGNUP_OPEN_POLICY_FIELDS
 from events.utils import starts_in_future
 from events.voice_presence import set_presence_manually, voice_feed_age_seconds
@@ -342,6 +344,7 @@ def _confirm_response(
     via: ReadyCheckConfirmVia,
     actor: SignupActor,
     not_in_check_message: str,
+    reason: str = "",
 ) -> Response:
     host: CustomUser | None = event.host
     with transaction.atomic():
@@ -352,7 +355,7 @@ def _confirm_response(
                 "no_ready_check", NO_READY_CHECK_MESSAGE, host=host, with_host=True
             )
         result = (
-            confirm_ready(event, user, via=via, actor=actor)
+            confirm_ready(event, user, via=via, actor=actor, reason=reason)
             if user is not None
             else ConfirmResult.NOT_IN_CHECK
         )
@@ -1312,11 +1315,12 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="admin-signup")
     def admin_signup(self, request: Request, pk: str | None = None) -> Response:
         """Admin adds a user to the event signup list.
-        POST /api/events/<pk>/admin-signup/ {"user_id": <pk>}
+        POST /api/events/<pk>/admin-signup/ {"user_id": <pk>, "reason"?: str}
         """
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         user_id = request.data.get("user_id")
         if not user_id:
             return Response(
@@ -1333,6 +1337,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 event,
                 user,
                 actor=SignupActor.for_request_on(request, user, event, staff_only=True),
+                reason=reason,
             )
             return Response(
                 EventSignupSerializer(signup, context={"request": request}).data,
@@ -1598,6 +1603,7 @@ class EventViewSet(viewsets.ModelViewSet):
         event = self._ready_check_operator_event(request)
         body = ReadyCheckConfirmInputSerializer(data=request.data)
         body.is_valid(raise_exception=True)
+        reason = parse_staff_reason(request.data)
         member = (
             CustomUser.objects.nocache()
             .filter(pk=body.validated_data["user_id"])
@@ -1609,6 +1615,7 @@ class EventViewSet(viewsets.ModelViewSet):
             via=ReadyCheckConfirmVia.STAFF,
             actor=SignupActor.from_request(request, role=ActorRole.STAFF),
             not_in_check_message=MEMBER_NOT_IN_CHECK_MESSAGE,
+            reason=reason,
         )
 
     @action(
@@ -1832,6 +1839,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
 
         mmr_override = None
         game_type = game_for_event(signup.event)
@@ -1860,6 +1868,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                     actor=SignupActor.for_request_on(
                         request, signup.user, signup.event, staff_only=True
                     ),
+                    reason=reason,
                 )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -1884,6 +1893,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         try:
             return Response(
                 EventSignupSerializer(
@@ -1892,6 +1902,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                         actor=SignupActor.for_request_on(
                             request, signup.user, signup.event, staff_only=True
                         ),
+                        reason=reason,
                     ),
                     context={"request": request},
                 ).data
@@ -1904,12 +1915,14 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         try:
             confirmed = staff_confirm_signup(
                 signup,
                 actor=SignupActor.for_request_on(
                     request, signup.user, signup.event, staff_only=True
                 ),
+                reason=reason,
             )
             return Response(
                 EventSignupSerializer(confirmed, context={"request": request}).data
@@ -1923,11 +1936,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         is_staff_action = signup.user_id != request.user.pk
         if is_staff_action and not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         actor = SignupActor.for_request_on(request, signup.user, signup.event)
         try:
             return Response(
                 EventSignupSerializer(
-                    cancel_signup(signup, actor=actor), context={"request": request}
+                    cancel_signup(signup, actor=actor, reason=reason),
+                    context={"request": request},
                 ).data
             )
         except ValueError as e:
@@ -1939,6 +1954,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         try:
             return Response(
                 EventSignupSerializer(
@@ -1947,6 +1963,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                         actor=SignupActor.for_request_on(
                             request, signup.user, signup.event, staff_only=True
                         ),
+                        reason=reason,
                     ),
                     context={"request": request},
                 ).data
@@ -1960,6 +1977,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         signup = self.get_object()
         if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         try:
             return Response(
                 EventSignupSerializer(
@@ -1968,6 +1986,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                         actor=SignupActor.for_request_on(
                             request, signup.user, signup.event, staff_only=True
                         ),
+                        reason=reason,
                     ),
                     context={"request": request},
                 ).data
@@ -1977,7 +1996,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"])
     def reinstate(self, request: Request, pk: str | None = None) -> Response:
-        """Reinstate a cancelled signup.
+        """Reinstate a removed signup.
 
         Staff may always reinstate; the owner only when self-serve is open.
         """
@@ -1985,6 +2004,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         is_staff = has_event_staff_access(request.user, signup.event)
         if signup.user != request.user and not is_staff:
             return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
         try:
             if not is_staff:
                 ensure_self_serve(signup.event, request.user)
@@ -1996,12 +2016,35 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                             request, signup.user, signup.event, staff_only=is_staff
                         ),
                         for_staff_placement=is_staff,
+                        reason=reason,
                     ),
                     context={"request": request},
                 ).data
             )
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="void-withdrawal")
+    def void_withdrawal(self, request: Request, pk: str | None = None) -> Response:
+        signup = self.get_object()
+        if not has_event_staff_access(request.user, signup.event):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        override = parse_override_request(request.data)
+        reason = parse_staff_reason(request.data)
+        try:
+            restored = void_withdrawal_service(
+                signup,
+                actor=SignupActor.for_request_on(
+                    request, signup.user, signup.event, staff_only=True
+                ),
+                reason=reason,
+                acknowledged_codes=override.acknowledged_codes,
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            EventSignupSerializer(restored, context={"request": request}).data
+        )
 
 
 class EventTeamViewSet(viewsets.ModelViewSet):

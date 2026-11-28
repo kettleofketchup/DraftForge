@@ -15,11 +15,11 @@ from rest_framework.test import APIClient
 from app.models import CustomUser, GameType
 from discordbot.models import DiscordMessageLog
 from events.admission import SignupRefused, ensure_self_serve
-from events.constants import EventState, SignupStatus
+from events.constants import EventState, SignupAction, SignupStatus
 from events.discord.handlers import handle_signup_button
 from events.discord.reactions import handle_reaction_signup
 from events.eligibility import Unmet, evaluate_signup, refresh_unmet_requirements
-from events.models import Event, EventSignup
+from events.models import Event, EventSignup, SignupLedgerEntry
 from events.services import (
     _promote_from_waitlist,
     cancel_signup,
@@ -750,12 +750,17 @@ class BackOfLineTest(ConductTestCase):
 
     def test_flagged_promoted_after_unflagged(self) -> None:
         self.enable(back_of_line_enabled=True)
-        _event, seated, flagged, clean = self.full_event_with_line()
+        event, seated, flagged, clean = self.full_event_with_line()
 
         cancel_signup(seated[0], actor=SYSTEM)
 
         self.assertEqual(self.reload(clean).status, SignupStatus.APPROVED)
         self.assertEqual(self.reload(flagged).status, SignupStatus.WAITLISTED)
+        promoted = SignupLedgerEntry.objects.get(
+            event=event, action=SignupAction.PROMOTED
+        )
+        self.assertEqual(promoted.signup_id, clean.pk)
+        self.assertEqual(promoted.before["waitlist_position"], 2)
 
     def test_flagged_seated_when_seat_free(self) -> None:
         self.enable(back_of_line_enabled=True)

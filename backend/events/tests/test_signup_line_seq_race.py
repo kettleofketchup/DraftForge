@@ -11,7 +11,12 @@ from app.models import CustomUser
 from events import line
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
-from events.services import create_tentative_signup, decline_signup, process_rsvp
+from events.services import (
+    cancel_signup,
+    create_tentative_signup,
+    decline_signup,
+    process_rsvp,
+)
 from events.tests.actors import SYSTEM
 from org.models import Organization
 
@@ -116,4 +121,105 @@ class SignupLineSeqTransactionTests(TransactionTestCase):
                 )
             ),
             [1, 2],
+        )
+
+    def test_resign_up_race_distinct_seq(self) -> None:
+        self.event.max_players = 10
+        self.event.save()
+        racers = self.users[:2]
+        original_pks: set[int] = set()
+        for user in racers:
+            signup = process_rsvp(self.event, user, actor=SYSTEM)
+            cancel_signup(signup, actor=SYSTEM)
+            original_pks.add(signup.pk)
+        barrier = threading.Barrier(2)
+        results: list[tuple[int, int]] = []
+        errors: list[BaseException] = []
+        lock = threading.Lock()
+
+        def worker(user: CustomUser) -> None:
+            try:
+                barrier.wait(timeout=5)
+                for attempt in range(1, 21):
+                    try:
+                        signup = process_rsvp(self.event, user, actor=SYSTEM)
+                        break
+                    except OperationalError:
+                        time.sleep(0.05 * attempt)
+                else:
+                    raise RuntimeError("process_rsvp kept failing")
+                with lock:
+                    results.append((signup.pk, signup.line_seq))
+            except BaseException as exc:
+                with lock:
+                    errors.append(exc)
+            finally:
+                close_old_connections()
+
+        threads = [threading.Thread(target=worker, args=(u,)) for u in racers]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual({pk for pk, _ in results}, original_pks)
+        self.assertEqual(sorted(seq for _, seq in results), [3, 4])
+        self.assertEqual(EventSignup.objects.filter(event=self.event).count(), 2)
+        self.assertEqual(
+            sorted(
+                EventSignup.objects.filter(event=self.event).values_list(
+                    "line_seq", flat=True
+                )
+            ),
+            [3, 4],
+        )
+
+    def test_switch_to_maybe_race_distinct_seq(self) -> None:
+        self.event.max_players = 10
+        self.event.save()
+        racers = self.users[:2]
+        original_pks = {
+            process_rsvp(self.event, user, actor=SYSTEM).pk for user in racers
+        }
+        barrier = threading.Barrier(2)
+        results: list[tuple[int, int]] = []
+        errors: list[BaseException] = []
+        lock = threading.Lock()
+
+        def worker(user: CustomUser) -> None:
+            try:
+                barrier.wait(timeout=5)
+                for attempt in range(1, 21):
+                    try:
+                        signup = create_tentative_signup(self.event, user, actor=SYSTEM)
+                        break
+                    except OperationalError:
+                        time.sleep(0.05 * attempt)
+                else:
+                    raise RuntimeError("create_tentative_signup kept failing")
+                with lock:
+                    results.append((signup.pk, signup.line_seq))
+            except BaseException as exc:
+                with lock:
+                    errors.append(exc)
+            finally:
+                close_old_connections()
+
+        threads = [threading.Thread(target=worker, args=(u,)) for u in racers]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [])
+        self.assertEqual({pk for pk, _ in results}, original_pks)
+        self.assertEqual(sorted(seq for _, seq in results), [3, 4])
+        self.assertEqual(
+            sorted(
+                EventSignup.objects.filter(event=self.event).values_list(
+                    "line_seq", flat=True
+                )
+            ),
+            [3, 4],
         )
