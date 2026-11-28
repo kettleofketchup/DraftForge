@@ -205,27 +205,32 @@ class LeadershipSettingsServiceTest(LeadershipTestCase):
 
 
 class ReviewDmSettingsTest(LeadershipTestCase):
-    NEW_FIELDS: tuple[str, ...] = ("captain_feedback_visible",)
+    NEW_FIELDS: tuple[str, ...] = ("review_dms_enabled", "captain_feedback_visible")
 
     def test_new_settings_defaults(self) -> None:
         row = get_leadership_settings(self.org)
+        self.assertIs(row.review_dms_enabled, False)
         self.assertIs(row.captain_feedback_visible, True)
+        self.assertIs(SETTINGS_DEFAULTS["review_dms_enabled"], False)
         self.assertIs(SETTINGS_DEFAULTS["captain_feedback_visible"], True)
         self.assertLessEqual(set(self.NEW_FIELDS), BOOL_SETTINGS)
         stored = get_leadership_settings(self.org, create=True)
         stored.refresh_from_db()
+        self.assertIs(stored.review_dms_enabled, False)
         self.assertIs(stored.captain_feedback_visible, True)
 
     def test_patch_accepts_bools(self) -> None:
         res = self.client_for(self.admin).patch(
             self.url("settings/"),
-            {"captain_feedback_visible": False},
+            {"review_dms_enabled": True, "captain_feedback_visible": False},
             format="json",
         )
         self.assertEqual(res.status_code, 200, res.content)
         body = res.json()
+        self.assertIs(body["review_dms_enabled"], True)
         self.assertIs(body["captain_feedback_visible"], False)
         row = OrgLeadershipSettings.objects.nocache().get(organization=self.org)
+        self.assertTrue(row.review_dms_enabled)
         self.assertFalse(row.captain_feedback_visible)
         log_row = OrgLog.objects.get(action="update_leadership_settings")
         self.assertEqual(
@@ -251,7 +256,9 @@ class ReviewDmSettingsTest(LeadershipTestCase):
 
     def test_settings_payload_includes_new_fields_and_defaults(self) -> None:
         body = self.client_for(self.admin).get(self.url("settings/")).json()
+        self.assertIs(body["review_dms_enabled"], False)
         self.assertIs(body["captain_feedback_visible"], True)
+        self.assertIs(body["defaults"]["review_dms_enabled"], False)
         self.assertIs(body["defaults"]["captain_feedback_visible"], True)
 
     def test_non_admin_cannot_patch(self) -> None:
@@ -259,12 +266,10 @@ class ReviewDmSettingsTest(LeadershipTestCase):
             with self.subTest(user=user.username):
                 res = self.client_for(user).patch(
                     self.url("settings/"),
-                    {"captain_feedback_visible": False},
+                    {"review_dms_enabled": True},
                     format="json",
                 )
                 self.assertEqual(res.status_code, 403, res.content)
         self.assertFalse(
-            OrgLeadershipSettings.objects.filter(
-                captain_feedback_visible=False
-            ).exists()
+            OrgLeadershipSettings.objects.filter(review_dms_enabled=True).exists()
         )

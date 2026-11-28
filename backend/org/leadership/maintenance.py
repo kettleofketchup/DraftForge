@@ -6,8 +6,9 @@ from django.db.models import Case, Count, Q, Value, When
 
 from app.cache_utils import invalidate_after_commit
 from app.models import CustomUser
+from discordbot import dm_ledger
 from org.leadership.constants import VoidKind
-from org.leadership.reviews import refresh_captain_rating
+from org.leadership.reviews import delete_drafts, refresh_captain_rating
 from org.leadership.settings import get_leadership_settings
 from org.models import ContributionPointValue, OrgLog, OrgUser
 from org.models_leadership import CaptainReview, EventCaptain, OrgLeadershipSettings
@@ -28,6 +29,7 @@ def _has_leadership(where: Q) -> bool:
             Q(captained_events__isnull=False)
             | Q(captain_reviews_given__isnull=False)
             | Q(rater_pools__isnull=False)
+            | Q(captain_review_drafts__isnull=False)
             | Q(contribution_entries__track="leadership")
         )
         .exists()
@@ -282,7 +284,14 @@ def reassign_member(drop: OrgUser, keep: OrgUser, *, now: datetime) -> int:
         raise ValueError("cannot merge leadership across organizations")
     if drop.pk == keep.pk or not _has_leadership(Q(pk=drop.pk)):
         return 0
+    drafts = delete_drafts(rater_ids=[drop.pk])
     snapshots, touched = _merge_snapshots(drop, keep, now=now)
+    drafts += delete_drafts(
+        snapshot_ids=EventCaptain.objects.nocache()
+        .filter(captain=keep)
+        .values_list("pk", flat=True),
+        rater_ids=[keep.pk],
+    )
     reviews, rated = _merge_reviews(drop, keep, now=now)
     pools = _merge_pools(drop, keep)
     entries, discarded = _merge_ledger(drop, keep, now=now)
@@ -297,6 +306,7 @@ def reassign_member(drop: OrgUser, keep: OrgUser, *, now: datetime) -> int:
         keep_org_user_id=keep.pk,
         moved=moved,
         discarded=discarded,
+        drafts_deleted=drafts,
         recomputed=recomputed,
     )
     return moved
@@ -332,6 +342,7 @@ def repoint_attribution(drop: CustomUser, keep: CustomUser) -> int:
 def delete_user_rows(
     user: CustomUser, *, actor: CustomUser | None, now: datetime
 ) -> int:
+    dm_ledger.scrub_rater(discord_user_id=user.discordId or "", now=now)
     if not _has_leadership(Q(user=user)):
         return 0
     reviews = list(

@@ -13,6 +13,7 @@ app = Celery("dtx")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 app.autodiscover_tasks(["events"], related_name="tournament_tasks")
+app.autodiscover_tasks(["org.leadership"], related_name="tasks")
 
 
 @worker_process_init.connect

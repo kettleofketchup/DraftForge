@@ -338,6 +338,7 @@ DMKindValue = Literal[
     "tournament_herodraft_link",
     "lobby_info",
     "signup_confirmation",
+    "leadership_review",
     "test_notification",
 ]
 DMStatusValue = Literal[
@@ -349,7 +350,7 @@ DMStatusValue = Literal[
     "skipped_no_discord",
     "skipped_disabled",
 ]
-DMSubjectValue = Literal["event", "tournament", "game_lobby"]
+DMSubjectValue = Literal["event", "tournament", "game_lobby", "captain_snapshot"]
 DMErrorClassValue = Literal[
     "pre_send", "rate_limit_timeout", "before_send_failed", "permanent"
 ]
@@ -406,6 +407,51 @@ class DMLedgerRowResponse(BaseModel):
     status: DMStatusValue
     attempts: int = 0
     model_config = {"extra": "ignore"}
+
+
+# --- Leadership review DMs (org/leadership/internal_views.py) ----------------
+
+
+class PlannedMessage(BaseModel):
+    snapshot_id: int
+    part: Annotated[int, Field(ge=1)]
+    parts: Annotated[int, Field(ge=1)]
+    trait_ids: list[int]
+    rater_org_user_id: int
+    recipient_user_id: int
+    organization_id: int
+    discord_user_id: DiscordId | None = None
+    skip: Literal["disabled"] | None = None
+    payload: dict[str, Any]
+    model_config = {"extra": "ignore"}
+
+
+class ReviewDMPlanBody(BaseModel):
+    event_id: int
+    snapshot_ids: list[int] = Field(max_length=500)
+    model_config = {"extra": "ignore"}
+
+
+class ReviewDMPlanResponse(BaseModel):
+    messages: list[PlannedMessage] = Field(default_factory=list)
+    model_config = {"extra": "ignore"}
+
+
+class ReviewClickBody(BaseModel):
+    discord_user_id: DiscordId
+    discord_message_id: DiscordId
+    discord_channel_id: DiscordId
+    interaction_id: DiscordId
+    snapshot_id: Annotated[int, Field(gt=0)]
+    trait_id: Annotated[int, Field(gt=0)]
+    score: Annotated[int, Field(ge=1, le=5)]
+    model_config = {"extra": "ignore"}
+
+
+class ClickResult(BaseModel):
+    message: dict[str, Any] | None = None
+    ephemeral: str | None = None
+    model_config = {"extra": "ignore", "frozen": True}
 
 
 # ---------------------------------------------------------------------------

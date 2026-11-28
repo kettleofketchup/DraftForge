@@ -7,6 +7,7 @@ from org.leadership.views import (
     leadership_mine,
     leadership_pending,
     leadership_review,
+    leadership_review_dm_preview,
     leadership_review_unvoid,
     leadership_review_void,
     leadership_settings,
@@ -16,6 +17,11 @@ from org.leadership.views import (
 
 urlpatterns = [
     path("settings/", leadership_settings, name="org-leadership-settings"),
+    path(
+        "review-dm-preview/",
+        leadership_review_dm_preview,
+        name="org-leadership-review-dm-preview",
+    ),
     path("traits/", leadership_traits, name="org-leadership-traits"),
     path("traits/<slug:key>/", leadership_trait, name="org-leadership-trait"),
     path("reviews/pending/", leadership_pending, name="org-leadership-pending"),

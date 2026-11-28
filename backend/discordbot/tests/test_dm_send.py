@@ -143,6 +143,7 @@ class SendDMTests(SimpleTestCase):
         hook = MagicMock()
         outcome = send_dm(
             _req(
+                kind=DMKind.LEADERSHIP_REVIEW,
                 content=None,
                 components=[{"type": 10, "content": "x"}],
                 flags=V2_FLAG,

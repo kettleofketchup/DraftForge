@@ -175,6 +175,13 @@ def _resolve_org(subject_type: DMSubject | None, subject_id: int | None) -> int 
             return _tournament_org(subject_id)
         case DMSubject.GAME_LOBBY:
             return _lobby_org(subject_id)
+        case DMSubject.CAPTAIN_SNAPSHOT:
+            snapshot = apps.get_model("org", "EventCaptain")
+            return (
+                snapshot.objects.filter(pk=subject_id)
+                .values_list("organization_id", flat=True)
+                .first()
+            )
     return None
 
 
@@ -372,3 +379,123 @@ def record_click(
     if not updated:
         return None
     return rows.first()
+
+
+def attach_on_click(
+    dm_id: int,
+    *,
+    discord_user_id: str,
+    discord_channel_id: str,
+    discord_message_id: str,
+    now: datetime,
+) -> DiscordDM:
+    with transaction.atomic():
+        row = DiscordDM.objects.select_for_update().filter(pk=dm_id).first()
+        if row is None:
+            raise LedgerNotFound(dm_id)
+        if not discord_user_id or row.discord_user_id != discord_user_id:
+            raise LedgerConflict(dm_id)
+        if row.discord_message_id:
+            if row.discord_message_id != discord_message_id:
+                raise LedgerConflict(dm_id)
+            return row
+        row.discord_channel_id = discord_channel_id
+        row.discord_message_id = discord_message_id
+        if row.status == DMStatus.PENDING:
+            row.status = DMStatus.SENT
+            row.sent_at = now
+            row.finished_at = now
+            row.error = "finalized_by_click"
+        row.save()
+    log.info(
+        "dm_attached_on_click",
+        system="discord",
+        subsystem="dm",
+        dm_kind=row.kind,
+        ledger_id=row.pk,
+        status=row.status,
+    )
+    return row
+
+
+def _leadership_rows(
+    *, snapshot_id: int, discord_user_id: str
+) -> models.QuerySet[DiscordDM]:
+    if not discord_user_id:
+        return DiscordDM.objects.none()
+    return DiscordDM.objects.filter(
+        kind=DMKind.LEADERSHIP_REVIEW,
+        subject_type=DMSubject.CAPTAIN_SNAPSHOT,
+        subject_id=snapshot_id,
+        discord_user_id=discord_user_id,
+    ).order_by("pk")
+
+
+def _trait_ids(row: DiscordDM) -> set[int]:
+    raw = row.context.get("trait_ids") if isinstance(row.context, dict) else None
+    if not isinstance(raw, list):
+        return set()
+    return {value for value in raw if isinstance(value, int)}
+
+
+def find_leadership_row(
+    *, snapshot_id: int, discord_user_id: str, trait_id: int
+) -> DiscordDM | None:
+    for row in _leadership_rows(
+        snapshot_id=snapshot_id, discord_user_id=discord_user_id
+    ):
+        if trait_id in _trait_ids(row):
+            return row
+    return None
+
+
+def leadership_message_of_other(
+    *, snapshot_id: int, discord_message_id: str, discord_user_id: str
+) -> bool:
+    if not discord_message_id:
+        return False
+    return (
+        DiscordDM.objects.filter(
+            kind=DMKind.LEADERSHIP_REVIEW,
+            subject_type=DMSubject.CAPTAIN_SNAPSHOT,
+            subject_id=snapshot_id,
+            discord_message_id=discord_message_id,
+        )
+        .exclude(discord_user_id=discord_user_id)
+        .exists()
+    )
+
+
+def leadership_trait_ids(*, snapshot_id: int, discord_user_id: str) -> set[int]:
+    ids: set[int] = set()
+    for row in _leadership_rows(
+        snapshot_id=snapshot_id, discord_user_id=discord_user_id
+    ):
+        ids |= _trait_ids(row)
+    return ids
+
+
+def scrub_rater(*, discord_user_id: str, now: datetime) -> int:
+    if not discord_user_id:
+        return 0
+    scrubbed = 0
+    with transaction.atomic():
+        rows = DiscordDM.objects.select_for_update().filter(
+            kind=DMKind.LEADERSHIP_REVIEW, discord_user_id=discord_user_id
+        )
+        for dm_id in rows.values_list("pk", flat=True):
+            scrubbed += DiscordDM.objects.filter(pk=dm_id).update(
+                idempotency_key=f"scrubbed:leadership_review:{dm_id}",
+                discord_user_id="",
+                first_clicked_at=None,
+                last_clicked_at=None,
+            )
+    log.info(
+        "dm_rater_scrubbed",
+        system="discord",
+        subsystem="dm",
+        dm_kind=DMKind.LEADERSHIP_REVIEW.value,
+        count=scrubbed,
+        scrubbed_at=now.isoformat(),
+    )
+    return scrubbed

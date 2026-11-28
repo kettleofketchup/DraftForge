@@ -28,6 +28,7 @@ SETTINGS_DEFAULTS: Final[dict[str, int | float | bool | None]] = {
     "leaderboard_public": False,
     "require_staff_release": False,
     "auto_release_after_hours": None,
+    "review_dms_enabled": False,
     "captain_feedback_visible": True,
 }
 
@@ -49,6 +50,7 @@ BOOL_SETTINGS: Final[frozenset[str]] = frozenset(
     {
         "leaderboard_public",
         "require_staff_release",
+        "review_dms_enabled",
         "captain_feedback_visible",
     }
 )

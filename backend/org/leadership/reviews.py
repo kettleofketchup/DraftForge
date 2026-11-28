@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
@@ -27,6 +27,7 @@ from org.leadership.traits import materialize_traits
 from org.models import ContributionEntry, Organization, OrgLog, OrgUser
 from org.models_leadership import (
     CaptainReview,
+    CaptainReviewDraft,
     CaptainTraitScore,
     EventCaptain,
     OrgLeadershipSettings,
@@ -147,6 +148,29 @@ def _existing(ec: EventCaptain, rater: OrgUser) -> CaptainReview | None:
     return review
 
 
+def check_rater_writable(
+    ec: EventCaptain, rater: OrgUser, *, now: datetime
+) -> CaptainReview | None:
+    _check_writable(ec, rater, now=now)
+    return _existing(ec, rater)
+
+
+def delete_drafts(
+    *,
+    snapshot_ids: Collection[int] | None = None,
+    rater_ids: Collection[int] | None = None,
+) -> int:
+    if snapshot_ids is None and rater_ids is None:
+        raise ValueError("delete_drafts needs snapshot_ids or rater_ids")
+    drafts = CaptainReviewDraft.objects.all()
+    if snapshot_ids is not None:
+        drafts = drafts.filter(event_captain_id__in=list(snapshot_ids))
+    if rater_ids is not None:
+        drafts = drafts.filter(rater_id__in=list(rater_ids))
+    deleted, _ = drafts.delete()
+    return deleted
+
+
 def _validated_scores(org_id: int, scores: Mapping[str, int]) -> dict[int, int]:
     by_key = {t.key: t for t in materialize_traits(org_id) if t.active}
     missing = sorted(set(by_key) - set(scores))
@@ -191,8 +215,7 @@ def submit_review(
 ) -> CaptainReview:
     ec = _lock_snapshot(org, event_id, captain_org_user_id)
     now = max(now, timezone.now())
-    _check_writable(ec, rater, now=now)
-    review = _existing(ec, rater)
+    review = check_rater_writable(ec, rater, now=now)
     by_trait = _validated_scores(org.pk, scores)
     if review is None:
         review = CaptainReview.objects.create(
@@ -238,13 +261,13 @@ def withdraw_review(
 ) -> None:
     ec = _lock_snapshot(org, event_id, captain_org_user_id)
     now = max(now, timezone.now())
-    _check_writable(ec, rater, now=now)
-    review = _existing(ec, rater)
+    review = check_rater_writable(ec, rater, now=now)
     if review is None or review.voided_at is not None:
         raise ReviewRefused("not_found", 404, "You have no review to withdraw.")
     review.voided_at = now
     review.void_kind = VoidKind.WITHDRAWN
     review.save(update_fields=["voided_at", "void_kind", "updated_at"])
+    delete_drafts(snapshot_ids=[ec.pk], rater_ids=[rater.pk])
     refresh_captain_rating(ec, settings=get_leadership_settings(org.pk))
     log.info(
         "captain_review_withdrawn",
@@ -346,6 +369,8 @@ def void_review(
     review.voided_by = actor
     review.void_reason = cleaned
     review.save()
+    if review.rater_id is not None:
+        delete_drafts(snapshot_ids=[ec.pk], rater_ids=[review.rater_id])
     before = _current_points(ec)
     after, _ = _refresh(ec, get_leadership_settings(org.pk))
     _moderation_log(

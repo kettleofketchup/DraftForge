@@ -931,8 +931,11 @@ they are computed per viewer after the cached payload. Review `PUT`/`DELETE` are
 throttled per user. Leaderboards (`rating`, `points`, `rating.<trait>`) go through the
 [standing endpoints](#organization-standing).
 
-`GET/PATCH settings/` includes `captain_feedback_visible` (default `true`). While it
-is off, a captain's own `members/{org_user_id}/` summary and own entry in
+`GET review-dm-preview/` returns `{"messages": [...]}` for organization admins. Each sample uses the organization’s active traits and review window with a fictional captain and event. More than five traits produce a second message. The preview also works while sending is disabled.
+
+`GET/PATCH settings/` includes `review_dms_enabled` (default `false`) and
+`captain_feedback_visible` (default `true`). While `captain_feedback_visible` is off,
+a captain's own `members/{org_user_id}/` summary and own entry in
 `events/{event_id}/reviews/` carry `feedback_private: true` with the review-derived
 fields `null` (`reviews` is nullable), and leaderboards plus `standing_tracks[]` carry
 `own_private: true` for that viewer.
@@ -968,8 +971,9 @@ Both POSTs return `success`, `detail`, and counts (`events`, `joined`, `left`, `
 |--------|----------|-------------|
 | POST | `/api/internal/events/{id}/auto-close/` | Used by `cleanup_stale_events` (X-Internal-Token). Closes to `completed` from `roll_call`/`in_progress`, or `cancelled` from `upcoming`/`signups_open`. `200 {"closed": true, "state"}` when it closed the event, `200 {"closed": false, "state"}` when it was already terminal or lost the race, `400` for other states, `404` if missing. |
 
-Discord DM ledger routes use the same internal token and IP allowlist. Ledger rows
-are described in [Discord DM Ledger](../development/discord-dm-ledger.md).
+Discord DM ledger and leadership review DM routes use the same internal token and
+IP allowlist. Ledger rows are described in
+[Discord DM Ledger](../development/discord-dm-ledger.md).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -977,6 +981,8 @@ are described in [Discord DM Ledger](../development/discord-dm-ledger.md).
 | POST | `/api/internal/discord/dms/{id}/sending/` | Body `{claim_token}`. Marks the row as sending right before the Discord POST. `204`; `409` wrong token or not pending |
 | POST | `/api/internal/discord/dms/{id}/finalize/` | Body `{claim_token, status, error_class?, discord_channel_id?, discord_message_id?, http_status?, error_code?, error?}`. `200 {id, status}` (also on a repeat with the same token and status), `409` conflict, `404` missing, `400` pending status or bad body |
 | POST | `/api/internal/discord/dms/click/` | Body `{discord_message_id, discord_user_id}`. Counts a component click on a DM. Always `204` |
+| POST | `/api/internal/discord/leadership/review-click/` | A leadership review DM button click: `discord_user_id`, `discord_message_id`, `discord_channel_id`, `interaction_id`, `snapshot_id`, `trait_id`, `score`. `200 {message, ephemeral}` (the re-rendered message and/or a private reply); 30 a minute per Discord user |
+| POST | `/api/internal/leadership/review-dms/plan/` | Body `{event_id, snapshot_ids}` (up to 500). Returns the review DMs to send for those snapshots, rendered |
 
 No ledger endpoint returns Discord channel or message ids.
 

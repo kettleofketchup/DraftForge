@@ -563,6 +563,7 @@ class DMKind(models.TextChoices):
     TOURNAMENT_HERODRAFT_LINK = "tournament_herodraft_link"
     LOBBY_INFO = "lobby_info"
     SIGNUP_CONFIRMATION = "signup_confirmation"
+    LEADERSHIP_REVIEW = "leadership_review"
     TEST_NOTIFICATION = "test_notification"
 
 
@@ -580,6 +581,7 @@ class DMSubject(models.TextChoices):
     EVENT = "event"
     TOURNAMENT = "tournament"
     GAME_LOBBY = "game_lobby"
+    CAPTAIN_SNAPSHOT = "captain_snapshot"
 
 
 class DiscordDMQuerySet(models.QuerySet["DiscordDM"]):

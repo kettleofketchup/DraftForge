@@ -22,6 +22,7 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 # Single source of truth for signup-flow prefixes (see custom_ids.py).
 from discordbot.custom_ids import SIGNUP_TAG_PREFIXES as _SIGNUP_TAG_PREFIXES
+from discordbot.custom_ids import LeadershipScoreId
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
@@ -57,7 +58,10 @@ def _prefix(custom_id: str | None) -> str | None:
 
 def resolve_tags(custom_id: str | None) -> list[str]:
     """Map a custom_id prefix to its cross-cutting tags. Unknown → []."""
-    return ["events", "signup"] if _prefix(custom_id) in _SIGNUP_TAG_PREFIXES else []
+    prefix = _prefix(custom_id)
+    if prefix == LeadershipScoreId.PREFIX:
+        return ["leadership", "review"]
+    return ["events", "signup"] if prefix in _SIGNUP_TAG_PREFIXES else []
 
 
 def tags_csv(tags: list[str]) -> str:
@@ -67,7 +71,11 @@ def tags_csv(tags: list[str]) -> str:
 
 def parse_event_id(custom_id: str | None) -> int | None:
     """Pull the event_id out of `prefix:event_id[:extra]`. Non-int → None."""
-    if not custom_id or ":" not in custom_id:
+    if (
+        not custom_id
+        or ":" not in custom_id
+        or _prefix(custom_id) == LeadershipScoreId.PREFIX
+    ):
         return None
     try:
         return int(custom_id.split(":")[1])
