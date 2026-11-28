@@ -115,7 +115,8 @@ class DiscordMessageLog(models.Model):
     source = models.CharField(max_length=64, default="unknown")
     source_id = models.IntegerField(null=True, blank=True)
 
-    # Link to tournament log (for grouping DM sends under one log entry)
+    # Groups pre-ledger DM sends under a tournament log; DMs now link via
+    # DiscordDM.tournament_log.
     tournament_log = models.ForeignKey(
         "DiscordTournamentLog",
         on_delete=models.SET_NULL,

@@ -78,7 +78,7 @@ def send_tournament_draft_links(
     )
     participants = get_tournament_participants(tournament_id)
 
-    # Create the parent log row first so child DiscordMessageLog rows can FK
+    # Create the parent log row first so child DiscordDM ledger rows can FK
     # to it. success=None marks the row as in-flight; the post-loop
     # update_tournament_log call below flips it to True/False with the final
     # count. Consumers polling this row MUST wait for a terminal state.
@@ -177,7 +177,7 @@ def send_tournament_herodraft_links(
     components = build_herodraft_link_components(herodraft_id, invite_url=invite_url)
     participants = get_match_participants(game_id)
 
-    # Create the parent log row first so child DiscordMessageLog rows can FK
+    # Create the parent log row first so child DiscordDM ledger rows can FK
     # to it. success=None = in-flight; flipped by update_tournament_log below.
     team_names = f"{radiant_name} vs {dire_name}"
     log_resp = create_tournament_log(
