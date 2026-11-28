@@ -24,6 +24,11 @@ import {
   signupHistoryPageSchema,
   type SignupHistoryPage,
 } from '~/components/events/signupHistorySchemas';
+import {
+  signupRecordsResponseSchema,
+  type SignupRecordsFilters,
+  type SignupRecordsResponse,
+} from '~/components/events/signupRecordsSchemas';
 
 import axios from './axios';
 
@@ -683,4 +688,81 @@ export async function getEventSignupHistory(
     },
   });
   return signupHistoryPageSchema.parse(data);
+}
+
+function signupRecordsParams(
+  filters: SignupRecordsFilters,
+): Record<string, string | number> {
+  return Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== undefined),
+  ) as Record<string, string | number>;
+}
+
+export async function getSignupRecords(
+  orgId: number,
+  filters: SignupRecordsFilters,
+): Promise<SignupRecordsResponse> {
+  const { data } = await axios.get(`/organizations/${orgId}/signup-records/`, {
+    params: signupRecordsParams(filters),
+  });
+  return signupRecordsResponseSchema.parse(data);
+}
+
+const FILENAME_STAR_RE = /filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i;
+const FILENAME_RE = /filename\s*=\s*"?([^";]+)"?/i;
+
+export function filenameFromDisposition(
+  header: unknown,
+  fallback: string,
+): string {
+  if (typeof header !== 'string') return fallback;
+  const star = FILENAME_STAR_RE.exec(header)?.[1]?.trim();
+  if (star) {
+    try {
+      return decodeURIComponent(star.replace(/^"|"$/g, ''));
+    } catch {
+      // fall through to the plain filename
+    }
+  }
+  return FILENAME_RE.exec(header)?.[1]?.trim() || fallback;
+}
+
+export async function downloadSignupRecordsCsv(
+  orgId: number,
+  filters: { since: string; until: string },
+): Promise<{ blob: Blob; filename: string }> {
+  try {
+    const response = await axios.get(
+      `/organizations/${orgId}/signup-records/`,
+      {
+        params: { ...filters, format: 'csv' },
+        responseType: 'blob',
+      },
+    );
+    return {
+      blob: response.data as Blob,
+      filename: filenameFromDisposition(
+        response.headers?.['content-disposition'],
+        `signup-records-${orgId}.csv`,
+      ),
+    };
+  } catch (err) {
+    const response = isAxiosError(err) ? err.response : undefined;
+    if (response && response.data instanceof Blob) {
+      try {
+        response.data = JSON.parse(await response.data.text());
+      } catch {
+        // not JSON: keep the raw body
+      }
+    }
+    throw err;
+  }
+}
+
+export function signupRecordsErrorCode(err: unknown): string | undefined {
+  if (!isAxiosError(err)) return undefined;
+  const data: unknown = err.response?.data;
+  if (!data || typeof data !== 'object') return undefined;
+  const code = (data as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
 }

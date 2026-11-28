@@ -54,6 +54,8 @@ const SETTINGS: OrgSettings = {
     code,
     label: `Label ${code}`,
   })),
+  signup_record_retention_days: null,
+  signup_record_min_retention_days: 30,
   updated_at: '2026-11-17T12:00:00Z',
 };
 
