@@ -63,4 +63,25 @@ describe('useApiAccessSection', () => {
     );
     expect(result.current.unit.isDirty).toBe(false);
   });
+
+  it('remounts the panel and drops an open draft when the org changes', () => {
+    const { result, rerender } = renderHook(
+      ({ org }: { org: number }) => useApiAccessSection(org, true),
+      { initialProps: { org: 7 } },
+    );
+    const first = result.current.content as { key: string | null };
+    render(<>{result.current.content}</>);
+    act(() =>
+      panel.props?.onConnectionDraftChange?.({
+        dirty: true,
+        discard: vi.fn(),
+      }),
+    );
+    expect(result.current.unit.isDirty).toBe(true);
+
+    rerender({ org: 8 });
+    const second = result.current.content as { key: string | null };
+    expect(second.key).not.toBe(first.key);
+    expect(result.current.unit.isDirty).toBe(false);
+  });
 });

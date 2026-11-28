@@ -23,10 +23,15 @@ export function useApiAccessSection(
     enabled ? organizationId : undefined,
   );
   const access = useOrgFeatureAccess(organization ?? undefined);
-  const [draft, setDraft] = useState<ConnectionDraftState | null>(null);
+  const scope = `${organizationId}:${access.viewerPk ?? 'anon'}`;
+  const [scopedDraft, setScopedDraft] = useState<{
+    scope: string;
+    state: ConnectionDraftState;
+  } | null>(null);
+  const draft = scopedDraft?.scope === scope ? scopedDraft.state : null;
   const onConnectionDraftChange = useCallback(
-    (state: ConnectionDraftState) => setDraft(state),
-    [],
+    (state: ConnectionDraftState) => setScopedDraft({ scope, state }),
+    [scope],
   );
   const unit: SettingsFormUnit = {
     id: SECTION_ID,
@@ -43,6 +48,7 @@ export function useApiAccessSection(
   return {
     content: (
       <ApiAccessPanel
+        key={scope}
         orgId={organizationId}
         access={access}
         enabled={enabled}
