@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -20,6 +21,19 @@ if TYPE_CHECKING:
 
 CONFIG_FIELDS = tuple(ConnectionConfig.model_fields)
 WRITE_ONLY_FIELDS = {"outbound_credential", "clear_outbound_credential"}
+
+
+def next_due_at(current: OrgApiConnection, config: ConnectionConfig) -> datetime | None:
+    if not (config.enabled and config.mmr_pull_enabled and config.interval_minutes):
+        return None
+    if (
+        current.next_due_at is not None
+        and current.enabled
+        and current.mmr_pull_enabled
+        and current.interval_minutes == config.interval_minutes
+    ):
+        return current.next_due_at
+    return timezone.now() + timedelta(minutes=config.interval_minutes)
 
 
 def apply_config_patch(
@@ -62,6 +76,7 @@ def apply_config_patch(
             updated_by=actor,
             updated_at=timezone.now(),
             config_version=expected_version + 1,
+            next_due_at=next_due_at(current, config),
         )
         old_origin = (
             canonical_origin(current.outbound_base_url)

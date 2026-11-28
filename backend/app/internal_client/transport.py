@@ -70,11 +70,13 @@ def log_network_error(method: str, path: str, exc: BaseException) -> None:
     )
 
 
-def post(path: str, data: dict) -> requests.Response | None:
+def post(
+    path: str, data: dict, *, timeout: float = TIMEOUT
+) -> requests.Response | None:
     """POST to an internal endpoint. Returns response or None on network error."""
     url = f"{INTERNAL_API_URL}{path}"
     try:
-        resp = requests.post(url, json=data, headers=headers(), timeout=TIMEOUT)
+        resp = requests.post(url, json=data, headers=headers(), timeout=timeout)
         if not resp.ok:
             log_http_error("POST", path, resp.status_code, resp.text[:200])
         return resp

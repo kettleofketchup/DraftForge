@@ -67,4 +67,24 @@ urlpatterns = [
         {"action": "send-backlog"},
         name="org-api-connection-promotion-send-backlog",
     ),
+    path(
+        "<int:connection_id>/test/",
+        views.connection_test,
+        name="org-api-connection-test",
+    ),
+    path(
+        "<int:connection_id>/pull/",
+        views.connection_pull,
+        name="org-api-connection-pull",
+    ),
+    path(
+        "<int:connection_id>/runs/",
+        views.connection_runs,
+        name="org-api-connection-runs",
+    ),
+    path(
+        "<int:connection_id>/runs/<uuid:run_id>/",
+        views.connection_run_detail,
+        name="org-api-connection-run",
+    ),
 ]

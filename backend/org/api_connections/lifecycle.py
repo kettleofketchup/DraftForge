@@ -185,3 +185,42 @@ def handle_credential_owner_loss(
                 action="api_connection_owner_lost",
                 credential_changed=owned_outbound,
             )
+
+
+def disable_orphaned_outbound(connection_id: int) -> None:
+    with transaction.atomic():
+        connection = (
+            OrgApiConnection.objects.select_for_update()
+            .filter(pk=connection_id)
+            .first()
+        )
+        if connection is None:
+            return
+        principal_id = (
+            connection.outbound_authorizer_id
+            if connection.outbound_auth == "none"
+            else connection.outbound_credential_owner_id
+        )
+        if principal_id is not None or not (
+            connection.mmr_push_enabled
+            or connection.mmr_pull_enabled
+            or connection.promotion_push_enabled
+        ):
+            return
+        connection.outbound_credential_ciphertext = ""
+        connection.outbound_credential_key_id = ""
+        connection.outbound_credential_set_at = None
+        connection.mmr_push_enabled = False
+        connection.mmr_pull_enabled = False
+        connection.promotion_push_enabled = False
+        connection.next_due_at = None
+        connection.last_error_code = "authority_lost"
+        connection.config_version += 1
+        connection.save()
+        invalidate_work(connection)
+        audit_connection(
+            connection,
+            actor=None,
+            action="api_connection_owner_lost",
+            credential_changed=True,
+        )

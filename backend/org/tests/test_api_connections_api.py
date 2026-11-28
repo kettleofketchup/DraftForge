@@ -219,7 +219,7 @@ class ConnectionApiTests(ApiTokenBase):
                 403,
             )
 
-    def test_unimplemented_directions_and_routes_fail_closed(self) -> None:
+    def test_incomplete_directions_and_run_routes_fail_closed(self) -> None:
         for direction in (
             "mmr_pull_enabled",
             "promotion_push_enabled",
@@ -231,13 +231,12 @@ class ConnectionApiTests(ApiTokenBase):
                 400,
             )
         row = self.create()
-        for action in ("test", "pull"):
-            self.assertEqual(
-                self.client.post(
-                    f"{self.url}{row['id']}/{action}/", {}, format="json"
-                ).status_code,
-                404,
-            )
+        pull = self.client.post(f"{self.url}{row['id']}/pull/", {}, format="json")
+        self.assertEqual(pull.status_code, 403)
+        test = self.client.post(
+            f"{self.url}{row['id']}/test/", {"direction": "mmr_pull"}, format="json"
+        )
+        self.assertEqual((test.status_code, test.data["code"]), (400, "invalid_url"))
 
     def test_owner_destroy_org_with_migrated_keys(self) -> None:
         self.org.owner = self.admin

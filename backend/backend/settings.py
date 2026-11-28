@@ -106,6 +106,10 @@ SECRET_KEY_FALLBACKS = env_list("DJANGO_SECRET_KEY_FALLBACKS")
 NODE_ENV = "dev"
 TEST = env_bool("TEST")
 RELEASE = env_bool("RELEASE")
+# Scheduled org API connection pulls; test stacks skip them unless enabled.
+ORG_API_SCHEDULED_PULLS = env_bool(
+    "ORG_API_SCHEDULED_PULLS", default=not TEST or RELEASE
+)
 DEBUG = env_bool("DEBUG")
 
 # Concurrent test runs share one Redis and number their drafts from 1, so each

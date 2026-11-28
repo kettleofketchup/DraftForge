@@ -21,11 +21,12 @@ from org.api_connections.crypto import (
 )
 from org.api_connections.limits import OUTBOUND_REQUESTS_PER_ORG, REQUEST_SECONDS
 from org.api_connections.pull import connection_config
+from org.api_connections.runs import lock_organization, outbound_busy
 from org.api_connections.safe_http import request_json
 from org.api_connections.schemas import ConnectionConfigError
 from org.api_connections.tls_adapter import SafeHttpError
 from org.api_connections.types import SafeHttpRequest, SafeHttpResponse, StepResult
-from org.models import Organization, OrgApiConnection, OrgApiMmrDelivery
+from org.models import OrgApiConnection, OrgApiMmrDelivery
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -93,12 +94,7 @@ def acquire_delivery_lease(
     if organization_id is None:
         return None
     with transaction.atomic():
-        list(
-            Organization.objects.nocache()
-            .select_for_update()
-            .filter(pk=organization_id)
-            .values_list("pk", flat=True)
-        )
+        lock_organization(organization_id)
         delivery = (
             OrgApiMmrDelivery.objects.select_for_update()
             .filter(delivery_id=delivery_id)
@@ -128,15 +124,7 @@ def acquire_delivery_lease(
         if delivery.attempts >= MAX_ATTEMPTS:
             _settle(delivery, State.PAUSED, "retries_exhausted")
             return None
-        busy = (
-            OrgApiMmrDelivery.objects.filter(
-                connection__organization_id=organization_id,
-                state=State.IN_FLIGHT,
-                lease_expires_at__gt=now,
-            )
-            .exclude(pk=delivery.pk)
-            .count()
-        )
+        busy = outbound_busy(organization_id, now, exclude_delivery=delivery.pk)
         if busy >= OUTBOUND_REQUESTS_PER_ORG:
             return None
         fence = uuid4()

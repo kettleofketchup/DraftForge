@@ -21,6 +21,7 @@ from org.api_connections.crypto import (
     open_credential,
 )
 from org.api_connections.limits import (
+    OUTBOUND_REQUESTS_PER_ORG,
     PAGE_BYTES,
     REQUEST_SECONDS,
     REQUESTS_PER_RUN,
@@ -37,6 +38,8 @@ from org.api_connections.runs import (
     finish_run,
     holds_fence,
     lock_fenced_run,
+    lock_organization,
+    outbound_busy,
     renew_lease,
 )
 from org.api_connections.safe_http import request_json
@@ -304,7 +307,7 @@ def _credential(connection: OrgApiConnection, config: ConnectionConfig) -> str |
         raise _Stop(exc.code) from None
 
 
-def _status_code(status: int) -> str | None:
+def status_error(status: int) -> str | None:
     if 200 <= status < 300:
         return None
     if status in (401, 403):
@@ -398,9 +401,15 @@ def _fetch(
     if budget <= 0:
         raise _Stop("pull_incomplete")
     with transaction.atomic():
+        lock_organization(run.organization_id)
         locked = lock_fenced_run(run.pk, fence)
         if locked is None:
             return _stale(run)
+        if (
+            outbound_busy(run.organization_id, timezone.now(), exclude_run=run.pk)
+            >= OUTBOUND_REQUESTS_PER_ORG
+        ):
+            return StepResult(locked.state, True, "org_busy")
         locked.request_count += 1
         renew_lease(locked)
         locked.save(update_fields=["request_count", "lease_expires_at"])
@@ -415,7 +424,7 @@ def _fetch(
     except SafeHttpError as exc:
         raise _Stop(exc.code) from None
     del credential, request
-    if code := _status_code(response.status):
+    if code := status_error(response.status):
         raise _Stop(code)
     run.refresh_from_db()
     if not holds_fence(run, fence):
@@ -536,6 +545,19 @@ def _stage(
             )
             continue
         matched.append((member, row.mmr or 0, row.page, row.index))
+    current = set(
+        OrgUser.objects.nocache()
+        .filter(
+            organization_id=run.organization_id,
+            pk__in=[m.org_user_id for m, *_ in matched],
+        )
+        .values_list("pk", flat=True)
+    )
+    for member, _, page, index in matched:
+        if member.org_user_id not in current:
+            run.conflict_count += 1
+            issues.append({"code": "membership_removed", "page": page, "index": index})
+    matched = [item for item in matched if item[0].org_user_id in current]
     existing = {
         target.org_user_id: target
         for target in OrgApiMmrPullTarget.objects.filter(
@@ -667,7 +689,11 @@ def _commit(
             )
         }
         for target in pending:
-            member = members[target.org_user_id]
+            member = members.get(target.org_user_id)
+            if member is None:
+                target.outcome_code = "membership_removed"
+                locked.conflict_count += 1
+                continue
             outcome = _evaluate(
                 target,
                 users[member.user_id],

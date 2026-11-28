@@ -7,10 +7,13 @@ from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from org.models import (
+    Organization,
     OrgApiConnection,
+    OrgApiMmrDelivery,
     OrgApiMmrPullTarget,
     OrgApiSyncRun,
 )
+from org.models_promotion_sync import OutboxState, PromotionContactOutbox
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -79,6 +82,42 @@ def add_issues(run: OrgApiSyncRun, issues: list[dict[str, Any]]) -> None:
         run.issues = [*run.issues, *issues[:room]]
 
 
+def lock_organization(organization_id: int) -> None:
+    list(
+        Organization.objects.nocache()
+        .select_for_update()
+        .filter(pk=organization_id)
+        .values_list("pk", flat=True)
+    )
+
+
+def outbound_busy(
+    organization_id: int,
+    now: datetime,
+    *,
+    exclude_run: UUID | None = None,
+    exclude_delivery: int | None = None,
+) -> int:
+    runs = OrgApiSyncRun.objects.filter(
+        organization_id=organization_id,
+        state__in=ACTIVE_STATES,
+        checkpoint__phase="fetch_inflight",
+        lease_expires_at__gt=now,
+    ).exclude(pk=exclude_run)
+    deliveries = OrgApiMmrDelivery.objects.filter(
+        connection__organization_id=organization_id,
+        state=OrgApiMmrDelivery.State.IN_FLIGHT,
+        lease_expires_at__gt=now,
+    ).exclude(pk=exclude_delivery)
+    promotions = PromotionContactOutbox.objects.filter(
+        organization_id=organization_id,
+        state=OutboxState.IN_FLIGHT,
+        connection__isnull=False,
+        lease_expires_at__gt=now,
+    )
+    return runs.count() + deliveries.count() + promotions.count()
+
+
 def run_summary(run: OrgApiSyncRun) -> dict[str, Any]:
     return {
         "run_id": str(run.pk),
@@ -119,7 +158,8 @@ def finish_run(
         }
         if state == OrgApiSyncRun.State.SUCCEEDED:
             updates["last_success_at"] = now
-        OrgApiConnection.objects.filter(pk=run.connection_id).update(**updates)
+        if run.kind != OrgApiSyncRun.Kind.TEST:
+            OrgApiConnection.objects.filter(pk=run.connection_id).update(**updates)
     log.info(
         "api_connection_run_finished",
         system="org",

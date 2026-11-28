@@ -566,4 +566,8 @@ urlpatterns += [
     path("api/internal/ops-notices/", include("opsnotices.internal_urls")),
 ]
 
+urlpatterns += [
+    path("api/internal/org-api-sync/", include("org.api_connections.internal_urls")),
+]
+
 urlpatterns += [path("", include("opsnotices.urls"))]

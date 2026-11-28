@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Final, Protocol
@@ -524,11 +524,13 @@ def dispatch_due(
     client: ReceiptClient | None = None,
     connection_client: ConnectionClient | None = None,
     clock: Callable[[], datetime] = timezone.now,
+    organization_ids: Collection[int] | None = None,
 ) -> DispatchReport:
     """Lease, send and finalize up to ``limit`` due rows.
 
     ``clock`` is read before each claim and after each answer. ``now``
-    pins it to one instant, for tests only.
+    pins it to one instant, for tests only. ``organization_ids`` limits the
+    run to those orgs' rows.
     """
     config = _config()
     if not config.enabled and not adopted_org_ids():
@@ -544,6 +546,8 @@ def dispatch_due(
         connection_client = ConnectionReceiptClient()
     report = DispatchReport(enabled=True)
     bound = _candidates(config)
+    if organization_ids is not None:
+        bound &= Q(organization_id__in=list(organization_ids))
     if resume_paused:
         with transaction.atomic(durable=True):
             report.resumed = PromotionContactOutbox.objects.filter(

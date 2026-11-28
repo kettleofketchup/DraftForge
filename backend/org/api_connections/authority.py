@@ -1,7 +1,10 @@
 from rest_framework.exceptions import PermissionDenied
 
 from app.models import CustomUser
-from org.api_connections.lifecycle import handle_credential_owner_loss
+from org.api_connections.lifecycle import (
+    disable_orphaned_outbound,
+    handle_credential_owner_loss,
+)
 from org.feature_errors import not_permitted, require_feature, require_org_admin
 from org.feature_keys import FeatureKey
 from org.models import OrgApiConnection
@@ -34,6 +37,8 @@ class ConnectionAuthorityLost(PermissionDenied):
             handle_credential_owner_loss(
                 principal, organization_id=self.organization_id
             )
+        else:
+            disable_orphaned_outbound(self.connection_id)
 
 
 def denial_code(denied: PermissionDenied) -> str:
@@ -65,6 +70,8 @@ def assert_connection_authority(
         if current.outbound_auth == "none"
         else current.outbound_credential_owner_id
     )
+    if testing and principal_id is None and current.outbound_auth == "none":
+        principal_id = requester.pk if requester is not None else None
     principal = CustomUser.objects.filter(pk=principal_id).first()
     if (
         principal is None

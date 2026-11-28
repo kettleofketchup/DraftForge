@@ -1,23 +1,26 @@
 from typing import Any
+from uuid import UUID
 
 from django.core import signing
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
     permission_classes,
 )
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from org.api_connections.audit import audit_connection
+from org.api_connections.authority import denial_code
 from org.api_connections.config import (
     CONFIG_FIELDS,
     WRITE_ONLY_FIELDS,
@@ -28,6 +31,15 @@ from org.api_connections.lifecycle import (
     invalidate_work,
     issue_connection_key,
     revoke_connection_keys,
+)
+from org.api_connections.limits import (
+    MANUAL_ACTIONS_PER_MINUTE,
+    TEST_ACTIONS_PER_DAY,
+)
+from org.api_connections.orchestration import (
+    create_test_run,
+    enqueue_manual_pull,
+    run_row,
 )
 from org.api_connections.promotion_config import (
     PromotionStreamError,
@@ -60,12 +72,15 @@ from org.models import (
     OrgApiConnection,
     OrgApiMmrDelivery,
     OrgApiPromotionAdoption,
+    OrgApiSyncRun,
     OrgApiToken,
 )
 
 DELIVERY_PAGE_SIZE = 50
 DELIVERY_STATES = ("pending", "retry", "paused")
 DELIVERY_CURSOR_SALT = "org-api-connections.deliveries"
+RUN_PAGE_SIZE = 50
+RUN_CURSOR_SALT = "org-api-connections.runs"
 CONFLICT_CODES = frozenset(
     {
         "configuration_changed",
@@ -97,7 +112,7 @@ def _increment_budget(key: str, *, limit: int, timeout: int) -> None:
 
 def check_action_budget(org_id: int, actor_id: int, *, kind: str = "admin") -> None:
     bucket = int(timezone.now().timestamp()) // 60
-    limit = 30 if kind == "admin" else 5
+    limit = 30 if kind == "admin" else MANUAL_ACTIONS_PER_MINUTE
     namespace = "admin" if kind == "admin" else "manual"
     for scope in (f"org:{org_id}", f"actor:{actor_id}"):
         _increment_budget(
@@ -106,7 +121,7 @@ def check_action_budget(org_id: int, actor_id: int, *, kind: str = "admin") -> N
     if kind == "test":
         _increment_budget(
             f"org-api:test:{org_id}:{timezone.now().date().isoformat()}",
-            limit=100,
+            limit=TEST_ACTIONS_PER_DAY,
             timeout=172800,
         )
 
@@ -134,8 +149,6 @@ def _check_patch(connection: OrgApiConnection, patch: dict[str, Any]) -> None:
     raw = {field: getattr(connection, field) for field in CONFIG_FIELDS}
     raw.update({key: value for key, value in patch.items() if key in CONFIG_FIELDS})
     config = validate_connection_config(raw)
-    if patch.get("mmr_pull_enabled") is True:
-        raise ConnectionConfigError("direction_unavailable")
     if config.promotion_push_enabled and not connection.promotion_push_enabled:
         if (
             connection.pk is None
@@ -571,3 +584,115 @@ def connection_promotion_recovery(
         return Response({"released": released})
     except ConnectionConfigError as exc:
         return _error(exc)
+
+
+def _denied(exc: PermissionDenied) -> Response:
+    code = denial_code(exc)
+    return Response({"code": code, "detail": code}, status=403)
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_test(request: Request, org_id: int, connection_id: int) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    if type(request.data) is not dict or set(request.data) != {"direction"}:
+        return _invalid()
+    check_action_budget(org.pk, request.user.pk, kind="test")
+    try:
+        run = create_test_run(
+            connection, requester=request.user, direction=request.data["direction"]
+        )
+    except ConnectionConfigError as exc:
+        return _error(exc)
+    except PermissionDenied as exc:
+        return _denied(exc)
+    return Response({"run_id": str(run.pk), "state": run.state}, status=202)
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_pull(request: Request, org_id: int, connection_id: int) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    if type(request.data) is not dict or request.data:
+        return _invalid()
+    check_action_budget(org.pk, request.user.pk, kind="manual")
+    try:
+        run = enqueue_manual_pull(connection, requester=request.user)
+    except ConnectionConfigError as exc:
+        return _error(exc)
+    except PermissionDenied as exc:
+        return _denied(exc)
+    return Response(run_row(run, now=timezone.now()), status=202)
+
+
+def _not_found() -> Response:
+    return Response({"code": "not_found", "detail": "not_found"}, status=404)
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_runs(request: Request, org_id: int, connection_id: int) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    params = request.query_params
+    if set(params) - {"cursor"}:
+        return _invalid()
+    runs = OrgApiSyncRun.objects.filter(connection=connection)
+    if cursor := params.get("cursor"):
+        try:
+            position = signing.loads(cursor, salt=RUN_CURSOR_SALT)
+        except signing.BadSignature:
+            return _not_found()
+        if (
+            type(position) is not dict
+            or position.get("c") != connection.pk
+            or type(position.get("t")) is not str
+            or type(position.get("p")) is not str
+        ):
+            return _not_found()
+        created = parse_datetime(position["t"])
+        if created is None:
+            return _not_found()
+        runs = runs.filter(
+            Q(created_at__lt=created) | Q(created_at=created, pk__lt=position["p"])
+        )
+    page = list(runs.order_by("-created_at", "-pk")[: RUN_PAGE_SIZE + 1])
+    more = len(page) > RUN_PAGE_SIZE
+    page = page[:RUN_PAGE_SIZE]
+    now = timezone.now()
+    return Response(
+        {
+            "items": [run_row(run, now=now) for run in page],
+            "next_cursor": signing.dumps(
+                {
+                    "c": connection.pk,
+                    "t": page[-1].created_at.isoformat(),
+                    "p": str(page[-1].pk),
+                },
+                salt=RUN_CURSOR_SALT,
+            )
+            if more
+            else None,
+        }
+    )
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_run_detail(
+    request: Request, org_id: int, connection_id: int, run_id: UUID
+) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    if request.query_params:
+        return _invalid()
+    run = OrgApiSyncRun.objects.filter(connection=connection, pk=run_id).first()
+    if run is None:
+        return _not_found()
+    return Response(run_row(run, now=timezone.now(), detail=True))

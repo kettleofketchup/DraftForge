@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
@@ -148,3 +149,11 @@ class StepResult:
     state: str
     continuation: bool
     error_code: str | None = None
+    fence: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkClaim:
+    run_id: UUID
+    fence: UUID
+    kind: Literal["run", "mmr_delivery"] = "run"
