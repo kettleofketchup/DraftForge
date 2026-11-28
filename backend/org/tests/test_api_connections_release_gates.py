@@ -30,7 +30,6 @@ from org.tests.test_api_connections_push import (
 from org.tests.test_api_connections_wire import WIRE_FIXTURE
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-REPO_DIR = BACKEND_DIR.parent
 TOKEN = "release-gate-internal-token"
 KEY_RING_SETTING = "ORG_API_CREDENTIAL_KEYS"
 
