@@ -1,4 +1,5 @@
 import time
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
@@ -6,7 +7,7 @@ from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 
@@ -27,6 +28,7 @@ from org.api_connections.limits import (
     PAGE_BYTES,
     REQUEST_SECONDS,
     REQUESTS_PER_RUN,
+    RUN_SECONDS,
 )
 from org.api_connections.mapping import MappingError, map_page
 from org.api_connections.pagination import first_page
@@ -57,6 +59,7 @@ from org.api_connections.templates import TemplateError, render_request
 from org.api_connections.tls_adapter import SafeHttpError
 from org.api_connections.types import (
     ConnectionConfig,
+    MappedRow,
     MemberSnapshot,
     SafeHttpRequest,
     SnapshotMember,
@@ -86,6 +89,7 @@ PURGE_BATCH = 500
 PURGE_BATCHES = 20
 HEALTH_PATH = "/health"
 HEALTH_BYTES = 4096
+ABANDON_SECONDS = 6 * RUN_SECONDS
 TEST_DIRECTIONS = ("mmr_pull", "mmr_push", "promotion_push")
 TERMINAL_STATES = ("succeeded", "failed", "canceled")
 Kind = OrgApiSyncRun.Kind
@@ -208,8 +212,9 @@ def schedule_due_pulls(*, now: datetime, limit: int) -> int:
         ).update(next_due_at=following):
             continue
         try:
-            _check_per_member(connection, connection_config(connection))
-            create_pull_run(connection, requester=None, scheduled=True)
+            with transaction.atomic():
+                _check_per_member(connection, connection_config(connection))
+                create_pull_run(connection, requester=None, scheduled=True)
         except (PermissionDenied, ConnectionConfigError) as exc:
             code = (
                 exc.code
@@ -225,13 +230,57 @@ def schedule_due_pulls(*, now: datetime, limit: int) -> int:
                 error_code=code,
             )
             continue
+        except Exception:
+            log.exception(
+                "api_connection_schedule_failed",
+                system="org",
+                subsystem="api_connections",
+                org_id=connection.organization_id,
+                connection_id=connection.pk,
+            )
+            continue
         scheduled += 1
     return scheduled
 
 
+def abandon_stale_runs(*, now: datetime, limit: int = PURGE_BATCH) -> int:
+    cutoff = now - timedelta(seconds=ABANDON_SECONDS)
+    run_ids = list(
+        OrgApiSyncRun.objects.filter(state__in=ACTIVE_STATES, created_at__lt=cutoff)
+        .order_by("created_at")
+        .values_list("pk", flat=True)[:limit]
+    )
+    abandoned = 0
+    for run_id in run_ids:
+        fence = uuid4()
+        if not OrgApiSyncRun.objects.filter(pk=run_id, state__in=ACTIVE_STATES).update(
+            lease_token=fence,
+            lease_expires_at=timezone.now() + timedelta(seconds=LEASE_SECONDS),
+        ):
+            continue
+        if finish_run(run_id, fence, state=RunState.FAILED, error_code="run_abandoned"):
+            abandoned += 1
+    if abandoned:
+        log.warning(
+            "api_connection_runs_abandoned",
+            system="org",
+            subsystem="api_connections",
+            abandoned=abandoned,
+        )
+    return abandoned
+
+
 def claim_work(*, now: datetime, limit: int = 20) -> list[WorkClaim]:
+    abandon_stale_runs(now=now)
     if settings.ORG_API_SCHEDULED_PULLS:
-        schedule_due_pulls(now=now, limit=limit)
+        try:
+            schedule_due_pulls(now=now, limit=limit)
+        except Exception:
+            log.exception(
+                "api_connection_schedule_sweep_failed",
+                system="org",
+                subsystem="api_connections",
+            )
     claims: list[WorkClaim] = []
     run_ids = list(
         OrgApiSyncRun.objects.filter(state__in=ACTIVE_STATES)
@@ -344,7 +393,7 @@ def step_promotion(*, now: datetime | None = None) -> StepResult:
     return StepResult("dispatched", promotion_due(now=timezone.now()))
 
 
-def _expired_runs(now: datetime) -> Any:
+def _expired_runs(now: datetime) -> QuerySet[OrgApiSyncRun]:
     cutoff = now - timedelta(days=RETENTION_DAYS)
     return OrgApiSyncRun.objects.filter(state__in=TERMINAL_STATES).filter(
         Q(finished_at__lt=cutoff) | Q(finished_at__isnull=True, created_at__lt=cutoff)
@@ -375,12 +424,14 @@ def purge_expired_runs(
 
 def worker_status(run: OrgApiSyncRun, now: datetime) -> str | None:
     if (
-        run.state == RunState.QUEUED
-        and run.started_at is None
-        and now - run.created_at > timedelta(seconds=WORKER_UNAVAILABLE_SECONDS)
+        run.state != RunState.QUEUED
+        or run.started_at is not None
+        or now - run.created_at <= timedelta(seconds=WORKER_UNAVAILABLE_SECONDS)
     ):
-        return "worker_unavailable"
-    return None
+        return None
+    if run.lease_expires_at is not None and run.lease_expires_at > now:
+        return "waiting_for_capacity"
+    return "worker_unavailable"
 
 
 RUN_FIELDS = (
@@ -540,6 +591,8 @@ def _step_test(run_id: UUID, fence: UUID) -> StepResult:
 
 
 def _execute_test(run: OrgApiSyncRun, fence: UUID, direction: str) -> StepResult:
+    if timezone.now() - run.created_at > timedelta(seconds=RUN_SECONDS):
+        raise _Stop("run_deadline_exceeded")
     connection = _check_test(run, direction)
     try:
         config = connection_config(connection)
@@ -619,7 +672,7 @@ def _execute_test(run: OrgApiSyncRun, fence: UUID, direction: str) -> StepResult
 
 
 def _sample(
-    config: ConnectionConfig, members: list[SnapshotMember], rows: Any
+    config: ConnectionConfig, members: list[SnapshotMember], rows: Sequence[MappedRow]
 ) -> tuple[dict[str, int], list[dict[str, Any]]]:
     id_type = config.mmr_pull_config.mapping.player_id_type
     by_steam = {m.steam_account_id: m for m in members if m.steam_account_id}

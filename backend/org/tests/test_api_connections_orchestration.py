@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from django.core.cache import cache
 from django.core.management import call_command
+from django.db import OperationalError
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -18,12 +19,14 @@ from app.models import CustomUser
 from config import tasks_org_api_sync
 from org.api_connections import internal_views, orchestration
 from org.api_connections.crypto import seal_credential
-from org.api_connections.limits import REQUEST_SECONDS
+from org.api_connections.limits import REQUEST_SECONDS, RUN_SECONDS
 from org.api_connections.orchestration import (
+    ABANDON_SECONDS,
     CLIENT_TIMEOUT_SECONDS,
     STEP_SECONDS,
     claim_work,
     purge_expired_runs,
+    schedule_due_pulls,
     step_delivery,
     step_run,
 )
@@ -181,10 +184,52 @@ class TestRunTests(OrchestrationBase):
         self.assertEqual(remote.requests, [])
 
     def test_unknown_direction_and_body_rejected(self) -> None:
-        for body in ({"direction": "nope"}, {}, {"direction": "mmr_pull", "x": 1}):
+        cache.clear()
+        for body in (
+            {"direction": "nope"},
+            {"direction": ["mmr_pull"]},
+            {},
+            {"direction": "mmr_pull", "x": 1},
+            {"direction": "nope"},
+            {"direction": "nope"},
+        ):
             with self.subTest(body=body):
                 response = self.api.post(f"{self.base}test/", body, format="json")
                 self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.post_test().status_code, 202)
+
+    def test_busy_test_run_reports_waiting_and_ends_at_run_deadline(self) -> None:
+        self.disable_pull()
+        run = OrgApiSyncRun.objects.get(pk=self.post_test().data["run_id"])
+        claim = self.run_claim(run)
+        with patch.object(orchestration, "outbound_busy", return_value=2):
+            busy = step_run(run.pk, fence=claim.fence)
+        self.assertEqual((busy.continuation, busy.error_code), (True, "org_busy"))
+        OrgApiSyncRun.objects.filter(pk=run.pk).update(
+            created_at=timezone.now() - timedelta(seconds=150)
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.state, "queued")
+        self.assertIsNone(run.started_at)
+        self.assertEqual(
+            orchestration.worker_status(run, timezone.now()), "waiting_for_capacity"
+        )
+        OrgApiSyncRun.objects.filter(pk=run.pk).update(
+            created_at=timezone.now() - timedelta(seconds=RUN_SECONDS + 1)
+        )
+        assert busy.fence is not None
+        remote = FakeRemote([rows((1001, 4000))])
+        with patch.object(orchestration, "request_json", side_effect=remote):
+            done = step_run(run.pk, fence=busy.fence)
+        self.assertEqual(
+            (done.continuation, done.error_code), (False, "run_deadline_exceeded")
+        )
+        self.assertEqual(remote.requests, [])
+        run.refresh_from_db()
+        self.assertEqual(
+            (run.state, run.error_code), ("failed", "run_deadline_exceeded")
+        )
+        self.assertIsNone(orchestration.worker_status(run, timezone.now()))
 
     @override_settings(ORG_API_CREDENTIAL_KEYS=json.dumps([OLD_KEY]))
     def test_push_health_test_never_sends_fake_members(self) -> None:
@@ -642,6 +687,40 @@ class ScheduleTests(OrchestrationBase):
         self.assertEqual(OrgApiSyncRun.objects.count(), 1)
 
     @override_settings(ORG_API_SCHEDULED_PULLS=True)
+    def test_unexpected_schedule_error_skips_only_that_connection(self) -> None:
+        other = OrgApiConnection.objects.create(
+            organization=self.org,
+            name="Second pull",
+            enabled=True,
+            mmr_pull_enabled=True,
+            outbound_base_url=ORIGIN,
+            outbound_auth="none",
+            outbound_authorizer=self.admin,
+            game_type=int(GAME),
+            mmr_pull_config={"path": "/players"},
+            interval_minutes=15,
+            next_due_at=timezone.now() - timedelta(days=11),
+        )
+        real = orchestration.create_pull_run
+
+        def explode(connection: OrgApiConnection, **kwargs: Any) -> OrgApiSyncRun:
+            if connection.pk == other.pk:
+                raise OperationalError("database is locked")
+            return real(connection, **kwargs)
+
+        with patch.object(orchestration, "create_pull_run", side_effect=explode):
+            self.assertEqual(schedule_due_pulls(now=timezone.now(), limit=20), 1)
+        self.assertEqual(
+            list(OrgApiSyncRun.objects.values_list("connection_id", flat=True)),
+            [self.connection.pk],
+        )
+        with patch.object(
+            orchestration, "schedule_due_pulls", side_effect=OperationalError("x")
+        ):
+            claims = self.claim()
+        self.assertEqual(len(claims), 1)
+
+    @override_settings(ORG_API_SCHEDULED_PULLS=True)
     def test_scheduled_auth_none_pull_rechecks_authorizer(self) -> None:
         for loss in ("demote", "delete"):
             with self.subTest(loss=loss):
@@ -853,6 +932,21 @@ class RetentionTests(OrchestrationBase):
         self.assertFalse(OrgApiMmrPullTarget.objects.filter(run_id=run.pk).exists())
         self.assertTrue(OrgApiSyncRun.objects.filter(pk=recent.pk).exists())
         self.assertTrue(OrgApiSyncRun.objects.filter(pk=stale_active.pk).exists())
+        young = OrgApiSyncRun.objects.create(
+            organization=self.org,
+            connection=self.connection,
+            kind="mmr_pull",
+            created_at=timezone.now() - timedelta(seconds=ABANDON_SECONDS - 60),
+        )
+        claimed = {claim.run_id for claim in self.claim()}
+        stale_active.refresh_from_db()
+        self.assertEqual(
+            (stale_active.state, stale_active.error_code), ("failed", "run_abandoned")
+        )
+        self.assertIsNotNone(stale_active.finished_at)
+        self.assertNotIn(stale_active.pk, claimed)
+        self.assertIn(young.pk, claimed)
+        self.assertGreater(ABANDON_SECONDS, RUN_SECONDS)
         self.assertEqual(
             OrgLog.objects.filter(details__source="api_pull").count(), logs
         )

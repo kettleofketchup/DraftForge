@@ -2,6 +2,7 @@ import json
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.test import override_settings
 from django.utils import timezone
@@ -9,8 +10,10 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
+from common.game import GameType
 from org.api_connections import tls_adapter
 from org.api_connections.promotion_config import adopt_legacy_promotion
+from org.api_connections.push import acquire_delivery_lease
 from org.api_connections.tls_adapter import SafeHttpError
 from org.api_connections.types import SafeHttpRawResponse, SafeHttpRequest
 from org.contributions.queries import member_totals
@@ -20,6 +23,7 @@ from org.integration.receipts import canonical_receipt_hash, canonical_receipt_j
 from org.models import (
     ContributionEntry,
     OrgApiConnection,
+    OrgApiMmrDelivery,
     OrgApiPromotionEventBinding,
     OrgUser,
     PromoSend,
@@ -299,6 +303,67 @@ class ConnectionTransportTests(_PushBase):
         self.assertEqual(after.delivery_id, row.delivery_id)
         self.assertEqual(after.payload_hash, canonical_receipt_hash(row.payload))
         self.assertEqual(report.counts["applied"], 1)
+
+    def mmr_deliveries(
+        self, connection: OrgApiConnection, **fields: Any
+    ) -> list[OrgApiMmrDelivery]:
+        members = list(OrgUser.objects.filter(organization=self.org).order_by("pk"))
+        self.assertGreaterEqual(len(members), 2)
+        return [
+            OrgApiMmrDelivery.objects.create(
+                connection=connection,
+                org_user=member,
+                game_type=int(GameType.DOTA2),
+                revision=1,
+                payload={"org_id": self.org.pk},
+                config_version=connection.config_version,
+                destination_origin="https://adaptor.example:443",
+                **fields,
+            )
+            for member in members[:2]
+        ]
+
+    def test_promotion_lease_refused_while_org_at_outbound_cap(self) -> None:
+        send = self.send()
+        connection = self.adopt()
+        in_flight = self.mmr_deliveries(
+            connection,
+            state=OrgApiMmrDelivery.State.IN_FLIGHT,
+            lease_token=uuid4(),
+            lease_expires_at=timezone.now() + timedelta(minutes=1),
+        )
+        transport = FakeAdaptorTransport([(200, applied_body)])
+        report = self.dispatch(transport)
+        self.assertEqual(transport.requests, [])
+        self.assertEqual((report.leased, report.busy), (0, 1))
+        row = self.row(send)
+        self.assertEqual((row.state, row.attempts), (OutboxState.PENDING, 0))
+        OrgApiMmrDelivery.objects.filter(pk=in_flight[0].pk).update(
+            state=OrgApiMmrDelivery.State.APPLIED, lease_expires_at=None
+        )
+        report = self.dispatch(transport)
+        self.assertEqual(report.leased, 1)
+        self.assertEqual(self.row(send).state, OutboxState.APPLIED)
+
+    def test_in_flight_promotion_counts_toward_mmr_cap(self) -> None:
+        self.send()
+        connection = self.adopt()
+        pending = self.mmr_deliveries(connection)
+        leases: list[Any] = []
+
+        def respond(request: SafeHttpRequest) -> dict[str, Any]:
+            leases.extend(
+                acquire_delivery_lease(delivery.delivery_id) for delivery in pending
+            )
+            return applied_body(request)
+
+        self.dispatch(FakeAdaptorTransport([(200, respond)]))
+        self.assertIsNotNone(leases[0])
+        self.assertIsNone(leases[1])
+        states = sorted(OrgApiMmrDelivery.objects.values_list("state", flat=True))
+        self.assertEqual(
+            states, [OrgApiMmrDelivery.State.IN_FLIGHT, OrgApiMmrDelivery.State.PENDING]
+        )
 
     def test_echo_before_connection_ack_settles_once(self) -> None:
         send = self.send()

@@ -34,7 +34,9 @@ the deployment transport only while its org and event are bound in
 only to the stream connection while it and its promotion push are enabled,
 and are recorded with that connection when leased; otherwise they stay
 pending (``held``). A row sent before its event binding became effective
-moves to ``backlog_held`` until an org admin releases it.
+moves to ``backlog_held`` until an org admin releases it. A connection row
+also stays pending (``busy``) while the org already has its cap of outbound
+requests in flight, counted under the same org lock the MMR paths take.
 
 An ``applied`` answer is recorded under the org and event locks together with
 reclassifying an already imported external copy of the send as its echo, so
@@ -62,11 +64,13 @@ from django.utils import timezone
 from config.promotion_sync import PromotionAdaptorConfig
 from events.models import Event
 from org.api_connections.crypto import CredentialError, canonical_origin
+from org.api_connections.limits import OUTBOUND_REQUESTS_PER_ORG
 from org.api_connections.promotion_config import (
     adopted_org_ids,
     env_dispatch_bindings,
     resolve_promotion_config,
 )
+from org.api_connections.runs import outbound_busy
 from org.integration import points
 from org.integration.adaptor_client import (
     ConnectionReceiptClient,
@@ -162,6 +166,7 @@ class DispatchReport:
     discarded: int = 0
     skipped_unbound: int = 0
     held: int = 0
+    busy: int = 0
     counts: Counter[str] = field(default_factory=Counter)
     reasons: Counter[str] = field(default_factory=Counter)
 
@@ -175,6 +180,7 @@ class DispatchReport:
             "discarded": self.discarded,
             "skipped_unbound": self.skipped_unbound,
             "held": self.held,
+            "busy": self.busy,
             "counts": dict(sorted(self.counts.items())),
             "reasons": dict(sorted(self.reasons.items())),
         }
@@ -306,6 +312,11 @@ def _claim(
             if moved:
                 _log_finished(row, row.attempts, OutboxState.BACKLOG_HELD, "")
             return None, OutboxState.BACKLOG_HELD if moved else "changed"
+        if (
+            route.connection_id is not None
+            and outbound_busy(row.organization_id, now) >= OUTBOUND_REQUESTS_PER_ORG
+        ):
+            return None, "busy"
         token = uuid.uuid4()
         extra: dict[str, Any] = {}
         if route.connection_id is not None:
@@ -571,6 +582,8 @@ def dispatch_due(
         if lease is None:
             if status == "held":
                 report.held += 1
+            elif status == "busy":
+                report.busy += 1
             elif status == OutboxState.BACKLOG_HELD:
                 report.counts[status] += 1
             continue
@@ -613,6 +626,7 @@ def dispatch_due(
         discarded=report.discarded,
         skipped_unbound=report.skipped_unbound,
         held=report.held,
+        busy=report.busy,
         counts=dict(report.counts),
     )
     return report

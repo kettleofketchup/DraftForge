@@ -37,6 +37,7 @@ from org.api_connections.limits import (
     TEST_ACTIONS_PER_DAY,
 )
 from org.api_connections.orchestration import (
+    TEST_DIRECTIONS,
     create_test_run,
     enqueue_manual_pull,
     run_row,
@@ -597,7 +598,11 @@ def _denied(exc: PermissionDenied) -> Response:
 def connection_test(request: Request, org_id: int, connection_id: int) -> Response:
     org = _org(request, org_id)
     connection = _connection(org, connection_id)
-    if type(request.data) is not dict or set(request.data) != {"direction"}:
+    if (
+        type(request.data) is not dict
+        or set(request.data) != {"direction"}
+        or request.data["direction"] not in TEST_DIRECTIONS
+    ):
         return _invalid()
     check_action_budget(org.pk, request.user.pk, kind="test")
     try:
