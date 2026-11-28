@@ -43,6 +43,8 @@ export interface OverrideWarningDialogProps {
   defaultReason?: string;
   minReasonLength?: number;
   reasonLabel?: string;
+  subject?: string;
+  resetKey?: number;
 }
 
 export function orgStaffPlacementPath(organizationId: number): string {
@@ -69,6 +71,8 @@ export function OverrideWarningDialog({
   defaultReason = '',
   minReasonLength = 1,
   reasonLabel = 'Reason',
+  subject,
+  resetKey,
 }: OverrideWarningDialogProps) {
   const isOrgAdmin = useIsOrganizationAdmin(organization);
   const schema = useMemo(
@@ -82,7 +86,7 @@ export function OverrideWarningDialog({
 
   useEffect(() => {
     form.reset({ reason: open ? defaultReason : '' });
-  }, [open, defaultReason, form]);
+  }, [open, defaultReason, resetKey, form]);
 
   const blocked = override?.blocked ?? false;
   const violations = override?.violations ?? [];
@@ -99,7 +103,13 @@ export function OverrideWarningDialog({
       >
         <DialogHeader>
           <DialogTitle>
-            {blocked ? 'Override blocked' : 'Override rules?'}
+            {subject
+              ? blocked
+                ? `Override blocked: ${subject}`
+                : `Override rules for ${subject}?`
+              : blocked
+                ? 'Override blocked'
+                : 'Override rules?'}
           </DialogTitle>
           <DialogDescription>
             {blocked

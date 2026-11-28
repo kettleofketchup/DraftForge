@@ -12,12 +12,15 @@ import type {
   ReadyCheckFields,
   RollCallMode,
   SignupOpenMode,
+  StaffReasonPolicy,
   StartMentionScope,
 } from '~/components/events/schemas';
 import {
   discordEventStateSchema,
+  eligibilityReasonSchema,
   eventListItemSchema,
   eventResponseSchema,
+  eventSignupSchema,
   type DiscordEventState,
 } from '~/components/events/schemas';
 import {
@@ -175,63 +178,163 @@ export async function getEventSignups(
   return data;
 }
 
-export async function approveSignup(
-  signupId: number,
-  mmr?: number,
-): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
-    `/events/signups/${signupId}/approve/`,
-    mmr != null ? { mmr } : undefined,
-  );
-  return data;
+export interface VoidWithdrawalBody {
+  reason?: string;
+  acknowledged_codes?: string[];
 }
 
-export async function rejectSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
-    `/events/signups/${signupId}/reject/`,
+function reasonPayload(reason?: string): { reason: string } | undefined {
+  const trimmed = reason?.trim();
+  return trimmed ? { reason: trimmed } : undefined;
+}
+
+export async function approveSignup(
+  signupId: number,
+  opts?: { mmr?: number; reason?: string },
+): Promise<EventSignupType> {
+  const body = {
+    ...(opts?.mmr != null ? { mmr: opts.mmr } : {}),
+    ...reasonPayload(opts?.reason),
+  };
+  const { data } = await axios.post(
+    `/events/signups/${signupId}/approve/`,
+    Object.keys(body).length ? body : undefined,
   );
-  return data;
+  return eventSignupSchema.parse(data);
+}
+
+export async function rejectSignup(
+  signupId: number,
+  reason?: string,
+): Promise<EventSignupType> {
+  const { data } = await axios.post(
+    `/events/signups/${signupId}/reject/`,
+    reasonPayload(reason),
+  );
+  return eventSignupSchema.parse(data);
 }
 
 export async function confirmSignup(
   signupId: number,
+  reason?: string,
 ): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
+  const { data } = await axios.post(
     `/events/signups/${signupId}/confirm/`,
+    reasonPayload(reason),
   );
-  return data;
+  return eventSignupSchema.parse(data);
 }
 
-export async function cancelSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
+export async function cancelSignup(
+  signupId: number,
+  reason?: string,
+): Promise<EventSignupType> {
+  const { data } = await axios.post(
     `/events/signups/${signupId}/cancel_signup/`,
+    reasonPayload(reason),
   );
-  return data;
+  return eventSignupSchema.parse(data);
 }
 
 export async function unconfirmSignup(
   signupId: number,
+  reason?: string,
 ): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
+  const { data } = await axios.post(
     `/events/signups/${signupId}/unconfirm/`,
+    reasonPayload(reason),
   );
-  return data;
+  return eventSignupSchema.parse(data);
 }
 
-export async function demoteSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
+export async function demoteSignup(
+  signupId: number,
+  reason?: string,
+): Promise<EventSignupType> {
+  const { data } = await axios.post(
     `/events/signups/${signupId}/demote/`,
+    reasonPayload(reason),
   );
-  return data;
+  return eventSignupSchema.parse(data);
+}
+
+function acknowledgedPayload(
+  codes: string[] = [],
+): { acknowledged_codes: string[] } | undefined {
+  return codes.length ? { acknowledged_codes: codes } : undefined;
 }
 
 export async function reinstateSignup(
   signupId: number,
+  reason?: string,
+  acknowledgedCodes: string[] = [],
 ): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
+  const body = {
+    ...reasonPayload(reason),
+    ...acknowledgedPayload(acknowledgedCodes),
+  };
+  const { data } = await axios.post(
     `/events/signups/${signupId}/reinstate/`,
+    Object.keys(body).length ? body : undefined,
   );
-  return data;
+  return eventSignupSchema.parse(data);
+}
+
+export async function voidWithdrawal(
+  signupId: number,
+  { reason, acknowledged_codes }: VoidWithdrawalBody = {},
+): Promise<EventSignupType> {
+  const { data } = await axios.post(
+    `/events/signups/${signupId}/void-withdrawal/`,
+    { ...reasonPayload(reason), ...acknowledgedPayload(acknowledged_codes) },
+  );
+  return eventSignupSchema.parse(data);
+}
+
+export const spotTransferResponseSchema = z.object({
+  mode: z.enum(['transfer', 'swap']),
+  correlation_id: z.string(),
+  giver: eventSignupSchema,
+  recipient: eventSignupSchema,
+});
+export type SpotTransferResponse = z.infer<typeof spotTransferResponseSchema>;
+
+export interface SpotTransferBody {
+  recipient_user_id: number;
+  reason?: string;
+  acknowledged_codes?: string[];
+}
+
+export async function transferSpot(
+  signupId: number,
+  { recipient_user_id, reason, acknowledged_codes }: SpotTransferBody,
+): Promise<SpotTransferResponse> {
+  const { data } = await axios.post(`/events/signups/${signupId}/transfer/`, {
+    recipient_user_id,
+    ...reasonPayload(reason),
+    ...acknowledgedPayload(acknowledged_codes),
+  });
+  return spotTransferResponseSchema.parse(data);
+}
+
+// backend/events/services.py _member_safe_reasons: the eligibility reason
+// shape, with the recipient's own profile params redacted.
+export const spotTransferReasonSchema = eligibilityReasonSchema;
+export type SpotTransferReason = z.infer<typeof spotTransferReasonSchema>;
+
+const spotTransferRefusalSchema = z.object({
+  code: z.string(),
+  error: z.string(),
+  reasons: z.array(spotTransferReasonSchema).default([]),
+});
+export type SpotTransferRefusal = z.infer<typeof spotTransferRefusalSchema>;
+
+export function getSpotTransferRefusal(
+  err: unknown,
+): SpotTransferRefusal | null {
+  if (!isAxiosError(err) || err.response?.status !== 400) return null;
+  const parsed = spotTransferRefusalSchema.safeParse(err.response.data);
+  return parsed.success ? parsed.data : null;
 }
 
 // --- EventRepeater ---
@@ -275,6 +378,10 @@ export interface EventRepeaterType extends ReadyCheckSettings {
   signup_deadline_hours: number | null;
   allow_team_signups: boolean;
   allow_user_signups: boolean;
+  line_withdraw_forfeits: boolean;
+  line_switch_restamps: boolean;
+  staff_reason_policy: StaffReasonPolicy;
+  allow_spot_transfer: boolean;
   auto_approve: boolean;
   auto_confirm: boolean;
   require_mmr_verified: boolean;
@@ -425,6 +532,10 @@ export interface OrgEventDefaultsType extends ReadyCheckSettings {
   signup_deadline_hours: number | null;
   allow_team_signups: boolean;
   allow_user_signups: boolean;
+  line_withdraw_forfeits: boolean;
+  line_switch_restamps: boolean;
+  staff_reason_policy: StaffReasonPolicy;
+  allow_spot_transfer: boolean;
   auto_approve: boolean;
   auto_confirm: boolean;
   require_mmr_verified: boolean;
@@ -517,12 +628,13 @@ const discordRolesResponseSchema = z.object({
 export async function adminAddSignup(
   eventId: number,
   userId: number,
+  reason?: string,
 ): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(
-    `/events/${eventId}/admin-signup/`,
-    { user_id: userId },
-  );
-  return data;
+  const { data } = await axios.post(`/events/${eventId}/admin-signup/`, {
+    user_id: userId,
+    ...reasonPayload(reason),
+  });
+  return eventSignupSchema.parse(data);
 }
 
 /** A one-off event body. A random lobby password mode sends no password. */

@@ -64,6 +64,10 @@ const stateConfig: Record<string, { label: string; className: string }> = {
   },
 };
 
+export function signupStatusLabel(status: string): string {
+  return stateConfig[status]?.label ?? status;
+}
+
 export function EventStateBadge({
   state,
   className,

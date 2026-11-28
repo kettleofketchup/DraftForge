@@ -1,5 +1,5 @@
 import type { EventSignupType } from './schemas';
-import { EventState, SignupStatus } from './schemas';
+import { SignupStatus } from './schemas';
 
 export const SIGNUP_ACTIONS = [
   'approve',
@@ -9,6 +9,8 @@ export const SIGNUP_ACTIONS = [
   'unconfirm',
   'demote',
   'reinstate',
+  'void_withdrawal',
+  'transfer',
 ] as const;
 
 export type SignupAction = (typeof SIGNUP_ACTIONS)[number];
@@ -20,8 +22,8 @@ export interface PendingSignupAction {
 
 /**
  * The status the server will give a signup after `action`, or null when it
- * depends on server-side state (reinstate outside roll call can land on
- * approved, pending or waitlisted).
+ * depends on server-side state (reinstate and void_withdrawal can restore
+ * any held status, or land on the back of the waitlist; transfer may swap).
  */
 export function optimisticSignupStatus(
   action: SignupAction,
@@ -40,7 +42,9 @@ export function optimisticSignupStatus(
     case 'demote':
       return SignupStatus.WAITLISTED;
     case 'reinstate':
-      return eventState === EventState.ROLL_CALL ? SignupStatus.APPROVED : null;
+    case 'void_withdrawal':
+    case 'transfer':
+      return null;
   }
 }
 
@@ -48,7 +52,7 @@ export function isSignupAction(value: unknown): value is SignupAction {
   return (SIGNUP_ACTIONS as readonly unknown[]).includes(value);
 }
 
-/** Mutation variables are either a signup id or `{ id, mmr }` (approve). */
+/** Signup id from mutation variables; null for `{ userId }` (admin add). */
 export function signupIdOf(variables: unknown): number | null {
   if (typeof variables === 'number') return variables;
   if (
@@ -94,4 +98,13 @@ export function replaceSignup(
   const next = signups.slice();
   next[idx] = updated;
   return next;
+}
+
+/** Like `replaceSignup`, but appends a row the list does not have yet. */
+export function upsertSignup(
+  signups: EventSignupType[],
+  row: EventSignupType,
+): EventSignupType[] {
+  const next = replaceSignup(signups, row);
+  return next === signups ? [...signups, row] : next;
 }

@@ -6,9 +6,9 @@ from django.utils import timezone as tz
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
-from events.constants import Commitment, EventState, SignupStatus
+from events.constants import Commitment, EventState, SignupAction, SignupStatus
 from events.exceptions import ImmutableFieldError
-from events.models import Event, EventSignup
+from events.models import Event, EventSignup, SignupLedgerEntry
 from events.services import (
     cancel_signup,
     create_tentative_signup,
@@ -99,8 +99,7 @@ class SignupLineStampingTests(TestCase):
         first_commitment: str,
     ) -> None:
         new.refresh_from_db()
-        self.assertNotEqual(new.pk, old_pk)
-        self.assertFalse(EventSignup.objects.filter(pk=old_pk).exists())
+        self.assertEqual(new.pk, old_pk)
         self.assertEqual(new.first_signed_up_at, past)
         self.assertEqual(new.first_commitment, first_commitment)
         self.assertGreater(new.line_seq, later.line_seq)
@@ -165,11 +164,19 @@ class SignupLineStampingTests(TestCase):
         with self.assertRaises(ImmutableFieldError):
             declined.save()
 
+    def _cancelled_tentative_without_history(self, event: Event) -> EventSignup:
+        return EventSignup.objects.create(
+            event=event,
+            user=self.users[0],
+            status=SignupStatus.CANCELLED,
+            commitment=Commitment.MAYBE,
+            first_signed_up_at=tz.now(),
+            first_commitment=Commitment.MAYBE,
+        )
+
     def test_reinstated_tentative_is_main(self) -> None:
         event = self._event()
-        signup = create_tentative_signup(event, self.users[0], actor=SYSTEM)
-        cancel_signup(signup, actor=SYSTEM)
-        signup.refresh_from_db()
+        signup = self._cancelled_tentative_without_history(event)
         reinstate_signup(signup, actor=SYSTEM)
         signup.refresh_from_db()
         self.assertEqual(signup.status, SignupStatus.RSVP)
@@ -178,14 +185,28 @@ class SignupLineStampingTests(TestCase):
 
     def test_reinstated_tentative_in_roll_call_is_main(self) -> None:
         event = self._event()
-        signup = create_tentative_signup(event, self.users[0], actor=SYSTEM)
-        cancel_signup(signup, actor=SYSTEM)
+        signup = self._cancelled_tentative_without_history(event)
         Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
         signup = EventSignup.objects.nocache().get(pk=signup.pk)
         reinstate_signup(signup, actor=SYSTEM)
         signup.refresh_from_db()
         self.assertEqual(signup.status, SignupStatus.APPROVED)
         self.assertEqual(signup.commitment, Commitment.MAIN)
+
+    def test_reinstated_tentative_with_history_is_restored(self) -> None:
+        for state in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
+            with self.subTest(state=state):
+                event = self._event()
+                signup = create_tentative_signup(event, self.users[0], actor=SYSTEM)
+                seq = signup.line_seq
+                cancel_signup(signup, actor=SYSTEM)
+                Event.objects.filter(pk=event.pk).update(state=state)
+                signup = EventSignup.objects.nocache().get(pk=signup.pk)
+                reinstate_signup(signup, actor=SYSTEM)
+                signup.refresh_from_db()
+                self.assertEqual(signup.status, SignupStatus.TENTATIVE)
+                self.assertEqual(signup.commitment, Commitment.MAYBE)
+                self.assertEqual(signup.line_seq, seq)
 
     def test_reject_to_rsvp_carries_first_fields(self) -> None:
         event = self._event()
@@ -212,18 +233,16 @@ class SignupLineStampingTests(TestCase):
             .values_list("pk", flat=True)
         )
 
-    def test_demote_diverges_line_from_waitlist_order(self) -> None:
-        """Pins current behaviour: demote sets waitlist_position only, not line_seq."""
+    def test_demote_converges_line_with_waitlist_order(self) -> None:
         event = self._event(max_players=3)
         a, _b, _c = (process_rsvp(event, u, actor=SYSTEM) for u in self.users[:3])
         d = process_rsvp(event, self.users[3], actor=SYSTEM)
         self.assertEqual(d.status, SignupStatus.WAITLISTED)
         demote_to_waitlist(a, actor=SYSTEM)
-        self.assertEqual(self._list_order(event), [a.pk, d.pk])
+        self.assertEqual(self._list_order(event), [d.pk, a.pk])
         self.assertEqual(self._waitlist_order(event), [d.pk, a.pk])
 
-    def test_reinstate_to_waitlist_diverges_line_from_waitlist_order(self) -> None:
-        """Pins current behaviour: reinstate onto the waitlist keeps the old line_seq."""
+    def test_reinstate_to_waitlist_converges_line_with_waitlist_order(self) -> None:
         event = self._event(max_players=3)
         a = process_rsvp(event, self.users[0], actor=SYSTEM)
         process_rsvp(event, self.users[1], actor=SYSTEM)
@@ -236,6 +255,9 @@ class SignupLineStampingTests(TestCase):
         reinstate_signup(a, actor=SYSTEM)
         a.refresh_from_db()
         self.assertEqual(a.status, SignupStatus.WAITLISTED)
-        self.assertEqual(a.line_seq, 1)
-        self.assertEqual(self._list_order(event), [a.pk, e.pk])
+        self.assertGreater(a.line_seq, e.line_seq)
+        entry = SignupLedgerEntry.objects.filter(signup=a).latest("pk")
+        self.assertEqual(entry.action, SignupAction.REINSTATED)
+        self.assertEqual(entry.rules_overridden, [])
+        self.assertEqual(self._list_order(event), [e.pk, a.pk])
         self.assertEqual(self._waitlist_order(event), [e.pk, a.pk])

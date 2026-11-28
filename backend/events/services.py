@@ -1,9 +1,12 @@
 import calendar
 import datetime
 import re
+import sys
 from collections.abc import Collection, Sequence
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.models import AnonymousUser
@@ -17,7 +20,12 @@ from discordbot.models import DiscordEvent, DiscordMessageLog
 from discordbot.signup_delivery import clear_signup_success_gates
 from draft.services.team import apply_draft_options
 from events.admission import NOT_ACCEPTING_MESSAGE, ensure_self_serve
-from events.capacity import has_free_seat, lock_event, seat_holding_statuses
+from events.capacity import (
+    count_seats,
+    has_free_seat,
+    lock_event,
+    seat_holding_statuses,
+)
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
@@ -41,6 +49,8 @@ from events.discord import (
 from events.discord.gates import repeater_generates
 from events.eligibility import (
     EligibilityResult,
+    ReasonCode,
+    Severity,
     claim_friend_id,
     clear_eligibility,
     eligibility_values,
@@ -49,7 +59,24 @@ from events.eligibility import (
     stamp_eligibility,
     validate_friend_id,
 )
-from events.ledger import SignupActor, record_signup_change, snapshot
+from events.exceptions import SpotTransferRefused
+from events.ledger import (
+    SignupActor,
+    latest_restorable_withdrawal,
+    record_signup_change,
+    require_staff_reason,
+    snapshot,
+)
+from events.line import (
+    forfeits_on_withdraw,
+    restamp_to_back,
+    restamps_on_switch,
+    restore_place,
+    same_gate_distance,
+    start_first_fields,
+    swap_places,
+    waitlist_rank,
+)
 from events.models import (
     DiscordEventConfigMixin,
     DiscordTournamentConfigMixin,
@@ -63,16 +90,25 @@ from events.models import (
     SignupLedgerEntry,
     TournamentTemplateMixin,
 )
+from events.overrides import (
+    OverrideRequired,
+    Violation,
+    check_overrides,
+    org_override_settings,
+)
 from events.ready_check_constants import (
     DROPPED_SIGNUP_MESSAGE,
     REMOVED_SIGNUP_STATUSES,
     ReadyCheckEntryState,
+    ReadyCheckPhase,
 )
 from events.ready_check_core import (
     cancel_ready_check,
+    check_scope,
     enrol_signup_if_live,
     live_ready_check,
     ready_check_promotion_status,
+    scope_statuses,
 )
 from events.reopen import ReopenNotPermitted, reopen_event
 from events.roster import (
@@ -132,16 +168,6 @@ def check_requirements(event: Event, user: CustomUser) -> bool:
     return evaluate_signup(event, user, for_staff_placement=True).clean
 
 
-def _first_fields_carry(existing: EventSignup | None) -> dict[str, Any]:
-    if existing is None:
-        return {}
-    return {
-        "first_signed_up_at": existing.first_signed_up_at,
-        "first_commitment": existing.first_commitment,
-        "first_rsvp_class": existing.first_rsvp_class,
-    }
-
-
 def _decide_signup_status(event: Event, result: EligibilityResult) -> SignupStatus:
     """Status for a signup taking a seat. Auto-approve events approve (or
     confirm) eligible players and hold the rest for staff; manual-approval
@@ -199,33 +225,14 @@ def _create_action(
     return SignupAction.SIGNED_UP
 
 
-@transaction.atomic
-def _create_signup(
-    event: Event,
-    user: CustomUser,
-    event_team: EventTeam | None = None,
-    *,
-    actor: SignupActor,
-    for_staff_placement: bool = False,
-    reason: str = "",
-) -> EventSignup:
-    """Internal: create a signup with no state check.
-
-    Handles existing-signup detection, waitlist placement, auto-approve / auto-confirm,
-    tournament addition, and notify hooks. State authorization is the caller's job.
-
-    INVARIANT: invalidate_after_commit MUST be registered before any transaction.on_commit
-    notify hook. Notify handlers may re-query, and reading through a stale cache would
-    re-warm it with stale data.
-    """
+def _existing_signup_or_refuse(event: Event, user: CustomUser) -> EventSignup | None:
+    """The user's returnable signup on the event, or None; raise if it can't return."""
     existing = (
         EventSignup.objects.nocache()
         .select_related("user__base_profile")
         .filter(event=event, user=user)
         .first()
     )
-    carry = _first_fields_carry(existing)
-    before: SignupSnapshot | None = None
     if existing:
         logger.info(
             "signup_existing_found",
@@ -236,88 +243,113 @@ def _create_signup(
             status=existing.status,
             signup_id=existing.id,
         )
-        if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            before = snapshot(existing)
-            existing.delete()
-            logger.info(
-                "signup_cancelled_deleted",
-                system="events",
-                subsystem="services",
-                user_id=user.pk,
-                event_id=event.pk,
-            )
-        elif existing.status == SignupStatus.TENTATIVE:
-            before = snapshot(existing)
-            existing.delete()
-            logger.info(
-                "signup_tentative_upgraded",
-                system="events",
-                subsystem="services",
-                user_id=user.pk,
-                event_id=event.pk,
-            )
-        elif existing.status == SignupStatus.DROPPED:
+        if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
-        else:
+        if existing.status not in _RETURNABLE_STATUSES:
             raise ValueError("User has already signed up for this event.")
+    return existing
 
+
+@transaction.atomic
+def _create_signup(
+    event: Event,
+    user: CustomUser,
+    event_team: EventTeam | None = None,
+    *,
+    actor: SignupActor,
+    for_staff_placement: bool = False,
+    reason: str = "",
+) -> EventSignup:
+    """Internal: create a signup, or bring the user's CANCELLED, REJECTED or
+    TENTATIVE row back in place, with no state check.
+
+    Handles waitlist placement, auto-approve / auto-confirm, the line rules,
+    tournament addition, and notify hooks. State authorization is the caller's job.
+
+    INVARIANT: invalidate_after_commit MUST be registered before any transaction.on_commit
+    notify hook. Notify handlers may re-query, and reading through a stale cache would
+    re-warm it with stale data.
+    """
+    existing = _existing_signup_or_refuse(event, user)
     action = _create_action(existing, for_staff_placement=for_staff_placement)
     signup_type = SignupType.TEAM if event_team else SignupType.USER
     result = evaluate_signup(event, user, for_staff_placement=for_staff_placement)
     eligibility = eligibility_values(result)
 
     locked = lock_event(event)
-    if not has_free_seat(locked):
-        max_pos = (
-            EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
-            .order_by("-waitlist_position")
-            .values_list("waitlist_position", flat=True)
-            .first()
-        ) or 0
+    waitlisted = not has_free_seat(locked)
+    status = (
+        SignupStatus.WAITLISTED if waitlisted else _decide_signup_status(event, result)
+    )
+    waitlist_position = _next_waitlist_position(locked) if waitlisted else None
+    before: SignupSnapshot | None = None
+    if existing is None:
         signup = EventSignup.objects.create(
             event=event,
             user=user,
             event_team=event_team,
             signup_type=signup_type,
-            status=SignupStatus.WAITLISTED,
-            waitlist_position=max_pos + 1,
+            status=status,
+            waitlist_position=waitlist_position,
             self_made=not for_staff_placement,
             **eligibility,
-            **carry,
         )
-        _record_leaf(
-            signup,
-            event=locked,
-            actor=actor,
-            action=action,
-            before=before,
-            reason=reason,
+    else:
+        before = _ranked_snapshot(existing)
+        prior_status = existing.status
+        restamp = _return_restamp_reason(
+            existing, locked, for_staff_placement=for_staff_placement
         )
-        invalidate_after_commit(event)
-        log.info(
-            "signup_post_commit_hooks_scheduled",
-            system="events",
-            subsystem="services",
-            signup_id=signup.pk,
-            event_id=event.pk,
-        )
-        transaction.on_commit(lambda: notify_signup_changed(event))
-        return signup
+        existing.event = locked
+        existing.status = status
+        existing.commitment = Commitment.MAIN
+        existing.event_team = event_team
+        existing.signup_type = signup_type
+        existing.self_made = not for_staff_placement
+        existing.waitlist_position = waitlist_position
+        for name, value in eligibility.items():
+            setattr(existing, name, value)
+        fields = [
+            "status",
+            "commitment",
+            "event_team",
+            "signup_type",
+            "self_made",
+            "waitlist_position",
+            *eligibility,
+            "updated_at",
+        ]
+        if restamp is not None:
+            fields += restamp_to_back(existing, reason=restamp)
+            if existing.first_signed_up_at is None:
+                fields += start_first_fields(existing)
+        existing.save(update_fields=fields)
+        signup = existing
+        context: dict[str, Any] = {
+            "system": "events",
+            "subsystem": "services",
+            "signup_id": signup.pk,
+            "user_id": user.pk,
+            "event_id": event.pk,
+            "prior_status": prior_status,
+            "status": status,
+            "restamp_reason": restamp,
+        }
+        if prior_status == SignupStatus.TENTATIVE:
+            logger.info("signup_switched_to_main_in_place", **context)
+        else:
+            logger.info("signup_resigned_up_in_place", **context)
 
-    status = _decide_signup_status(event, result)
-    signup = EventSignup.objects.create(
-        event=event,
-        user=user,
-        event_team=event_team,
-        signup_type=signup_type,
-        status=status,
-        self_made=not for_staff_placement,
-        **eligibility,
-        **carry,
-    )
-    _roster_add_if_joins(signup)
+    if not waitlisted:
+        _roster_add_if_joins(signup)
     _record_leaf(
-        signup, event=locked, actor=actor, action=action, before=before, reason=reason
+        signup,
+        event=locked,
+        actor=actor,
+        action=action,
+        before=before,
+        after=_ranked_snapshot(signup),
+        reason=reason,
     )
     invalidate_after_commit(event)
     log.info(
@@ -331,6 +363,33 @@ def _create_signup(
     if status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
         transaction.on_commit(lambda: notify_mark_interested(event, user.pk))
     return signup
+
+
+_RETURNABLE_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.CANCELLED, SignupStatus.REJECTED, SignupStatus.TENTATIVE}
+)
+
+
+def _return_restamp_reason(
+    signup: EventSignup, event: Event, *, for_staff_placement: bool
+) -> str | None:
+    """Why a returning row goes to the back of the line, or None to keep its place."""
+    if for_staff_placement:
+        return "staff_add"
+    if signup.first_signed_up_at is None:
+        return "bare_decline"
+    if signup.status == SignupStatus.TENTATIVE:
+        return "switch" if restamps_on_switch(event) else None
+    return "resign_up" if forfeits_on_withdraw(event) else None
+
+
+def _next_waitlist_position(event: Event) -> int:
+    max_pos = (
+        EventSignup.objects.nocache()
+        .filter(event=event, status=SignupStatus.WAITLISTED)
+        .aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
+    )
+    return (max_pos or 0) + 1
 
 
 @transaction.atomic
@@ -372,7 +431,7 @@ def process_rsvp(
 def create_tentative_signup(
     event: Event, user: CustomUser, *, actor: SignupActor
 ) -> EventSignup:
-    """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
+    """Mark the user Maybe (TENTATIVE), in place on any existing row.
 
     Funnel point for both the DRF action and the Discord tentative button.
 
@@ -380,50 +439,109 @@ def create_tentative_signup(
       - Self-serve admission applies (events.admission).
       - If existing TENTATIVE signup -> raise ValueError (already tentative).
       - If existing DROPPED signup -> raise ValueError; the row is kept.
-      - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
-        -> withdraw it, delete the row, then create a fresh TENTATIVE.
-      - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
+      - If existing seat-holding or WAITLISTED row -> switch it to Maybe in
+        place; a freed seat promotes from the waitlist.
+      - If existing CANCELLED/REJECTED row -> bring it back as Maybe in place.
       - Records one ledger entry and dispatches notify_signup_changed once.
     """
     event = _reread_event(event)
     ensure_self_serve(event, user, intent=Commitment.MAYBE)
 
+    locked = lock_event(event)
     existing = (
         EventSignup.objects.nocache()
         .select_related("user__base_profile")
         .filter(event=event, user=user)
         .first()
     )
-    carry = _first_fields_carry(existing)
+    action = _create_action(existing, for_staff_placement=False)
     before: SignupSnapshot | None = None
     prior_status: str | None = None
-    action = _create_action(existing, for_staff_placement=False)
-    if existing:
+    if existing is None:
+        signup = EventSignup.objects.create(
+            event=event,
+            user=user,
+            status=SignupStatus.TENTATIVE,
+            self_made=True,
+        )
+    else:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
         if existing.status == SignupStatus.DROPPED:
             raise ValueError(DROPPED_SIGNUP_MESSAGE)
-        before = snapshot(existing)
-        if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            prior_status = _withdraw(existing, by_member=_by_member(actor))
+        before = _ranked_snapshot(existing)
+        prior_status = existing.status
+        withdrawing = prior_status not in REMOVED_SIGNUP_STATUSES
+        if withdrawing:
             action = SignupAction.SWITCHED_COMMITMENT
-        EventSignup.objects.filter(pk=existing.pk).delete()
+        restamp = _maybe_restamp_reason(existing, locked)
+        existing.event = locked
+        existing.status = SignupStatus.TENTATIVE
+        existing.commitment = Commitment.MAYBE
+        existing.self_made = True
+        existing.waitlist_position = None
+        existing.event_team = None
+        existing.signup_type = SignupType.USER
+        fields = [
+            "status",
+            "commitment",
+            "self_made",
+            "waitlist_position",
+            "event_team",
+            "signup_type",
+            *clear_eligibility(existing),
+            "updated_at",
+        ]
+        if restamp is not None:
+            fields += restamp_to_back(existing, reason=restamp)
+            if existing.first_signed_up_at is None:
+                fields += start_first_fields(existing)
+        existing.save(update_fields=fields)
+        signup = existing
+        if withdrawing:
+            standing.on_signup_withdrawn(
+                signup, prior_status=prior_status, by_member=_by_member(actor)
+            )
+            _roster_remove_if_left(signup)
+        context: dict[str, Any] = {
+            "system": "events",
+            "subsystem": "services",
+            "signup_id": signup.pk,
+            "user_id": user.pk,
+            "event_id": event.pk,
+            "prior_status": prior_status,
+            "status": signup.status,
+            "restamp_reason": restamp,
+        }
+        if withdrawing:
+            logger.info("signup_switched_to_maybe_in_place", **context)
+        else:
+            logger.info("signup_resigned_up_in_place", **context)
 
-    signup = EventSignup.objects.create(
-        event=event,
-        user=user,
-        status=SignupStatus.TENTATIVE,
-        self_made=True,
-        **carry,
+    entry = _record_leaf(
+        signup,
+        event=locked,
+        actor=actor,
+        action=action,
+        before=before,
+        after=snapshot(signup, waitlist_rank=None),
     )
-    entry = _record_leaf(signup, event=event, actor=actor, action=action, before=before)
-    if prior_status in seat_holding_statuses(event):
-        _promote_from_waitlist(event, cause=entry)
+    if prior_status in seat_holding_statuses(locked):
+        _promote_from_waitlist(locked, cause=entry)
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
     # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
+
+
+def _maybe_restamp_reason(signup: EventSignup, event: Event) -> str | None:
+    """Why a row turning Maybe goes to the back of the line, or None to keep its place."""
+    if signup.first_signed_up_at is None:
+        return "bare_decline"
+    if signup.status in REMOVED_SIGNUP_STATUSES:
+        return "resign_up" if forfeits_on_withdraw(event) else None
+    return "switch" if restamps_on_switch(event) else None
 
 
 @transaction.atomic
@@ -456,7 +574,7 @@ def decline_signup(
 
     if existing.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError("Already declined")
-    before = snapshot(existing)
+    before = _ranked_snapshot(existing)
     prior_status = _withdraw(existing, by_member=_by_member(actor))
     entry = _record_leaf(
         existing,
@@ -633,6 +751,16 @@ def staff_add_signup(
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
         raise ValueError(NOT_ACCEPTING_MESSAGE)
+    _existing_signup_or_refuse(event, user)
+    reason = require_staff_reason(
+        event_id=event.pk,
+        policy=event.staff_reason_policy,
+        actor=actor,
+        subject_id=user.pk,
+        action=SignupAction.STAFF_ADDED,
+        from_status=None,
+        reason=reason,
+    )
     # Admin-added users join the organization so per-org data (MMR, history)
     # has somewhere to live before they're approved.
     if event.organization_id:
@@ -671,6 +799,24 @@ def _reread_signup(signup: EventSignup) -> None:
     )
 
 
+def _require_reason(
+    signup: EventSignup,
+    *,
+    actor: SignupActor,
+    action: SignupAction,
+    reason: str,
+) -> str:
+    return require_staff_reason(
+        event_id=signup.event_id,
+        policy=signup.event.staff_reason_policy,
+        actor=actor,
+        subject_id=signup.user_id,
+        action=action,
+        from_status=signup.status,
+        reason=reason,
+    )
+
+
 def _record_leaf(
     signup: EventSignup,
     *,
@@ -678,10 +824,12 @@ def _record_leaf(
     actor: SignupActor,
     action: SignupAction,
     before: SignupSnapshot | None,
+    after: SignupSnapshot | None = None,
     extra: dict[str, Any] | None = None,
     reason: str = "",
     rules_overridden: Sequence[str] = (),
     correlation_id: str = "",
+    caused_by: SignupLedgerEntry | None = None,
 ) -> SignupLedgerEntry:
     return record_signup_change(
         event=event,
@@ -690,25 +838,32 @@ def _record_leaf(
         action=action,
         signup=signup,
         before=before,
-        after=snapshot(signup, extra=extra),
+        after=after or snapshot(signup, extra=extra),
         reason=reason,
         rules_overridden=rules_overridden,
+        caused_by=caused_by,
         correlation_id=correlation_id,
     )
 
 
 @transaction.atomic
 def approve_signup(
-    signup: EventSignup, mmr_override: int | None = None, *, actor: SignupActor
+    signup: EventSignup,
+    mmr_override: int | None = None,
+    *,
+    actor: SignupActor,
+    reason: str = "",
 ) -> EventSignup:
     """Approve a signup, optionally setting the user's MMR."""
+    lock_event(signup.event)
     _reread_signup(signup)
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.APPROVED, reason=reason
+    )
     in_roll_call = signup.event.state == EventState.ROLL_CALL
-    if in_roll_call:
-        lock_event(signup.event)
-    before = snapshot(signup)
+    before = _ranked_snapshot(signup)
     extra: dict[str, Any] | None = None
 
     if mmr_override is not None:
@@ -739,6 +894,7 @@ def approve_signup(
         action=SignupAction.APPROVED,
         before=before,
         extra=extra,
+        reason=reason,
     )
     if in_roll_call:
         enrol_signup_if_live(signup, actor=actor)
@@ -748,15 +904,21 @@ def approve_signup(
 
 
 @transaction.atomic
-def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def reject_signup(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Reject a signup."""
     _reread_signup(signup)
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
-    before = snapshot(signup)
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.REJECTED, reason=reason
+    )
+    before = _ranked_snapshot(signup)
     prior_status = signup.status
     signup.status = SignupStatus.REJECTED
-    signup.save(update_fields=["status", "updated_at"])
+    signup.waitlist_position = None
+    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     _roster_remove_if_left(signup)
     entry = _record_leaf(
         signup,
@@ -764,6 +926,7 @@ def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
         actor=actor,
         action=SignupAction.REJECTED,
         before=before,
+        reason=reason,
     )
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event, cause=entry)
@@ -778,6 +941,7 @@ def confirm_signup(
     *,
     actor: SignupActor,
     reason: str = "",
+    fallback_reason: str = "",
     rules_overridden: Sequence[str] = (),
     correlation_id: str = "",
 ) -> EventSignup:
@@ -785,6 +949,9 @@ def confirm_signup(
     _reread_signup(signup)
     if signup.status != SignupStatus.APPROVED:
         raise ValueError("Only approved signups can be confirmed.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.CONFIRMED, reason=reason
+    )
     before = snapshot(signup)
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
@@ -795,7 +962,7 @@ def confirm_signup(
         actor=actor,
         action=SignupAction.CONFIRMED,
         before=before,
-        reason=reason,
+        reason=reason or fallback_reason,
         rules_overridden=rules_overridden,
         correlation_id=correlation_id,
     )
@@ -804,12 +971,17 @@ def confirm_signup(
     return signup
 
 
-def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
+def _check_withdrawable(signup: EventSignup) -> None:
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
+
+
+def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
+    _check_withdrawable(signup)
     prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
-    signup.save(update_fields=["status", "updated_at"])
+    signup.waitlist_position = None
+    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     standing.on_signup_withdrawn(signup, prior_status=prior_status, by_member=by_member)
     _roster_remove_if_left(signup)
     # Log on commit, not on entry — same reason as signup_created in process_rsvp:
@@ -830,10 +1002,16 @@ def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
 
 
 @transaction.atomic
-def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def cancel_signup(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Cancel a signup."""
     _reread_signup(signup)
-    before = snapshot(signup)
+    _check_withdrawable(signup)
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.WITHDREW, reason=reason
+    )
+    before = _ranked_snapshot(signup)
     prior_status = _withdraw(signup, by_member=_by_member(actor))
     entry = _record_leaf(
         signup,
@@ -841,12 +1019,17 @@ def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
         actor=actor,
         action=SignupAction.WITHDREW,
         before=before,
+        reason=reason,
     )
     if prior_status in seat_holding_statuses(signup.event):
         _promote_from_waitlist(signup.event, cause=entry)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
+
+
+def _ranked_snapshot(signup: EventSignup) -> SignupSnapshot:
+    return snapshot(signup, waitlist_rank=waitlist_rank(signup))
 
 
 def _by_member(actor: SignupActor) -> bool:
@@ -883,7 +1066,7 @@ def _promote_from_waitlist(
     cause: SignupLedgerEntry | None,
     actor: SignupActor | None = None,
 ) -> list[EventSignup]:
-    """Promote waitlisted signups into every free seat, in waitlist order as
+    """Promote waitlisted signups into every free seat, in line order as
     reordered by the org's standing tracks.
 
     Promotions are recorded as system rows unless ``actor`` names who caused
@@ -895,7 +1078,7 @@ def _promote_from_waitlist(
             EventSignup.objects.nocache()
             .filter(event=locked, status=SignupStatus.WAITLISTED)
             .select_related("user__base_profile")
-            .order_by("waitlist_position")
+            .in_line_order()
         )
         cache = StandingCache()
         correlation_id = cause.correlation_id if cause is not None else ""
@@ -904,7 +1087,9 @@ def _promote_from_waitlist(
         for candidate in standing.promotion_order(locked, candidates, cache=cache):
             if not has_free_seat(locked):
                 break
-            before = snapshot(candidate)
+            before = snapshot(
+                candidate, waitlist_rank=_rank_among(candidate, candidates, promoted)
+            )
             promoted.append(_promote_one(locked, candidate, cache=cache))
             record_signup_change(
                 event=locked,
@@ -913,7 +1098,7 @@ def _promote_from_waitlist(
                 action=SignupAction.PROMOTED,
                 signup=candidate,
                 before=before,
-                after=snapshot(candidate),
+                after=snapshot(candidate, waitlist_rank=None),
                 caused_by=cause,
                 correlation_id=correlation_id,
             )
@@ -924,12 +1109,25 @@ def _promote_from_waitlist(
     return promoted
 
 
+def _rank_among(
+    signup: EventSignup, line: list[EventSignup], gone: list[EventSignup]
+) -> int:
+    gone_pks = {g.pk for g in gone}
+    ahead = line[: line.index(signup)]
+    return 1 + sum(1 for s in ahead if s.pk not in gone_pks)
+
+
 @transaction.atomic
-def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def unconfirm_signup(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
     _reread_signup(signup)
     if signup.status != SignupStatus.CONFIRMED:
         raise ValueError("Only confirmed signups can be unconfirmed.")
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.UNCONFIRMED, reason=reason
+    )
     check = None
     if signup.event.state == EventState.ROLL_CALL:
         check = live_ready_check(lock_event(signup.event), lock=True)
@@ -949,6 +1147,7 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
         actor=actor,
         action=SignupAction.UNCONFIRMED,
         before=before,
+        reason=reason,
         correlation_id=f"rc{check.pk}:unconfirm" if check is not None else "",
     )
     invalidate_after_commit(signup, signup.event)
@@ -957,22 +1156,23 @@ def unconfirm_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
 
 
 @transaction.atomic
-def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
+def demote_to_waitlist(
+    signup: EventSignup, *, actor: SignupActor, reason: str = ""
+) -> EventSignup:
     """Move an active signup to the end of the waitlist. Staff fill the freed
     seat by hand; nobody is promoted."""
     _reread_signup(signup)
     if signup.status in (*REMOVED_SIGNUP_STATUSES, SignupStatus.WAITLISTED):
         raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
-    before = snapshot(signup)
-    max_pos = (
-        EventSignup.objects.filter(
-            event=signup.event, status=SignupStatus.WAITLISTED
-        ).aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
-        or 0
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.DEMOTED, reason=reason
     )
+    lock_event(signup.event)
+    before = snapshot(signup, waitlist_rank=None)
     signup.status = SignupStatus.WAITLISTED
-    signup.waitlist_position = max_pos + 1
-    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+    signup.waitlist_position = _next_waitlist_position(signup.event)
+    restamped = restamp_to_back(signup, reason="demote")
+    signup.save(update_fields=["status", "waitlist_position", *restamped, "updated_at"])
     _roster_remove_if_left(signup)
     _record_leaf(
         signup,
@@ -980,6 +1180,8 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
         actor=actor,
         action=SignupAction.DEMOTED,
         before=before,
+        after=_ranked_snapshot(signup),
+        reason=reason,
     )
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
@@ -988,7 +1190,12 @@ def demote_to_waitlist(signup: EventSignup, *, actor: SignupActor) -> EventSignu
 
 @transaction.atomic
 def reinstate_signup(
-    signup: EventSignup, *, actor: SignupActor, for_staff_placement: bool = True
+    signup: EventSignup,
+    *,
+    actor: SignupActor,
+    for_staff_placement: bool = True,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
 ) -> EventSignup:
     """Bring a removed signup back into the active list.
 
@@ -1000,6 +1207,9 @@ def reinstate_signup(
                       can re-confirm without leaving the rollcall screen.
     DROPPED is reinstated like CANCELLED, by staff only; a DROPPED entry in
     the live ready check becomes EXCUSED.
+    Staff reinstate with withdrawal history delegates to ``void_withdrawal``;
+    while signups are open it skips that when the restore would seat the
+    member over capacity.
     """
     _reread_signup(signup)
     event = signup.event
@@ -1014,10 +1224,28 @@ def reinstate_signup(
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
-        before = snapshot(signup)
+        if _delegates_to_void(
+            signup, for_staff_placement=for_staff_placement, over_capacity_ok=True
+        ):
+            return void_withdrawal(
+                signup,
+                actor=actor,
+                reason=reason,
+                acknowledged_codes=acknowledged_codes,
+            )
+        reason = _require_reason(
+            signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
+        )
+        before = _ranked_snapshot(signup)
         locked = lock_event(event)
         check = live_ready_check(locked, lock=True)
         was_dropped = signup.status == SignupStatus.DROPPED
+        restamp = _reinstate_restamp_reason(
+            signup,
+            locked,
+            for_staff_placement=for_staff_placement,
+            waitlisted=False,
+        )
         signup.status = SignupStatus.APPROVED
         signup.waitlist_position = None
         signup.commitment = Commitment.MAIN
@@ -1028,6 +1256,7 @@ def reinstate_signup(
                 "waitlist_position",
                 "commitment",
                 *cleared,
+                *_reinstate_restamp(signup, restamp),
                 "updated_at",
             ]
         )
@@ -1035,7 +1264,9 @@ def reinstate_signup(
             check.entries.filter(
                 signup_id=signup.pk, state=ReadyCheckEntryState.DROPPED
             ).update(state=ReadyCheckEntryState.EXCUSED)
-        _record_reinstated(signup, before, event=event, actor=actor, check=check)
+        _record_reinstated(
+            signup, before, event=event, actor=actor, check=check, reason=reason
+        )
         enrol_signup_if_live(signup, actor=actor)
         invalidate_after_commit(signup, event)
         transaction.on_commit(lambda: notify_signup_changed(event))
@@ -1045,20 +1276,27 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
-    before = snapshot(signup)
+    if _delegates_to_void(
+        signup, for_staff_placement=for_staff_placement, over_capacity_ok=False
+    ):
+        return void_withdrawal(
+            signup, actor=actor, reason=reason, acknowledged_codes=acknowledged_codes
+        )
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
+    )
+    before = _ranked_snapshot(signup)
     locked = lock_event(event)
     result = evaluate_signup(
         locked, signup.user, for_staff_placement=for_staff_placement
     )
-    if not has_free_seat(locked):
-        max_pos = (
-            EventSignup.objects.filter(
-                event=event, status=SignupStatus.WAITLISTED
-            ).aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
-            or 0
-        )
+    waitlisted = not has_free_seat(locked)
+    restamp = _reinstate_restamp_reason(
+        signup, locked, for_staff_placement=for_staff_placement, waitlisted=waitlisted
+    )
+    if waitlisted:
+        signup.waitlist_position = _next_waitlist_position(locked)
         signup.status = SignupStatus.WAITLISTED
-        signup.waitlist_position = max_pos + 1
     else:
         signup.status = _decide_signup_status(locked, result)
         signup.waitlist_position = None
@@ -1071,13 +1309,36 @@ def reinstate_signup(
             "waitlist_position",
             "commitment",
             *stamped,
+            *_reinstate_restamp(signup, restamp),
             "updated_at",
         ]
     )
-    _record_reinstated(signup, before, event=locked, actor=actor, check=None)
+    _record_reinstated(
+        signup, before, event=locked, actor=actor, check=None, reason=reason
+    )
     invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
+
+
+def _reinstate_restamp_reason(
+    signup: EventSignup, event: Event, *, for_staff_placement: bool, waitlisted: bool
+) -> str | None:
+    """Why a reinstated row goes to the back of the line, or None to keep its place."""
+    if signup.first_signed_up_at is None:
+        return "bare_decline"
+    if not for_staff_placement:
+        return "member_reinstate" if forfeits_on_withdraw(event) else None
+    return "staff_reinstate" if waitlisted else None
+
+
+def _reinstate_restamp(signup: EventSignup, reason: str | None) -> list[str]:
+    if reason is None:
+        return []
+    fields = restamp_to_back(signup, reason=reason)
+    if signup.first_signed_up_at is None:
+        fields += start_first_fields(signup)
+    return fields
 
 
 def _record_reinstated(
@@ -1087,6 +1348,7 @@ def _record_reinstated(
     event: Event,
     actor: SignupActor,
     check: ReadyCheck | None,
+    reason: str,
 ) -> None:
     _record_leaf(
         signup,
@@ -1094,7 +1356,774 @@ def _record_reinstated(
         actor=actor,
         action=SignupAction.REINSTATED,
         before=before,
+        after=_ranked_snapshot(signup),
+        reason=reason,
         correlation_id=f"rc{check.pk}:reinstate" if check is not None else "",
+    )
+
+
+VOID_NOT_REMOVED_MESSAGE = "Only withdrawn or rejected signups can be voided."
+VOID_NO_HISTORY_MESSAGE = "This withdrawal has no recorded place to restore."
+VOIDABLE_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.CANCELLED, SignupStatus.REJECTED}
+)
+VOIDABLE_EVENT_STATES: frozenset[str] = frozenset(
+    {EventState.SIGNUPS_OPEN, EventState.ROLL_CALL}
+)
+VOID_OVER_CAPACITY_MESSAGE = (
+    "Event is at capacity; restoring seats this member over capacity."
+)
+_STAFF_SEATED_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.APPROVED, SignupStatus.CONFIRMED}
+)
+
+
+def _over_capacity_violation(event: Event) -> Violation:
+    return Violation(
+        code="over_capacity",
+        rule="capacity",
+        category="seating",
+        message=VOID_OVER_CAPACITY_MESSAGE,
+        params={"capacity": event.max_players, "seated": count_seats(event)},
+    )
+
+
+def _void_violations(event: Event, snap: SignupSnapshot) -> list[Violation]:
+    if snap.status in seat_holding_statuses(event) and not has_free_seat(event):
+        return [_over_capacity_violation(event)]
+    return []
+
+
+def _check_void_overrides(
+    signup: EventSignup,
+    event: Event,
+    snap: SignupSnapshot,
+    *,
+    acknowledged_codes: Collection[str],
+    reason: str,
+) -> list[str]:
+    try:
+        return check_overrides(
+            _void_violations(event, snap),
+            org_settings=org_override_settings(event.organization_id),
+            acknowledged=acknowledged_codes,
+            reason=reason,
+        )
+    except OverrideRequired as exc:
+        log.info(
+            "void_override_required",
+            system="events",
+            subsystem="void",
+            signup_id=signup.pk,
+            event_id=event.pk,
+            codes=[v.code for v in exc.violations],
+            blocked=exc.blocked,
+        )
+        raise
+
+
+def _restored_eligibility(signup: EventSignup, event: Event) -> list[str]:
+    if signup.status in _STAFF_SEATED_STATUSES:
+        return clear_eligibility(signup)
+    return stamp_eligibility(
+        signup, evaluate_signup(event, signup.user, for_staff_placement=True)
+    )
+
+
+def _delegates_to_void(
+    signup: EventSignup, *, for_staff_placement: bool, over_capacity_ok: bool
+) -> bool:
+    if not for_staff_placement:
+        return False
+    locked = lock_event(signup.event)
+    voided = latest_restorable_withdrawal(signup)
+    if voided is None:
+        return False
+    if over_capacity_ok:
+        return True
+    return not _void_violations(locked, SignupSnapshot.model_validate(voided.before))
+
+
+def _voided_extra(voided: SignupLedgerEntry) -> dict[str, Any]:
+    carried = {
+        key: value
+        for key, value in ((voided.before or {}).get("extra") or {}).items()
+        if key != "staff_power"
+    }
+    return {**carried, "voided_entry_id": voided.pk}
+
+
+@transaction.atomic
+def void_withdrawal(
+    signup: EventSignup,
+    *,
+    actor: SignupActor,
+    reason: str = "",
+    acknowledged_codes: Collection[str] = (),
+) -> EventSignup:
+    """Restore a removed signup to the exact place its latest withdrawal,
+    decline or rejection took it from."""
+    locked = lock_event(signup.event)
+    signup.refresh_from_db(
+        from_queryset=EventSignup.objects.select_for_update()
+        .nocache()
+        .select_related("event", "user__base_profile")
+    )
+    if locked.state not in VOIDABLE_EVENT_STATES:
+        raise ValueError(NOT_ACCEPTING_MESSAGE)
+    if signup.status not in VOIDABLE_STATUSES:
+        raise ValueError(VOID_NOT_REMOVED_MESSAGE)
+    voided = latest_restorable_withdrawal(signup)
+    if voided is None:
+        raise ValueError(VOID_NO_HISTORY_MESSAGE)
+    reason = _require_reason(
+        signup, actor=actor, action=SignupAction.VOIDED_WITHDRAWAL, reason=reason
+    )
+    before = _ranked_snapshot(signup)
+    snap = SignupSnapshot.model_validate(voided.before)
+    overridden = _check_void_overrides(
+        signup, locked, snap, acknowledged_codes=acknowledged_codes, reason=reason
+    )
+    check = live_ready_check(locked, lock=True)
+
+    restore_place(signup, snap)
+    signup.waitlist_position = (
+        _next_waitlist_position(locked)
+        if signup.status == SignupStatus.WAITLISTED
+        else None
+    )
+    eligibility = _restored_eligibility(signup, locked)
+    signup.save(update_fields=["waitlist_position", *eligibility, "updated_at"])
+    _roster_add_if_joins(signup)
+    if check is not None and signup.status in seat_holding_statuses(locked):
+        check.entries.filter(
+            signup_id=signup.pk, state=ReadyCheckEntryState.DROPPED
+        ).update(state=ReadyCheckEntryState.EXCUSED)
+
+    void_entry = _record_leaf(
+        signup,
+        event=locked,
+        actor=actor,
+        action=SignupAction.VOIDED_WITHDRAWAL,
+        before=before,
+        after=snapshot(
+            signup,
+            extra=_voided_extra(voided),
+            waitlist_rank=waitlist_rank(signup),
+        ),
+        reason=reason,
+        rules_overridden=overridden,
+        caused_by=voided,
+        correlation_id=f"rc{check.pk}:void" if check is not None else "",
+    )
+    enrol_signup_if_live(signup, actor=actor)
+    promoted = _promote_from_waitlist(locked, cause=void_entry)
+    if any(p.pk == signup.pk for p in promoted):
+        _reread_signup(signup)
+    invalidate_after_commit(signup, locked)
+    transaction.on_commit(lambda: notify_signup_changed(locked))
+    signup_id, event_id, voided_id = signup.pk, locked.pk, voided.pk
+    restored_status = str(snap.status)
+    transaction.on_commit(
+        lambda: log.info(
+            "signup_withdrawal_voided",
+            system="events",
+            subsystem="void",
+            signup_id=signup_id,
+            event_id=event_id,
+            voided_entry_id=voided_id,
+            restored_status=restored_status,
+            overridden=overridden,
+        )
+    )
+    return signup
+
+
+TRANSFER_EVENT_STATES: frozenset[str] = frozenset(
+    {EventState.SIGNUPS_OPEN, EventState.ROLL_CALL}
+)
+
+
+@dataclass(frozen=True)
+class SpotTransferResult:
+    mode: Literal["transfer", "swap"]
+    giver: EventSignup
+    recipient: EventSignup
+    correlation_id: str
+
+
+_PLACE_CLASS: dict[str, int] = {
+    SignupStatus.APPROVED: 0,
+    SignupStatus.CONFIRMED: 0,
+    SignupStatus.RSVP: 1,
+    SignupStatus.PENDING_APPROVAL: 1,
+    SignupStatus.WAITLISTED: 2,
+    SignupStatus.TENTATIVE: 3,
+}
+_UNPLACED_CLASS = 4
+_UNSEQUENCED = sys.maxsize
+_SEAT_STATUS_ORDER: tuple[str, ...] = (
+    SignupStatus.RSVP,
+    SignupStatus.PENDING_APPROVAL,
+    SignupStatus.APPROVED,
+    SignupStatus.CONFIRMED,
+)
+_MEMBER_OPAQUE_REASON_CODES: frozenset[str] = frozenset(
+    {ReasonCode.CONDUCT_BELOW_THRESHOLD}
+)
+_MEMBER_GENERIC_REASON: dict[str, Any] = {
+    "code": "recipient_ineligible",
+    "severity": str(Severity.BLOCK),
+    "rule": "eligibility",
+    "message": "Not eligible for this event",
+    "fix": None,
+    "params": {},
+}
+# The giver sees the recipient's reasons: drop params that describe the
+# recipient's own profile (their MMR, their rank type).
+_MEMBER_PRIVATE_PARAMS: frozenset[str] = frozenset({"mmr", "rank_status"})
+
+
+def _place_rank(signup: EventSignup) -> tuple[int, int, int]:
+    return (
+        _PLACE_CLASS.get(signup.status, _UNPLACED_CLASS),
+        _UNSEQUENCED if signup.line_seq is None else signup.line_seq,
+        signup.pk,
+    )
+
+
+def _member_status_cap(giver_status: str, decided: str) -> str:
+    if giver_status not in _SEAT_STATUS_ORDER or decided not in _SEAT_STATUS_ORDER:
+        return giver_status
+    return min(giver_status, decided, key=_SEAT_STATUS_ORDER.index)
+
+
+def _seat_status_above(status: str, other: str) -> bool:
+    if status not in _SEAT_STATUS_ORDER or other not in _SEAT_STATUS_ORDER:
+        return False
+    return _SEAT_STATUS_ORDER.index(status) > _SEAT_STATUS_ORDER.index(other)
+
+
+def _member_safe_reasons(
+    result: EligibilityResult, *, opaque: bool = False
+) -> list[dict[str, Any]]:
+    """Reasons a member may see about someone else. Opaque reasons (conduct,
+    and non-membership via ``opaque``) collapse into one trailing generic
+    entry, so neither can be told apart from the other."""
+    out: list[dict[str, Any]] = []
+    for reason in result.reasons:
+        if reason.code in _MEMBER_OPAQUE_REASON_CODES:
+            opaque = True
+            continue
+        entry = reason.as_dict()
+        entry["params"] = {
+            k: v for k, v in entry["params"].items() if k not in _MEMBER_PRIVATE_PARAMS
+        }
+        if entry not in out:
+            out.append(entry)
+    if opaque:
+        out.append(dict(_MEMBER_GENERIC_REASON, params={}))
+    return out
+
+
+_STAFF_REMOVED_STATUSES: frozenset[str] = frozenset(
+    {SignupStatus.REJECTED, SignupStatus.DROPPED}
+)
+_PROBE_REFUSAL_CODES: frozenset[str] = frozenset(
+    {"recipient_ineligible", "not_org_member"}
+)
+TRANSFER_REFUSAL_MESSAGES: dict[str, str] = {
+    "transfer_disabled": "Spot transfer is not enabled for this event.",
+    "user_signups_disabled": (
+        "Self sign-ups are disabled for this event; ask an organizer to move places."
+    ),
+    "event_state": (
+        "Places can only be transferred while signups are open or during roll call."
+    ),
+    "ready_check_held": "The ready check is paused; resume it to transfer places.",
+    "giver_not_active": "This signup no longer holds a place.",
+    "same_user": "A place can't be transferred to the member who holds it.",
+    "recipient_not_found": "That member could not be found.",
+    "recipient_removed": "Staff removed that member from this event.",
+    "commitment_mismatch": "Main and Maybe places can't be swapped.",
+    "swap_would_demote_recipient": (
+        "You can only swap with someone whose place is behind yours"
+    ),
+    "gate_distance": "That place is too far from this one to transfer.",
+    "not_org_member": "That member is not part of this organization.",
+    "recipient_ineligible": "That member is not eligible for this event.",
+}
+
+
+def _refuse_transfer(
+    code: str,
+    *,
+    event: Event,
+    actor: SignupActor,
+    recipient_user: CustomUser,
+    reasons: Sequence[dict[str, Any]] = (),
+    shown_code: str | None = None,
+) -> SpotTransferRefused:
+    emit = log.warning if code in _PROBE_REFUSAL_CODES else log.info
+    emit(
+        "signup_spot_transfer_refused",
+        system="events",
+        subsystem="line",
+        event_id=event.pk,
+        code=code,
+        caller_user_id=actor.user.pk if actor.user is not None else None,
+        recipient_user_id=recipient_user.pk,
+    )
+    shown_code = shown_code or code
+    return SpotTransferRefused(
+        shown_code, TRANSFER_REFUSAL_MESSAGES[shown_code], reasons
+    )
+
+
+def _lock_transfer_rows(
+    locked: Event, giver: EventSignup, recipient_user: CustomUser
+) -> tuple[EventSignup | None, EventSignup | None]:
+    held_pk = (
+        EventSignup.objects.nocache()
+        .filter(event=locked, user=recipient_user)
+        .values_list("pk", flat=True)
+        .first()
+    )
+    pks = {giver.pk} if held_pk is None else {giver.pk, held_pk}
+    rows = {
+        row.pk: row
+        for row in EventSignup.objects.select_for_update()
+        .nocache()
+        .select_related("user__base_profile")
+        .filter(pk__in=pks)
+        .order_by("pk")
+    }
+    for row in rows.values():
+        row.event = locked
+    return rows.get(giver.pk), None if held_pk is None else rows.get(held_pk)
+
+
+def _transfer_guard(
+    event: Event,
+    giver: EventSignup,
+    target: EventSignup,
+    recipient_user: CustomUser,
+    *,
+    check: ReadyCheck | None,
+    is_staff: bool,
+    swap: bool,
+) -> str | None:
+    if not event.allow_spot_transfer:
+        return "transfer_disabled"
+    if event.state not in TRANSFER_EVENT_STATES:
+        return "event_state"
+    if not is_staff and not event.allow_user_signups:
+        return "user_signups_disabled"
+    if check is not None and check.phase == ReadyCheckPhase.HELD:
+        return "ready_check_held"
+    if giver.status in REMOVED_SIGNUP_STATUSES:
+        return "giver_not_active"
+    if giver.user_id == recipient_user.pk:
+        return "same_user"
+    if not is_staff and target.status in _STAFF_REMOVED_STATUSES:
+        return "recipient_removed"
+    if swap and (giver.status == SignupStatus.TENTATIVE) != (
+        target.status == SignupStatus.TENTATIVE
+    ):
+        return "commitment_mismatch"
+    if (
+        swap
+        and not is_staff
+        and (
+            _place_rank(giver) >= _place_rank(target)
+            or _seat_status_above(target.status, giver.status)
+        )
+    ):
+        return "swap_would_demote_recipient"
+    if not same_gate_distance(giver, target):
+        return "gate_distance"
+    return None
+
+
+def _is_org_member(event: Event, user: CustomUser) -> bool:
+    return (
+        event.organization_id is None
+        or OrgUser.objects.nocache()
+        .filter(user=user, organization_id=event.organization_id)
+        .exists()
+    )
+
+
+def _member_recipient_eligibility(
+    event: Event, giver: EventSignup, recipient_user: CustomUser, actor: SignupActor
+) -> EligibilityResult:
+    is_member = _is_org_member(event, recipient_user)
+    result = evaluate_signup(
+        event, recipient_user, intent=giver.commitment, actor=actor.user
+    )
+    if not is_member or not result.clean:
+        raise _refuse_transfer(
+            "recipient_ineligible" if is_member else "not_org_member",
+            event=event,
+            actor=actor,
+            recipient_user=recipient_user,
+            reasons=_member_safe_reasons(result, opaque=not is_member),
+            shown_code="recipient_ineligible",
+        )
+    return result
+
+
+def _require_transfer_reason(
+    event: Event,
+    giver: EventSignup,
+    target: EventSignup,
+    *,
+    actor: SignupActor,
+    actions: tuple[SignupAction, SignupAction],
+    reason: str,
+) -> str:
+    sides = (
+        (giver.user_id, actions[0], giver.status),
+        (target.user_id, actions[1], target.status if target.pk is not None else None),
+    )
+    for subject_id, action, from_status in sides:
+        reason = require_staff_reason(
+            event_id=event.pk,
+            policy=event.staff_reason_policy,
+            actor=actor,
+            subject_id=subject_id,
+            action=action,
+            from_status=from_status,
+            reason=reason,
+        )
+    return reason
+
+
+def _gains_seat_status(status: str, held: str) -> bool:
+    return status in _SEAT_STATUS_ORDER and (
+        held not in _SEAT_STATUS_ORDER or _seat_status_above(status, held)
+    )
+
+
+def _eligibility_violations(
+    result: EligibilityResult, *, prefix: str = ""
+) -> list[Violation]:
+    return [
+        Violation(
+            code=str(r.code),
+            rule=r.rule,
+            message=f"{prefix}{r.message}",
+            category="eligibility",
+            params=dict(r.params),
+        )
+        for r in result.reasons
+    ]
+
+
+def _violation_codes(violations: Sequence[Violation]) -> list[str]:
+    return list(dict.fromkeys(v.code for v in violations))
+
+
+def _staff_transfer_overrides(
+    event: Event,
+    giver: EventSignup,
+    recipient_user: CustomUser,
+    *,
+    giver_status: str | None,
+    actor: SignupActor,
+    acknowledged: Collection[str],
+    reason: str,
+) -> tuple[list[str], list[str]]:
+    is_member = _is_org_member(event, recipient_user)
+    recipient_violations = (
+        []
+        if is_member
+        else [
+            Violation(
+                code="not_org_member",
+                rule="membership",
+                category="eligibility",
+                message="Not a member of this organization",
+            )
+        ]
+    )
+    recipient_violations += _eligibility_violations(
+        evaluate_signup(
+            event,
+            recipient_user,
+            intent=giver.commitment,
+            actor=actor.user,
+            for_staff_placement=True,
+        )
+    )
+    giver_violations = (
+        _eligibility_violations(
+            evaluate_signup(
+                event,
+                giver.user,
+                intent=giver.commitment,
+                actor=actor.user,
+                for_staff_placement=True,
+            ),
+            prefix="Giver: ",
+        )
+        if giver_status is not None and _gains_seat_status(giver_status, giver.status)
+        else []
+    )
+    try:
+        check_overrides(
+            recipient_violations + giver_violations,
+            org_settings=org_override_settings(event.organization_id),
+            acknowledged=acknowledged,
+            reason=reason,
+        )
+    except OverrideRequired as exc:
+        log.info(
+            "spot_transfer_override_required",
+            system="events",
+            subsystem="line",
+            event_id=event.pk,
+            giver_signup_id=giver.pk,
+            recipient_user_id=recipient_user.pk,
+            codes=[v.code for v in exc.violations],
+            blocked=exc.blocked,
+        )
+        raise
+    if not is_member:
+        resolve_or_create_org_user(recipient_user, event.organization)
+    return _violation_codes(giver_violations), _violation_codes(recipient_violations)
+
+
+def _hand_over_place(
+    event: Event, giver: EventSignup, target: EventSignup, status: str
+) -> None:
+    target.status = status
+    target.line_seq = giver.line_seq
+    target.signed_up_at = giver.signed_up_at
+    target.waitlist_position = giver.waitlist_position
+    target.commitment = (
+        Commitment.MAYBE if status == SignupStatus.TENTATIVE else Commitment.MAIN
+    )
+    eligibility = _restored_eligibility(target, event)
+    if target.pk is None:
+        target.first_signed_up_at = timezone.now()
+        target.save()
+    else:
+        target.save(
+            update_fields=[
+                "status",
+                "line_seq",
+                "signed_up_at",
+                "waitlist_position",
+                "commitment",
+                *eligibility,
+                "updated_at",
+            ]
+        )
+    giver.status = SignupStatus.CANCELLED
+    giver.waitlist_position = None
+    restamped = restamp_to_back(giver, reason="transferred_out")
+    giver.save(update_fields=["status", "waitlist_position", *restamped, "updated_at"])
+
+
+def _swap_held_places(
+    event: Event,
+    giver: EventSignup,
+    target: EventSignup,
+    *,
+    giver_status: str,
+    target_status: str,
+) -> None:
+    swap_places(giver, target)
+    giver.waitlist_position, target.waitlist_position = (
+        target.waitlist_position,
+        giver.waitlist_position,
+    )
+    giver.status, target.status = giver_status, target_status
+    for row in (giver, target):
+        eligibility = _restored_eligibility(row, event)
+        row.save(
+            update_fields=["status", "waitlist_position", *eligibility, "updated_at"]
+        )
+
+
+_ROLL_CALL_SEATED: frozenset[str] = frozenset(
+    {SignupStatus.APPROVED, SignupStatus.CONFIRMED}
+)
+
+
+def _roll_call_seat_status(
+    check: ReadyCheck | None, row: EventSignup, status: str
+) -> str:
+    if check is None or status not in _ROLL_CALL_SEATED:
+        return status
+    confirmed = (
+        row.pk is not None and row.status == SignupStatus.CONFIRMED
+    ) or check.entries.filter(
+        user_id=row.user_id, state=ReadyCheckEntryState.CONFIRMED
+    ).exists()
+    return SignupStatus.CONFIRMED if confirmed else SignupStatus.APPROVED
+
+
+def _counterparty_snapshot(signup: EventSignup, counterparty_id: int) -> SignupSnapshot:
+    return snapshot(
+        signup,
+        extra={"counterparty_user_id": counterparty_id},
+        waitlist_rank=waitlist_rank(signup),
+    )
+
+
+@transaction.atomic
+def transfer_spot(
+    giver: EventSignup,
+    recipient_user: CustomUser,
+    *,
+    actor: SignupActor,
+    reason: str = "",
+    acknowledged: Collection[str] = (),
+) -> SpotTransferResult:
+    """Hand the giver's exact place in line to another member, or swap
+    places when the recipient already holds one. Nobody else moves."""
+    locked = lock_event(giver.event)
+    found, held = _lock_transfer_rows(locked, giver, recipient_user)
+    if found is None:
+        raise _refuse_transfer(
+            "giver_not_active", event=locked, actor=actor, recipient_user=recipient_user
+        )
+    giver = found
+    is_staff = actor.role == ActorRole.STAFF
+    swap = held is not None and held.status not in REMOVED_SIGNUP_STATUSES
+    target = (
+        held if held is not None else EventSignup(event=locked, user=recipient_user)
+    )
+    check = (
+        live_ready_check(locked, lock=True)
+        if locked.state == EventState.ROLL_CALL
+        else None
+    )
+    code = _transfer_guard(
+        locked,
+        giver,
+        target,
+        recipient_user,
+        check=check,
+        is_staff=is_staff,
+        swap=swap,
+    )
+    if code is not None:
+        raise _refuse_transfer(
+            code, event=locked, actor=actor, recipient_user=recipient_user
+        )
+
+    mode: Literal["transfer", "swap"] = "swap" if swap else "transfer"
+    giver_action, target_action = (
+        (SignupAction.SWAPPED, SignupAction.SWAPPED)
+        if swap
+        else (SignupAction.TRANSFERRED_OUT, SignupAction.TRANSFERRED_IN)
+    )
+    reason = _require_transfer_reason(
+        locked,
+        giver,
+        target,
+        actor=actor,
+        actions=(giver_action, target_action),
+        reason=reason,
+    )
+    giver_overridden: list[str] = []
+    target_overridden: list[str] = []
+    if is_staff:
+        giver_overridden, target_overridden = _staff_transfer_overrides(
+            locked,
+            giver,
+            recipient_user,
+            giver_status=target.status if swap else None,
+            actor=actor,
+            acknowledged=acknowledged,
+            reason=reason,
+        )
+        status = giver.status
+    else:
+        result = _member_recipient_eligibility(locked, giver, recipient_user, actor)
+        status = _member_status_cap(giver.status, _decide_signup_status(locked, result))
+        if swap and _seat_status_above(target.status, status):
+            status = target.status
+    giver_status = _roll_call_seat_status(check, giver, target.status)
+    status = _roll_call_seat_status(check, target, status)
+    correlation_id = f"xfer:{uuid4().hex}"
+
+    giver_before = _ranked_snapshot(giver)
+    target_before = _ranked_snapshot(target) if target.pk is not None else None
+    was_seated = {
+        row.pk: row.status in _STAFF_SEATED_STATUSES
+        for row in (giver, target)
+        if row.pk is not None
+    }
+    if swap:
+        _swap_held_places(
+            locked, giver, target, giver_status=giver_status, target_status=status
+        )
+    else:
+        _hand_over_place(locked, giver, target, status)
+    for row in (giver, target):
+        _roster_add_if_joins(row)
+        _roster_remove_if_left(row)
+
+    record_signup_change(
+        event=locked,
+        subject=giver.user,
+        actor=actor,
+        action=giver_action,
+        signup=giver,
+        before=giver_before,
+        after=_counterparty_snapshot(giver, recipient_user.pk),
+        reason=reason,
+        rules_overridden=giver_overridden,
+        correlation_id=correlation_id,
+    )
+    record_signup_change(
+        event=locked,
+        subject=recipient_user,
+        actor=actor,
+        action=target_action,
+        signup=target,
+        before=target_before,
+        after=_counterparty_snapshot(target, giver.user_id),
+        reason=reason,
+        rules_overridden=target_overridden,
+        correlation_id=correlation_id,
+    )
+    if check is not None:
+        in_scope = scope_statuses(check_scope(check))
+        seated = seat_holding_statuses(locked)
+        for row in (giver, target):
+            if row.status in seated:
+                check.entries.filter(
+                    signup_id=row.pk, state=ReadyCheckEntryState.DROPPED
+                ).update(state=ReadyCheckEntryState.EXCUSED)
+            if row.status in in_scope:
+                enrol_signup_if_live(row, actor=actor)
+
+    invalidate_after_commit(giver, target, locked)
+    transaction.on_commit(lambda: notify_signup_changed(locked))
+    for row in (giver, target):
+        if row.status in _STAFF_SEATED_STATUSES and not was_seated.get(row.pk, False):
+            user_pk = row.user_id
+            transaction.on_commit(
+                lambda user_pk=user_pk: notify_mark_interested(locked, user_pk)
+            )
+    context: dict[str, Any] = {
+        "system": "events",
+        "subsystem": "line",
+        "event_id": locked.pk,
+        "mode": mode,
+        "giver_signup_id": giver.pk,
+        "recipient_signup_id": target.pk,
+        "correlation_id": correlation_id,
+        "actor_role": str(actor.role),
+    }
+    transaction.on_commit(lambda: log.info("signup_spot_transferred", **context))
+    return SpotTransferResult(
+        mode=mode, giver=giver, recipient=target, correlation_id=correlation_id
     )
 
 

@@ -14,13 +14,17 @@ import {
   localToUTC,
   READY_CHECK_CONFIG_DEFAULTS,
   refineEventEnd,
+  SIGNUP_LINE_DEFAULTS,
   SIGNUP_OPEN_DEFAULTS,
+  signupLineSchema,
+  STAFF_REASON_POLICIES,
+  STAFF_REASON_POLICY_LABELS,
   utcToLocalInput,
 } from '~/components/events/schemas';
+import { signupLineFrom } from '~/components/events/signupLine';
 
-// A complete discordConfigSchema payload that intentionally omits the
-// dropped `discord_subscriber_dm` and `discord_subscriber_dm_hours`
-// fields. After PR-0 loosens those fields to optional, this should parse.
+// A complete discordConfigSchema payload that omits the dropped
+// `discord_subscriber_dm` and `discord_subscriber_dm_hours` fields; it must still parse.
 const baseDiscordConfig = {
   discord_create_event: false,
   discord_sync_signups: false,
@@ -57,6 +61,10 @@ const baseDiscordConfig = {
   require_profile_complete: false,
   roll_call_enabled: false,
   allow_user_signups: true,
+  line_withdraw_forfeits: true,
+  line_switch_restamps: true,
+  staff_reason_policy: 'optional',
+  allow_spot_transfer: false,
 };
 
 describe('discord_subscriber_dm tolerance', () => {
@@ -253,7 +261,7 @@ describe('eventSchema leadership viewer flags', () => {
   });
 });
 
-// Pre-refactor key lists: the fragment composition must keep them exact.
+// Fixed key lists the fragment composition must reproduce exactly.
 const TEMPLATE_KEYS = [
   'name',
   'description',
@@ -307,6 +315,10 @@ const DISCORD_KEYS = [
   'require_mmr_verified',
   'require_profile_complete',
   'allow_user_signups',
+  'line_withdraw_forfeits',
+  'line_switch_restamps',
+  'staff_reason_policy',
+  'allow_spot_transfer',
 ];
 const SIGNUP_OPEN_KEYS = ['signup_open_mode', 'signups_open_hours_before'];
 const LOBBY_KEYS = [
@@ -511,5 +523,137 @@ describe('eventSchema user_is_event_operator', () => {
       eventSchema.parse({ ...payload, user_is_event_operator: true })
         .user_is_event_operator,
     ).toBe(true);
+  });
+});
+
+describe('signup line rules', () => {
+  it('defaults both rules on', () => {
+    expect(SIGNUP_LINE_DEFAULTS).toEqual({
+      line_withdraw_forfeits: true,
+      line_switch_restamps: true,
+      staff_reason_policy: 'optional',
+      allow_spot_transfer: false,
+    });
+    expect(DISCORD_CONFIG_DEFAULTS).toMatchObject(SIGNUP_LINE_DEFAULTS);
+  });
+
+  it('rejects a non-boolean rule', () => {
+    expect(
+      signupLineSchema.safeParse({
+        line_withdraw_forfeits: 'yes',
+        line_switch_restamps: true,
+        staff_reason_policy: 'optional',
+        allow_spot_transfer: false,
+      }).success,
+    ).toBe(false);
+    expect(
+      discordConfigSchema.safeParse({
+        ...baseDiscordConfig,
+        line_switch_restamps: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('tolerates event payloads without the rules', () => {
+    const rules = z.object({
+      line_withdraw_forfeits: eventSchema.shape.line_withdraw_forfeits,
+      line_switch_restamps: eventResponseSchema.shape.line_switch_restamps,
+    });
+    expect(rules.parse({})).toEqual({});
+    expect(
+      rules.parse({
+        line_withdraw_forfeits: false,
+        line_switch_restamps: false,
+      }),
+    ).toEqual({ line_withdraw_forfeits: false, line_switch_restamps: false });
+  });
+
+  it('signupLineFrom falls back to the defaults', () => {
+    expect(signupLineFrom({})).toEqual(SIGNUP_LINE_DEFAULTS);
+    expect(signupLineFrom(null)).toEqual(SIGNUP_LINE_DEFAULTS);
+    expect(signupLineFrom(undefined)).toEqual(SIGNUP_LINE_DEFAULTS);
+  });
+
+  it('signupLineFrom copies loaded values', () => {
+    expect(
+      signupLineFrom({
+        line_withdraw_forfeits: false,
+        line_switch_restamps: true,
+        staff_reason_policy: 'placements',
+        allow_spot_transfer: true,
+      }),
+    ).toEqual({
+      line_withdraw_forfeits: false,
+      line_switch_restamps: true,
+      staff_reason_policy: 'placements',
+      allow_spot_transfer: true,
+    });
+  });
+
+  it('signupLineFrom defaults spot transfer off', () => {
+    expect(signupLineFrom({}).allow_spot_transfer).toBe(false);
+    expect(
+      signupLineFrom({ allow_spot_transfer: true }).allow_spot_transfer,
+    ).toBe(true);
+  });
+
+  it('rejects a non-boolean spot transfer setting', () => {
+    expect(
+      signupLineSchema.safeParse({
+        ...SIGNUP_LINE_DEFAULTS,
+        allow_spot_transfer: 'yes',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('tolerates event payloads without the spot transfer setting', () => {
+    expect(eventSchema.shape.allow_spot_transfer.parse(undefined)).toBe(
+      undefined,
+    );
+    expect(eventResponseSchema.shape.allow_spot_transfer.parse(true)).toBe(
+      true,
+    );
+  });
+
+  it('signupLineFrom defaults a missing staff reason policy to optional', () => {
+    expect(
+      signupLineFrom({
+        line_withdraw_forfeits: false,
+        line_switch_restamps: false,
+      }).staff_reason_policy,
+    ).toBe('optional');
+  });
+
+  it('rejects an unknown staff reason policy', () => {
+    expect(
+      signupLineSchema.safeParse({
+        ...SIGNUP_LINE_DEFAULTS,
+        staff_reason_policy: 'sometimes',
+      }).success,
+    ).toBe(false);
+    expect(
+      eventResponseSchema.shape.staff_reason_policy.safeParse('sometimes')
+        .success,
+    ).toBe(false);
+  });
+
+  it('tolerates event payloads without the staff reason policy', () => {
+    expect(eventSchema.shape.staff_reason_policy.parse(undefined)).toBe(
+      undefined,
+    );
+    expect(
+      eventResponseSchema.shape.staff_reason_policy.parse('all_staff_changes'),
+    ).toBe('all_staff_changes');
+  });
+
+  it('labels every staff reason policy', () => {
+    expect(STAFF_REASON_POLICY_LABELS).toEqual({
+      optional: 'Optional',
+      placements: 'Required for placements',
+      all_staff_changes: 'Required for every staff change',
+    });
+    expect(Object.keys(STAFF_REASON_POLICY_LABELS)).toEqual([
+      ...STAFF_REASON_POLICIES,
+    ]);
   });
 });

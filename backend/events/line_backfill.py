@@ -1,9 +1,10 @@
-"""Stamp line position and add ``backfilled`` ledger entries for existing signups.
+"""Line backfill (migration 0027, ``backfill_signup_line``) and waitlist realignment
+(migration 0044).
 
-Shared by migration 0027 and the ``backfill_signup_line`` command. Models are
-resolved from the registry passed in, never imported, and every read and write
-goes through ``_base_manager`` so the live ``first_*`` guards do not apply. If a
-later schema change breaks this module, freeze its current body into 0027.
+Models are resolved from the registry passed in, never imported, and every read
+and write goes through ``_base_manager`` so the live ``first_*`` guards do not
+apply. If a later schema change breaks this module, freeze the affected function
+into its migration.
 """
 
 from collections import defaultdict
@@ -14,7 +15,7 @@ from uuid import uuid4
 
 from django.apps.registry import Apps
 from django.conf import settings
-from django.db.models import Model
+from django.db.models import Max, Model
 from django.utils import timezone
 
 from events.constants import (
@@ -68,6 +69,10 @@ def _created_key(signup: Model) -> tuple[datetime, int]:
 def _waitlist_key(signup: Model) -> tuple[bool, int, datetime, int]:
     position = signup.waitlist_position
     return (position is None, position or 0, signup.created_at, signup.pk)
+
+
+def _line_key(signup: Model) -> tuple[bool, int, int]:
+    return (signup.line_seq is None, signup.line_seq or 0, signup.pk)
 
 
 def _declined_without_signing_up(signup: Model) -> bool:
@@ -245,3 +250,49 @@ def unbackfill_signup_line(apps: Apps) -> None:
     SignupLedgerEntry = apps.get_model("events", "SignupLedgerEntry")
     SignupLedgerEntry._base_manager.filter(action=SignupAction.BACKFILLED).delete()
     EventSignup._base_manager.update(line_seq=None)
+
+
+def realign_waitlist(apps: Apps) -> int:
+    """Renumber each event's waitlisted rows to the back of its line, in
+    ``waitlist_position`` order, wherever the two orders disagree."""
+    EventSignup = apps.get_model("events", "EventSignup")
+    signups = EventSignup._base_manager.nocache()
+
+    by_event: dict[int, list[Model]] = defaultdict(list)
+    for signup in signups.filter(status=SignupStatus.WAITLISTED).order_by(
+        "event_id", "pk"
+    ):
+        by_event[signup.event_id].append(signup)
+    tops: dict[int, int | None] = dict(
+        signups.filter(event_id__in=list(by_event))
+        .order_by()
+        .values("event_id")
+        .annotate(top=Max("line_seq"))
+        .values_list("event_id", "top")
+    )
+
+    realigned: list[Model] = []
+    events = 0
+    for event_id, rows in by_event.items():
+        if len(rows) < 2:
+            continue
+        waitlist = sorted(rows, key=_waitlist_key)
+        if sorted(rows, key=_line_key) == waitlist:
+            continue
+        top = tops.get(event_id) or 0
+        for offset, signup in enumerate(waitlist, start=1):
+            signup.line_seq = top + offset
+        realigned.extend(waitlist)
+        events += 1
+    EventSignup._base_manager.bulk_update(
+        realigned, ["line_seq"], batch_size=BATCH_SIZE
+    )
+
+    log.info(
+        "waitlist_line_realigned",
+        system="events",
+        subsystem="migration",
+        events=events,
+        rows=len(realigned),
+    )
+    return events

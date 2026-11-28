@@ -10,9 +10,17 @@ from django.http import HttpRequest
 from django.utils import timezone as tz
 from structlog.contextvars import get_contextvars
 
-from events.constants import ActorRole, SignupAction, SignupMeans
+from events.constants import (
+    ActorRole,
+    SignupAction,
+    SignupMeans,
+    SignupStatus,
+    StaffReasonPolicy,
+)
 from events.models import Event, EventSignup, ReadyCheck, SignupLedgerEntry
+from events.overrides import StaffReasonRequired
 from events.permissions import has_event_staff_access
+from events.ready_check_constants import REMOVED_SIGNUP_STATUSES
 from events.schemas import SignupSnapshot
 from telemetry.logging import get_logger
 
@@ -21,21 +29,48 @@ if TYPE_CHECKING:
 
 __all__ = [
     "PLACEMENT_ACTIONS",
+    "REMOVED_STATUS_FOR",
+    "RESTORABLE_ACTIONS",
     "ActorRole",
     "SignupAction",
     "SignupActor",
     "SignupMeans",
     "current_interaction_id",
     "event_snapshot",
+    "is_placement",
+    "latest_restorable_withdrawal",
     "record_ready_check_transition",
     "record_signup_change",
+    "require_staff_reason",
     "snapshot",
     "user_snapshot",
 ]
 
 log = get_logger(__name__)
 
-PLACEMENT_ACTIONS: frozenset[str] = frozenset()
+PLACEMENT_ACTIONS: frozenset[str] = frozenset(
+    {
+        SignupAction.STAFF_ADDED,
+        SignupAction.DEMOTED,
+        SignupAction.REINSTATED,
+        SignupAction.VOIDED_WITHDRAWAL,
+        SignupAction.TRANSFERRED_OUT,
+        SignupAction.TRANSFERRED_IN,
+        SignupAction.SWAPPED,
+    }
+)
+
+REMOVED_STATUS_FOR: dict[str, str] = {
+    SignupAction.WITHDREW: SignupStatus.CANCELLED,
+    SignupAction.DECLINED: SignupStatus.CANCELLED,
+    SignupAction.REJECTED: SignupStatus.REJECTED,
+}
+
+RESTORABLE_ACTIONS: frozenset[str] = frozenset(REMOVED_STATUS_FOR)
+
+_PLACE_HANDOFF_ACTIONS: frozenset[str] = frozenset(
+    {SignupAction.MOVED_EVENT, SignupAction.TRANSFERRED_OUT}
+)
 
 CORRELATION_ID_MAX_LENGTH = 64
 
@@ -121,12 +156,62 @@ class SignupActor:
         )
 
 
+def is_placement(action: str, *, from_status: str | None = None) -> bool:
+    if action in PLACEMENT_ACTIONS:
+        return True
+    return action == SignupAction.APPROVED and from_status == SignupStatus.WAITLISTED
+
+
+def require_staff_reason(
+    *,
+    event_id: int,
+    policy: str,
+    actor: SignupActor,
+    subject_id: int,
+    action: str,
+    from_status: str | None,
+    reason: str,
+) -> str:
+    """Return the trimmed reason; raise StaffReasonRequired when the policy needs one."""
+    trimmed = reason.strip()
+    if (
+        trimmed
+        or actor.role != ActorRole.STAFF
+        or actor.user is None
+        or actor.user.pk == subject_id
+        or policy == StaffReasonPolicy.OPTIONAL
+    ):
+        return trimmed
+    placement = is_placement(action, from_status=from_status)
+    if policy == StaffReasonPolicy.PLACEMENTS and not placement:
+        return trimmed
+    log.warning(
+        "staff_reason_refused",
+        system="events",
+        subsystem="staff_reason",
+        event_id=event_id,
+        actor_id=actor.user.pk,
+        subject_id=subject_id,
+        action=action,
+        from_status=from_status,
+        placement=placement,
+        policy=policy,
+    )
+    raise StaffReasonRequired()
+
+
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+_UNSET: Any = object()
+
+
 def snapshot(
-    signup: EventSignup, *, extra: dict[str, Any] | None = None
+    signup: EventSignup,
+    *,
+    extra: dict[str, Any] | None = None,
+    waitlist_rank: int | None = _UNSET,
 ) -> SignupSnapshot:
     return SignupSnapshot(
         status=signup.status,
@@ -134,10 +219,47 @@ def snapshot(
         rsvp_class=signup.rsvp_class,
         signed_up_at=signup.signed_up_at,
         line_seq=signup.line_seq,
-        waitlist_position=signup.waitlist_position,
+        waitlist_position=(
+            signup.waitlist_position if waitlist_rank is _UNSET else waitlist_rank
+        ),
         event_team_id=signup.event_team_id,
         extra=dict(extra) if extra else {},
     )
+
+
+def _after_status(entry: SignupLedgerEntry) -> str | None:
+    if entry.after is not None and entry.after.get("status"):
+        return str(entry.after["status"])
+    return REMOVED_STATUS_FOR.get(entry.action)
+
+
+def latest_restorable_withdrawal(signup: EventSignup) -> SignupLedgerEntry | None:
+    """The withdrawal, decline or rejection that still describes the row, if any."""
+    entries = list(
+        SignupLedgerEntry.objects.filter(
+            event_id=signup.event_id, subject_user_id=signup.user_id, signup=signup
+        ).order_by("-occurred_at", "-pk")
+    )
+    index = next(
+        (i for i, e in enumerate(entries) if e.action in RESTORABLE_ACTIONS), None
+    )
+    if index is None:
+        return None
+    candidate = entries[index]
+    if candidate.before is None:
+        return None
+    if candidate.before.get("status") in REMOVED_SIGNUP_STATUSES:
+        return None
+    removed_status = _after_status(candidate)
+    if removed_status != signup.status:
+        return None
+    for later in entries[:index]:
+        if later.action in _PLACE_HANDOFF_ACTIONS:
+            return None
+        later_status = (later.after or {}).get("status")
+        if later_status is not None and later_status != removed_status:
+            return None
+    return candidate
 
 
 def event_snapshot(event: Event) -> dict[str, Any]:

@@ -1,0 +1,206 @@
+from datetime import time, timedelta
+from unittest.mock import MagicMock, patch
+
+from django.utils import timezone as tz
+from rest_framework.test import APIClient
+
+from events.capacity import count_seats, has_free_seat, with_signup_counts
+from events.constants import RepeatFrequency, SignupStatus, StaffReasonPolicy
+from events.models import Event, EventRepeater, EventSignup, OrgEventDefaults
+from events.tests.base import EventTestCase
+
+LINE_FIELDS: tuple[str, ...] = ("line_withdraw_forfeits", "line_switch_restamps")
+OFF: dict[str, bool] = {name: False for name in LINE_FIELDS}
+
+REQUIRED_POLICIES: tuple[str, ...] = (
+    StaffReasonPolicy.PLACEMENTS,
+    StaffReasonPolicy.ALL_STAFF_CHANGES,
+)
+
+
+@patch("events.services.notify_create_discord_event", MagicMock())
+@patch("events.services.notify_new_event", MagicMock())
+class LineSettingsTests(EventTestCase):
+    def setUp(self) -> None:
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.DAILY,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date() + timedelta(days=30),
+            created_by=self.admin,
+        )
+        self.defaults = OrgEventDefaults.objects.create(organization=self.org)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def assert_line_fields(self, data: dict[str, object], expected: bool) -> None:
+        for name in LINE_FIELDS:
+            self.assertIs(data[name], expected, name)
+
+    def test_defaults_true_on_event_repeater_org_defaults(self) -> None:
+        for obj in (self.make_event(), self.repeater, self.defaults):
+            obj.refresh_from_db()
+            for name in LINE_FIELDS:
+                self.assertIs(getattr(obj, name), True, f"{type(obj).__name__}.{name}")
+
+    def test_event_patch_round_trip(self) -> None:
+        url = f"/api/events/{self.event.pk}/"
+        resp = self.client.patch(url, OFF, format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assert_line_fields(self.client.get(url).data, False)
+
+    def test_repeater_patch_round_trip(self) -> None:
+        url = f"/api/events/repeaters/{self.repeater.pk}/"
+        resp = self.client.patch(url, OFF, format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assert_line_fields(self.client.get(url).data, False)
+
+    def test_org_defaults_patch_round_trip(self) -> None:
+        resp = self.client.patch(
+            f"/api/events/defaults/{self.defaults.pk}/", OFF, format="json"
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        data = self.client.get(
+            "/api/events/defaults/", {"organization": self.org.pk}
+        ).data
+        self.assert_line_fields(data, False)
+
+    def test_member_patch_refused(self) -> None:
+        member = APIClient()
+        member.force_authenticate(self.make_user())
+        resp = member.patch(f"/api/events/{self.event.pk}/", OFF, format="json")
+        self.assertEqual(resp.status_code, 403)
+        self.event.refresh_from_db()
+        for name in LINE_FIELDS:
+            self.assertIs(getattr(self.event, name), True, name)
+
+    def test_tentative_never_holds_seat(self) -> None:
+        event = self.make_event(max_players=1)
+        EventSignup.objects.create(
+            event=event, user=self.make_user(), status=SignupStatus.TENTATIVE
+        )
+        self.assertEqual(count_seats(event), 0)
+        self.assertTrue(has_free_seat(event))
+        annotated = with_signup_counts(Event.objects.filter(pk=event.pk)).get()
+        self.assertEqual(annotated.signup_count, 0)
+
+
+@patch("events.services.notify_create_discord_event", MagicMock())
+@patch("events.services.notify_new_event", MagicMock())
+class StaffReasonPolicySettingsTests(EventTestCase):
+    def setUp(self) -> None:
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.DAILY,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date() + timedelta(days=30),
+            created_by=self.admin,
+        )
+        self.defaults = OrgEventDefaults.objects.create(organization=self.org)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def assert_round_trip(
+        self, obj: Event | EventRepeater | OrgEventDefaults, url: str
+    ) -> None:
+        for value in REQUIRED_POLICIES:
+            with self.subTest(value=value):
+                resp = self.client.patch(
+                    url, {"staff_reason_policy": value}, format="json"
+                )
+                self.assertEqual(resp.status_code, 200, resp.data)
+                self.assertEqual(resp.data["staff_reason_policy"], value)
+                obj.refresh_from_db()
+                self.assertEqual(obj.staff_reason_policy, value)
+
+    def test_defaults_optional(self) -> None:
+        for obj in (self.make_event(), self.repeater, self.defaults):
+            obj.refresh_from_db()
+            self.assertEqual(
+                obj.staff_reason_policy,
+                StaffReasonPolicy.OPTIONAL,
+                type(obj).__name__,
+            )
+
+    def test_patch_round_trip_event(self) -> None:
+        self.assert_round_trip(self.event, f"/api/events/{self.event.pk}/")
+
+    def test_patch_round_trip_repeater(self) -> None:
+        self.assert_round_trip(
+            self.repeater, f"/api/events/repeaters/{self.repeater.pk}/"
+        )
+
+    def test_patch_round_trip_org_defaults(self) -> None:
+        self.assert_round_trip(
+            self.defaults, f"/api/events/defaults/{self.defaults.pk}/"
+        )
+
+    def test_invalid_choice_rejected(self) -> None:
+        resp = self.client.patch(
+            f"/api/events/{self.event.pk}/",
+            {"staff_reason_policy": "sometimes"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("staff_reason_policy", resp.data)
+
+
+@patch("events.services.notify_create_discord_event", MagicMock())
+@patch("events.services.notify_new_event", MagicMock())
+class SpotTransferSettingTests(EventTestCase):
+    def setUp(self) -> None:
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.DAILY,
+            time_of_day=time(20, 0),
+            timezone="UTC",
+            starts_at=tz.now().date() + timedelta(days=30),
+            created_by=self.admin,
+        )
+        self.defaults = OrgEventDefaults.objects.create(organization=self.org)
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def assert_round_trip(
+        self, obj: Event | EventRepeater | OrgEventDefaults, url: str
+    ) -> None:
+        resp = self.client.patch(url, {"allow_spot_transfer": True}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertIs(resp.data["allow_spot_transfer"], True)
+        obj.refresh_from_db()
+        self.assertIs(obj.allow_spot_transfer, True)
+
+    def test_defaults_false(self) -> None:
+        for obj in (self.make_event(), self.repeater, self.defaults):
+            obj.refresh_from_db()
+            self.assertIs(obj.allow_spot_transfer, False, type(obj).__name__)
+
+    def test_patch_round_trip_event(self) -> None:
+        self.assert_round_trip(self.event, f"/api/events/{self.event.pk}/")
+
+    def test_patch_round_trip_repeater(self) -> None:
+        self.assert_round_trip(
+            self.repeater, f"/api/events/repeaters/{self.repeater.pk}/"
+        )
+
+    def test_patch_round_trip_org_defaults(self) -> None:
+        self.assert_round_trip(
+            self.defaults, f"/api/events/defaults/{self.defaults.pk}/"
+        )
+
+    def test_member_patch_refused(self) -> None:
+        member = APIClient()
+        member.force_authenticate(self.make_user())
+        resp = member.patch(
+            f"/api/events/{self.event.pk}/",
+            {"allow_spot_transfer": True},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.event.refresh_from_db()
+        self.assertIs(self.event.allow_spot_transfer, False)

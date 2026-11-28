@@ -154,10 +154,105 @@ Players RSVP from the event page (web) or via the Discord signup post. The signu
 
 - **Auto-approve** — signups go directly to Approved status
 - **Manual approval** — admin reviews and approves each signup
-- **Waitlist** — when max players is reached, new signups are waitlisted with position tracking
-- **Re-RSVP** — cancelled signups can re-register
+- **Waitlist** — when max players is reached, new signups are waitlisted. A signup's waitlist position is its rank among the waitlisted signups in line order, and promotion takes the next waitlisted signup in line
+- **Re-RSVP** — cancelled, declined and rejected signups can sign up again. The same signup is reused, so its history stays in one place
+- **Main/Maybe switch** — switching between RSVP (Main) and tentative (Maybe) changes the same signup. Moving from Main to Maybe frees the seat for the next waitlisted signup
+- **Spot transfer** — when the event allows it, a member can give their place in line to another eligible member, or swap places with a member who already holds one. See [Spot transfer](#spot-transfer)
 
 Each signup keeps a place in line and its original sign-up, and the signup ledger records every change to it, with who made it and how: see [Signup Ledger & Line Position](events/signup-ledger.md).
+
+The **Signup Line** settings decide whether a returning or switching signup keeps its place in line. They sit on the event's approval tab, on the series' event tab and in the organization's New Event Defaults, and a series passes them on to its future events:
+
+| Setting | Default | When on | When off |
+|---|---|---|---|
+| **Withdrawing gives up your place** (`line_withdraw_forfeits`) | on | A member who withdraws, declines or is rejected and signs up again goes to the back of the line | They get their old place back |
+| **Switching Main/Maybe gives up your place** (`line_switch_restamps`) | on | Moving between Main and Maybe sends the signup to the back of the line | It keeps its place |
+| **Allow spot transfer** (`allow_spot_transfer`) | off | Members can give their place to another eligible member, or swap with one who holds a place. See [Spot transfer](#spot-transfer) | The action is hidden and the API refuses it |
+
+With both on, which is the default, the order is the same as before these settings existed. Signup rows on the event page and the roll call page show **in line since**: the time the signup took its current place.
+
+#### Staff reasons
+
+The **Staff reasons** setting (`staff_reason_policy`) decides when staff must say why they changed someone's signup. It sits next to the Signup Line settings, and a series passes it on to its future events like the other event settings. Past events keep the setting they had.
+
+| Choice | Value | A reason is required for |
+|---|---|---|
+| **Optional** (default) | `optional` | nothing; staff can still give one |
+| **Required for placements** | `placements` | placements only |
+| **Required for every staff change** | `all_staff_changes` | every staff change to a signup |
+
+Placements are the changes that decide who gets a seat: adding a member, approving a waitlisted signup, demoting to the waitlist and reinstating. Approving a pending signup, rejecting, confirming, unconfirming and removing are not placements.
+
+No reason is ever needed for:
+
+- a member changing their own signup, staff included;
+- system changes such as waitlist promotions, series cascades and scheduled tasks;
+- Discord buttons and commands, which are all member actions on the member's own signup. No staff Discord action exists. One added later would be refused under a strict policy until it collects a reason;
+- event-level transitions: starting roll call, reopening signups, starting the tournament, cancelling, restarting and closing;
+- ready check open, escalate and close. These apply the ready check rules to everyone at once, so no single member's change needs justifying. To remove one member with a reason, use Remove;
+- voice presence and ready check resolve, which already require their own reason.
+
+A reason that is given is saved with the change under every choice. Staff see it in the signup's **History**. Reasons are not shown to members, are not sent in live updates or Discord posts, and are not written to logs.
+
+Under **Optional** the one-click buttons stay one-click. The actions that already open a dialog (the MMR approval recap, Remove, and the roll call confirm, reject and remove dialogs) get an optional reason field. When the choice requires a reason, a one-click action opens a short reason dialog first, and the dialog-based actions mark their field as required.
+
+**API:** each staff signup action (`admin-signup`, `approve`, `demote`, `reinstate`, `void-withdrawal`, `reject`, `confirm`, `unconfirm`, `cancel_signup` and `ready-check/confirm`) accepts an optional `reason` in the body, at most 500 characters after trimming. When the event's choice requires one and none is sent, the endpoint returns 400 `{"error": "reason_required"}`. Status errors come first: a request on a signup in the wrong state gets the usual status error, not `reason_required`. `ready-check/recheck` writes no history, so it ignores `reason`.
+
+#### Voiding a withdrawal
+
+Staff can void a withdrawal that should never have happened: a cancel, a decline or a rejection. The member comes back exactly as they were before it:
+
+- the same status, so a Maybe comes back as a Maybe and a waitlisted member comes back waitlisted;
+- the same commitment (main or maybe) and RSVP class;
+- the same place in line (`line_seq` and `signed_up_at`).
+
+**Void withdrawal** sits next to **Restore** on cancelled and rejected rows, in the event page's Removed tab and on the [roll call page](events/roll-call.md#3-roll-call-page). It works while signups are open and during roll call. Only event staff can void; members get 403. Voiding counts as a placement under [Staff reasons](#staff-reasons).
+
+Only the signup's latest cancel, decline or rejection can be voided, and only while nothing else has changed the signup since. A signup with no recorded withdrawal, such as one from before the [signup ledger](events/signup-ledger.md) existed, cannot be voided: staff get "This withdrawal has no recorded place to restore." and can still use Restore.
+
+Voiding never moves anyone else. Members promoted into the freed seat keep it. A restored waitlisted member takes their old place in the waitlist and is promoted straight away if a seat is free. When the restored status holds a seat and the event is full, the organization's [Staff placement](organization-settings.md#staff-placement) policy decides, through the `over_capacity` rule:
+
+| Policy | Voiding on a full event |
+|---|---|
+| **Silent** (default) | Seats the member over capacity and records `over_capacity` as an overridden rule |
+| **Confirm** | Asks staff to confirm the warning, with a reason, then seats the member over capacity |
+| **Block** | Refuses the void |
+
+When several warnings arrive at once, for example after voiding two rows quickly, they wait in turn and each names its member.
+
+**Restore** uses the same exact restore when the signup's withdrawal is on record, with these exceptions:
+
+- no recorded withdrawal: Restore works as before;
+- while signups are open and the event is full, a member whose restored status holds a seat goes to the back of the waitlist, whatever the Staff placement policy. Restore never seats anyone over capacity during signups; Void withdrawal is the only way to do that;
+- during roll call, Restore on a full event is a void: the Staff placement policy decides, exactly as in the table above.
+
+While signups are open, Restore refuses a rejected signup ("Only cancelled signups can be reinstated."). To undo a rejection then, use Void withdrawal.
+
+A void does not undo everything the withdrawal did:
+
+- tournament team membership, captaincy and deputy roles are not restored. The member rejoins the tournament roster when their restored status puts them on it; staff put them back on a team by hand;
+- a [late cancel](organization-conduct.md#late-cancels) recorded by the member's own withdrawal stays until the event completes. As for a member who signs up again, completion clears it while the member is still on the event. Staff can also change it in the Attendance panel.
+
+The signup's History shows the void as **Withdrawal voided**, with the reason and any overridden rule. See [Signup Ledger](events/signup-ledger.md#what-gets-recorded).
+
+#### Spot transfer
+
+With **Allow spot transfer** on, a member who holds a place can hand it to another member. Members can only do this while **self sign-ups** are allowed; with them off the button is hidden and the API refuses with `user_signups_disabled`, but staff can still transfer. It is off by default, and a series passes it on to its future events like the other Signup Line settings. Transfers work while signups are open and during roll call, but not while the ready check is held.
+
+- **Give my place** on the member's own signup card opens a dialog with a member search. When the chosen member has no place, the transfer takes effect at once: they take the giver's exact place in line (`line_seq` and `signed_up_at`) and status, and the giver's signup is cancelled.
+- When the chosen member already holds a place, the two **swap** places. A member can only swap with someone whose place is behind theirs and whose status is not ahead of theirs, so a swap never moves the other member forward against their interest. Main and Maybe places can't be swapped with each other.
+- Nobody else moves and nobody is promoted, so the number of seats taken stays the same. Tournament membership follows the new statuses.
+- In a swap, each side keeps their own commitment (Main or Maybe); the two are always the same, since Main and Maybe can't swap. In a plain transfer the recipient takes the place's commitment, because a Maybe place is always a Maybe signup: a Maybe place makes the recipient Maybe, a Main place makes them Main.
+- Each side keeps their own RSVP class and their own original sign-up (a new signup starts with the default class).
+- A giver who later signs up again goes to the back of the line.
+
+**Who the place can go to.** The recipient must be a member of the event's organization and must meet every signup requirement of the event, checked as if they signed up with the giver's commitment. A refusal lists the unmet requirements in the same shape as a signup's eligibility reasons (code, severity, rule, message, fix, params), minus the params that describe the recipient's own profile (their MMR and rank type). A recipient who is not an organization member, or is held by the organization's conduct rules, shows only "Not eligible for this event", so a member can't use the dialog to find out who belongs to the organization or who has a poor attendance record. Members never get an override. On an event with manual approval the recipient still needs staff approval ("Staff will need to approve them."), and a member transfer never gives the recipient a status their own signup would not get. During roll call, a recipient is confirmed only if they confirmed in the ready check themselves; otherwise they take the place as approved and are asked in the live ready check.
+
+**Staff.** Event staff can transfer anyone's place from the **Transfer place** button on the signup rows. A staff transfer is a placement under [Staff reasons](#staff-reasons), so the event's choice may require a reason. Unmet requirements, and a recipient who is not an organization member, go through the organization's [Staff placement](organization-settings.md#staff-placement) policy, the same as other staff overrides. Staff can also place a rejected or dropped member and swap in any direction. During roll call, a member the ready check dropped who gets a place this way is kept by staff in the ready check, as with a reinstate. Staff acting on their own signup are treated as a member.
+
+The roll call page has no transfer button yet; use the event page.
+
+Both signups' History show the change as **Transferred out** / **Transferred in**, or **Swapped** on both sides. See [Signup Ledger](events/signup-ledger.md#spot-transfer).
 
 #### Web vs Discord parity
 
@@ -179,7 +274,7 @@ The endpoint is a single canonical action accepting `{intent, profile}`; the old
 
 #### Approve flow
 
-Admin approve uses `POST /api/event-signups/{id}/approve/` with optional `{ "mmr": <int> }`. On approve:
+Admin approve uses `POST /api/events/signups/{id}/approve/` with optional `{ "mmr": <int> }`. On approve:
 
 - `EventSignup.status` → `approved`.
 - If `mmr` is supplied, the org MMR of the event's game is written and the OrgLog records `set_mmr` with `game_type`. The signup ledger's `approved` entry also records the override as `mmr_override` and `game_type` in its after snapshot. An `OrgUser` row is created if missing. The value is checked against that game's range (0–20000); an out-of-range value returns 400.
@@ -316,13 +411,15 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/event-signups/{id}/approve/` | Approve a signup. Optional body `{"mmr": <int>}` writes the org MMR of the event's game and logs `set_mmr`. Does NOT mutate positions. |
-| POST | `/api/event-signups/{id}/reject/` | Reject a signup |
-| POST | `/api/event-signups/{id}/confirm/` | Confirm attendance (roll-call) |
-| POST | `/api/event-signups/{id}/unconfirm/` | Reverse a confirm |
-| POST | `/api/event-signups/{id}/demote/` | Move an active signup to the end of the waitlist. Nobody is promoted into the freed seat; staff fill it by hand |
-| POST | `/api/event-signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
-| POST | `/api/event-signups/{id}/reinstate/` | Re-enable a cancelled signup |
+| POST | `/api/events/signups/{id}/approve/` | Approve a signup. Optional body `{"mmr": <int>}` writes the org MMR of the event's game and logs `set_mmr`. Does NOT mutate positions. |
+| POST | `/api/events/signups/{id}/reject/` | Reject a signup |
+| POST | `/api/events/signups/{id}/confirm/` | Confirm attendance (roll-call) |
+| POST | `/api/events/signups/{id}/unconfirm/` | Reverse a confirm |
+| POST | `/api/events/signups/{id}/demote/` | Move an active signup to the waitlist; it moves to the back of the line. Nobody is promoted into the freed seat; staff fill it by hand |
+| POST | `/api/events/signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
+| POST | `/api/events/signups/{id}/reinstate/` | Re-enable a cancelled signup. Staff restore the exact place when the withdrawal is on record (while signups are open, only when that would not seat the member over capacity). Staff may send `acknowledged_codes`; `409` `override_required` in roll call on a full event under the Confirm or Block policy. See [Voiding a withdrawal](#voiding-a-withdrawal) |
+| POST | `/api/events/signups/{id}/void-withdrawal/` | Void the latest cancel, decline or rejection and restore the signup exactly (event staff; `403` for anyone else). Optional body `{"reason": "...", "acknowledged_codes": ["over_capacity"]}`. `400` when the signup is not cancelled or rejected, or has no recorded withdrawal; `409` `override_required` on a full event under the Confirm or Block policy. See [Voiding a withdrawal](#voiding-a-withdrawal) |
+| POST | `/api/events/signups/{id}/transfer/` | Give this signup's place to another member, or swap when they hold one. Body `{"recipient_user_id": <int>}`; staff on someone else's signup may add `reason` and `acknowledged_codes`. Returns `{mode: "transfer" \| "swap", correlation_id, giver, recipient}`. Refusals are 400 `{code, error, reasons?}` with `code` one of `transfer_disabled`, `event_state`, `ready_check_held`, `giver_not_active`, `user_signups_disabled` (members only), `same_user`, `recipient_not_found`, `recipient_removed`, `commitment_mismatch`, `swap_would_demote_recipient`, `gate_distance`, `recipient_ineligible`; `reasons` uses the eligibility reason shape. A non-member recipient is `recipient_ineligible` for members; staff get it as the `not_org_member` override. `409` `override_required` for staff. `403` for anyone other than the signup's member or event staff. See [Spot transfer](#spot-transfer) |
 
 ### Repeaters & defaults
 

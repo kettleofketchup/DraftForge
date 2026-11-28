@@ -71,7 +71,7 @@ describe('MmrApprovalModal on a Deadlock event', () => {
         signup={signup({ self_reported_rank: 'Emissary 1' })}
         open
         onOpenChange={noop}
-        onApprove={noop}
+        onApprove={async () => true}
       />,
     );
     expect(screen.queryByText('No Dota profile')).toBeNull();

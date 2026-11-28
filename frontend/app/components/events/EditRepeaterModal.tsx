@@ -46,6 +46,8 @@ import {
   signupOpenSchema,
 } from './schemas';
 import { ScopedDiscordConfigSection as DiscordConfigSection } from './ScopedDiscordConfigSection';
+import { signupLineFrom } from './signupLine';
+import { SignupLineConfigSection } from './SignupLineConfigSection';
 import { signupOpenFrom } from './signupOpen';
 import {
   SERIES_IMMEDIATE_HELP,
@@ -151,6 +153,7 @@ export function EditRepeaterModal({
         discord_notify_new_events: repeater.discord_notify_new_events,
         ...discordResetValues(repeater),
         ...signupRulesFrom(repeater),
+        ...signupLineFrom(repeater),
         ...signupOpenFrom(repeater),
         ...dotaLobbyResetValues(repeater, { savedFromMode: true }),
         ...readyCheckResetValues(repeater),
@@ -250,6 +253,7 @@ export function EditRepeaterModal({
                 helpText={`${SERIES_POLICY_CHANGE_HELP} ${SERIES_IMMEDIATE_HELP}`}
               />
               <SignupRulesSection control={form.control} />
+              <SignupLineConfigSection control={form.control} />
             </>
           ),
         },

@@ -42,6 +42,7 @@ export function meta({ data }: Route.MetaArgs) {
 
 import {
   ArrowDownToLine,
+  ArrowLeftRight,
   Bell,
   BellOff,
   Building2,
@@ -49,6 +50,7 @@ import {
   Clock,
   Loader2,
   Repeat,
+  RotateCcw,
   Undo2,
   UserCheck,
   UserPlus,
@@ -60,7 +62,7 @@ import { toast } from 'sonner';
 
 import { useQueryClient } from '@tanstack/react-query';
 import type { AddMemberPayload } from '~/components/api/api';
-import { adminAddSignup } from '~/components/api/api';
+import { isStaffReasonRequiredError } from '~/components/api/overridesAPI';
 import { EventStateBadge } from '~/components/events';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
@@ -71,13 +73,17 @@ import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluate
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { MySignupActions } from '~/components/events/MySignupActions';
+import { OverrideWarningDialog } from '~/components/events/OverrideWarningDialog';
 import { SignupHistorySection } from '~/components/events/SignupHistorySection';
 import {
   historySubjectFor,
   SignupHistoryButton,
   SignupHistorySheet,
 } from '~/components/events/SignupHistorySheet';
+import { SignupInLineSince } from '~/components/events/SignupInLineSince';
+import { StaffReasonDialog } from '~/components/events/StaffReasonDialog';
 import { SubscriberList } from '~/components/events/SubscriberList';
+import { TransferSpotDialog } from '~/components/events/TransferSpotDialog';
 import { canCompleteEvent } from '~/components/events/eventCompletion';
 import {
   eventTabOptions,
@@ -87,19 +93,24 @@ import type {
   EventSignupType,
   EventType,
   HistorySubject,
+  StaffReasonPolicy,
 } from '~/components/events/schemas';
 import { EventState, rollCallLabel } from '~/components/events/schemas';
 import {
   canRestoreSignup,
+  canVoidWithdrawal,
   isRemovedSignup,
   partitionSignups,
 } from '~/components/events/signupPartitions';
 import { signupRowMmr } from '~/components/events/signupRowMmr';
 import { rollCallSummary } from '~/components/events/signupRules';
+import { staffReasonMode } from '~/components/events/staffReasonPolicy';
 import {
   signupHoldReason,
   signupSuccessMessage,
 } from '~/components/events/unmetRequirements';
+import { useSignupOverride } from '~/components/events/useSignupOverride';
+import { useStaffAction } from '~/components/events/useStaffAction';
 import {
   GAME_LABEL,
   isGameType,
@@ -111,6 +122,7 @@ import {
   orgUsersQueryKey,
   useOrgUsersQuery,
 } from '~/components/organization/hooks/useOrgUsersQuery';
+import type { OrganizationType } from '~/components/organization/schemas';
 import { Badge } from '~/components/ui/badge';
 import {
   DestructiveButton,
@@ -147,14 +159,11 @@ import {
   EventLeadershipSection,
 } from '~/features/leadership';
 import {
-  invalidateConductQueries,
   removeFeatureQueries,
   useOrgFeatureAccess,
 } from '~/features/org-features';
 import { canPromoteEvent, PromoteEventButton } from '~/features/promotion';
 import {
-  invalidateEventLists,
-  invalidateSignupHistory,
   removeSignupHistoryQueries,
   useEvent,
   useEventActionMutation,
@@ -191,6 +200,10 @@ export default function EventPage() {
   const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [transferGiver, setTransferGiver] = useState<EventSignupType | null>(
+    null,
+  );
   const [showEditModal, setShowEditModal] = useState(false);
   const [signupModal, setSignupModal] = useState<{
     open: boolean;
@@ -407,6 +420,14 @@ export default function EventPage() {
     );
   }
 
+  const transferOpen =
+    !!event.allow_spot_transfer &&
+    (event.state === EventState.SIGNUPS_OPEN ||
+      event.state === EventState.ROLL_CALL);
+  const spotTransfer = transferOpen
+    ? { event, signups: signups ?? [] }
+    : undefined;
+
   const scheduledDate = new Date(event.scheduled_at);
   const formattedDate = scheduledDate.toLocaleDateString(undefined, {
     weekday: 'long',
@@ -522,7 +543,9 @@ export default function EventPage() {
         {/* Row 3: Admin button group (left) + Subscribe/RSVP (right) */}
         {(isAdmin ||
           canPromoteEvent(event, eventOrgAccess) ||
-          (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) ||
+          (currentUser &&
+            (event.state === EventState.SIGNUPS_OPEN || transferOpen) &&
+            signups) ||
           (currentUser && event.event_repeater)) && (
           <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             {/* Admin actions — left side */}
@@ -613,8 +636,14 @@ export default function EventPage() {
                   allowUserSignups={event.allow_user_signups}
                   signupDisabled={!profileLoaded || signupMutation.isPending}
                   cancelPending={signupActions.cancel.isPending}
+                  transferOpen={transferOpen && event.allow_user_signups}
                   onSignup={trySignup}
                   onCancel={() => setShowCancelRsvpConfirm(true)}
+                  onTransfer={() => {
+                    if (!mySignup) return;
+                    setTransferGiver(mySignup);
+                    setShowTransferDialog(true);
+                  }}
                 />
               )}
             </div>
@@ -688,14 +717,19 @@ export default function EventPage() {
           <TabsContent value="signups">
             <SignupsTab
               signups={activeSignups}
+              spotTransfer={spotTransfer}
               autoApprove={event.auto_approve}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -703,10 +737,15 @@ export default function EventPage() {
           <TabsContent value="tentative">
             <SignupsTab
               signups={tentativeSignups}
+              spotTransfer={spotTransfer}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -714,10 +753,15 @@ export default function EventPage() {
           <TabsContent value="waitlist">
             <SignupsTab
               signups={waitlistedSignups}
+              spotTransfer={spotTransfer}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -727,8 +771,12 @@ export default function EventPage() {
               signups={removedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
+              currentUserId={currentUser?.pk}
+              staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
               state={event.state}
+              eventTimezone={event.timezone}
               onShowHistory={setHistoryFor}
             />
           </TabsContent>
@@ -792,6 +840,20 @@ export default function EventPage() {
         confirmTestId="event-rollcall-dialog-confirm"
       />
 
+      {transferGiver && (
+        <TransferSpotDialog
+          open={showTransferDialog}
+          onOpenChange={setShowTransferDialog}
+          signup={
+            signups?.find((s) => s.id === transferGiver.id) ?? transferGiver
+          }
+          event={event}
+          signups={signups ?? []}
+          mode="member"
+          transfer={signupActions.transfer}
+        />
+      )}
+
       <ConfirmDialog
         open={showCancelRsvpConfirm}
         onOpenChange={setShowCancelRsvpConfirm}
@@ -802,7 +864,7 @@ export default function EventPage() {
         onConfirm={async () => {
           if (!mySignup) return;
           try {
-            await signupActions.cancel.mutateAsync(mySignup.id);
+            await signupActions.cancel.mutateAsync({ id: mySignup.id });
             toast.success('RSVP cancelled');
           } catch {
             toast.error('Failed to cancel RSVP');
@@ -955,6 +1017,11 @@ function DetailsTab({
   );
 }
 
+interface SpotTransferContext {
+  event: EventType;
+  signups: EventSignupType[];
+}
+
 /** Signups tab showing participants and admin actions */
 function SignupsTab({
   signups,
@@ -967,9 +1034,19 @@ function SignupsTab({
   autoApprove = true,
   conductMemberFor,
   onShowHistory,
+  eventTimezone,
+  currentUserId,
+  staffReasonPolicy,
+  organization,
+  spotTransfer,
 }: {
+  organization?: OrganizationType | null;
+  spotTransfer?: SpotTransferContext;
+  currentUserId: number | undefined;
+  staffReasonPolicy: StaffReasonPolicy | undefined;
   conductMemberFor?: ConductMemberLookup;
   onShowHistory?: (user: HistorySubject) => void;
+  eventTimezone?: string;
   signups: EventSignupType[];
   autoApprove?: boolean;
   isAdmin: boolean;
@@ -990,6 +1067,24 @@ function SignupsTab({
     name: string;
   } | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
+  const staffAction = useStaffAction({
+    policy: staffReasonPolicy,
+    currentUserId,
+  });
+  const { run, collect, dialogProps } = staffAction;
+  const signupOverride = useSignupOverride(signupActions);
+  const [transferSignup, setTransferSignup] = useState<EventSignupType | null>(
+    null,
+  );
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const reasonMode = (
+    action: Parameters<typeof staffReasonMode>[1],
+    signup: EventSignupType | null,
+  ) =>
+    staffReasonMode(staffReasonPolicy, action, {
+      fromStatus: signup?.status,
+      isSelf: signup?.user === currentUserId,
+    });
   const queryClient = useQueryClient();
   const gameType = useContextGameType();
 
@@ -1005,6 +1100,7 @@ function SignupsTab({
     [signups],
   );
   const entityContext = useMemo(() => ({ orgId }), [orgId]);
+  const { mutateAsync: adminAdd } = signupActions.adminAdd;
   const handleAddUser = useCallback(
     async (payload: AddMemberPayload): Promise<UserType> => {
       // The modal's Discord tab can hand back a discord_id with no user_id, and
@@ -1014,18 +1110,34 @@ function SignupsTab({
           'Select a site user — adding a Discord member directly is not supported here yet.',
         );
       }
-      const resp = await adminAddSignup(eventId!, payload.user_id);
-      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
-      void invalidateEventLists(queryClient);
-      invalidateSignupHistory(queryClient, eventId!);
-      void invalidateConductQueries(queryClient, orgId);
-      // Backend adds the user as an OrgUser when an admin signs them up;
-      // refetch the org members so the org page shows the new membership.
-      if (orgId) {
-        void queryClient.invalidateQueries({
-          queryKey: orgUsersQueryKey(orgId),
+      const userId = payload.user_id;
+      const collectReason = async (forceRequired = false) => {
+        const reason = await collect('admin_add', {
+          userId,
+          forceRequired,
+          title: 'Add user to event',
         });
+        if (reason === null)
+          throw new Error('Not added: a reason is required.');
+        return reason;
+      };
+      let reason: string | undefined;
+      if (
+        staffReasonMode(staffReasonPolicy, 'admin_add', {
+          isSelf: userId === currentUserId,
+        }) === 'required'
+      ) {
+        reason = await collectReason();
+      }
+      const add = () =>
+        adminAdd({ userId, ...(reason === undefined ? {} : { reason }) });
+      let resp;
+      try {
+        resp = await add();
+      } catch (error) {
+        if (!isStaffReasonRequiredError(error)) throw error;
+        reason = await collectReason(true);
+        resp = await add();
       }
       // AddUserModal reads `.pk` off this to track optimistic adds — the signup
       // itself has no pk, so hand back the user it embeds.
@@ -1039,7 +1151,7 @@ function SignupsTab({
           }
         : { pk: payload.user_id, username: null };
     },
-    [eventId, orgId, queryClient],
+    [adminAdd, collect, staffReasonPolicy, currentUserId],
   );
   const checkIsAdded = useCallback(
     (user: UserType) => (user.pk != null ? signupUserPks.has(user.pk) : false),
@@ -1086,7 +1198,13 @@ function SignupsTab({
           const position = signup.waitlist_position ?? index + 1;
           // "Waitlist" fires the server's `demote` mutation
           // (approved/rsvp → waitlisted); named so the label/mutation gap is explicit.
-          const handleWaitlist = () => signupActions.demote.mutate(signup.id);
+          const handleWaitlist = () =>
+            void run('demote', signup, (reason) =>
+              signupActions.demote.mutateAsync({
+                id: signup.id,
+                ...(reason === undefined ? {} : { reason }),
+              }),
+            );
 
           const adminActions = isAdmin ? (
             <div className="flex gap-1 [&_button]:min-h-11 sm:[&_button]:min-h-8">
@@ -1136,7 +1254,14 @@ function SignupsTab({
                       <SecondaryButton
                         color="blue"
                         size="sm"
-                        onClick={() => signupActions.confirm.mutate(signup.id)}
+                        onClick={() =>
+                          void run('confirm', signup, (reason) =>
+                            signupActions.confirm.mutateAsync({
+                              id: signup.id,
+                              ...(reason === undefined ? {} : { reason }),
+                            }),
+                          )
+                        }
                         disabled={signupActions.confirm.isPending}
                       >
                         <UserCheck className="h-3.5 w-3.5" />
@@ -1151,6 +1276,7 @@ function SignupsTab({
                     <TooltipTrigger asChild>
                       <DestructiveButton
                         size="sm"
+                        data-testid={`waitlist-signup-${signup.id}`}
                         onClick={handleWaitlist}
                         loading={signupActions.demote.isPending}
                         depth={false}
@@ -1171,7 +1297,14 @@ function SignupsTab({
                     <SecondaryButton
                       color="orange"
                       size="sm"
-                      onClick={() => signupActions.unconfirm.mutate(signup.id)}
+                      onClick={() =>
+                        void run('unconfirm', signup, (reason) =>
+                          signupActions.unconfirm.mutateAsync({
+                            id: signup.id,
+                            ...(reason === undefined ? {} : { reason }),
+                          }),
+                        )
+                      }
                       disabled={signupActions.unconfirm.isPending}
                     >
                       <Undo2 className="h-3.5 w-3.5" />
@@ -1206,7 +1339,17 @@ function SignupsTab({
                     <SecondaryButton
                       size="sm"
                       data-testid="event-restore-btn"
-                      onClick={() => signupActions.reinstate.mutate(signup.id)}
+                      onClick={() =>
+                        void run(
+                          'reinstate',
+                          signup,
+                          signupOverride.fire(
+                            'reinstate',
+                            signup.id,
+                            DisplayName(signup),
+                          ),
+                        )
+                      }
                       disabled={signupActions.reinstate.isPending}
                     >
                       <Undo2 className="h-3.5 w-3.5" />
@@ -1215,6 +1358,64 @@ function SignupsTab({
                   </TooltipTrigger>
                   <TooltipContent className="lg:hidden">
                     Restore signup
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {canVoidWithdrawal(signup.status) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton
+                      size="sm"
+                      aria-label="Void withdrawal"
+                      data-testid="event-void-withdrawal-btn"
+                      onClick={() =>
+                        void run(
+                          'void_withdrawal',
+                          signup,
+                          signupOverride.fire(
+                            'void_withdrawal',
+                            signup.id,
+                            DisplayName(signup),
+                          ),
+                          {
+                            title: 'Void withdrawal',
+                            actionLabel: 'Void withdrawal',
+                            errorLabel: 'void withdrawal',
+                          },
+                        )
+                      }
+                      disabled={signupActions.voidWithdrawal.isPending}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">
+                        Void withdrawal
+                      </span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Restore exact place, class and commitment
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {spotTransfer && !isRemovedSignup(signup.status) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton
+                      size="sm"
+                      aria-label="Transfer place"
+                      data-testid="signup-transfer-btn"
+                      onClick={() => {
+                        setTransferSignup(signup);
+                        setTransferDialogOpen(true);
+                      }}
+                      disabled={signupActions.transfer.isPending}
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Transfer</span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">
+                    Transfer place
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1261,6 +1462,10 @@ function SignupsTab({
                 </span>
                 <EventStateBadge state={signup.status} />
               </span>
+              <SignupInLineSince
+                signup={signup}
+                eventTimezone={eventTimezone}
+              />
               <ConductBadge member={conductMemberFor?.(signup.user)} />
               {holdReason && (
                 <span
@@ -1334,71 +1539,114 @@ function SignupsTab({
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);
         }}
-        onApprove={(signupId, mmr) => {
-          const previousMmr = approvalSignup?.org_user_mmr ?? null;
-          const playerName = approvalSignup
-            ? DisplayName(approvalSignup)
-            : `User #${signupId}`;
-          signupActions.approve.mutate(
-            { id: signupId, mmr },
-            {
-              onSuccess: () => {
-                setApprovalSignup(null);
-                if (orgId) {
-                  void queryClient.invalidateQueries({
-                    queryKey: orgUsersQueryKey(orgId),
-                  });
-                }
-                if (previousMmr != null && previousMmr !== mmr) {
-                  const delta = mmr - previousMmr;
-                  toast.success(
-                    `Approved ${playerName} — MMR ${previousMmr.toLocaleString()} → ${mmr.toLocaleString()} (${delta > 0 ? '+' : ''}${delta.toLocaleString()})`,
-                  );
-                } else if (previousMmr == null) {
-                  toast.success(
-                    `Approved ${playerName} at MMR ${mmr.toLocaleString()}`,
-                  );
-                } else {
-                  toast.success(
-                    `Approved ${playerName} (MMR unchanged at ${mmr.toLocaleString()})`,
-                  );
-                }
-              },
-            },
+        reasonMode={reasonMode('approve', liveApprovalSignup)}
+        onApprove={async (signupId, mmr, reason) => {
+          if (!liveApprovalSignup) return false;
+          const previousMmr = liveApprovalSignup.org_user_mmr ?? null;
+          const playerName = DisplayName(liveApprovalSignup);
+          const success = await run(
+            'approve',
+            liveApprovalSignup,
+            (r) =>
+              signupActions.approve.mutateAsync({
+                id: signupId,
+                mmr,
+                reason: r,
+              }),
+            { reason },
           );
+          if (!success) return false;
+          setApprovalSignup(null);
+          if (orgId) {
+            void queryClient.invalidateQueries({
+              queryKey: orgUsersQueryKey(orgId),
+            });
+          }
+          if (previousMmr != null && previousMmr !== mmr) {
+            const delta = mmr - previousMmr;
+            toast.success(
+              `Approved ${playerName} — MMR ${previousMmr.toLocaleString()} → ${mmr.toLocaleString()} (${delta > 0 ? '+' : ''}${delta.toLocaleString()})`,
+            );
+          } else if (previousMmr == null) {
+            toast.success(
+              `Approved ${playerName} at MMR ${mmr.toLocaleString()}`,
+            );
+          } else {
+            toast.success(
+              `Approved ${playerName} (MMR unchanged at ${mmr.toLocaleString()})`,
+            );
+          }
+          return true;
         }}
         isApproving={signupActions.approve.isPending}
         isRejecting={signupActions.reject.isPending}
-        onReject={(signupId) => {
-          const playerName = approvalSignup
-            ? DisplayName(approvalSignup)
-            : `User #${signupId}`;
-          signupActions.reject.mutate(signupId, {
-            onSuccess: () => {
-              setApprovalSignup(null);
-              toast.success(`Rejected signup for ${playerName}`);
-            },
-            onError: () => toast.error(`Failed to reject ${playerName}`),
-          });
+        onReject={async (signupId) => {
+          if (!liveApprovalSignup) return;
+          const playerName = DisplayName(liveApprovalSignup);
+          if (
+            await run('reject', liveApprovalSignup, (reason) =>
+              signupActions.reject.mutateAsync({
+                id: signupId,
+                ...(reason === undefined ? {} : { reason }),
+              }),
+            )
+          ) {
+            setApprovalSignup(null);
+            toast.success(`Rejected signup for ${playerName}`);
+          }
         }}
       />
-      <ConfirmDialog
+      <StaffReasonDialog
+        key={removeSignup?.signup.id ?? 'remove'}
         open={!!removeSignup}
         onOpenChange={(open) => {
           if (!open) setRemoveSignup(null);
         }}
         title="Remove User"
         description={`Remove ${removeSignup?.name ?? 'this user'} from the event? They will lose their signup position and need to re-sign up.`}
-        confirmLabel="Remove"
-        variant="destructive"
-        isLoading={signupActions.cancel.isPending}
-        onConfirm={() => {
-          if (removeSignup) {
-            signupActions.cancel.mutate(removeSignup.signup.id, {
-              onSuccess: () => setRemoveSignup(null),
-            });
-          }
+        actionLabel="Remove"
+        destructive
+        required={
+          reasonMode('cancel', removeSignup?.signup ?? null) === 'required'
+        }
+        submitting={signupActions.cancel.isPending}
+        onConfirm={async (reason) => {
+          if (!removeSignup) return false;
+          const success = await run(
+            'cancel',
+            removeSignup.signup,
+            (r) =>
+              signupActions.cancel.mutateAsync({
+                id: removeSignup.signup.id,
+                reason: r,
+              }),
+            { reason },
+          );
+          if (success) setRemoveSignup(null);
+          return success;
         }}
+      />
+      {spotTransfer && transferSignup && (
+        <TransferSpotDialog
+          open={transferDialogOpen}
+          onOpenChange={setTransferDialogOpen}
+          signup={
+            spotTransfer.signups.find((s) => s.id === transferSignup.id) ??
+            transferSignup
+          }
+          event={spotTransfer.event}
+          signups={spotTransfer.signups}
+          mode={transferSignup.user === currentUserId ? 'member' : 'staff'}
+          orgId={spotTransfer.event.organization}
+          transfer={signupActions.transfer}
+          staffAction={staffAction}
+          signupOverride={signupOverride}
+        />
+      )}
+      <StaffReasonDialog {...dialogProps} />
+      <OverrideWarningDialog
+        {...signupOverride.dialogProps}
+        organization={organization ?? null}
       />
     </div>
   );

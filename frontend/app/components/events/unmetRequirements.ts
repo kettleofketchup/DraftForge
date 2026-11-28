@@ -56,3 +56,7 @@ export function signupSuccessMessage(
   if (status === 'pending_approval') return 'Signed up, pending approval';
   return intent === 'rsvp' ? 'Signed up!' : 'Marked as tentative!';
 }
+
+export function unmetLabel(code: string, fallback: string): string {
+  return isUnmetCode(code) ? UNMET_REQUIREMENT_LABELS[code] : fallback;
+}

@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest import mock
 
 from django.test import SimpleTestCase
 from rest_framework.exceptions import ValidationError
@@ -13,14 +14,27 @@ from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory
 from rest_framework.views import APIView
 
-from events import overrides
+from app.exception_handler import exception_handler
+from app.models import CustomUser
+from events import ledger, overrides
+from events.constants import (
+    ActorRole,
+    SignupAction,
+    SignupMeans,
+    SignupStatus,
+    StaffReasonPolicy,
+)
+from events.ledger import SignupActor, require_staff_reason
 from events.overrides import (
     REASON_MAX_LENGTH,
+    STAFF_REASON_REQUIRED_CODE,
     OverrideReasonRequired,
     OverrideRequired,
+    StaffReasonRequired,
     Violation,
     check_overrides,
     parse_override_request,
+    parse_staff_reason,
     resolve_overrides,
 )
 from org.settings_constants import ALL_CODES, StaffOverridePolicy
@@ -399,6 +413,135 @@ class ExceptionHandlerTest(SimpleTestCase):
         response = self.post({}, [_seat()], _settings(StaffOverridePolicy.SILENT))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, {"overridden": [TICKED], "reason": None})
+
+
+class StaffReasonSerializerTest(SimpleTestCase):
+    def test_absent_null_blank_are_empty(self) -> None:
+        for body in ({}, {"reason": None}, {"reason": "   "}):
+            with self.subTest(body=body):
+                self.assertEqual(parse_staff_reason(body), "")
+
+    def test_trims(self) -> None:
+        self.assertEqual(parse_staff_reason({"reason": "  late sub  "}), "late sub")
+
+    def test_limit_counts_trimmed_text(self) -> None:
+        reason = parse_staff_reason({"reason": f"  {'x' * 500}  "})
+        self.assertEqual(len(reason), 500)
+
+    def test_over_limit_raises(self) -> None:
+        with self.assertRaises(ValidationError) as ctx:
+            parse_staff_reason({"reason": "x" * 501})
+        self.assertIn("reason", ctx.exception.detail)
+
+    def test_non_string_raises(self) -> None:
+        with self.assertRaises(ValidationError) as ctx:
+            parse_staff_reason({"reason": {"text": "no"}})
+        self.assertIn("reason", ctx.exception.detail)
+
+
+SUBJECT_ID = 11
+EVENT_ID = 5
+
+
+def _actor(kind: str) -> SignupActor:
+    if kind == "system":
+        return SignupActor.system()
+    user = CustomUser(pk=SUBJECT_ID if kind == "staff_self" else 22)
+    role = ActorRole.MEMBER if kind == "member" else ActorRole.STAFF
+    return SignupActor(user=user, role=role, means=SignupMeans.WEB)
+
+
+class RequireStaffReasonTest(SimpleTestCase):
+    ACTIONS: tuple[tuple[str, str | None, bool], ...] = (
+        (SignupAction.STAFF_ADDED, None, True),
+        (SignupAction.APPROVED, SignupStatus.WAITLISTED, True),
+        (SignupAction.APPROVED, SignupStatus.RSVP, False),
+        (SignupAction.REJECTED, SignupStatus.PENDING_APPROVAL, False),
+        (SignupAction.CONFIRMED, SignupStatus.APPROVED, False),
+    )
+
+    def test_truth_table(self) -> None:
+        for policy in StaffReasonPolicy.values:
+            for kind in ("staff_other", "staff_self", "member", "system"):
+                for action, from_status, placement in self.ACTIONS:
+                    for reason in ("", "  ", " ok "):
+                        should_raise = (
+                            kind == "staff_other"
+                            and not reason.strip()
+                            and (
+                                policy == StaffReasonPolicy.ALL_STAFF_CHANGES
+                                or (
+                                    policy == StaffReasonPolicy.PLACEMENTS and placement
+                                )
+                            )
+                        )
+                        with self.subTest(
+                            policy=policy,
+                            kind=kind,
+                            action=action,
+                            from_status=from_status,
+                            reason=reason,
+                        ):
+                            kwargs: dict[str, Any] = {
+                                "event_id": EVENT_ID,
+                                "policy": policy,
+                                "actor": _actor(kind),
+                                "subject_id": SUBJECT_ID,
+                                "action": action,
+                                "from_status": from_status,
+                                "reason": reason,
+                            }
+                            if should_raise:
+                                with self.assertRaises(StaffReasonRequired):
+                                    require_staff_reason(**kwargs)
+                            else:
+                                self.assertEqual(
+                                    require_staff_reason(**kwargs), reason.strip()
+                                )
+
+    def test_refusal_logs_without_reason_text(self) -> None:
+        with mock.patch.object(ledger, "log") as log:
+            with self.assertRaises(StaffReasonRequired):
+                require_staff_reason(
+                    event_id=EVENT_ID,
+                    policy=StaffReasonPolicy.PLACEMENTS,
+                    actor=_actor("staff_other"),
+                    subject_id=SUBJECT_ID,
+                    action=SignupAction.APPROVED,
+                    from_status=SignupStatus.WAITLISTED,
+                    reason="   ",
+                )
+        calls = log.warning.call_args_list + log.info.call_args_list
+        self.assertEqual(len(calls), 1)
+        args, kwargs = calls[0]
+        self.assertEqual(args, ("staff_reason_refused",))
+        self.assertEqual(
+            kwargs,
+            {
+                "system": "events",
+                "subsystem": "staff_reason",
+                "event_id": EVENT_ID,
+                "actor_id": 22,
+                "subject_id": SUBJECT_ID,
+                "action": SignupAction.APPROVED,
+                "from_status": SignupStatus.WAITLISTED,
+                "placement": True,
+                "policy": StaffReasonPolicy.PLACEMENTS,
+            },
+        )
+        self.assertNotIn("reason", kwargs)
+
+    def test_staff_reason_required_is_not_value_error(self) -> None:
+        self.assertFalse(issubclass(StaffReasonRequired, ValueError))
+        self.assertEqual(STAFF_REASON_REQUIRED_CODE, "reason_required")
+
+
+class StaffReasonHandlerTest(SimpleTestCase):
+    def test_staff_reason_required_renders_400(self) -> None:
+        response = exception_handler(StaffReasonRequired(), {})
+        assert response is not None
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data, {"error": "reason_required"})
 
 
 class ModuleImportTest(SimpleTestCase):

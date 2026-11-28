@@ -61,6 +61,22 @@ describe('EVENT_SECTION_FIELDS', () => {
     expect(stale).toEqual([]);
   });
 
+  it('lists the staff reason policy under Approval with search keywords', () => {
+    const entry = EVENT_SECTION_FIELDS.approval.staff_reason_policy;
+    expect(entry.label).toBe('Staff reasons');
+    expect(entry.keywords).toEqual(
+      expect.arrayContaining(['reason', 'audit', 'staff', 'placement']),
+    );
+  });
+
+  it('lists spot transfer under Approval so a swap search finds it', () => {
+    const entry = EVENT_SECTION_FIELDS.approval.allow_spot_transfer;
+    expect(entry.label).toBe('Allow spot transfer');
+    expect(entry.keywords).toEqual(
+      expect.arrayContaining(['transfer', 'give place', 'swap']),
+    );
+  });
+
   it('describes the Friend ID requirement without naming one game', () => {
     expect(
       EVENT_SECTION_FIELDS.approval.require_steam_id.description,

@@ -34,6 +34,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
+  RotateCcw,
   Undo2,
   Users,
   XCircle,
@@ -41,6 +42,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
+import { OverrideWarningDialog } from '~/components/events/OverrideWarningDialog';
 import {
   isApprovableSignup,
   moveRollCallFocus,
@@ -51,8 +53,19 @@ import {
 } from '~/components/events/rollCallNavigation';
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
-import { canRestoreSignup } from '~/components/events/signupPartitions';
+import { SignupInLineSince } from '~/components/events/SignupInLineSince';
+import {
+  canRestoreSignup,
+  canVoidWithdrawal,
+} from '~/components/events/signupPartitions';
+import { StaffReasonDialog } from '~/components/events/StaffReasonDialog';
+import {
+  staffReasonMode,
+  type StaffSignupAction,
+} from '~/components/events/staffReasonPolicy';
 import { startTournamentErrorMessage } from '~/components/events/startTournamentError';
+import { useSignupOverride } from '~/components/events/useSignupOverride';
+import { useStaffAction } from '~/components/events/useStaffAction';
 import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
@@ -66,6 +79,11 @@ import {
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 import { Kbd } from '~/components/ui/kbd';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/ui/tooltip';
 import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import {
@@ -88,6 +106,7 @@ import { useProvideGameType } from '~/hooks/useGameType';
 import { useMemberAccess } from '~/hooks/useMemberAccess';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { cn } from '~/lib/utils';
+import { useUserStore } from '~/store/userStore';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -107,6 +126,25 @@ export default function RollCallPage() {
   );
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+  const { fire, dialogProps: overrideDialogProps } =
+    useSignupOverride(signupActions);
+  const currentUserId = useUserStore((state) => state.currentUser?.pk);
+  const {
+    dispatch,
+    dialogProps,
+    isOpen: staffActionIsOpen,
+  } = useStaffAction({
+    policy: event?.staff_reason_policy,
+    currentUserId,
+  });
+  const reasonMode = (
+    action: StaffSignupAction,
+    signup: EventSignupType | null,
+  ) =>
+    staffReasonMode(event?.staff_reason_policy, action, {
+      fromStatus: signup?.status,
+      isSelf: signup?.user === currentUserId,
+    });
 
   const { organization: eventOrg, refetch: refetchEventOrg } = useOrganization(
     event?.organization ?? undefined,
@@ -162,21 +200,49 @@ export default function RollCallPage() {
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
-  const advanceFrom = useCallback((signup: EventSignupType) => {
-    setFocusedId(rollCallFocusAfterAction(rowsRef.current, signup.id));
-  }, []);
+  const nextFocusFrom = useCallback(
+    (signup: EventSignupType) =>
+      rollCallFocusAfterAction(rowsRef.current, signup.id),
+    [],
+  );
 
-  const { mutate: reinstate } = signupActions.reinstate;
-  // Restore is non-destructive — fire the mutation directly. The backend
-  // moves REJECTED/CANCELLED back to APPROVED during ROLL_CALL.
   const handleRestore = useCallback(
-    (signup: EventSignupType) => {
-      advanceFrom(signup);
-      reinstate(signup.id, {
-        onError: () => toast.error(`Failed to restore ${DisplayName(signup)}`),
-      });
+    async (signup: EventSignupType) => {
+      const next = nextFocusFrom(signup);
+      if (
+        await dispatch(
+          'reinstate',
+          signup,
+          fire('reinstate', signup.id, DisplayName(signup)),
+          {
+            errorLabel: `restore ${DisplayName(signup)}`,
+          },
+        )
+      ) {
+        setFocusedId(next);
+      }
     },
-    [reinstate, advanceFrom],
+    [dispatch, fire, nextFocusFrom],
+  );
+  const handleVoid = useCallback(
+    async (signup: EventSignupType) => {
+      const next = nextFocusFrom(signup);
+      if (
+        await dispatch(
+          'void_withdrawal',
+          signup,
+          fire('void_withdrawal', signup.id, DisplayName(signup)),
+          {
+            title: 'Void withdrawal',
+            actionLabel: 'Void withdrawal',
+            errorLabel: `void withdrawal for ${DisplayName(signup)}`,
+          },
+        )
+      ) {
+        setFocusedId(next);
+      }
+    },
+    [dispatch, fire, nextFocusFrom],
   );
 
   const minPlayers = event?.min_players;
@@ -205,6 +271,8 @@ export default function RollCallPage() {
         confirmSignup ||
         rejectSignup ||
         cancelSignup ||
+        staffActionIsOpen ||
+        overrideDialogProps.open ||
         showStartConfirm
       )
         return;
@@ -261,6 +329,8 @@ export default function RollCallPage() {
     confirmSignup,
     rejectSignup,
     cancelSignup,
+    staffActionIsOpen,
+    overrideDialogProps.open,
     showStartConfirm,
   ]);
 
@@ -320,6 +390,7 @@ export default function RollCallPage() {
       isAdmin={isAdmin}
       conductMember={conductMemberFor(signup.user)}
       leaguePk={event.tournament_league ?? null}
+      eventTimezone={event.timezone}
       pending={pendingIds.has(signup.id)}
       focused={isAdmin && signup.id === activeId}
       onSelect={setFocusedId}
@@ -328,6 +399,7 @@ export default function RollCallPage() {
       onRequestReject={setRejectSignup}
       onRequestCancel={setCancelSignup}
       onRequestRestore={handleRestore}
+      onRequestVoid={handleVoid}
     />
   );
 
@@ -477,28 +549,46 @@ export default function RollCallPage() {
 
       <MmrApprovalModal
         signup={approvalSignup}
+        reasonMode={reasonMode('approve', approvalSignup)}
         open={!!approvalSignup}
         onOpenChange={(open) => {
           if (!open) setApprovalSignup(null);
         }}
-        onApprove={(signupId, mmr) => {
+        onApprove={async (signupId, mmr, reason) => {
           const target = approvalSignup;
-          if (target) advanceFrom(target);
-          setApprovalSignup(null);
-          signupActions.approve.mutate(
-            { id: signupId, mmr },
-            {
-              onError: () =>
-                toast.error(
-                  `Failed to approve ${target ? DisplayName(target) : 'signup'}`,
-                ),
-            },
+          if (!target) return false;
+          const next = nextFocusFrom(target);
+          const success = await dispatch(
+            'approve',
+            target,
+            (r) =>
+              signupActions.approve.mutateAsync({
+                id: signupId,
+                mmr,
+                reason: r,
+              }),
+            { reason },
           );
+          if (success) {
+            setFocusedId(next);
+            setApprovalSignup(null);
+          }
+          return success;
         }}
       />
 
+      <StaffReasonDialog {...dialogProps} />
+      <OverrideWarningDialog
+        {...overrideDialogProps}
+        organization={eventOrg ?? null}
+      />
+
       {/* Per-row Confirm (approved → confirmed) */}
-      <ConfirmDialog
+      <StaffReasonDialog
+        key={`confirm-${confirmSignup?.id}`}
+        required={reasonMode('confirm', confirmSignup) === 'required'}
+        submitting={false}
+        contentTestId="rollcall-confirm-dialog"
         open={!!confirmSignup}
         onOpenChange={(open) => {
           if (!open) setConfirmSignup(null);
@@ -531,23 +621,34 @@ export default function RollCallPage() {
             ''
           )
         }
-        confirmLabel="Confirm"
-        cancelLabel="Cancel"
-        onConfirm={() => {
+        actionLabel="Confirm"
+        onConfirm={async (reason) => {
           const target = confirmSignup;
-          if (!target) return;
-          advanceFrom(target);
-          signupActions.confirm.mutate(target.id, {
-            onError: () =>
-              toast.error(`Failed to confirm ${DisplayName(target)}`),
-          });
+          if (!target) return false;
+          const next = nextFocusFrom(target);
+          const success = await dispatch(
+            'confirm',
+            target,
+            (r) =>
+              signupActions.confirm.mutateAsync({
+                id: target.id,
+                ...(r ? { reason: r } : {}),
+              }),
+            { reason, errorLabel: `confirm ${DisplayName(target)}` },
+          );
+          if (success) setFocusedId(next);
+          return success;
         }}
         confirmTestId="rollcall-confirm-dialog-confirm"
         cancelTestId="rollcall-confirm-dialog-cancel"
       />
 
       {/* Per-row Reject (approved → rejected) */}
-      <ConfirmDialog
+      <StaffReasonDialog
+        key={`reject-${rejectSignup?.id}`}
+        required={reasonMode('reject', rejectSignup) === 'required'}
+        submitting={false}
+        contentTestId="rollcall-reject-dialog"
         open={!!rejectSignup}
         onOpenChange={(open) => {
           if (!open) setRejectSignup(null);
@@ -578,24 +679,35 @@ export default function RollCallPage() {
             ''
           )
         }
-        confirmLabel="Reject"
-        cancelLabel="Cancel"
-        variant="destructive"
-        onConfirm={() => {
+        actionLabel="Reject"
+        destructive
+        onConfirm={async (reason) => {
           const target = rejectSignup;
-          if (!target) return;
-          advanceFrom(target);
-          signupActions.reject.mutate(target.id, {
-            onError: () =>
-              toast.error(`Failed to remove ${DisplayName(target)}`),
-          });
+          if (!target) return false;
+          const next = nextFocusFrom(target);
+          const success = await dispatch(
+            'reject',
+            target,
+            (r) =>
+              signupActions.reject.mutateAsync({
+                id: target.id,
+                ...(r ? { reason: r } : {}),
+              }),
+            { reason, errorLabel: `remove ${DisplayName(target)}` },
+          );
+          if (success) setFocusedId(next);
+          return success;
         }}
         confirmTestId="rollcall-reject-dialog-confirm"
         cancelTestId="rollcall-reject-dialog-cancel"
       />
 
       {/* Per-row Cancel (confirmed → cancelled) */}
-      <ConfirmDialog
+      <StaffReasonDialog
+        key={`cancel-${cancelSignup?.id}`}
+        required={reasonMode('cancel', cancelSignup) === 'required'}
+        submitting={false}
+        contentTestId="rollcall-cancel-dialog"
         open={!!cancelSignup}
         onOpenChange={(open) => {
           if (!open) setCancelSignup(null);
@@ -625,17 +737,24 @@ export default function RollCallPage() {
             ''
           )
         }
-        confirmLabel="Remove"
-        cancelLabel="Cancel"
-        variant="destructive"
-        onConfirm={() => {
+        actionLabel="Remove"
+        destructive
+        onConfirm={async (reason) => {
           const target = cancelSignup;
-          if (!target) return;
-          advanceFrom(target);
-          signupActions.cancel.mutate(target.id, {
-            onError: () =>
-              toast.error(`Failed to remove ${DisplayName(target)}`),
-          });
+          if (!target) return false;
+          const next = nextFocusFrom(target);
+          const success = await dispatch(
+            'cancel',
+            target,
+            (r) =>
+              signupActions.cancel.mutateAsync({
+                id: target.id,
+                ...(r ? { reason: r } : {}),
+              }),
+            { reason, errorLabel: `remove ${DisplayName(target)}` },
+          );
+          if (success) setFocusedId(next);
+          return success;
         }}
         confirmTestId="rollcall-cancel-dialog-confirm"
         cancelTestId="rollcall-cancel-dialog-cancel"
@@ -678,6 +797,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap,
   isAdmin,
   leaguePk,
+  eventTimezone,
   pending,
   focused,
   onSelect,
@@ -686,6 +806,7 @@ const SignupStrip = memo(function SignupStrip({
   onRequestReject,
   onRequestCancel,
   onRequestRestore,
+  onRequestVoid,
   conductMember,
 }: {
   conductMember?: ForecastMember;
@@ -693,6 +814,7 @@ const SignupStrip = memo(function SignupStrip({
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   leaguePk: number | null;
+  eventTimezone?: string;
   pending: boolean;
   focused: boolean;
   onSelect: (id: number) => void;
@@ -701,6 +823,7 @@ const SignupStrip = memo(function SignupStrip({
   onRequestReject: (signup: EventSignupType) => void;
   onRequestCancel: (signup: EventSignupType) => void;
   onRequestRestore: (signup: EventSignupType) => void;
+  onRequestVoid: (signup: EventSignupType) => void;
 }) {
   const user = userMap.get(signup.user);
   const isApprovable = isApprovableSignup(signup.status);
@@ -723,6 +846,7 @@ const SignupStrip = memo(function SignupStrip({
         )}
         <EventStateBadge state={signup.status} />
       </span>
+      <SignupInLineSince signup={signup} eventTimezone={eventTimezone} />
       <ConductBadge member={conductMember} />
     </span>
   );
@@ -803,6 +927,25 @@ const SignupStrip = memo(function SignupStrip({
           <Undo2 className="h-3.5 w-3.5" />
           <span className="hidden sm:inline ml-1">Restore</span>
         </SecondaryButton>
+      )}
+      {canVoidWithdrawal(signup.status) && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SecondaryButton
+              size="sm"
+              aria-label="Void withdrawal"
+              data-testid="rollcall-void-withdrawal-btn"
+              onClick={() => onRequestVoid(signup)}
+              disabled={pending}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline ml-1">Void</span>
+            </SecondaryButton>
+          </TooltipTrigger>
+          <TooltipContent>
+            Restore exact place, class and commitment
+          </TooltipContent>
+        </Tooltip>
       )}
     </div>
   ) : undefined;

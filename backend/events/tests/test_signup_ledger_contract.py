@@ -234,7 +234,9 @@ class LeafMutationLedgerTests(LedgerContractMixin, EventTestCase):
         entry = self.ledger(event)[0]
         self.assertEqual(entry.action, SignupAction.DEMOTED)
         self.assertIsNone(entry.before["waitlist_position"])
-        self.assertEqual(entry.after["waitlist_position"], 4)
+        self.assertEqual(entry.after["waitlist_position"], 2)
+        signup.refresh_from_db()
+        self.assertEqual(signup.waitlist_position, 4)
 
     def test_reinstate_roll_call_records(self, _notify: Any) -> None:
         event = self.make_event(state=EventState.ROLL_CALL)
@@ -638,7 +640,7 @@ class CreatePathLedgerTests(LedgerContractMixin, EventTestCase):
         event = self.make_event()
         old = self._cancelled_after_signup(event)
         signup = process_rsvp(event, self.subject, actor=self.member_actor)
-        self.assertNotEqual(signup.pk, old.pk)
+        self.assertEqual(signup.pk, old.pk)
         self.assert_single_entry(
             event,
             action=SignupAction.RESIGNED_UP,
@@ -914,7 +916,7 @@ class TentativeDeclineLedgerTests(LedgerContractMixin, EventTestCase):
         self.assertEqual(promoted.before["status"], SignupStatus.WAITLISTED)
 
     def test_tentative_from_seated_row_notifies_once(self, notify: Any) -> None:
-        event, _seated, waiting = self._full_event()
+        event, seated, waiting = self._full_event()
         actor = SignupActor(
             user=self.subject,
             role=ActorRole.MEMBER,
@@ -924,6 +926,7 @@ class TentativeDeclineLedgerTests(LedgerContractMixin, EventTestCase):
         with self.captureOnCommitCallbacks(execute=True):
             signup = create_tentative_signup(event, self.subject, actor=actor)
         self.assertEqual(notify.call_count, 1)
+        self.assertEqual(signup.pk, seated.pk)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self._assert_promotion_chain(
             event,

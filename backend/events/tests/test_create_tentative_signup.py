@@ -34,12 +34,11 @@ class CreateTentativeSignupTests(TestCase):
         self.assertEqual(signup.user, self.user)
 
     def test_upgrades_active_signup_to_tentative(self):
-        # Active signups (RSVP/APPROVED/CONFIRMED/etc.) are cancelled and
-        # replaced with a fresh TENTATIVE row. Only one row remains.
-        EventSignup.objects.create(
+        old = EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.RSVP
         )
         signup = create_tentative_signup(self.event, self.user, actor=SYSTEM)
+        self.assertEqual(signup.pk, old.pk)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 1
@@ -52,11 +51,12 @@ class CreateTentativeSignupTests(TestCase):
         with self.assertRaises(ValueError):
             create_tentative_signup(self.event, self.user, actor=SYSTEM)
 
-    def test_cleans_up_cancelled_row(self):
-        EventSignup.objects.create(
+    def test_reuses_cancelled_row(self):
+        old = EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.CANCELLED
         )
         signup = create_tentative_signup(self.event, self.user, actor=SYSTEM)
+        self.assertEqual(signup.pk, old.pk)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self.assertEqual(
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 1

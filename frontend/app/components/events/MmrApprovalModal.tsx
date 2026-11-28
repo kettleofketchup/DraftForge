@@ -1,8 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import {
+  StaffReasonField,
+  useStaffReasonForm,
+} from '~/components/events/StaffReasonField';
 import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
 import type { EventSignupType } from '~/components/events/schemas';
 import {
@@ -78,7 +82,12 @@ interface MmrApprovalModalProps {
   signup: EventSignupType | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onApprove: (signupId: number, mmr: number) => void;
+  onApprove: (
+    signupId: number,
+    mmr: number,
+    reason: string,
+  ) => Promise<boolean>;
+  reasonMode?: 'required' | 'optional';
   onReject?: (signupId: number) => void;
   isApproving?: boolean;
   isRejecting?: boolean;
@@ -92,10 +101,20 @@ export function MmrApprovalModal({
   onReject,
   isApproving = false,
   isRejecting = false,
+  reasonMode = 'optional',
 }: MmrApprovalModalProps) {
   const gameType = useContextGameType();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [approvedMmr, setApprovedMmr] = useState<number | null>(null);
+  const reasonRequired = reasonMode === 'required';
+  const reasonForm = useStaffReasonForm(
+    reasonRequired,
+    signup?.id,
+    confirmOpen,
+  );
+  const inFlight = useRef(false);
+  const ignoreClose = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
   const mmrSchema = useMemo(() => buildMmrSchema(gameType), [gameType]);
   const formId = useId();
   // 3-generic useForm because z.coerce.number() genuinely splits input/output:
@@ -174,10 +193,22 @@ export function MmrApprovalModal({
     setConfirmOpen(true);
   };
 
-  const handleConfirmApproval = () => {
-    if (approvedMmr == null) return;
-    onApprove(signup.id, approvedMmr);
-    setConfirmOpen(false);
+  const handleConfirmApproval = async (fromDialog: boolean) => {
+    if (approvedMmr == null || isApproving || inFlight.current) return;
+    inFlight.current = true;
+    setSubmitting(true);
+    let success = false;
+    try {
+      await reasonForm.handleSubmit(async ({ reason }) => {
+        success = await onApprove(signup.id, approvedMmr, reason);
+      })();
+      if (success) setConfirmOpen(false);
+    } finally {
+      // ConfirmDialog otherwise closes even when approval was refused.
+      ignoreClose.current = fromDialog && !success;
+      inFlight.current = false;
+      setSubmitting(false);
+    }
   };
 
   const deltaSummary = (() => {
@@ -410,13 +441,32 @@ export function MmrApprovalModal({
 
       <ConfirmDialog
         open={confirmOpen}
-        onOpenChange={setConfirmOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && ignoreClose.current) {
+            ignoreClose.current = false;
+            return;
+          }
+          if (!nextOpen && inFlight.current) return;
+          setConfirmOpen(nextOpen);
+        }}
         title={isLargeChange ? 'Confirm large MMR change' : 'Confirm approval'}
         description={confirmDescription}
         confirmLabel={isLargeChange ? 'Approve anyway' : 'Approve'}
         variant={isLargeChange ? 'warning' : 'default'}
-        isLoading={isApproving}
-        onConfirm={handleConfirmApproval}
+        isLoading={isApproving || submitting}
+        confirmDisabled={
+          !reasonForm.formState.isValid || isApproving || submitting
+        }
+        onConfirm={() => handleConfirmApproval(true)}
+        bodyContent={
+          <Form {...reasonForm}>
+            <StaffReasonField
+              form={reasonForm}
+              required={reasonRequired}
+              onSubmit={() => handleConfirmApproval(false)}
+            />
+          </Form>
+        }
         confirmTestId="mmr-confirm-approve"
         cancelTestId="mmr-confirm-cancel"
       />
