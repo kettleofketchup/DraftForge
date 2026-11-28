@@ -231,6 +231,7 @@ class SharedSettingsParityTest(SimpleTestCase):
                 sys.executable,
                 "-c",
                 "from django.conf import settings as s; "
+                "print(repr(s.SIGNUP_RECORDS_PURGE_MAX_CALLS)); "
                 "print(repr(s.SIGNUP_POST)); print(repr(s.REDIS_KEY_SCOPE)); "
                 "print(repr(s.REDIS_HOST))",
             ],
@@ -241,7 +242,7 @@ class SharedSettingsParityTest(SimpleTestCase):
             timeout=120,
         )
         self.assertEqual(result.returncode, 0, result.stderr[-3000:])
-        return result.stdout.strip().splitlines()[-3:]
+        return result.stdout.strip().splitlines()[-4:]
 
     def test_signup_post_and_scope_parity(self) -> None:
         web = self._read("backend.settings")
@@ -250,6 +251,7 @@ class SharedSettingsParityTest(SimpleTestCase):
         self.assertEqual(
             web,
             [
+                "12",
                 "SignupPostConfig(debounce_seconds=4, lock_seconds=60, disabled=False,"
                 " read_retries=5, retry_seconds=3, busy_warn_passes=4)",
                 "'df-s3:'",
@@ -264,6 +266,41 @@ class SharedSettingsParityTest(SimpleTestCase):
                 worker = self._read("config.settings_celery", redis_host)
                 self.assertEqual(web[-1], worker[-1])
                 self.assertNotEqual(web[-1], "''")
+
+
+class WorkerTaskSettingsTest(SimpleTestCase):
+    """Beat tasks must run under config.settings_celery, not only backend.settings."""
+
+    SCRIPT = (
+        "import django; django.setup()\n"
+        "from unittest import mock\n"
+        "from events import tasks\n"
+        "with mock.patch.object(tasks, 'purge_signup_records',"
+        " return_value={'more': True}) as purge:\n"
+        "    tasks.purge_expired_signup_records()\n"
+        "print(purge.call_count)\n"
+    )
+
+    def test_purge_expired_signup_records_runs_under_worker_settings(self) -> None:
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("RUNNING_TESTS", "DF_RUNNING_TESTS")
+        }
+        env["DJANGO_SETTINGS_MODULE"] = "config.settings_celery"
+        result = subprocess.run(
+            [sys.executable, "-c", self.SCRIPT],
+            cwd=BACKEND_DIR,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr[-3000:])
+        self.assertEqual(
+            result.stdout.strip().splitlines()[-1],
+            str(settings.SIGNUP_RECORDS_PURGE_MAX_CALLS),
+        )
 
 
 class ResolveRedisHostTest(SimpleTestCase):

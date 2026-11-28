@@ -33,6 +33,7 @@ from config.leagues import app_config
 from config.promotion_sync import PromotionAdaptorConfig, PromotionSyncConfig
 from config.redis_host import is_docker, resolve_redis_host
 from config.signup_post import SignupPostConfig
+from config.signup_records import SIGNUP_RECORDS_PURGE_MAX_CALLS  # noqa: F401
 from telemetry.config import init_telemetry
 
 warnings.filterwarnings("once", message=r".*cacheops cache is unreachable.*")
@@ -629,7 +630,6 @@ SIGNUP_RECORD_MIN_RETENTION_DAYS = int(
 SIGNUP_RECORD_MAX_RETENTION_DAYS = 36500
 SIGNUP_RECORDS_MAX_ROWS = int(os.environ.get("SIGNUP_RECORDS_MAX_ROWS", "50000"))
 SIGNUP_RECORDS_PURGE_BUDGET_S = 20.0
-SIGNUP_RECORDS_PURGE_MAX_CALLS = 12
 
 # League configuration
 LEAGUE_CHOICES = app_config.league_choices
