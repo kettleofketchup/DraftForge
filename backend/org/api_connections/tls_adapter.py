@@ -106,6 +106,13 @@ def _resolve(host: str, deadline: float) -> tuple[str, ...]:
         child.communicate()
 
 
+def public_answers(host: str, deadline: float) -> frozenset[str]:
+    answers = _resolve(host, deadline)
+    if not 0 < len(answers) <= 64:
+        raise SafeHttpError("dns_failed")
+    return frozenset(public_address(answer) for answer in answers)
+
+
 class _PinnedConnection(HTTPSConnection):
     def __init__(self, host: str, deadline: float) -> None:
         super().__init__(
@@ -130,10 +137,7 @@ class _PinnedConnection(HTTPSConnection):
                 pass
 
     def _new_conn(self) -> socket.socket:
-        answers = _resolve(self.host, self.deadline)
-        if not 0 < len(answers) <= 64:
-            raise SafeHttpError("dns_failed")
-        addresses = frozenset(public_address(answer) for answer in answers)
+        addresses = public_answers(self.host, self.deadline)
         address = sorted(addresses)[0]
         family = socket.AF_INET6 if ":" in address else socket.AF_INET
         sock = socket.socket(family, socket.SOCK_STREAM)

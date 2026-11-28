@@ -26,7 +26,8 @@ States after an answer:
 
 A row whose lease expired (the dispatcher died mid-request) is due again and
 is resent with the same delivery UUID and bytes. Rows are dispatched only for
-orgs and events bound in ``PROMOTION_SYNC``; others stay pending.
+orgs and events bound in ``PROMOTION_SYNC`` that have not adopted a connection
+stream (``promotion_config``); others stay pending.
 
 The clock is read again for each claim and after each answer, never once per
 run: a run that sends many rows to a slow adaptor would otherwise lease later
@@ -48,6 +49,7 @@ from django.db.models import F, Q
 from django.utils import timezone
 
 from config.promotion_sync import PromotionAdaptorConfig
+from org.api_connections.promotion_config import env_dispatch_bindings
 from org.integration.adaptor_client import (
     OutcomeKind,
     PromotionAdaptorClient,
@@ -126,9 +128,9 @@ def _config() -> PromotionAdaptorConfig:
 
 
 def _bound() -> Q:
-    """Rows whose org and event are both bound to an external occasion."""
+    """Rows of unadopted orgs whose org and event are both deployment-bound."""
     q = Q(pk__in=[])
-    for binding in settings.PROMOTION_SYNC.bindings:
+    for binding in env_dispatch_bindings():
         if binding.events:
             q |= Q(organization_id=binding.org_id, event_id__in=list(binding.events))
     return q

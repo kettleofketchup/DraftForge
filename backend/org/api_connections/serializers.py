@@ -9,6 +9,7 @@ from org.models import OrgApiConnection
 class ConnectionSerializer(serializers.ModelSerializer):
     credential_present = serializers.SerializerMethodField()
     inbound_credentials = serializers.SerializerMethodField()
+    promotion_stream = serializers.SerializerMethodField()
 
     class Meta:
         model = OrgApiConnection
@@ -31,6 +32,7 @@ class ConnectionSerializer(serializers.ModelSerializer):
             "last_success_at",
             "last_error_code",
             "next_due_at",
+            "promotion_stream",
         )
         read_only_fields = fields
 
@@ -51,3 +53,6 @@ class ConnectionSerializer(serializers.ModelSerializer):
             {field: getattr(token, field) for field in fields}
             for token in sorted(obj.tokens.all(), key=lambda token: token.pk)
         ]
+
+    def get_promotion_stream(self, obj: OrgApiConnection) -> bool:
+        return hasattr(obj, "promotion_adoption")

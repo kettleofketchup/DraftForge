@@ -40,7 +40,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Any, Final, Literal
 
-from django.conf import settings
 from django.db import IntegrityError
 from django.db.models import Max
 from django.utils import timezone
@@ -48,6 +47,7 @@ from django.utils import timezone
 from app.models import CustomUser
 from config.promotion_sync import OrgPromotionBinding
 from events.models import Event
+from org.api_connections.promotion_config import resolve_promotion_config
 from org.integration import observations, points
 from org.integration.bindings import get_org_binding
 from org.integration.errors import IntegrationError, invalid
@@ -384,9 +384,11 @@ def _create(
     event: Event | None,
     user: CustomUser | None,
     org_user: OrgUser | None,
+    connection_id: int | None,
 ) -> ExternalPromotionReceipt:
     now = timezone.now()
     return ExternalPromotionReceipt.objects.create(
+        connection_id=connection_id,
         organization=org,
         source=ReceiptSource.CONTACT_LOG,
         source_contact_id=entry.source_contact_id,
@@ -526,6 +528,7 @@ def _apply_batch(
     events: dict[int, Event],
     retained: dict[int, ExternalPromotionReceipt],
     candidates: list[ExternalPromotionReceipt],
+    connection_id: int | None = None,
 ) -> dict[str, Any]:
     """Write the validated batch. Runs inside the org and event locks."""
     results: list[dict[str, Any]] = []
@@ -544,7 +547,7 @@ def _apply_batch(
                 else PointStatus.NOT_APPLICABLE
             )
         elif receipt is None:
-            receipt = _create(org, batch, entry, event, user, org_user)
+            receipt = _create(org, batch, entry, event, user, org_user, connection_id)
             status = "applied"
             outcome = points.settle(receipt)
         else:
@@ -580,7 +583,7 @@ def _apply_batch(
             continue
         counts["restored_local"] += points.retract(receipt)
         counts["retracted"] += 1
-    observations.record_ranges(org.pk, batch)
+    observations.record_ranges(org.pk, batch, connection_id=connection_id)
     highest = ExternalPromotionReceipt.objects.filter(
         organization=org, source=ReceiptSource.CONTACT_LOG
     ).aggregate(highest=Max("source_contact_id"))["highest"]
@@ -608,9 +611,12 @@ def _apply_batch(
     }
 
 
-def import_contact_receipts(org: Organization, payload: Any) -> dict[str, Any]:
+def import_contact_receipts(
+    org: Organization, payload: Any, *, connection_id: int | None = None
+) -> dict[str, Any]:
     """Validate and apply one guild-wide batch atomically; see the module
-    docstring.
+    docstring. ``connection_id`` is the authenticated key's connection,
+    recorded as provenance on new rows only; it never narrows the scan.
 
     Raises ``IntegrationError``: 400 for an invalid batch, 403
     ``binding_missing`` / ``binding_mismatch`` for the binding and its guild,
@@ -642,7 +648,7 @@ def import_contact_receipts(org: Organization, payload: Any) -> dict[str, Any]:
         retained, candidates = _read(org, batch)
         if not _lock_set(batch, events, [*retained.values(), *candidates]) <= lock_ids:
             raise _LockSetChanged
-        return _apply_batch(org, batch, events, retained, candidates)
+        return _apply_batch(org, batch, events, retained, candidates, connection_id)
 
     try:
         result = with_event_mutations(sorted(lock_ids), locked, lock_first=lock_org)
@@ -757,8 +763,7 @@ def reconcile_association(
 def contact_sync_status(org: Organization, event: Event) -> dict[str, Any]:
     """Candidate-envelope ``contact_sync``. The import time is when the last
     receipt for this event arrived, not proof the history is complete."""
-    binding = settings.PROMOTION_SYNC.for_org(org.pk)
-    configured = binding is not None and event.pk in binding.events
+    configured = event.pk in resolve_promotion_config(org.pk).events
     last = None
     if configured:
         last = ExternalPromotionReceipt.objects.filter(

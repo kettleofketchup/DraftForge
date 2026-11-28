@@ -285,6 +285,8 @@ class OrgLog(models.Model):
         ("api_connection_owner_lost", "API Connection Owner Lost"),
         ("resume_mmr_deliveries", "Resume MMR Deliveries"),
         ("resync_mmr_deliveries", "Resync MMR Deliveries"),
+        ("edit_promotion_binding", "Edit Promotion Binding"),
+        ("adopt_promotion_sync", "Adopt Promotion Sync"),
         ("void_promo_point", "Void Promotion Point"),
         ("restore_promo_point", "Restore Promotion Point"),
         ("update_external_contact", "Update External Contact"),

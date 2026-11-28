@@ -1,3 +1,4 @@
+import json
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -6,13 +7,22 @@ from unittest import skipUnless
 from unittest.mock import patch
 
 from django.db import connection, connections, transaction
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from common.game import GameType
+from config.promotion_sync import OrgPromotionBinding, PromotionSyncConfig
+from events.models import Event
+from org.api_connections import tls_adapter
 from org.api_connections.lifecycle import ConnectionConflict, issue_connection_key
 from org.api_connections.mutations import MmrMutationContext, MmrRevisionConflict
+from org.api_connections.promotion_config import (
+    PromotionStreamError,
+    adopt_legacy_promotion,
+    set_promotion_binding,
+)
 from org.api_connections.pull import create_pull_run
 from org.api_connections.push import acquire_delivery_lease
 from org.api_connections.revisions import next_revision
@@ -23,6 +33,9 @@ from org.models import (
     Organization,
     OrgApiConnection,
     OrgApiMmrDelivery,
+    OrgApiPromotionAdoption,
+    OrgApiPromotionBinding,
+    OrgApiPromotionEventBinding,
     OrgApiSyncRun,
     OrgApiToken,
     OrgMmrRevisionCounter,
@@ -30,6 +43,7 @@ from org.models import (
     OrgUser,
     OrgUserGameMmr,
 )
+from org.tests.test_api_connections_crypto import OLD_KEY
 
 
 @skipUnless(connection.vendor == "postgresql", "Requires PostgreSQL row locks")
@@ -461,3 +475,121 @@ class MmrDeliveryLeaseRaceTests(TransactionTestCase):
         self.assertEqual(
             OrgApiMmrDelivery.objects.get(delivery_id=delivery_id).attempts, 1
         )
+
+
+GUILD = "770000000000000001"
+
+
+@skipUnless(connection.vendor == "postgresql", "Requires PostgreSQL row locks")
+@override_settings(ORG_API_CREDENTIAL_KEYS=json.dumps([OLD_KEY]))
+class PromotionStreamRaceTests(TransactionTestCase):
+    def setUp(self) -> None:
+        resolve = patch.object(tls_adapter, "_resolve", return_value=("93.184.216.34",))
+        resolve.start()
+        self.addCleanup(resolve.stop)
+        self.operator = CustomUser.objects.create_superuser(
+            username="stream-operator", password="x"
+        )
+
+    def org(self, name: str, *, env_bound: bool) -> tuple[Organization, Event]:
+        org = Organization.objects.create(
+            name=name, owner=self.operator, discord_server_id=GUILD
+        )
+        org.admins.add(self.operator)
+        set_org_feature(org, FeatureKey.PROMOTION, enabled=True, actor=None)
+        event = Event.objects.create(
+            organization=org,
+            name=f"{name} event",
+            scheduled_at=timezone.now(),
+            created_by=self.operator,
+        )
+        if env_bound:
+            config = PromotionSyncConfig(
+                bindings=(
+                    OrgPromotionBinding(
+                        org_id=org.pk, guild_id=int(GUILD), events={event.pk: 88}
+                    ),
+                )
+            )
+            override = override_settings(PROMOTION_SYNC=config)
+            override.enable()
+            self.addCleanup(override.disable)
+        return org, event
+
+    def race(self, *jobs: Callable[[], object]) -> list[str]:
+        barrier = threading.Barrier(len(jobs), timeout=10)
+
+        def run(job: Callable[[], object]) -> str:
+            try:
+                barrier.wait()
+                try:
+                    job()
+                    return "ok"
+                except PromotionStreamError as exc:
+                    return exc.code
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+            futures = [pool.submit(run, job) for job in jobs]
+            return sorted(future.result(timeout=30) for future in futures)
+
+    def adopt(self, org: Organization) -> Callable[[], object]:
+        return lambda: adopt_legacy_promotion(
+            org_id=org.pk,
+            actor=CustomUser.objects.get(pk=self.operator.pk),
+            credential="per-org-key",
+            base_url="https://adaptor.example",
+            dry_run=False,
+        )
+
+    def bind(
+        self, connection_row: OrgApiConnection, event: Event
+    ) -> Callable[[], object]:
+        return lambda: set_promotion_binding(
+            OrgApiConnection.objects.get(pk=connection_row.pk),
+            actor=CustomUser.objects.get(pk=self.operator.pk),
+            events={event.pk: 99},
+        )
+
+    def assertSingleStream(self, org: Organization, events: int) -> None:
+        adoption = OrgApiPromotionAdoption.objects.get(organization=org)
+        binding = OrgApiPromotionBinding.objects.get(organization=org)
+        self.assertEqual(binding.connection_id, adoption.connection_id)
+        self.assertEqual(
+            OrgApiPromotionEventBinding.objects.filter(
+                binding__organization=org
+            ).count(),
+            events,
+        )
+
+    def test_concurrent_promotion_stream_adoption_single_authority(self) -> None:
+        org, _ = self.org("Adopt twice", env_bound=True)
+        self.assertEqual(
+            self.race(self.adopt(org), self.adopt(org)),
+            ["ok", "promotion_stream_exists"],
+        )
+        self.assertSingleStream(org, 1)
+
+        org, event = self.org("Adopt vs bind", env_bound=True)
+        rival = OrgApiConnection.objects.create(organization=org, name="Rival")
+        outcome = self.race(self.adopt(org), self.bind(rival, event))
+        self.assertEqual(outcome.count("ok"), 1, outcome)
+        self.assertTrue(
+            {"managed_by_deployment", "promotion_stream_exists"} & set(outcome),
+            outcome,
+        )
+        self.assertSingleStream(org, 1)
+        self.assertNotEqual(
+            OrgApiPromotionAdoption.objects.get(organization=org).connection_id,
+            rival.pk,
+        )
+
+        org, event = self.org("Bind twice", env_bound=False)
+        first = OrgApiConnection.objects.create(organization=org, name="First")
+        second = OrgApiConnection.objects.create(organization=org, name="Second")
+        self.assertEqual(
+            self.race(self.bind(first, event), self.bind(second, event)),
+            ["ok", "promotion_stream_exists"],
+        )
+        self.assertSingleStream(org, 1)

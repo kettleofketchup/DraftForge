@@ -29,6 +29,14 @@ from org.api_connections.lifecycle import (
     issue_connection_key,
     revoke_connection_keys,
 )
+from org.api_connections.promotion_config import (
+    PromotionStreamError,
+    describe,
+    parse_event_bindings,
+    resolve_promotion_config,
+    set_promotion_binding,
+    stream_destination_locked,
+)
 from org.api_connections.recovery import (
     resume_mmr_deliveries,
     resync_mmr_deliveries,
@@ -95,7 +103,7 @@ def _connection(org: Organization, connection_id: int) -> OrgApiConnection:
 def _error(exc: ConnectionConfigError | CredentialError) -> Response:
     return Response(
         {"code": exc.code, "detail": exc.code},
-        status=409 if exc.code == "configuration_changed" else 400,
+        status=409 if exc.code in ("configuration_changed", "binding_locked") else 400,
     )
 
 
@@ -142,7 +150,9 @@ def connections(request: Request, org_id: int) -> Response:
     if request.method == "GET":
         return Response(
             ConnectionSerializer(
-                org.api_connections.order_by("pk").prefetch_related(
+                org.api_connections.order_by("pk")
+                .select_related("promotion_adoption")
+                .prefetch_related(
                     Prefetch("tokens", queryset=OrgApiToken.objects.order_by("pk"))
                 ),
                 many=True,
@@ -244,6 +254,10 @@ def connection_detail(request: Request, org_id: int, connection_id: int) -> Resp
                 if version != current.config_version:
                     raise ConnectionConfigError("configuration_changed")
                 _check_patch(current, patch)
+                if "outbound_base_url" in patch and stream_destination_locked(
+                    current, str(patch["outbound_base_url"])
+                ):
+                    raise ConnectionConfigError("binding_locked")
                 grants_changed = "operations" in patch and set(
                     patch["operations"]
                 ) != set(current.operations)
@@ -443,3 +457,34 @@ def connection_delivery_recovery(
         return Response({"enqueued": enqueued})
     except ConnectionConfigError as exc:
         return _error(exc)
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def promotion_stream(request: Request, org_id: int) -> Response:
+    org = _org(request, org_id)
+    return Response(describe(resolve_promotion_config(org.pk)))
+
+
+@api_view(["PUT"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_promotion_binding(
+    request: Request, org_id: int, connection_id: int
+) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    if type(request.data) is not dict or set(request.data) != {"events"}:
+        return _invalid()
+    require_feature(org, FeatureKey.PROMOTION)
+    check_action_budget(org.pk, request.user.pk)
+    try:
+        resolved = set_promotion_binding(
+            connection,
+            actor=request.user,
+            events=parse_event_bindings(request.data["events"]),
+        )
+    except PromotionStreamError as exc:
+        return Response({"code": exc.code, "detail": exc.code}, status=exc.status)
+    return Response(describe(resolved))

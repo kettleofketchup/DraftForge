@@ -1,7 +1,8 @@
 """Look up the trusted external binding for an org's event.
 
-Bindings come only from ``settings.PROMOTION_SYNC``
-(``config/promotion_sync.py``). Every lookup also checks the event belongs
+Bindings come from ``resolve_promotion_config``: the org's adopted
+connection stream, or ``settings.PROMOTION_SYNC`` until it adopts one. Every
+lookup also checks the event belongs
 to the org and the configured guild is the org's own Discord server, so a
 stale or mistyped binding fails closed instead of mapping contacts into the
 wrong guild.
@@ -11,10 +12,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from django.conf import settings
-
-from config.promotion_sync import OrgPromotionBinding, PromotionSyncConfig
+from config.promotion_sync import OrgPromotionBinding
 from events.models import Event
+from org.api_connections.promotion_config import resolve_promotion_config
 from org.integration.errors import IntegrationError
 from org.models import Organization
 
@@ -27,17 +27,16 @@ class EventBinding:
     occasion_id: int
 
 
-def _config() -> PromotionSyncConfig:
-    return settings.PROMOTION_SYNC
-
-
 def get_org_binding(org_id: int) -> OrgPromotionBinding:
     """The org's binding, checked against its Discord server.
 
     403 ``binding_missing`` when the org is not configured, 403
     ``binding_mismatch`` when the configured guild is not the org's server.
     """
-    binding = _config().for_org(org_id)
+    return _checked(org_id, resolve_promotion_config(org_id).binding)
+
+
+def _checked(org_id: int, binding: OrgPromotionBinding | None) -> OrgPromotionBinding:
     if binding is None:
         raise IntegrationError("binding_missing", 403)
     server_id = (
@@ -58,7 +57,7 @@ def get_event_binding(org_id: int, event_id: int) -> EventBinding:
     the configuration says), 403 ``binding_missing`` when the org or event
     is not bound, 403 ``binding_mismatch`` for a guild mismatch.
     """
-    binding = _config().for_org(org_id)
+    binding = resolve_promotion_config(org_id).binding
     if binding is None:
         raise IntegrationError("binding_missing", 403)
     if not (
@@ -68,7 +67,7 @@ def get_event_binding(org_id: int, event_id: int) -> EventBinding:
     occasion_id = binding.events.get(event_id)
     if occasion_id is None:
         raise IntegrationError("binding_missing", 403)
-    org_binding = get_org_binding(org_id)
+    org_binding = _checked(org_id, binding)
     return EventBinding(
         org_id=org_id,
         guild_id=org_binding.guild_id,

@@ -33,13 +33,18 @@ def covered(source_id: int, ranges: list[tuple[int, int]]) -> bool:
     return any(after < source_id <= through for after, through in ranges)
 
 
-def record_ranges(org_id: int, batch: ImportBatch) -> None:
+def record_ranges(
+    org_id: int, batch: ImportBatch, *, connection_id: int | None = None
+) -> None:
     if batch.range_through is None:
         return
     stored = PromotionImportObservation.objects.filter(
         organization_id=org_id, source=ReceiptSource.CONTACT_LOG
     )
-    spans = list(stored.values_list("after", "through", "observed_at"))
+    rows = list(stored.values_list("after", "through", "observed_at", "connection_id"))
+    spans = [(after, through, observed) for after, through, observed, _ in rows]
+    sources = {observed: source for _, _, observed, source in rows}
+    sources[batch.scan_started_at] = connection_id
     after = batch.range_after
     for skipped in sorted(batch.skipped_ids):
         if after < skipped - 1:
@@ -78,6 +83,7 @@ def record_ranges(org_id: int, batch: ImportBatch) -> None:
     PromotionImportObservation.objects.bulk_create(
         [
             PromotionImportObservation(
+                connection_id=sources.get(observed),
                 organization_id=org_id,
                 source=ReceiptSource.CONTACT_LOG,
                 after=start,

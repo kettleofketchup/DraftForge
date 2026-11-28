@@ -6,6 +6,16 @@ urlpatterns = [
     path("", views.connections, name="org-api-connections"),
     path("<int:connection_id>/", views.connection_detail, name="org-api-connection"),
     path(
+        "promotion/",
+        views.promotion_stream,
+        name="org-api-connections-promotion",
+    ),
+    path(
+        "<int:connection_id>/promotion-binding/",
+        views.connection_promotion_binding,
+        name="org-api-connection-promotion-binding",
+    ),
+    path(
         "<int:connection_id>/issue-key/",
         views.connection_key,
         {"action": "issue"},

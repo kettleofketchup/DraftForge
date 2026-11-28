@@ -177,7 +177,7 @@ class GrantTests(ApiTokenBase):
                 self.assertEqual(resp.status_code, 400)
         self.assertFalse(OrgApiToken.objects.filter(name="x").exists())
 
-    def test_new_promotion_grants_require_promotion_and_routes_are_not_registered(
+    def test_new_promotion_grants_require_promotion_and_reach_only_their_method(
         self,
     ) -> None:
         self.client.force_authenticate(self.admin)
@@ -198,13 +198,16 @@ class GrantTests(ApiTokenBase):
             self.assertEqual(issued.status_code, 201, issued.data)
             self.assertEqual(issued.data["operations"], [operation])
             machine = self.bearer(issued.data["token"])
-            for route in ("contact-history", "contact-receipts/write"):
-                self.assertEqual(
-                    machine.get(
-                        f"/api/organizations/{self.org.pk}/integration/v1/{route}/"
-                    ).status_code,
-                    404,
-                )
+            url = f"/api/organizations/{self.org.pk}/integration/v1/contact-receipts/"
+            read = machine.get(url, {"event_id": "1"})
+            write = machine.post(url, {}, format="json")
+            denied_code = "operation_not_granted"
+            if operation == "promotion:read":
+                self.assertEqual(read.json()["error"]["code"], "binding_missing")
+                self.assertEqual(write.json()["error"]["code"], denied_code)
+            else:
+                self.assertEqual(read.json()["error"]["code"], denied_code)
+                self.assertEqual(write.status_code, 400)
         legacy = issue_token(
             self.org, self.admin, "import", operations=["promotion:import"]
         )
