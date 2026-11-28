@@ -1,0 +1,2 @@
+- Organization staff can export sign-up records, including cancelled and deleted events, as a CSV from the organization page, and BI tools can read them through new records and ledger APIs (#499).
+- Organization admins can set how long sign-up records are kept; a nightly job deletes records for events past that period. Operators can tune the minimum period with `SIGNUP_RECORD_MIN_RETENTION_DAYS` (default 30) and the export row cap with `SIGNUP_RECORDS_MAX_ROWS` (default 50000).

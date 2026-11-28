@@ -273,14 +273,15 @@ Django upgrade that changes it fails CI.
 
 ## Retention
 
-`opsnotices.retention.RETENTION` declares the contract for the retention job (#499):
+`opsnotices.retention.RETENTION` declares the contract for a notice retention job:
 
 - `purge_notices(older_than=..., organization=None)` deletes closed notices whose
   `closed_at` is older than the cutoff, and `log` notices whose `last_seen_at` is older,
   open or not. Open `urgent` and `task` notices are never purged.
 - `older_than` below 365 days raises `ValueError`.
 
-Nothing calls it yet, so notices are kept indefinitely until #499 wires it in.
+Nothing calls it yet, so notices are kept indefinitely. Wiring it into a scheduled job
+remains a follow-up: #499's nightly purge deletes sign-up ledger entries only.
 
 ## Extending the states (#564)
 

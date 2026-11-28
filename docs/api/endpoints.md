@@ -807,19 +807,24 @@ Guide and error codes: [MMR update requests](../features/mmr-update-requests.md#
 
 ## Organization Settings
 
-Guide: [Organization Settings](../features/organization-settings.md).
+Guide: [Organization Settings](../features/organization-settings.md). Sign-up records: [Signup Ledger: Records API](../features/events/signup-ledger.md#records-api).
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| GET | `/api/organizations/{id}/settings/` | `{organization, staff_override_policy, staff_override_warning_codes, available_warning_codes: [{code, label}], updated_at}`. Creates the row with defaults on first read. | Org admin |
-| PATCH | `/api/organizations/{id}/settings/` | Partial body with `staff_override_policy` (`silent` \| `confirm` \| `block`) and/or `staff_override_warning_codes` (list of codes; duplicates removed, stored in canonical order, empty list allowed). Logs an `OrgLog` `update` entry when something changed. Returns the row. | Org admin |
+| GET | `/api/organizations/{id}/settings/` | `{organization, staff_override_policy, staff_override_warning_codes, available_warning_codes: [{code, label}], signup_record_retention_days, signup_record_min_retention_days, updated_at}`. Creates the row with defaults on first read. | Org admin |
+| PATCH | `/api/organizations/{id}/settings/` | Partial body with `staff_override_policy` (`silent` \| `confirm` \| `block`), `staff_override_warning_codes` (list of codes; duplicates removed, stored in canonical order, empty list allowed) and/or `signup_record_retention_days` (`null` to keep forever, or whole days from `signup_record_min_retention_days` to 36500). Logs an `OrgLog` `update` entry when something changed. Returns the row. | Org admin |
+| GET | `/api/organizations/{id}/signup-records/` | One sign-up record per event and member, `{organization, count, results}`. Filters `since`, `until`, `series`, `event`, `user`; `format=csv` downloads the CSV. 400 `too_many_records` above `SIGNUP_RECORDS_MAX_ROWS`. Session login only, 10 requests a minute. | Org staff |
+| GET | `/api/organizations/{id}/signup-ledger/` | Raw ledger entries, oldest first, in the cursor envelope (`cursor`, `page_size`) with the same filters. Session login only, shares the records throttle. | Org staff |
+| GET | `/api/internal/signup-records/?organization={id}` | Same as the org records endpoint, for BI tools. | Internal token |
+| GET | `/api/internal/signup-ledger/?organization={id}` | Same as the org ledger endpoint. | Internal token |
+| POST | `/api/internal/signup-records/purge/` | One purge pass over the organizations with a retention period, from the optional body `{"resume_org_id": <id>}` on; at most 20 seconds of deletion, and at least one batch when anything has expired. Returns `{purged, organizations, events, skipped_unknown_end, per_org, more, resume_org_id}`. Called by the nightly beat task. | Internal token |
 
-"Org admin" means org admin, org owner or site admin. Other callers get `403` with
+"Org admin" means org admin, org owner or site admin; "Org staff" on the sign-up records rows adds org staff, but not league staff. Other callers get `403` with
 `{"code": "not_permitted", "detail": ...}` and anonymous callers the usual uncoded
 authentication error; a denied request never creates the row. An unknown organization is
 `404`. An unknown policy, a non-list or non-string code entry, or an unknown code is
 `400`, for example
-`{"staff_override_warning_codes": ["Unknown warning code(s): x, y"]}`. Read-only and
+`{"staff_override_warning_codes": ["Unknown warning code(s): x, y"]}`. A retention value below the minimum or above 36500 is `400`. Read-only and
 unknown body keys are ignored. Stored codes that are no longer defined are left out of
 responses.
 

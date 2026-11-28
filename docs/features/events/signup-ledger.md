@@ -51,6 +51,18 @@ Entries cannot be edited or deleted through the app or the admin. They outlive t
 
 Each signup that existed when the ledger was added got a `backfilled` entry, marking where its history starts. A `backfilled` entry is not a change in itself. Every change since then writes its own entry, as described below.
 
+## Cancellation and permanent deletion
+
+Cancelling an event retains every live signup and its status, commitment, line stamps and original-signup fields. Its non-removed signups receive `event_cancelled` entries attributed to the staff actor (`staff`/`web`) or system (`system`/`system`). The before snapshot is captured before tournament cleanup, and the after snapshot reflects the remaining placement. Existing event-team placement is retained; linked tournament references can be removed. Ready-check cancellation entries remain alongside the new per-signup entries. No individual withdrawal or waitlist promotion is fabricated.
+
+Cancellation is atomic with its history: if cleanup or an append fails, the database changes roll back together. A second cancellation is rejected without extra entries; a valid reopen followed by cancellation adds a new cycle. The optional API reason accepts up to 2,000 characters; this does not make staff reasons mandatory for other actions.
+
+When an organization staff member tries to delete a record-bearing event, the API returns HTTP 409 and `{"error": "has_signup_records", "count": N}`. **N counts ledger entries, not people or active signups**, including rows with no live signup. An organization administrator must explicitly confirm permanent deletion. The browser requires the exact event name; staff without administrator access can cancel instead where legal, but cannot confirm.
+
+Confirmed deletion removes the live event and signups, without adding cancellation entries or changing existing snapshots. The surviving history is readable in the read-only ledger admin and in the organization's [sign-up records export](#exporting-sign-up-records), **not** through the ordinary history endpoint: that endpoint requires a live event and remains staff-only. Series deletion cancels and retains occurrences with any signup or ledger history, makes them standalone, and deletes only truly empty active occurrences. Schedule realignment skips ledger-bearing occurrences without moving their timestamp; the subsequent configuration cascade is unchanged.
+
+The `cleanup_stale_repeater_events` script uses shared cancellation and emits system-attributed `event_cancelled` entries for the remaining non-removed signups. With no supplied reason, those entries have an empty reason; ready-check closure keeps its separate `event_cancelled` machine reason. Signups and their statuses remain in place. Maintenance refuses events outside `upcoming`/`signups_open` and linked tournaments that have started. Arbitrary ORM deletes and organization cascades are not guarded by the event DELETE confirmation flow.
+
 ## What gets recorded
 
 Each signup change writes one entry (moving a signup to another event writes one on each event, see [Moved signups](#moved-signups)), in the same database transaction as the change. If the change fails or is rolled back, no entry is kept, and if the entry cannot be written, the change fails too.
@@ -71,6 +83,7 @@ Each signup change writes one entry (moving a signup to another event writes one
 | `promoted` | A waitlisted signup takes a freed seat |
 | `account_merged` | A signup moves to another account in an account merge |
 | `moved_event` | The stale repeater cleanup moves a signup to another event |
+| `event_cancelled` | Shared event cancellation, including a registered occurrence kept during series deletion. One per non-removed signup per cancellation cycle; cancelled, rejected and dropped signups are retained without a new entry. |
 | `voice_presence_set` | An operator sets presence by hand, with a required reason; a resulting confirmation links to this entry through `caused_by` |
 
 The role and means show who acted and how:
@@ -122,7 +135,7 @@ Approving a profile claim used to delete the claimed profile's signups; it now m
 
 ### Moved signups
 
-When the stale repeater cleanup script moves a signup to another event, it writes a `moved_event` entry on each event. The entry on the old event closes that signup's history there, and the entry on the new event starts it, with `caused_by` pointing at the old event's entry. The before and after snapshots carry `extra.event_id` for the old and new event.
+When the stale repeater cleanup script moves a signup to another event, it writes a `moved_event` entry on each event. The entry on the old event closes that signup's history there (the [sign-up records](#exporting-sign-up-records) show it with final status `moved`), and the entry on the new event starts it, with `caused_by` pointing at the old event's entry. The before and after snapshots carry `extra.event_id` for the old and new event.
 
 ### What is not recorded
 
@@ -154,6 +167,61 @@ The tab has two filters, **member** and **action**. **Clear filters** resets bot
 
 !!! info "Reasons and overridden rules"
     Staff cannot give a reason for most changes yet, so `reason` is usually empty, and nothing fills `rules_overridden` yet. The page shows both as soon as later work records them.
+
+## Exporting sign-up records
+
+Organization staff can download every sign-up for the organization's events as a CSV file:
+
+1. Open the organization page and select **Export sign-up records** in the header.
+2. Pick **From** and **To** dates. The range covers events scheduled from the start of **From** to the end of **To**, in the organization's timezone. It defaults to the last 90 days.
+3. Select **Download CSV**.
+
+The file has one row per event and member. Cancelled events are included, and so are events that were deleted or moved to another organization, using the event snapshot from the ledger. Ready-check entries have no member, so they are not in the export.
+
+| Column | Content |
+|---|---|
+| `event_id`, `event_name`, `scheduled_at`, `series_id` | The event, from the live event or its last snapshot |
+| `event_state` | The event's state, `deleted` for a deleted event, or `moved` for an event now in another organization |
+| `user_id`, `discord_id` | The member. A deleted user falls back to the snapshot. Only the member's Discord ID is included, never the ID of whoever made a change |
+| `original_signed_up_at`, `original_commitment`, `original_rsvp_class`, `original_means` | The member's first recorded sign-up for the event |
+| `final_status`, `final_commitment`, `final_rsvp_class`, `final_signed_up_at`, `final_line_seq` | The member's signup as of their last recorded change. When that change moved the signup to another event (`moved_event`), `final_status` is `moved` and the other columns hold the signup as it was on this event just before the move |
+| `withdrawn_at` | When the member withdrew, if their signup ends cancelled or dropped. Empty otherwise |
+| `change_count` | The number of the member's entries after the original sign-up. When none of their entries holds a readable signup snapshot, there is no original sign-up and every entry counts |
+| `last_changed_at` | The time of the member's last entry for the event |
+
+Times in the file are UTC. Rows are ordered by the event's scheduled time, then event, then member. A member whose entries hold no readable signup snapshot still gets a row, with the original and final columns empty.
+
+!!! note "Cells starting with `= + - @`"
+    In the CSV only, a cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading `'`, so spreadsheet apps do not run it as a formula. An event named `-Weekly Inhouse-` appears as `'-Weekly Inhouse-` in the CSV and unchanged in the JSON API.
+
+If the range holds more than 50,000 rows the download fails with "Too many records — choose a shorter range."
+
+Only organization staff, organization admins and site admins can export. League staff cannot, because the export covers every event in the organization.
+
+## Retention and purge
+
+Sign-up records are kept forever by default. An organization admin can set a retention period in **Org Settings → Sign-up records**: choose **For a set period** and enter a number of days. The minimum is 30 days. See [Organization Settings: Sign-up records](../organization-settings.md#sign-up-records).
+
+Every night at 04:30 a job deletes the ledger entries of events that ended longer ago than the retention period:
+
+- An event's end is its `ends_at`, or its `scheduled_at` when it has no end time. An event is purged when that end is strictly before now minus the retention period.
+- Deleted events and events moved to another organization are judged by the latest ledger snapshot the organization holds for them.
+- An event whose end cannot be read from the event or its snapshot is kept. Entries with no organization are never purged.
+- The job deletes whole events: an event's entries are all deleted together or not at all.
+- It deletes ledger entries only. Signups, events and members are never touched.
+
+!!! danger "Purged records cannot be recovered"
+    Lowering the retention period takes effect at the next nightly run. Entries deleted by the purge are gone for good; export them first if you need them.
+
+The job runs through the internal API in up to 12 requests per night, each spending at most 20 seconds deleting. Each request picks up at the organization where the previous one stopped and deletes something whenever anything has expired, so a large backlog in one organization delays later organizations but never blocks them. A backlog that does not fit finishes on the following nights.
+
+!!! info "Operator settings"
+    Two environment variables on the backend tune this feature:
+
+    | Variable | Default | Meaning |
+    |---|---|---|
+    | `SIGNUP_RECORD_MIN_RETENTION_DAYS` | `30` | The shortest retention period an organization can set |
+    | `SIGNUP_RECORDS_MAX_ROWS` | `50000` | The most rows one records request or export can return before it fails with `too_many_records` |
 
 ## For developers
 
@@ -196,6 +264,41 @@ Errors:
 
 The frontend reads it with `getEventSignupHistory` and the `useSignupHistory` hook (query key `['event-signup-history', eventId, filters]`). Every staff signup mutation invalidates that key for the event.
 
+### Records API
+
+Four read endpoints serve the sign-up records to the website and to BI tools. They are read-only and not cached.
+
+| Method | Path | Auth |
+|---|---|---|
+| GET | `/api/organizations/<id>/signup-records/` | Session login only, org staff |
+| GET | `/api/organizations/<id>/signup-ledger/` | Session login only, org staff |
+| GET | `/api/internal/signup-records/?organization=<id>` | Internal service token |
+| GET | `/api/internal/signup-ledger/?organization=<id>` | Internal service token |
+
+The organization endpoints accept a browser session only, not an org API token or the internal token. Org staff, org admins and site admins are allowed; league staff, members and anonymous callers get 403, and each denial logs `signup_records_denied`. They share a throttle of 10 requests a minute per user. Machine access goes through the internal endpoints, which use `InternalServiceAuth` and `IsInternalService` like the other internal routes. On those, `organization` is required: a missing or invalid value is 400 and an unknown organization is 404.
+
+Both endpoints take the same filters. Empty values count as absent.
+
+| Param | Meaning |
+|---|---|
+| `since` | Events with `scheduled_at` at or after this time |
+| `until` | Events with `scheduled_at` before this time (exclusive) |
+| `series` | Events in this series |
+| `event` | One event |
+| `user` | Entries about this user (pk), including a deleted user's entries by snapshot |
+
+`since` and `until` take an ISO date or a datetime with a UTC offset. A date means 00:00 in the organization's timezone, on the internal endpoints too. A datetime without an offset, `since` after `until`, or a bad id is 400, for example `{"until": ["Must not be before since."]}`. Events with no scheduled time are left out whenever `since` or `until` is set. The filters apply to the event's scheduled time, not to when entries were written.
+
+**Records.** `signup-records/` returns `{organization, count, results}`, one item per event and member, unpaginated. Each item has the [export columns](#exporting-sign-up-records), with the original and final fields nested under `original` and `final` (each `null` when there is no readable snapshot). Times are UTC ISO strings ending in `Z`. Add `format=csv` for the CSV file, with the same rows in the same order and a `Content-Disposition` filename of `signup-records-<org id>-<YYYYMMDD>.csv`. The leading `'` formula guard applies to the CSV only. More rows than `SIGNUP_RECORDS_MAX_ROWS` gives 400 `{"detail": "Too many records; narrow the date range.", "code": "too_many_records"}`. Errors are always JSON, including on a `format=csv` request.
+
+**Raw ledger.** `signup-ledger/` returns the ledger entries themselves, oldest first by `id`, including ready-check entries (with `subject: null`). It takes `cursor` and `page_size` (1 to 100, default 50) as well as the filters, and returns the cursor envelope `{count, next, previous, results}` like the [history API](#history-api). Each item has the history fields plus `event_id`, `organization_id` and `event: {name, state, scheduled_at}`, where `state` is `deleted` or `moved` for an event resolved from its snapshot. The member keeps `discord_id`; the actor never has it.
+
+The cursor is keyed on `id` alone, so a sync can save `next` and resume from it later. Entries written after a page was read always appear on a later page. Ids are never reused: the ledger table's `id` is an `AUTOINCREMENT` key, so a purge that deletes the newest entries does not hand their ids out again. Entries the purge deletes after a sync read them simply drop out of later counts.
+
+**Purge.** `POST /api/internal/signup-records/purge/` (internal token) runs one purge pass and returns `{purged, organizations, events, skipped_unknown_end, per_org, more, resume_org_id}`. The pass spends at most 20 seconds deleting; finding the expired events does not count against that budget, and every pass deletes at least one batch when anything has expired, so each pass makes progress. `per_org` maps organization ids (as strings) to deleted entry counts. `more` is true when the time ran out before every organization was done, and `resume_org_id` is then the organization to continue from (otherwise `null`). The body may carry `{"resume_org_id": <id>}` to start at that organization and skip lower ids; a value that is not a positive id is 400 `{"resume_org_id": ["Invalid organization."]}`. The Celery task `events.tasks.purge_expired_signup_records` calls it in a loop while `more` is true, passing each `resume_org_id` on, up to 12 times. Each organization's purge logs `signup_records_purged` and each pass logs `signup_records_purge_completed` (`system="events"`, `subsystem="ledger"`).
+
+The code is in `events/ledger.py` (event resolution and purge), `events/records.py` (records and CSV cells) and `events/views_records.py` (views). The frontend reads the records with `getSignupRecords` and downloads the CSV with `downloadSignupRecordsCsv` in `frontend/app/components/api/eventsAPI.ts`.
+
 ## After deploying
 
 Signups created by the old containers while migrations ran have no place in line and sort last. Once the release stack is recreated, run the backfill once in its backend container:
@@ -210,4 +313,4 @@ Use `docker exec` rather than `just dev::run`, which starts a container on the d
 
 ## Coming later
 
-A member's own view of their signup records, and the reasons staff give for their changes, will build on this ledger. This page will describe them when they land.
+A member's own view of their signup records, the reasons staff give for their changes, and org API token access to the records will build on this ledger. This page will describe them when they land.

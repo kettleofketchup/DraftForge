@@ -43,6 +43,13 @@ from discordbot.internal_signup_delivery_views import (
 )
 from draft.views.team_api import DraftRoundView, DraftView
 from events.views import fire_event_task, get_event_task_schedule
+from events.views_records import (
+    InternalSignupLedgerView,
+    InternalSignupRecordsView,
+    OrgSignupLedgerView,
+    OrgSignupRecordsView,
+    internal_signup_records_purge,
+)
 from league.ssr import LeagueSSRView
 from league.views import LeagueView
 from league.views_admin_team import (
@@ -279,6 +286,16 @@ urlpatterns = [
         name="org-settings",
     ),
     path(
+        "api/organizations/<int:org_id>/signup-records/",
+        OrgSignupRecordsView.as_view(),
+        name="org-signup-records",
+    ),
+    path(
+        "api/organizations/<int:org_id>/signup-ledger/",
+        OrgSignupLedgerView.as_view(),
+        name="org-signup-ledger",
+    ),
+    path(
         "api/organizations/<int:org_id>/promoters/",
         org_promoters,
         name="org-promoters",
@@ -505,6 +522,21 @@ urlpatterns += [
     ),
     path("api/internal/scheduled-events/due/", get_due_scheduled_events),
     path("api/internal/events/<int:event_id>/full/", get_event_for_task),
+    path(
+        "api/internal/signup-records/",
+        InternalSignupRecordsView.as_view(),
+        name="internal_signup_records",
+    ),
+    path(
+        "api/internal/signup-ledger/",
+        InternalSignupLedgerView.as_view(),
+        name="internal_signup_ledger",
+    ),
+    path(
+        "api/internal/signup-records/purge/",
+        internal_signup_records_purge,
+        name="internal_signup_records_purge",
+    ),
     # Tournament endpoints
     path("", include("draft.internal_urls")),
     path(

@@ -12,6 +12,7 @@ from config.dota_lobby import DotaLobbyConfig
 from config.installed_apps import MODEL_APPS
 from config.redis_host import resolve_redis_host
 from config.signup_post import SignupPostConfig
+from config.signup_records import SIGNUP_RECORDS_PURGE_MAX_CALLS  # noqa: F401
 
 load_dotenv()
 

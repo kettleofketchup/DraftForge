@@ -180,6 +180,7 @@ CELERY_RESULT_BACKEND = "redis://redis:6379/1"
 | `user.tasks.avatar_refresh.refresh_discord_avatars` | Every 5 min | Batch refresh Discord avatars (50 users) |
 | `user.tasks.avatar_refresh.refresh_all_discord_data` | Daily at 4 AM | Full Discord data refresh for all users |
 | `user.tasks.avatar_refresh.refresh_avatars_batched` | Daily at 4:15 AM | Diff cached guild members and bulk-update changed avatars through the internal API |
+| `events.tasks.purge_expired_signup_records` | Daily at 4:30 AM | Delete sign-up ledger rows past each org's retention through the internal API |
 | `user.tasks.discord_name_sync.sync_active_org_discord_names` | Every 30 min | Refresh Discord names for active orgs through the internal API |
 
 ### Task Functions

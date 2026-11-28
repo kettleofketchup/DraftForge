@@ -16,6 +16,7 @@ from org.settings_service import (
     get_org_settings,
     normalize_warning_codes,
     update_org_settings,
+    validate_retention_days,
 )
 from org.standing import api as standing
 
@@ -212,11 +213,24 @@ class OrgSettingsAdminForm(ModelForm):
         except ValueError as exc:
             raise forms.ValidationError(str(exc)) from exc
 
+    def clean_signup_record_retention_days(self) -> int | None:
+        try:
+            return validate_retention_days(
+                self.cleaned_data.get("signup_record_retention_days")
+            )
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+
 
 @admin.register(OrgSettings)
 class OrgSettingsAdmin(admin.ModelAdmin):
     form = OrgSettingsAdminForm
-    list_display = ("organization", "staff_override_policy", "updated_at")
+    list_display = (
+        "organization",
+        "staff_override_policy",
+        "signup_record_retention_days",
+        "updated_at",
+    )
     list_filter = ("staff_override_policy",)
     raw_id_fields = ["organization"]
     search_fields = ["organization__name"]

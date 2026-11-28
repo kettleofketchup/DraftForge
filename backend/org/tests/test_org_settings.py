@@ -8,7 +8,7 @@ from cacheops import invalidate_obj
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.response import Response
 from rest_framework.test import APIClient
 
@@ -20,6 +20,7 @@ from org.settings_service import (
     get_org_settings,
     normalize_warning_codes,
     update_org_settings,
+    validate_retention_days,
 )
 
 PINNED_MSG = (
@@ -85,6 +86,11 @@ class OrgSettingsModelTest(TestCase):
             row_b.staff_override_warning_codes, settings_constants.ALL_CODES
         )
         self.assertNotIn("x", settings_constants.ALL_CODES)
+
+    def test_retention_defaults_null(self) -> None:
+        row = OrgSettings.objects.create(organization=self.org)
+        row.refresh_from_db()
+        self.assertIsNone(row.signup_record_retention_days)
 
     def test_policy_alias(self) -> None:
         self.assertIs(OrgSettings.StaffOverridePolicy, StaffOverridePolicy)
@@ -223,7 +229,80 @@ class OrgSettingsServiceTest(TestCase):
             changed_fields=changed,
             staff_override_policy="confirm",
             warning_code_count=1,
+            signup_record_retention_days=None,
         )
+
+    def test_update_retention_persists_and_audits(self) -> None:
+        get_org_settings(self.org)
+        with (
+            mock.patch.object(settings_service, "log") as log,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            row = update_org_settings(
+                self.org,
+                actor=self.actor,
+                changes={"signup_record_retention_days": 365},
+            )
+        stored = OrgSettings.objects.nocache().get(pk=row.pk)
+        self.assertEqual(stored.signup_record_retention_days, 365)
+        entry = OrgLog.objects.get(organization=self.org)
+        self.assertEqual(
+            entry.details,
+            {"area": "settings", "changed_fields": ["signup_record_retention_days"]},
+        )
+        updated = [
+            c for c in log.info.call_args_list if c.args[0] == "org_settings_updated"
+        ]
+        self.assertEqual(len(updated), 1)
+        self.assertEqual(updated[0].kwargs["signup_record_retention_days"], 365)
+
+    def test_update_retention_bounds(self) -> None:
+        row = get_org_settings(self.org)
+        for bad in (29, 36501):
+            with self.subTest(days=bad), self.assertRaises(ValueError):
+                update_org_settings(
+                    self.org,
+                    actor=self.actor,
+                    changes={"signup_record_retention_days": bad},
+                )
+        self.assertIsNone(
+            OrgSettings.objects.nocache().get(pk=row.pk).signup_record_retention_days
+        )
+        for good in (30, 36500, None):
+            with self.subTest(days=good):
+                update_org_settings(
+                    self.org,
+                    actor=self.actor,
+                    changes={"signup_record_retention_days": good},
+                )
+                self.assertEqual(
+                    OrgSettings.objects.nocache()
+                    .get(pk=row.pk)
+                    .signup_record_retention_days,
+                    good,
+                )
+
+    def test_validate_retention_days(self) -> None:
+        self.assertIsNone(validate_retention_days(None))
+        self.assertEqual(validate_retention_days(30), 30)
+        self.assertEqual(validate_retention_days(36500), 36500)
+        with self.assertRaisesMessage(
+            ValueError, "Retention must be at least 30 days."
+        ):
+            validate_retention_days(29)
+        with self.assertRaisesMessage(
+            ValueError, "Retention must be at most 36500 days."
+        ):
+            validate_retention_days(36501)
+        for bad in ("x", "60", True, False, 45.0):
+            with self.subTest(value=bad), self.assertRaises(ValueError):
+                validate_retention_days(bad)
+        with override_settings(SIGNUP_RECORD_MIN_RETENTION_DAYS=60):
+            with self.assertRaisesMessage(
+                ValueError, "Retention must be at least 60 days."
+            ):
+                validate_retention_days(59)
+            self.assertEqual(validate_retention_days(60), 60)
 
     def test_update_noop(self) -> None:
         row = get_org_settings(self.org)
@@ -367,10 +446,13 @@ class OrgSettingsApiTest(TestCase):
                         "staff_override_policy",
                         "staff_override_warning_codes",
                         "available_warning_codes",
+                        "signup_record_retention_days",
+                        "signup_record_min_retention_days",
                         "updated_at",
                     },
                 )
                 self.assertEqual(data["organization"], self.org.pk)
+                self.assertIsNone(data["signup_record_retention_days"])
                 self.assertEqual(data["staff_override_policy"], "silent")
                 self.assertEqual(data["staff_override_warning_codes"], ALL_CODES)
                 self.assertEqual(len(data["available_warning_codes"]), 6)
@@ -511,6 +593,56 @@ class OrgSettingsApiTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["staff_override_warning_codes"], [])
         self.assertEqual(self._row(self.org).staff_override_warning_codes, [])
+
+    def test_patch_retention(self) -> None:
+        response = self._patch(self.admin, {"signup_record_retention_days": 365})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["signup_record_retention_days"], 365)
+        self.assertEqual(self._row(self.org).signup_record_retention_days, 365)
+
+        for bad, msg in (
+            (29, "Retention must be at least 30 days."),
+            (36501, "Retention must be at most 36500 days."),
+        ):
+            with self.subTest(days=bad):
+                response = self._patch(
+                    self.admin, {"signup_record_retention_days": bad}
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.data, {"signup_record_retention_days": [msg]})
+        self.assertEqual(self._row(self.org).signup_record_retention_days, 365)
+
+        response = self._patch(self.admin, {"signup_record_retention_days": None})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(response.data["signup_record_retention_days"])
+        self.assertIsNone(self._row(self.org).signup_record_retention_days)
+
+        response = self._patch(self.staff, {"signup_record_retention_days": 90})
+        self.assertEqual(response.status_code, 403)
+        self.assertIsNone(self._row(self.org).signup_record_retention_days)
+
+    def test_min_retention_read_only(self) -> None:
+        response = self._as(self.admin).get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["signup_record_min_retention_days"], 30)
+
+        response = self._patch(self.admin, {"signup_record_min_retention_days": 1})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["signup_record_min_retention_days"], 30)
+
+        with override_settings(SIGNUP_RECORD_MIN_RETENTION_DAYS=60):
+            response = self._as(self.admin).get(self.url)
+            self.assertEqual(response.data["signup_record_min_retention_days"], 60)
+            response = self._patch(self.admin, {"signup_record_retention_days": 59})
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(
+                response.data,
+                {
+                    "signup_record_retention_days": [
+                        "Retention must be at least 60 days."
+                    ]
+                },
+            )
 
     def test_patch_normalizes(self) -> None:
         response = self._patch(
@@ -724,6 +856,26 @@ class OrgSettingsAdminTest(TestCase):
                 self.assertEqual(after.staff_override_warning_codes, list(ALL_CODES))
         self.assertFalse(OrgLog.objects.filter(organization=self.org).exists())
 
+    def test_admin_rejects_low_retention(self) -> None:
+        row = get_org_settings(self.org)
+        response = self._post_change(
+            row,
+            {
+                "staff_override_policy": "silent",
+                "staff_override_warning_codes": json.dumps(list(ALL_CODES)),
+                "signup_record_retention_days": "5",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["adminform"].form
+        self.assertEqual(
+            form.errors["signup_record_retention_days"],
+            ["Retention must be at least 30 days."],
+        )
+        after = OrgSettings.objects.nocache().get(pk=row.pk)
+        self.assertIsNone(after.signup_record_retention_days)
+        self.assertFalse(OrgLog.objects.filter(organization=self.org).exists())
+
     def test_organization_readonly_on_change(self) -> None:
         row = get_org_settings(self.org)
         response = self._post_change(
@@ -770,6 +922,15 @@ class OrgSettingsInertTest(SimpleTestCase):
         }
     )
 
+    # #499 retention purge reads each org's signup_record_retention_days.
+    RETENTION: frozenset[str] = frozenset(
+        {
+            "events/ledger.py",
+            "events/tests/test_purge_expired_signup_records.py",
+            "events/tests/test_signup_records_purge_task.py",
+        }
+    )
+
     def test_policy_inert_until_524(self) -> None:
         """#524 removes this test and replaces it with block/confirm enforcement tests."""
         base = Path(settings.BASE_DIR)
@@ -778,7 +939,7 @@ class OrgSettingsInertTest(SimpleTestCase):
             parts = path.relative_to(base).parts
             if parts[0] in ("org", "tests") or "migrations" in parts:
                 continue
-            if "/".join(parts) in self.CONTRACT:
+            if "/".join(parts) in self.CONTRACT | self.RETENTION:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             offenders.extend(

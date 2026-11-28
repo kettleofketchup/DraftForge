@@ -30,6 +30,7 @@ from app.internal_client import (
     get_or_create_discord_event,
     get_repeater_subscribers,
     get_sync_discord_state,
+    purge_signup_records,
     search_message_logs,
     transition_event_state,
     transport,
@@ -217,6 +218,28 @@ def _discord_error_message(data: object, status_code: int) -> str:
     message = f"{data['message']} (code {data.get('code', '?')}, HTTP {status_code})"
     details = _flatten_discord_form_errors(data.get("errors") or {})
     return f"{message}: {'; '.join(details)}" if details else message
+
+
+@shared_task(ignore_result=True, soft_time_limit=300, time_limit=360)
+def purge_expired_signup_records() -> None:
+    max_calls: int = settings.SIGNUP_RECORDS_PURGE_MAX_CALLS
+    resume: int | None = None
+    for _ in range(max_calls):
+        result = purge_signup_records(resume_org_id=resume)
+        if result is None:
+            log.warning(
+                "signup_records_purge_failed", system="events", subsystem="ledger"
+            )
+            return
+        if not result.get("more"):
+            return
+        resume = result.get("resume_org_id")
+    log.info(
+        "signup_records_purge_incomplete",
+        system="events",
+        subsystem="ledger",
+        calls=max_calls,
+    )
 
 
 @shared_task

@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 
+from django.conf import settings
 from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
@@ -15,6 +16,7 @@ __all__ = [
     "normalize_warning_codes",
     "update_org_settings",
     "validate_policy",
+    "validate_retention_days",
 ]
 
 log = get_logger(__name__)
@@ -22,6 +24,7 @@ log = get_logger(__name__)
 EDITABLE_FIELDS: tuple[str, ...] = (
     "staff_override_policy",
     "staff_override_warning_codes",
+    "signup_record_retention_days",
 )
 
 
@@ -44,6 +47,20 @@ def validate_policy(policy: object) -> str:
     if not isinstance(policy, str) or policy not in StaffOverridePolicy.values:
         raise ValueError(f"Unknown staff override policy: {policy!r}")
     return policy
+
+
+def validate_retention_days(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("Retention must be a whole number of days.")
+    minimum: int = settings.SIGNUP_RECORD_MIN_RETENTION_DAYS
+    maximum: int = settings.SIGNUP_RECORD_MAX_RETENTION_DAYS
+    if value < minimum:
+        raise ValueError(f"Retention must be at least {minimum} days.")
+    if value > maximum:
+        raise ValueError(f"Retention must be at most {maximum} days.")
+    return value
 
 
 def _cached_row(org_id: int) -> OrgSettings | None:
@@ -92,6 +109,8 @@ def update_org_settings(
                 value = validate_policy(value)
             elif field == "staff_override_warning_codes":
                 value = normalize_warning_codes(value)
+            elif field == "signup_record_retention_days":
+                value = validate_retention_days(value)
             updates[field] = value
 
         changed_fields = [
@@ -115,6 +134,7 @@ def update_org_settings(
         actor_id = actor.pk if actor else None
         policy = row.staff_override_policy
         code_count = len(row.staff_override_warning_codes)
+        retention_days = row.signup_record_retention_days
         transaction.on_commit(
             lambda: log.info(
                 "org_settings_updated",
@@ -125,6 +145,7 @@ def update_org_settings(
                 changed_fields=changed_fields,
                 staff_override_policy=policy,
                 warning_code_count=code_count,
+                signup_record_retention_days=retention_days,
             )
         )
 

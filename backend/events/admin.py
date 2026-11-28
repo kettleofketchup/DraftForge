@@ -56,13 +56,15 @@ class EventAdmin(admin.ModelAdmin):
     ]
 
     def delete_model(self, request: HttpRequest, obj: Event) -> None:
-        teardown_event(obj, actor=cast(CustomUser, request.user))
+        teardown_event(
+            obj, actor=cast(CustomUser, request.user), confirm_signup_records=True
+        )
 
     def delete_queryset(self, request: HttpRequest, queryset: QuerySet[Event]) -> None:
         actor = cast(CustomUser, request.user)
         with transaction.atomic():
             for event in queryset:
-                teardown_event(event, actor=actor)
+                teardown_event(event, actor=actor, confirm_signup_records=True)
 
 
 @admin.register(EventTeam)

@@ -3,6 +3,7 @@ from typing import Any
 from zoneinfo import available_timezones
 
 import nh3
+from django.conf import settings
 from rest_framework import serializers
 
 from common.game import GameType
@@ -11,7 +12,7 @@ from org import settings_constants
 from org.mmr import get_org_mmrs, resolve_game_type
 from org.models import Organization, OrgSettings, OrgUser, OrgUserGameMmr
 from org.settings_constants import StaffOverridePolicy
-from org.settings_service import normalize_warning_codes
+from org.settings_service import normalize_warning_codes, validate_retention_days
 from user.models import ProfileClaimRequest
 from user.serializers import (
     STEAM_VERIFICATION_READ_FIELDS,
@@ -323,6 +324,10 @@ class OrgSettingsSerializer(serializers.ModelSerializer):
         child=serializers.CharField(), allow_empty=True
     )
     available_warning_codes = serializers.SerializerMethodField()
+    signup_record_retention_days = serializers.IntegerField(
+        allow_null=True, required=False
+    )
+    signup_record_min_retention_days = serializers.SerializerMethodField()
 
     class Meta:
         model = OrgSettings
@@ -331,9 +336,16 @@ class OrgSettingsSerializer(serializers.ModelSerializer):
             "staff_override_policy",
             "staff_override_warning_codes",
             "available_warning_codes",
+            "signup_record_retention_days",
+            "signup_record_min_retention_days",
             "updated_at",
         ]
-        read_only_fields = ["organization", "available_warning_codes", "updated_at"]
+        read_only_fields = [
+            "organization",
+            "available_warning_codes",
+            "signup_record_min_retention_days",
+            "updated_at",
+        ]
 
     def to_representation(self, instance: OrgSettings) -> dict[str, Any]:
         data = super().to_representation(instance)
@@ -348,6 +360,15 @@ class OrgSettingsSerializer(serializers.ModelSerializer):
             return normalize_warning_codes(value)
         except ValueError as exc:
             raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_signup_record_retention_days(self, value: int | None) -> int | None:
+        try:
+            return validate_retention_days(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def get_signup_record_min_retention_days(self, obj: OrgSettings) -> int:
+        return settings.SIGNUP_RECORD_MIN_RETENTION_DAYS
 
     def get_available_warning_codes(self, obj: OrgSettings) -> list[dict[str, str]]:
         labels = settings_constants.WARNING_CODE_LABELS

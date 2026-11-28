@@ -20,7 +20,7 @@ from events.constants import (
 )
 from events.exceptions import LedgerAppendOnlyError
 from events.models import Event, EventSignup, SignupLedgerEntry
-from events.services import teardown_event
+from events.services import SignupRecordsConflict, teardown_event
 from events.tests.base import EventTestCase
 from user.discord_accounts import merge_discord_accounts
 
@@ -140,12 +140,12 @@ class AppendOnlyTest(SignupLedgerModelTestCase):
         a = self._entry()
         b = self._entry()
         with capture_logs() as logs:
-            count = SignupLedgerEntry.objects.filter(pk__in=[a.pk, b.pk]).purge()
-        self.assertEqual(count, 2)
+            outcome = SignupLedgerEntry.objects.filter(pk__in=[a.pk, b.pk]).purge()
+        self.assertEqual(outcome.count, 2)
         self.assertEqual(
             list(SignupLedgerEntry.objects.values_list("pk", flat=True)), [keep.pk]
         )
-        purged = [e for e in logs if e["event"] == "signup_ledger_purged"]
+        purged = [e for e in logs if e["event"] == "signup_records_purged"]
         self.assertEqual(len(purged), 1, logs)
         self.assertEqual(purged[0]["system"], "events")
         self.assertEqual(purged[0]["subsystem"], "ledger")
@@ -246,7 +246,9 @@ class LedgerSurvivalTest(SignupLedgerModelTestCase):
         )
         event_id = event.pk
 
-        teardown_event(event)
+        with self.assertRaises(SignupRecordsConflict):
+            teardown_event(event, actor=self.admin)
+        teardown_event(event, actor=self.admin, confirm_signup_records=True)
 
         self.assertFalse(Event.objects.filter(pk=event_id).exists())
         self.assertFalse(EventSignup.objects.filter(pk=signup.pk).exists())

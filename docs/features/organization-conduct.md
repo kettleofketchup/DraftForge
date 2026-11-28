@@ -333,10 +333,9 @@ wins; otherwise the surviving account's outcome is kept.
 
 ## Known bypasses
 
-Two paths change an event's state without going through the conduct hooks, the same way
-they already bypass Contributions:
+The generic internal transition endpoint (`/api/internal/events/{id}/transition/`)
+changes event state without going through the conduct hooks, the same way it bypasses
+Contributions. An event closed through it is neither finalized nor voided for conduct.
 
-- the generic internal transition endpoint (`/api/internal/events/{id}/transition/`);
-- the `cleanup_stale_repeater_events` script.
-
-An event closed by either of these is neither finalized nor voided for conduct.
+The `cleanup_stale_repeater_events` script uses shared cancellation: it voids attendance
+outcomes and closes the event for conduct without awarding host/helper points.

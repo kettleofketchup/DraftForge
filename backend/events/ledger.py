@@ -1,34 +1,53 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+import time
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import F, OuterRef, QuerySet, Subquery
 from django.http import HttpRequest
 from django.utils import timezone as tz
 from structlog.contextvars import get_contextvars
 
 from events.constants import ActorRole, SignupAction, SignupMeans
-from events.models import Event, EventSignup, ReadyCheck, SignupLedgerEntry
+from events.models import (
+    PURGE_BATCH_SIZE,
+    Event,
+    EventSignup,
+    ReadyCheck,
+    SignupLedgerEntry,
+)
 from events.permissions import has_event_staff_access
 from events.schemas import SignupSnapshot
+from org.models import OrgSettings
 from telemetry.logging import get_logger
 
 if TYPE_CHECKING:
     from app.models import CustomUser
 
 __all__ = [
+    "LEDGER_STATE_DELETED",
+    "LEDGER_STATE_MOVED",
     "PLACEMENT_ACTIONS",
+    "RESOLVE_CHUNK_SIZE",
+    "LedgerEvent",
+    "RecordsWindow",
+    "SignupPurgeResult",
     "ActorRole",
     "SignupAction",
     "SignupActor",
     "SignupMeans",
     "current_interaction_id",
     "event_snapshot",
+    "parse_snapshot_time",
+    "purge_expired",
     "record_ready_check_transition",
     "record_signup_change",
+    "resolve_ledger_events",
     "snapshot",
     "user_snapshot",
 ]
@@ -285,3 +304,305 @@ def record_ready_check_transition(
         )
     )
     return entry
+
+
+LEDGER_STATE_DELETED = "deleted"
+LEDGER_STATE_MOVED = "moved"
+RESOLVE_CHUNK_SIZE: int = 500
+
+_LIVE_FIELDS = (
+    "pk",
+    "name",
+    "scheduled_at",
+    "ends_at",
+    "state",
+    "event_repeater_id",
+    "organization_id",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RecordsWindow:
+    since: datetime | None = None
+    until: datetime | None = None
+    series_id: int | None = None
+    event_id: int | None = None
+
+    @property
+    def has_time_bounds(self) -> bool:
+        return self.since is not None or self.until is not None
+
+    def admits(self, event: LedgerEvent) -> bool:
+        if self.event_id is not None and event.event_id != self.event_id:
+            return False
+        if self.series_id is not None and event.series_id != self.series_id:
+            return False
+        if not self.has_time_bounds:
+            return True
+        if event.scheduled_at is None:
+            return False
+        if self.since is not None and event.scheduled_at < self.since:
+            return False
+        return not (self.until is not None and event.scheduled_at >= self.until)
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerEvent:
+    event_id: int
+    name: str
+    scheduled_at: datetime | None
+    ends_at: datetime | None
+    state: str
+    series_id: int | None
+    organization_id: int | None
+
+    @property
+    def end(self) -> datetime | None:
+        return self.ends_at or self.scheduled_at
+
+
+def parse_snapshot_time(
+    value: object, *, event_id: int | None = None, field: str = ""
+) -> datetime | None:
+    if value is None or value == "":
+        return None
+    parsed: datetime | None = None
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            parsed = None
+    if parsed is None or parsed.tzinfo is None:
+        log.debug(
+            "signup_ledger_snapshot_unparsed",
+            system="events",
+            subsystem="ledger",
+            event_id=event_id,
+            field=field,
+        )
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _chunks(ids: Sequence[int]) -> Iterator[list[int]]:
+    size = RESOLVE_CHUNK_SIZE
+    for start in range(0, len(ids), size):
+        yield list(ids[start : start + size])
+
+
+def _snapshot_int(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _from_snapshot(
+    event_id: int, snap: object, *, state: str, organization_id: int
+) -> LedgerEvent:
+    data: dict[str, Any] = snap if isinstance(snap, dict) else {}
+    name = data.get("name")
+    return LedgerEvent(
+        event_id=event_id,
+        name=name if isinstance(name, str) else "",
+        scheduled_at=parse_snapshot_time(
+            data.get("scheduled_at"), event_id=event_id, field="scheduled_at"
+        ),
+        ends_at=parse_snapshot_time(
+            data.get("ends_at"), event_id=event_id, field="ends_at"
+        ),
+        state=state,
+        series_id=_snapshot_int(data.get("series_id")),
+        organization_id=organization_id,
+    )
+
+
+def _live_query(
+    ids: list[int], organization_id: int, window: RecordsWindow | None
+) -> QuerySet[Any]:
+    qs = Event.objects.nocache().filter(pk__in=ids, organization_id=organization_id)
+    if window is not None:
+        if window.since is not None:
+            qs = qs.filter(scheduled_at__gte=window.since)
+        if window.until is not None:
+            qs = qs.filter(scheduled_at__lt=window.until)
+        if window.series_id is not None:
+            qs = qs.filter(event_repeater_id=window.series_id)
+    return qs.values_list(*_LIVE_FIELDS)
+
+
+def _latest_snapshots(organization_id: int, ids: list[int]) -> dict[int, object]:
+    rows = SignupLedgerEntry.objects.nocache().filter(organization_id=organization_id)
+    latest = (
+        rows.filter(event_id=OuterRef("event_id"))
+        .order_by("-occurred_at", "-pk")
+        .values("pk")[:1]
+    )
+    return dict(
+        rows.filter(event_id__in=ids)
+        .annotate(latest_pk=Subquery(latest))
+        .filter(pk=F("latest_pk"))
+        .order_by()
+        .values_list("event_id", "event_snapshot")
+    )
+
+
+def resolve_ledger_events(
+    organization_id: int,
+    *,
+    event_ids: Collection[int] | None = None,
+    window: RecordsWindow | None = None,
+) -> dict[int, LedgerEvent]:
+    ids: set[int] = set(
+        SignupLedgerEntry.objects.nocache()
+        .filter(organization_id=organization_id)
+        .order_by()
+        .values_list("event_id", flat=True)
+        .distinct()
+    )
+    if event_ids is not None:
+        ids &= set(event_ids)
+    if window is not None and window.event_id is not None:
+        ids &= {window.event_id}
+    ordered = sorted(ids)
+    if not ordered:
+        return {}
+
+    result: dict[int, LedgerEvent] = {}
+    snapshot_ids: dict[int, str] = {}
+    for chunk in _chunks(ordered):
+        owners = dict(
+            Event.objects.nocache()
+            .filter(pk__in=chunk)
+            .order_by()
+            .values_list("pk", "organization_id")
+        )
+        live_ids = [pk for pk in chunk if owners.get(pk) == organization_id]
+        for pk in chunk:
+            if pk not in owners:
+                snapshot_ids[pk] = LEDGER_STATE_DELETED
+            elif owners[pk] != organization_id:
+                snapshot_ids[pk] = LEDGER_STATE_MOVED
+        if not live_ids:
+            continue
+        for pk, name, scheduled_at, ends_at, state, series_id, org_id in _live_query(
+            live_ids, organization_id, window
+        ):
+            result[pk] = LedgerEvent(
+                event_id=pk,
+                name=name,
+                scheduled_at=scheduled_at,
+                ends_at=ends_at,
+                state=str(state),
+                series_id=series_id,
+                organization_id=org_id,
+            )
+
+    pending = sorted(snapshot_ids)
+    for chunk in _chunks(pending):
+        for pk, snap in _latest_snapshots(organization_id, chunk).items():
+            resolved = _from_snapshot(
+                pk, snap, state=snapshot_ids[pk], organization_id=organization_id
+            )
+            if window is None or window.admits(resolved):
+                result[pk] = resolved
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class SignupPurgeResult:
+    purged: int
+    organizations: int
+    events: int
+    skipped_unknown_end: int
+    per_org: dict[int, int]
+    more: bool
+    resume_org_id: int | None = None
+
+
+def purge_expired(
+    *,
+    now: datetime | None = None,
+    batch_size: int = PURGE_BATCH_SIZE,
+    time_budget_s: float | None = None,
+    resume_org_id: int | None = None,
+) -> SignupPurgeResult:
+    """Delete expired ledger entries, org by org from ``resume_org_id``.
+
+    The budget covers deletion only, and each call deletes at least one batch
+    when anything has expired, so successive calls always reach later orgs.
+    """
+    now = now or tz.now()
+    budget = (
+        settings.SIGNUP_RECORDS_PURGE_BUDGET_S
+        if time_budget_s is None
+        else time_budget_s
+    )
+    spent = 0.0
+    deleted_any = False
+    purged = events = skipped = 0
+    per_org: dict[int, int] = {}
+    more = False
+    resume: int | None = None
+    retention = (
+        OrgSettings.objects.nocache()
+        .filter(signup_record_retention_days__isnull=False)
+        .order_by("organization_id")
+        .values_list("organization_id", "signup_record_retention_days")
+    )
+    if resume_org_id is not None:
+        retention = retention.filter(organization_id__gte=resume_org_id)
+    for org_id, days in retention:
+        if deleted_any and spent >= budget:
+            more, resume = True, org_id
+            break
+        cutoff = now - timedelta(days=days)
+        expired: list[int] = []
+        for event_id, resolved in resolve_ledger_events(org_id).items():
+            end = resolved.end
+            if end is None:
+                skipped += 1
+            elif end < cutoff:
+                expired.append(event_id)
+        if not expired:
+            continue
+        started = time.monotonic()
+        outcome = (
+            SignupLedgerEntry.objects.nocache()
+            .filter(organization_id=org_id)
+            .purge(
+                organization_id=org_id,
+                event_ids=expired,
+                batch_size=batch_size,
+                deadline=started + max(budget - spent, 0.0),
+                min_batches=0 if deleted_any else 1,
+                extra_log={"retention_days": days},
+            )
+        )
+        spent += time.monotonic() - started
+        deleted_any = deleted_any or outcome.batches > 0
+        per_org[org_id] = outcome.count
+        purged += outcome.count
+        events += outcome.events
+        if not outcome.complete:
+            more, resume = True, org_id
+            break
+
+    result = SignupPurgeResult(
+        purged=purged,
+        organizations=len(per_org),
+        events=events,
+        skipped_unknown_end=skipped,
+        per_org=per_org,
+        more=more,
+        resume_org_id=resume,
+    )
+    log.info(
+        "signup_records_purge_completed",
+        system="events",
+        subsystem="ledger",
+        purged=purged,
+        organizations=result.organizations,
+        events=events,
+        skipped_unknown_end=skipped,
+        more=more,
+        resume_org_id=resume,
+    )
+    return result

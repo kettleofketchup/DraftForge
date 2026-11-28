@@ -14,6 +14,7 @@ from common.game import GameType
 from events.capacity import seat_holding_statuses
 from events.constants import LINE_EXCLUDED_STATUSES, EventState
 from events.history import reduce_history_rules, reduce_history_snapshot
+from events.ledger import LedgerEvent
 from events.mmr_suggestions import suggest_mmr
 from events.models import (
     Event,
@@ -91,6 +92,23 @@ TIMER_FIELD_KWARGS = {
     "hero_reserve_time_ms": RESERVE_TIME_MS_KWARGS,
 }
 SIGNUPS_OPEN_HOURS_KWARGS = {"max_value": MAX_SIGNUPS_OPEN_HOURS_BEFORE}
+
+
+class _CancellationReasonField(serializers.CharField):
+    def to_internal_value(self, data: Any) -> str:
+        if not isinstance(data, str):
+            self.fail("invalid")
+        return super().to_internal_value(data)
+
+
+class CancelEventSerializer(serializers.Serializer):
+    reason = _CancellationReasonField(
+        required=False,
+        default="",
+        allow_blank=True,
+        max_length=2000,
+        trim_whitespace=False,
+    )
 
 
 class LobbySteamLeagueMixin:
@@ -432,6 +450,37 @@ class SignupLedgerEntrySerializer(serializers.Serializer):
 
     def get_caused_by(self, obj: SignupLedgerEntry) -> int | None:
         return obj.caused_by_id
+
+
+class OrgSignupLedgerEntrySerializer(SignupLedgerEntrySerializer):
+    """Org-wide raw ledger row; needs ``context["ledger_events"]``."""
+
+    event_id = serializers.IntegerField(read_only=True)
+    organization_id = serializers.IntegerField(read_only=True)
+    event = serializers.SerializerMethodField()
+
+    def get_subject(self, obj: SignupLedgerEntry) -> dict[str, Any] | None:
+        snap = obj.subject_snapshot
+        if obj.subject_user is None and not (
+            isinstance(snap, dict) and snap.get("user_id") is not None
+        ):
+            return None
+        return super().get_subject(obj)
+
+    def get_event(self, obj: SignupLedgerEntry) -> dict[str, Any] | None:
+        events: dict[int, LedgerEvent] = self.context.get("ledger_events") or {}
+        event = events.get(obj.event_id)
+        if event is None:
+            return None
+        return {
+            "name": event.name,
+            "state": event.state,
+            "scheduled_at": (
+                serializers.DateTimeField().to_representation(event.scheduled_at)
+                if event.scheduled_at is not None
+                else None
+            ),
+        }
 
 
 class ReadyCheckEntrySerializer(serializers.ModelSerializer):

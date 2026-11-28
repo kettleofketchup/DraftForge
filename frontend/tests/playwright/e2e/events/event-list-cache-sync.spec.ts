@@ -96,9 +96,13 @@ test.describe('Events - list stays in sync with the event page (@cicd)', () => {
     const csrf = await getCsrfToken(context);
     while (created.length) {
       const id = created.pop();
-      await context.request.delete(`${API_URL}/events/${id}/`, {
-        headers: { 'X-CSRFToken': csrf },
-      });
+      const response = await context.request.delete(
+        `${API_URL}/events/${id}/?confirm=true`,
+        {
+          headers: { 'X-CSRFToken': csrf },
+        },
+      );
+      expect(response.status()).toBe(204);
     }
     await resetEventsData(context);
   });

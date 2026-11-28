@@ -161,3 +161,23 @@ describe('repeater mutations', () => {
     expect(isStale(client, KEYS.orgRepeaters)).toBe(true);
   });
 });
+
+it('series deletion refreshes retained occurrence detail, signup and history caches', async () => {
+  const { client, wrapper } = setup();
+  const detail = ['event', 41];
+  const signups = ['event-signups', 41];
+  const history = ['event-signup-history', 41, {}];
+  client.setQueryData(detail, { id: 41, event_repeater: REPEATER });
+  client.setQueryData(signups, [{ id: 11 }]);
+  client.setQueryData(history, { pages: [] });
+  const { result } = renderHook(() => useDeleteEventRepeaterMutation(), {
+    wrapper,
+  });
+  await act(() =>
+    result.current.mutateAsync({ id: REPEATER, organization: ORG }),
+  );
+  for (const key of [detail, signups, history]) {
+    expect(isStale(client, key)).toBe(true);
+    expect(client.getQueryData(key)).toBeDefined();
+  }
+});

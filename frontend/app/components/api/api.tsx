@@ -150,6 +150,7 @@ export {
   deleteEvent,
   deleteEventRepeater,
   demoteSignup,
+  downloadSignupRecordsCsv,
   getDiscordChannels,
   getDiscordRoles,
   getEvent,
@@ -161,6 +162,7 @@ export {
   getEvents,
   getOrgEventDefaults,
   getRepeaterSubscribers,
+  getSignupRecords,
   openSignups,
   reactivateRepeater,
   reinstateSignup,
@@ -169,6 +171,7 @@ export {
   restartTournament,
   setEventStaff,
   signupForEvent,
+  signupRecordsErrorCode,
   startRollCall,
   startTournament,
   subscribeToRepeater,
@@ -185,6 +188,8 @@ export type {
   EventType,
 } from '~/components/events/schemas';
 export type {
+  CancelEventOptions,
+  DeleteEventOptions,
   DiscordChannel,
   DiscordRole,
   EventRepeaterListItem,
@@ -204,9 +209,13 @@ export {
   getOrgSettings,
   orgSettingsKey,
   patchOrgSettings,
+  signupRetentionFormSchema,
+  toRetentionPatch,
 } from './orgSettingsAPI';
 export type {
   OrgSettings,
+  SignupRetentionFormValues,
+  SignupRetentionPatch,
   StaffOverridePolicy,
   StaffPlacementFormValues,
 } from './orgSettingsAPI';
