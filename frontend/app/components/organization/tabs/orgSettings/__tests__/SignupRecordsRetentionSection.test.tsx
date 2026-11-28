@@ -232,7 +232,7 @@ describe('useSignupRecordsRetentionSection', () => {
     expect(toast.error).toHaveBeenCalledWith('Not allowed.');
   });
 
-  it('writes the PATCH response to the shared settings cache', async () => {
+  it('writes only its own fields from the PATCH response to the shared cache', async () => {
     const saved: OrgSettings = {
       ...SETTINGS,
       staff_override_policy: 'block',
@@ -245,14 +245,63 @@ describe('useSignupRecordsRetentionSection', () => {
     await waitFor(() => expect(days().value).toBe('365'));
     fireEvent.change(days(), { target: { value: '120' } });
     await save();
-    expect(qc.getQueryData(orgSettingsKey(7))).toEqual(saved);
-    await waitFor(() =>
-      expect(
-        screen.getByTestId('org-settings-policy-select'),
-      ).toHaveTextContent('Block'),
+    expect(qc.getQueryData(orgSettingsKey(7))).toEqual({
+      ...SETTINGS,
+      signup_record_retention_days: 120,
+      updated_at: '2026-11-27T12:10:00Z',
+    });
+    expect(screen.getByTestId('org-settings-policy-select')).toHaveTextContent(
+      'Silent',
     );
     expect(staffUnit.isDirty).toBe(false);
     expect(unit.isDirty).toBe(false);
+  });
+
+  it('keeps both saves when parallel PATCH responses arrive out of order', async () => {
+    let resolveStaff: (v: OrgSettings) => void = () => undefined;
+    let resolveRetention: (v: OrgSettings) => void = () => undefined;
+    vi.mocked(patchOrgSettings).mockImplementation((_id, patch) =>
+      'staff_override_policy' in patch
+        ? new Promise((r) => (resolveStaff = r))
+        : new Promise((r) => (resolveRetention = r)),
+    );
+    await loaded({}, true);
+    fireEvent.pointerDown(screen.getByTestId('org-settings-policy-select'), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse',
+    });
+    fireEvent.click(screen.getByRole('option', { name: /Block/ }));
+    fireEvent.click(period());
+    await waitFor(() => expect(days().value).toBe('365'));
+
+    let saves: Promise<boolean[]> = Promise.resolve([]);
+    act(() => {
+      saves = Promise.all([staffUnit.save(), unit.save()]);
+    });
+    await waitFor(() => expect(patchOrgSettings).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      resolveRetention({
+        ...SETTINGS,
+        signup_record_retention_days: 365,
+        updated_at: '2026-11-27T12:10:00Z',
+      });
+      await Promise.resolve();
+      resolveStaff({
+        ...SETTINGS,
+        staff_override_policy: 'block',
+        updated_at: '2026-11-27T12:09:00Z',
+      });
+      await saves;
+    });
+
+    const cached = qc.getQueryData<OrgSettings>(orgSettingsKey(7));
+    expect(cached?.staff_override_policy).toBe('block');
+    expect(cached?.signup_record_retention_days).toBe(365);
+    expect(days().value).toBe('365');
+    expect(screen.getByTestId('org-settings-policy-select')).toHaveTextContent(
+      'Block',
+    );
   });
 
   it('renders no form element inside the section', async () => {

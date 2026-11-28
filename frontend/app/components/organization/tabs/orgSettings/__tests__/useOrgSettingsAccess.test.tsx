@@ -56,7 +56,7 @@ describe('useOrgSettingsAccess', () => {
     expect(access(org({ owner_id: VIEWER }))).toEqual({
       settled: true,
       canOpen: true,
-      visibleSectionIds: ['staff-placement'],
+      visibleSectionIds: ['staff-placement', 'signup-records'],
     });
   });
 
@@ -65,13 +65,13 @@ describe('useOrgSettingsAccess', () => {
       {
         settled: true,
         canOpen: true,
-        visibleSectionIds: ['staff-placement', 'conduct'],
+        visibleSectionIds: ['staff-placement', 'signup-records', 'conduct'],
       },
     );
     expect(
       access(org({ owner_id: VIEWER, can_manage_conduct: false }))
         .visibleSectionIds,
-    ).toEqual(['staff-placement']);
+    ).toEqual(['staff-placement', 'signup-records']);
   });
 
   it('shows the leadership section only with leadership manage access', () => {
@@ -92,7 +92,7 @@ describe('useOrgSettingsAccess', () => {
           standing_tracks: [track(true)],
         } as Partial<OrganizationType>),
       ).visibleSectionIds,
-    ).toEqual(['staff-placement', 'leadership']);
+    ).toEqual(['staff-placement', 'signup-records', 'leadership']);
     expect(
       access(
         org({
@@ -100,17 +100,17 @@ describe('useOrgSettingsAccess', () => {
           standing_tracks: [track(false)],
         } as Partial<OrganizationType>),
       ).visibleSectionIds,
-    ).toEqual(['staff-placement']);
+    ).toEqual(['staff-placement', 'signup-records']);
   });
 
   it('shows the api access section only while mmr_sync is on', () => {
     expect(
       access(org({ owner_id: VIEWER, features: ['mmr_sync'] }))
         .visibleSectionIds,
-    ).toEqual(['staff-placement', 'api-access']);
+    ).toEqual(['staff-placement', 'signup-records', 'api-access']);
     expect(
       access(org({ owner_id: VIEWER, features: [] })).visibleSectionIds,
-    ).toEqual(['staff-placement']);
+    ).toEqual(['staff-placement', 'signup-records']);
   });
 
   it('shows the api access section to a site admin while locked', () => {

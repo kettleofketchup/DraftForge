@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
   type RefObject,
@@ -85,16 +84,10 @@ export function useSignupRecordsRetentionSection(
     enabled,
   });
 
-  const minRef = useRef(30);
-  if (data) minRef.current = data.signup_record_min_retention_days;
+  const minDays = data?.signup_record_min_retention_days;
   const resolver = useMemo<Resolver<SignupRetentionFormValues>>(
-    () => (values, context, options) =>
-      zodResolver(signupRetentionFormSchema(minRef.current))(
-        values,
-        context,
-        options,
-      ),
-    [],
+    () => zodResolver(signupRetentionFormSchema(minDays ?? 30)),
+    [minDays],
   );
   const form = useForm<SignupRetentionFormValues>({
     resolver,
@@ -116,7 +109,20 @@ export function useSignupRecordsRetentionSection(
           organizationId,
           toRetentionPatch(values),
         );
-        queryClient.setQueryData(orgSettingsKey(organizationId), saved);
+        queryClient.setQueryData<OrgSettings>(
+          orgSettingsKey(organizationId),
+          (old) =>
+            old
+              ? {
+                  ...old,
+                  signup_record_retention_days:
+                    saved.signup_record_retention_days,
+                  signup_record_min_retention_days:
+                    saved.signup_record_min_retention_days,
+                  updated_at: saved.updated_at,
+                }
+              : saved,
+        );
         form.reset(pickRetentionValues(saved));
         return true;
       } catch (err) {
@@ -157,7 +163,6 @@ export function useSignupRecordsRetentionSection(
     },
   };
 
-  const minDays = data?.signup_record_min_retention_days;
   const content = useMemo(
     () => (
       <section

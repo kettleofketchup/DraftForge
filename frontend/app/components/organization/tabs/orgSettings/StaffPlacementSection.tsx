@@ -122,7 +122,19 @@ export function useStaffPlacementSection(
     }
     try {
       const saved = await patchOrgSettings(organizationId, changes);
-      queryClient.setQueryData(orgSettingsKey(organizationId), saved);
+      queryClient.setQueryData<OrgSettings>(
+        orgSettingsKey(organizationId),
+        (old) =>
+          old
+            ? {
+                ...old,
+                staff_override_policy: saved.staff_override_policy,
+                staff_override_warning_codes:
+                  saved.staff_override_warning_codes,
+                updated_at: saved.updated_at,
+              }
+            : saved,
+      );
       form.reset(pickFormValues(saved));
       return true;
     } catch (err) {
