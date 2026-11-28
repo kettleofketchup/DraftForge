@@ -5,6 +5,7 @@ import re
 import ssl
 import time
 import zlib
+from collections.abc import Callable
 from contextlib import suppress
 from urllib.parse import quote, unquote, urlencode, urlsplit
 
@@ -28,7 +29,11 @@ from org.api_connections.tls_adapter import (
     public_answers,
     remaining,
 )
-from org.api_connections.types import SafeHttpRequest, SafeHttpResponse
+from org.api_connections.types import (
+    SafeHttpRawResponse,
+    SafeHttpRequest,
+    SafeHttpResponse,
+)
 
 tracer = trace.get_tracer(__name__)
 
@@ -111,7 +116,16 @@ def _render(
     if request.method == "GET" and body is not None:
         raise SafeHttpError("invalid_request")
     encoded_body = None
-    if body is not None:
+    if body is not None and request.body_encoding == "canonical":
+        encoded_body = json.dumps(
+            body,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        headers["Content-Type"] = "application/json; charset=utf-8"
+    elif body is not None:
         encoded_body = json.dumps(body, allow_nan=False, separators=(",", ":")).encode()
         headers["Content-Type"] = "application/json"
     for value in query.values():
@@ -130,9 +144,7 @@ def _render(
     return target, encoded_body, headers
 
 
-def _read_json(response: HTTPResponse, deadline: float, cap: int) -> SafeHttpResponse:
-    if 300 <= response.status < 400:
-        raise SafeHttpError("redirect_forbidden")
+def _read_body(response: HTTPResponse, deadline: float, cap: int) -> bytes:
     encoding = response.headers.get("Content-Encoding", "identity").strip().lower()
     if encoding not in ("identity", "gzip", "deflate"):
         raise SafeHttpError("unsupported_encoding")
@@ -161,6 +173,13 @@ def _read_json(response: HTTPResponse, deadline: float, cap: int) -> SafeHttpRes
     if decoder and not decoder.eof:
         raise SafeHttpError("invalid_compression")
     remaining(deadline)
+    return bytes(result)
+
+
+def _read_json(response: HTTPResponse, deadline: float, cap: int) -> SafeHttpResponse:
+    if 300 <= response.status < 400:
+        raise SafeHttpError("redirect_forbidden")
+    result = _read_body(response, deadline, cap)
     try:
         data = json.loads(result) if result else None
     except ValueError:
@@ -173,9 +192,35 @@ def _read_json(response: HTTPResponse, deadline: float, cap: int) -> SafeHttpRes
     )
 
 
+def _read_raw(response: HTTPResponse, deadline: float, cap: int) -> SafeHttpRawResponse:
+    body = _read_body(response, deadline, cap)
+    retry_after = response.headers.get("Retry-After")
+    return SafeHttpRawResponse(
+        status=response.status,
+        body=body,
+        retry_after=retry_after[:64] if retry_after is not None else None,
+    )
+
+
 def request_json(
     request: SafeHttpRequest, *, deadline: float, max_bytes: int = PAGE_BYTES
 ) -> SafeHttpResponse:
+    return _send(request, deadline, max_bytes, _read_json)
+
+
+def request_bytes(
+    request: SafeHttpRequest, *, deadline: float, max_bytes: int = PAGE_BYTES
+) -> SafeHttpRawResponse:
+    """Like ``request_json`` but returns the undecoded body; 3xx is not followed."""
+    return _send(request, deadline, max_bytes, _read_raw)
+
+
+def _send[T: (SafeHttpResponse, SafeHttpRawResponse)](
+    request: SafeHttpRequest,
+    deadline: float,
+    max_bytes: int,
+    reader: Callable[[HTTPResponse, float, int], T],
+) -> T:
     adapter: PinnedHTTPSAdapter | None = None
     response: HTTPResponse | None = None
     if (
@@ -199,7 +244,7 @@ def request_json(
             target, body, headers = _render(request, url)
             adapter = PinnedHTTPSAdapter(url, deadline)
             response = adapter.send(request.method, target, body, headers)
-            result = _read_json(response, deadline, max_bytes)
+            result = reader(response, deadline, max_bytes)
             span.set_attribute("http.response.status_code", result.status)
             return result
         except SafeHttpError as exc:

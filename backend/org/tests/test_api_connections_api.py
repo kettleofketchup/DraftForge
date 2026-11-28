@@ -231,7 +231,7 @@ class ConnectionApiTests(ApiTokenBase):
                 400,
             )
         row = self.create()
-        for action in ("test", "pull", "promotion/resume"):
+        for action in ("test", "pull"):
             self.assertEqual(
                 self.client.post(
                     f"{self.url}{row['id']}/{action}/", {}, format="json"

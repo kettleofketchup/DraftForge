@@ -24,6 +24,7 @@ class SafeHttpRequest(ConfigRecord):
     credential: str | None = Field(default=None, repr=False)
     credential_origin: str | None = Field(default=None, repr=False)
     credential_field: CredentialField | None = None
+    body_encoding: Literal["compact", "canonical"] = "compact"
     idempotency_key: (
         Annotated[
             str,
@@ -39,6 +40,12 @@ class SafeHttpResponse(ConfigRecord):
     status: int
     data: JsonValue = Field(repr=False)
     bytes_received: int
+
+
+class SafeHttpRawResponse(ConfigRecord):
+    status: int
+    body: bytes = Field(repr=False)
+    retry_after: str | None = None
 
 
 class ResponseMapping(ConfigRecord):

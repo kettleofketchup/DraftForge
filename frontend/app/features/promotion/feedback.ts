@@ -33,6 +33,8 @@ const EXTERNAL_WRITEBACK_TEXT: Record<ExternalWritebackState, string> = {
     'The adaptor could not take it yet; DraftForge will try recording it externally again.',
   paused:
     'External recording is paused. The send is saved in DraftForge and will be recorded once it resumes.',
+  backlog_held:
+    'This send was recorded before external recording was set up for the event. It is recorded externally only if an org admin releases it.',
   reconciliation_required:
     'This send needs review before it can be recorded externally.',
   applied: 'Recorded externally.',

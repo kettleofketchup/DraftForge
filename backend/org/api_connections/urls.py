@@ -50,4 +50,21 @@ urlpatterns = [
         {"action": "resync"},
         name="org-api-connection-deliveries-resync",
     ),
+    path(
+        "<int:connection_id>/promotion/outbox/",
+        views.connection_promotion_outbox,
+        name="org-api-connection-promotion-outbox",
+    ),
+    path(
+        "<int:connection_id>/promotion/resume/",
+        views.connection_promotion_recovery,
+        {"action": "resume"},
+        name="org-api-connection-promotion-resume",
+    ),
+    path(
+        "<int:connection_id>/promotion/send-backlog/",
+        views.connection_promotion_recovery,
+        {"action": "send-backlog"},
+        name="org-api-connection-promotion-send-backlog",
+    ),
 ]

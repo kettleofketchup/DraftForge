@@ -303,6 +303,7 @@ After a send is recorded, a configured org shows the external state on its own l
 | `in_flight` | Being recorded externally now. |
 | `retry` | The adaptor could not take it yet; DraftForge will try recording it externally again. |
 | `paused` | External recording is paused. The send is saved in DraftForge and will be recorded once it resumes. |
+| `backlog_held` | This send was recorded before external recording was set up for the event. It is recorded externally only if an org admin releases it. |
 | `reconciliation_required` | This send needs review before it can be recorded externally. |
 | `applied` | Recorded externally. |
 | `canceled` | This send will not be recorded externally. |
@@ -326,9 +327,11 @@ writer interface without changing this side. Until then, leave writeback off.
 **Gate before enabling writeback.** Once DraftForge sends can reach the external log,
 an import can see a DraftForge send's external copy before the dispatcher marks the
 outbox row applied. That copy would be imported as the point holder instead of an echo.
-Before writeback is turned on, the dispatcher must reconcile when it marks a row applied,
-under the event lock: reclassify an already imported copy as an echo, void its credit and
-restore the local point. This is not built yet, because writeback is disabled.
+The dispatcher reconciles when it marks a row applied, in the same transaction and
+under the org and event locks: it reclassifies an already imported copy as an echo,
+voids its credit and restores the local point (or, if the copy was a duplicate, only
+marks it as the echo). An import that arrives after the acknowledgement sees the
+applied row and records the echo directly. Both orders settle the point once.
 
 ## Running the dispatcher
 

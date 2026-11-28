@@ -1,10 +1,12 @@
 from collections import defaultdict
+from typing import Any
 
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
+from events.models import Event
 from org.api_connections.audit import audit_connection
 from org.api_connections.authority import (
     ConnectionAuthorityLost,
@@ -17,15 +19,19 @@ from org.api_connections.mmr_delivery import (
     supersede_unsent,
 )
 from org.api_connections.mutations import lock_memberships
+from org.api_connections.promotion_stream import lock_org
 from org.api_connections.schemas import ConnectionConfigError
 from org.feature_errors import not_permitted, require_org_admin
+from org.integration.event_lock import with_event_mutations
 from org.models import (
     OrgApiConnection,
     OrgApiMmrDelivery,
+    OrgApiPromotionAdoption,
     OrgMmrRevisionCounter,
     OrgMmrSyncState,
     OrgUserGameMmr,
 )
+from org.models_promotion_sync import OutboxState, PromotionContactOutbox
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -238,3 +244,138 @@ def resync_mmr_deliveries(
         count=enqueued,
     )
     return enqueued
+
+
+PROMOTION_STATES = (
+    OutboxState.PENDING,
+    OutboxState.IN_FLIGHT,
+    OutboxState.RETRY,
+    OutboxState.PAUSED,
+    OutboxState.BACKLOG_HELD,
+    OutboxState.RECONCILIATION_REQUIRED,
+    OutboxState.APPLIED,
+    OutboxState.CANCELED,
+)
+REASON_STATES = (
+    OutboxState.RETRY,
+    OutboxState.PAUSED,
+    OutboxState.RECONCILIATION_REQUIRED,
+)
+
+
+def _admin(connection: OrgApiConnection, actor: CustomUser) -> None:
+    if not actor.is_active:
+        raise not_permitted()
+    require_org_admin(actor, connection.organization, None)
+
+
+def _require_stream(connection: OrgApiConnection) -> None:
+    if not OrgApiPromotionAdoption.objects.filter(
+        organization_id=connection.organization_id, connection_id=connection.pk
+    ).exists():
+        raise ConnectionConfigError("not_promotion_stream")
+
+
+def _promotion_rows(connection: OrgApiConnection) -> QuerySet[PromotionContactOutbox]:
+    return PromotionContactOutbox.objects.filter(
+        organization_id=connection.organization_id
+    )
+
+
+def promotion_outbox_summary(connection: OrgApiConnection) -> dict[str, Any]:
+    """Counts and fixed reason codes of the org's promotion outbox; no payloads."""
+    _require_stream(connection)
+    rows = _promotion_rows(connection)
+    counts = dict(
+        rows.values("state").annotate(total=Count("pk")).values_list("state", "total")
+    )
+    reasons: dict[str, dict[str, int]] = {state: {} for state in REASON_STATES}
+    for state, reason, total in (
+        rows.filter(state__in=REASON_STATES)
+        .exclude(last_reason="")
+        .values("state", "last_reason")
+        .annotate(total=Count("pk"))
+        .values_list("state", "last_reason", "total")
+    ):
+        reasons[state][reason] = total
+    return {
+        "counts": {state: counts.get(state, 0) for state in PROMOTION_STATES},
+        "reasons": reasons,
+    }
+
+
+def resume_promotion_outbox(connection: OrgApiConnection, *, actor: CustomUser) -> int:
+    """Move this org's paused rows back to pending; delivery ID and payload stay."""
+    _admin(connection, actor)
+    now = timezone.now()
+    with transaction.atomic():
+        lock_org(connection.organization_id)
+        _require_stream(connection)
+        ids = list(
+            _promotion_rows(connection)
+            .filter(state=OutboxState.PAUSED)
+            .order_by("pk")
+            .values_list("pk", flat=True)[:RESUME_LIMIT]
+        )
+        PromotionContactOutbox.objects.filter(
+            pk__in=ids, state=OutboxState.PAUSED
+        ).update(state=OutboxState.PENDING, due_at=now, last_reason="", updated_at=now)
+        audit_connection(
+            connection, actor=actor, action="resume_promotion_outbox", fields=[]
+        )
+    log.info(
+        "promo_outbox_resumed",
+        system="org",
+        subsystem="integration",
+        org_id=connection.organization_id,
+        connection_id=connection.pk,
+        count=len(ids),
+    )
+    return len(ids)
+
+
+def release_promotion_backlog(
+    connection: OrgApiConnection, *, actor: CustomUser, confirmed_count: int
+) -> int:
+    """Release every backlog-held row once the admin confirmed their current count."""
+    if type(confirmed_count) is not int or confirmed_count < 0:
+        raise ConnectionConfigError("invalid_request")
+    _admin(connection, actor)
+    org_id = connection.organization_id
+    held = _promotion_rows(connection).filter(state=OutboxState.BACKLOG_HELD)
+    event_ids = sorted(
+        Event.objects.nocache()
+        .filter(pk__in=held.values("event_id"))
+        .values_list("pk", flat=True)
+    )
+
+    def locked() -> int:
+        _require_stream(connection)
+        ids = list(held.values_list("pk", flat=True))
+        if len(ids) != confirmed_count:
+            raise ConnectionConfigError("backlog_changed")
+        now = timezone.now()
+        PromotionContactOutbox.objects.filter(pk__in=ids).update(
+            state=OutboxState.PENDING,
+            due_at=now,
+            last_reason="",
+            connection_id=connection.pk,
+            updated_at=now,
+        )
+        audit_connection(
+            connection, actor=actor, action="release_promotion_backlog", fields=[]
+        )
+        return len(ids)
+
+    released = with_event_mutations(
+        event_ids, locked, lock_first=lambda: lock_org(org_id)
+    )
+    log.info(
+        "promo_backlog_released",
+        system="org",
+        subsystem="integration",
+        org_id=org_id,
+        connection_id=connection.pk,
+        count=released,
+    )
+    return released

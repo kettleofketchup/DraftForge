@@ -39,12 +39,18 @@ from org.contributions.kinds import ContributionKind
 from org.contributions.services import set_point_value
 from org.feature_keys import FeatureKey
 from org.features import set_org_feature
-from org.integration import contacts, event_lock
+from org.integration import contacts, dispatch, event_lock
+from org.integration.adaptor_client import OutcomeKind, ReceiptOutcome
 from org.integration.contacts import import_contact_receipts
 from org.integration.event_lock import with_event_mutation
 from org.integration.receipts import format_timestamp
 from org.models import ContributionEntry, Organization, OrgUser, PromoSend
-from org.models_promotion_sync import ExternalPromotionReceipt
+from org.models_promotion_sync import (
+    ExternalPromotionReceipt,
+    OutboxState,
+    PointStatus,
+    PromotionContactOutbox,
+)
 from org.promotion import services
 from org.promotion.services import (
     ContactAlreadyRecorded,
@@ -52,6 +58,7 @@ from org.promotion.services import (
     undo_promo_send,
 )
 from org.tests.test_integration_contacts import age_import
+from org.tests.test_promotion_dispatch import _config as adaptor_config
 from tournament.models import Tournament
 
 GUILD = "770000000000000002"
@@ -509,6 +516,85 @@ class UndoAndDuplicateRaceTests(_RaceBase):
         receipt.refresh_from_db()
         self.assertEqual(receipt.event_id, self.event.pk)
         self.assertTrue(receipt.holds_point)
+
+
+class EchoAckRaceTests(_RaceBase):
+    """The adaptor's ack and the import of its external copy, in both orders."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        adaptor = override_settings(PROMOTION_ADAPTOR=adaptor_config())
+        adaptor.enable()
+        self.addCleanup(adaptor.disable)
+
+    def leased(self) -> tuple[PromoSend, dispatch.Lease]:
+        send = self.send()
+        row = PromotionContactOutbox.objects.get(local_send_id=send.pk)
+        lease = dispatch.claim(row, now=timezone.now(), config=adaptor_config())
+        assert lease is not None
+        return send, lease
+
+    def ack(self, lease: dispatch.Lease) -> bool:
+        outcome = ReceiptOutcome(OutcomeKind.APPLIED, "", 200, contact_log_id=9001)
+        return dispatch.finalize(
+            lease, outcome, now=timezone.now(), config=adaptor_config()
+        )
+
+    def assertEchoSettled(self, send: PromoSend) -> None:
+        receipt = ExternalPromotionReceipt.objects.get(source_contact_id=9001)
+        self.assertEqual(receipt.point_status, PointStatus.ECHO)
+        self.assertFalse(receipt.holds_point)
+        self.assertEqual(receipt.origin_send_id, send.pk)
+        self.assertEqual(
+            PromotionContactOutbox.objects.get(local_send_id=send.pk).state,
+            OutboxState.APPLIED,
+        )
+        entry = ContributionEntry.objects.get(promo_send=send)
+        self.assertFalse(entry.voided)
+        self.assertEqual(
+            sum(ContributionEntry.objects.values_list("points", flat=True)),
+            entry.points,
+        )
+
+    def test_import_holding_locks_then_ack_reclassifies(self) -> None:
+        send, lease = self.leased()
+        payload = self.payload()
+        wrapper, inside, release = self.paused(contacts._apply_batch)
+        with patch.object(contacts, "_apply_batch", wrapper):
+            importer = _Worker(lambda: import_contact_receipts(self.org, payload))
+            importer.start()
+            self.assertTrue(inside.wait(WAIT), importer.error)
+            acker = _Worker(lambda: self.ack(lease))
+            acker.start()
+            self.assertFalse(acker.finished.wait(BLOCKED_PROBE))
+            release.set()
+            importer.join(WAIT)
+            acker.join(WAIT)
+        self.assertIsNone(importer.error)
+        self.assertIsNone(acker.error)
+        self.assertEqual(importer.result["voided_local"], 1)
+        self.assertTrue(acker.result)
+        self.assertEchoSettled(send)
+
+    def test_ack_holding_locks_then_import_sees_echo(self) -> None:
+        send, lease = self.leased()
+        payload = self.payload()
+        wrapper, inside, release = self.paused(dispatch._mark)
+        with patch.object(dispatch, "_mark", wrapper):
+            acker = _Worker(lambda: self.ack(lease))
+            acker.start()
+            self.assertTrue(inside.wait(WAIT), acker.error)
+            importer = _Worker(lambda: import_contact_receipts(self.org, payload))
+            importer.start()
+            self.assertFalse(importer.finished.wait(BLOCKED_PROBE))
+            release.set()
+            acker.join(WAIT)
+            importer.join(WAIT)
+        self.assertIsNone(acker.error)
+        self.assertIsNone(importer.error)
+        self.assertEqual(importer.result["echo"], 1)
+        self.assertEqual(importer.result["voided_local"], 0)
+        self.assertEchoSettled(send)
 
 
 class _PausedOrgLog:

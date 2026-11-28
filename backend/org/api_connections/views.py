@@ -41,7 +41,10 @@ from org.api_connections.promotion_config import (
     stream_destination_locked,
 )
 from org.api_connections.recovery import (
+    promotion_outbox_summary,
+    release_promotion_backlog,
     resume_mmr_deliveries,
+    resume_promotion_outbox,
     resync_mmr_deliveries,
 )
 from org.api_connections.schemas import (
@@ -52,7 +55,13 @@ from org.api_connections.serializers import ConnectionSerializer
 from org.api_tokens.operations import entitlements_for
 from org.feature_errors import require_feature, require_org_admin
 from org.feature_keys import FeatureKey
-from org.models import Organization, OrgApiConnection, OrgApiMmrDelivery, OrgApiToken
+from org.models import (
+    Organization,
+    OrgApiConnection,
+    OrgApiMmrDelivery,
+    OrgApiPromotionAdoption,
+    OrgApiToken,
+)
 
 DELIVERY_PAGE_SIZE = 50
 DELIVERY_STATES = ("pending", "retry", "paused")
@@ -63,6 +72,7 @@ CONFLICT_CODES = frozenset(
         "binding_locked",
         "promotion_stream_exists",
         "promotion_stream_in_use",
+        "backlog_changed",
     }
 )
 
@@ -124,9 +134,18 @@ def _check_patch(connection: OrgApiConnection, patch: dict[str, Any]) -> None:
     raw = {field: getattr(connection, field) for field in CONFIG_FIELDS}
     raw.update({key: value for key, value in patch.items() if key in CONFIG_FIELDS})
     config = validate_connection_config(raw)
-    unavailable = ("mmr_pull_enabled", "promotion_push_enabled")
-    if any(patch.get(field) is True for field in unavailable):
+    if patch.get("mmr_pull_enabled") is True:
         raise ConnectionConfigError("direction_unavailable")
+    if config.promotion_push_enabled and not connection.promotion_push_enabled:
+        if (
+            connection.pk is None
+            or not OrgApiPromotionAdoption.objects.filter(
+                connection_id=connection.pk
+            ).exists()
+        ):
+            raise ConnectionConfigError("not_promotion_stream")
+        if config.outbound_auth != "bearer":
+            raise ConnectionConfigError("unsupported_auth")
     added = set(config.operations) - set(connection.operations)
     try:
         check_promotion_grants(connection.organization_id, connection.pk, added)
@@ -143,6 +162,8 @@ def _check_patch(connection: OrgApiConnection, patch: dict[str, Any]) -> None:
             required.add(FeatureKey.PROMOTION)
     if config.mmr_push_enabled and not connection.mmr_push_enabled:
         required.add(FeatureKey.MMR_SYNC)
+    if config.promotion_push_enabled and not connection.promotion_push_enabled:
+        required.add(FeatureKey.PROMOTION)
     for feature in required:
         require_feature(connection.organization, feature)
     if config.outbound_auth != "none" and (
@@ -507,3 +528,46 @@ def connection_promotion_binding(
     except PromotionStreamError as exc:
         return Response({"code": exc.code, "detail": exc.code}, status=exc.status)
     return Response(describe(resolved))
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_promotion_outbox(
+    request: Request, org_id: int, connection_id: int
+) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    if request.query_params:
+        return _invalid()
+    try:
+        return Response(promotion_outbox_summary(connection))
+    except ConnectionConfigError as exc:
+        return _error(exc)
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAuthenticated])
+def connection_promotion_recovery(
+    request: Request, org_id: int, connection_id: int, action: str
+) -> Response:
+    org = _org(request, org_id)
+    connection = _connection(org, connection_id)
+    allowed = {"confirmed_count"} if action == "send-backlog" else set()
+    if type(request.data) is not dict or set(request.data) != allowed:
+        return _invalid()
+    check_action_budget(org.pk, request.user.pk, kind="manual")
+    try:
+        if action == "resume":
+            return Response(
+                {"resumed": resume_promotion_outbox(connection, actor=request.user)}
+            )
+        released = release_promotion_backlog(
+            connection,
+            actor=request.user,
+            confirmed_count=request.data["confirmed_count"],
+        )
+        return Response({"released": released})
+    except ConnectionConfigError as exc:
+        return _error(exc)

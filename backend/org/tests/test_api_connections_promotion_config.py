@@ -393,7 +393,7 @@ class AdoptedDispatchTests(_DispatchFixture):
         client = FakeClient(applied)
         report = self.dispatch(client)
         self.assertEqual(client.calls, [])
-        self.assertEqual(report.skipped_unbound, 1)
+        self.assertEqual((report.skipped_unbound, report.held), (0, 1))
         self.assertEqual(self.row(send).state, OutboxState.PENDING)
 
 

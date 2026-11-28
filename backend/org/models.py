@@ -287,6 +287,8 @@ class OrgLog(models.Model):
         ("resync_mmr_deliveries", "Resync MMR Deliveries"),
         ("edit_promotion_binding", "Edit Promotion Binding"),
         ("adopt_promotion_sync", "Adopt Promotion Sync"),
+        ("resume_promotion_outbox", "Resume Promotion Outbox"),
+        ("release_promotion_backlog", "Release Promotion Backlog"),
         ("void_promo_point", "Void Promotion Point"),
         ("restore_promo_point", "Restore Promotion Point"),
         ("update_external_contact", "Update External Contact"),

@@ -18,6 +18,10 @@ receipt is byte for byte the same. Redirects are never followed and proxy
 settings from the environment are ignored. Logs carry the delivery UUID,
 status and a fixed reason code; never the payload, a Discord or user ID, the
 key or any response text.
+
+``ConnectionReceiptClient`` sends the same bytes to an adopted stream
+connection over the org-safe transport with that connection's own credential;
+the deployment key is never used there.
 """
 
 from __future__ import annotations
@@ -31,10 +35,26 @@ from typing import Any, Final
 
 import requests
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework.exceptions import PermissionDenied
 
 from common.strict_json import StrictJSONError, loads_strict, parse_canonical_id
 from config.promotion_sync import PromotionAdaptorConfig
+from org.api_connections.authority import (
+    ConnectionAuthorityLost,
+    assert_connection_authority,
+    denial_code,
+)
+from org.api_connections.crypto import (
+    CredentialError,
+    canonical_origin,
+    open_credential,
+)
+from org.api_connections.limits import REQUEST_SECONDS
+from org.api_connections.safe_http import request_bytes
+from org.api_connections.tls_adapter import SafeHttpError
+from org.api_connections.types import SafeHttpRequest
 from org.integration.receipts import canonical_receipt_json
+from org.models import OrgApiConnection
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
@@ -77,6 +97,19 @@ class ReceiptOutcome:
     http_status: int | None
     contact_log_id: int | None = None
     retry_after: float | None = None
+
+
+_TRANSPORT_OUTCOMES: Final[dict[str, tuple[OutcomeKind, str]]] = {
+    "deadline_exceeded": (OutcomeKind.RETRYABLE, "timeout"),
+    "network_failed": (OutcomeKind.RETRYABLE, "connection_error"),
+    "dns_failed": (OutcomeKind.RETRYABLE, "connection_error"),
+    "unsafe_address": (OutcomeKind.NOT_APPLIED, "unsafe_destination"),
+    "peer_mismatch": (OutcomeKind.NOT_APPLIED, "unsafe_destination"),
+    "invalid_url": (OutcomeKind.NOT_APPLIED, "unsafe_destination"),
+    "response_too_large": (OutcomeKind.INVALID_RESPONSE, "invalid_response"),
+    "invalid_compression": (OutcomeKind.INVALID_RESPONSE, "invalid_response"),
+    "unsupported_encoding": (OutcomeKind.INVALID_RESPONSE, "invalid_response"),
+}
 
 
 class _Invalid(Exception):
@@ -148,6 +181,113 @@ class PromotionAdaptorClient:
             except _Invalid:
                 return _invalid(status)
             return _classify(status, raw, response.headers, delivery_id)
+
+
+def _held(reason: str) -> ReceiptOutcome:
+    return ReceiptOutcome(OutcomeKind.NOT_APPLIED, reason, None)
+
+
+class ConnectionReceiptClient:
+    """Sends one frozen receipt to an adopted stream connection's destination.
+
+    Uses the org-safe transport. Every attempt rechecks the connection's
+    flags, saved version, destination and outbound authority; anything the
+    adaptor contract cannot honor pauses with a fixed reason.
+    """
+
+    def record(
+        self,
+        payload: dict[str, Any],
+        *,
+        connection_id: int,
+        origin: str,
+        config_version: int,
+    ) -> ReceiptOutcome:
+        delivery_id = str(payload["delivery_id"])
+        started = time.monotonic()
+        result = self._record(payload, connection_id, origin, config_version)
+        log.info(
+            "promo_adaptor_receipt_answered",
+            system="org",
+            subsystem="integration",
+            org_id=payload.get("org_id"),
+            connection_id=connection_id,
+            delivery_id=delivery_id,
+            http_status=result.http_status,
+            outcome=result.kind.value,
+            reason=result.reason or None,
+            duration_ms=round((time.monotonic() - started) * 1000),
+        )
+        return result
+
+    def _record(
+        self,
+        payload: dict[str, Any],
+        connection_id: int,
+        origin: str,
+        config_version: int,
+    ) -> ReceiptOutcome:
+        connection = OrgApiConnection.objects.filter(pk=connection_id).first()
+        if connection is None or connection.archived_at is not None:
+            return _held("connection_archived")
+        if not (connection.enabled and connection.promotion_push_enabled):
+            return _held("direction_disabled")
+        try:
+            current = canonical_origin(connection.outbound_base_url)
+        except CredentialError:
+            current = ""
+        if current != origin:
+            return _held("origin_changed")
+        if connection.config_version != config_version:
+            return ReceiptOutcome(OutcomeKind.RETRYABLE, "configuration_changed", None)
+        if connection.outbound_auth != "bearer":
+            return _held("unsupported_auth")
+        try:
+            assert_connection_authority(connection, direction="promotion_push")
+        except ConnectionAuthorityLost as lost:
+            lost.cleanup()
+            return _held("authority_lost")
+        except PermissionDenied as denied:
+            return _held(denial_code(denied))
+        try:
+            credential = open_credential(
+                connection.outbound_credential_ciphertext,
+                org_id=connection.organization_id,
+                connection_id=connection.pk,
+                origin=origin,
+            )
+        except CredentialError as exc:
+            return _held(exc.code)
+        org_id = parse_canonical_id(payload["org_id"])
+        if org_id != connection.organization_id:
+            raise ValueError("payload org_id does not match the connection")
+        request = SafeHttpRequest(
+            url=connection.outbound_base_url.rstrip("/") + _PATH.format(org_id=org_id),
+            method="POST",
+            body=payload,
+            body_encoding="canonical",
+            auth="bearer",
+            credential=credential,
+            credential_origin=origin,
+        )
+        del credential
+        try:
+            raw = request_bytes(
+                request,
+                deadline=time.monotonic() + REQUEST_SECONDS,
+                max_bytes=MAX_RESPONSE_BYTES,
+            )
+        except SafeHttpError as exc:
+            kind, reason = _TRANSPORT_OUTCOMES.get(
+                exc.code, (OutcomeKind.NOT_APPLIED, exc.code)
+            )
+            return ReceiptOutcome(kind, reason, None)
+        return _classify(
+            raw.status,
+            raw.body,
+            {"Retry-After": raw.retry_after},
+            str(payload["delivery_id"]),
+        )
 
 
 def _read_bounded(response: requests.Response) -> bytes:
