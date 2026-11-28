@@ -66,7 +66,6 @@ from events.discord.embeds import (
     build_scheduled_event_sync_payload,
     build_subscriber_dm_embed,
 )
-from events.discord.signup_destination import resolve_signup_channel_type
 from events.discord.gates import (
     announcement_branch,
     attendance_reminder_gate,
@@ -79,6 +78,7 @@ from events.discord.gates import (
     signup_reminder_gate,
     start_mention_gate,
 )
+from events.discord.signup_destination import resolve_signup_channel_type
 from events.scheduling.fire import fire_due_reminders
 from events.signup_post_lock import (
     acquire_lock,
