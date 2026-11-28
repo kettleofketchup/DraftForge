@@ -40,7 +40,11 @@ function renderActions(
         onStartRollCallClick={vi.fn()}
         onReopenSignupsClick={vi.fn()}
         onOpenRollCallClick={vi.fn()}
-        onDeleteConfirmed={vi.fn()}
+        canDelete
+        isOrganizationAdmin
+        onDelete={vi.fn().mockResolvedValue(undefined)}
+        onCancel={vi.fn().mockResolvedValue(undefined)}
+        onDeleted={vi.fn()}
         onCompleteConfirmed={onCompleteConfirmed}
       />
     </TooltipProvider>,

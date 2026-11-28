@@ -75,8 +75,45 @@ export async function updateEvent(
   return data;
 }
 
-export async function deleteEvent(eventId: number): Promise<void> {
-  await axios.delete(`/events/${eventId}/`);
+export type DeleteEventOptions = { confirm?: boolean };
+
+const signupRecordsConflictSchema = z.object({
+  error: z.literal('has_signup_records'),
+  count: z.number().int().nonnegative(),
+});
+
+/** DELETE refused because the event has signup ledger entries. */
+export class EventSignupRecordsConflict extends Error {
+  readonly count: number;
+
+  constructor(count: number) {
+    super('Event has signup records');
+    this.name = 'EventSignupRecordsConflict';
+    this.count = count;
+  }
+}
+
+export async function deleteEvent(
+  eventId: number,
+  options?: DeleteEventOptions,
+): Promise<void> {
+  try {
+    if (options?.confirm === true) {
+      await axios.delete(`/events/${eventId}/`, {
+        params: { confirm: 'true' },
+      });
+    } else {
+      await axios.delete(`/events/${eventId}/`);
+    }
+  } catch (err) {
+    if (isAxiosError(err) && err.response?.status === 409) {
+      const conflict = signupRecordsConflictSchema.safeParse(err.response.data);
+      if (conflict.success) {
+        throw new EventSignupRecordsConflict(conflict.data.count);
+      }
+    }
+    throw err;
+  }
 }
 
 export type SignupBody = {
@@ -133,9 +170,15 @@ export async function startTournament(eventId: number): Promise<EventType> {
   return data;
 }
 
-export async function cancelEvent(eventId: number): Promise<EventType> {
-  const { data } = await axios.post<EventType>(`/events/${eventId}/cancel/`);
-  return data;
+export type CancelEventOptions = { reason?: string };
+
+export async function cancelEvent(
+  eventId: number,
+  options?: CancelEventOptions,
+): Promise<EventType> {
+  const body = options?.reason === undefined ? {} : { reason: options.reason };
+  const { data } = await axios.post(`/events/${eventId}/cancel/`, body);
+  return eventResponseSchema.parse(data);
 }
 
 export async function completeEvent(eventId: number): Promise<EventType> {

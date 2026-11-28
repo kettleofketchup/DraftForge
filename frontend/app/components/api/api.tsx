@@ -185,6 +185,8 @@ export type {
   EventType,
 } from '~/components/events/schemas';
 export type {
+  CancelEventOptions,
+  DeleteEventOptions,
   DiscordChannel,
   DiscordRole,
   EventRepeaterListItem,

@@ -15,6 +15,7 @@ import {
   visitAndWaitForHydration,
   type EventInfo,
 } from '../../fixtures';
+import { loginAsUser } from '../../fixtures/auth';
 import { API_URL } from '../../fixtures/base-url';
 
 let eventInfo: EventInfo;
@@ -80,6 +81,39 @@ test.describe('Events - series views stay in sync (@cicd)', () => {
 
   test.afterEach(async ({ context }) => {
     await resetEventsData(context);
+  });
+
+  test('retained occurrence refreshes its state and series link without a reload', async ({
+    context,
+    page,
+  }) => {
+    const response = await context.request.post(
+      `${API_URL}/tests/signup-records/reset/`,
+    );
+    expect(response.status()).toBe(200);
+    const data = (await response.json()) as {
+      admin_pk: number;
+      registered_event_pk: number;
+      repeater_pk: number;
+    };
+    await loginAsUser(context, data.admin_pk);
+    await visitAndWaitForHydration(page, `/events/${data.registered_event_pk}`);
+    await markDocument(page);
+    await page.getByTestId('event-series-link').click();
+    await page.getByTestId('delete-series-btn').click();
+    await page
+      .getByTestId('delete-series-confirm-input')
+      .fill('Records Weekly Series');
+    await page.getByTestId('delete-series-confirm').click();
+    await expect(page).toHaveURL(/\/events$/);
+    await page.goBack();
+    await page.goBack();
+    await expect(page).toHaveURL(
+      new RegExp(`/events/${data.registered_event_pk}`),
+    );
+    await expect(page.getByTestId('event-cancel-btn')).toHaveCount(0);
+    await expect(page.getByTestId('event-series-link')).toHaveCount(0);
+    await expectSameDocument(page);
   });
 
   test('renaming a series updates the cached /events Series tab', async ({

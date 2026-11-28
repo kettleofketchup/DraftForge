@@ -21,6 +21,7 @@ from events.capacity import has_free_seat, lock_event, seat_holding_statuses
 from events.constants import (
     EVENT_REOPEN_TRANSITIONS,
     EVENT_RESTART_TRANSITIONS,
+    EVENT_STATE_TRANSITIONS,
     REGISTERED_SIGNUP_STATUSES,
     ActorRole,
     Commitment,
@@ -94,6 +95,7 @@ from org.mmr import game_for_event
 from org.mmr_official import apply_official_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
+from org.permissions import has_org_admin_access
 from org.standing import api as standing
 from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
@@ -550,7 +552,6 @@ def apply_signup_input(
                 if role and priorities[role] == 0:
                     priorities[role] = min(slot_idx + 1, 5)
 
-        # Derive per-org binary flags from priorities.
         profile.pos_1 = priorities["carry"] > 0
         profile.pos_2 = priorities["mid"] > 0
         profile.pos_3 = priorities["offlane"] > 0
@@ -749,7 +750,6 @@ def approve_signup(
 
 @transaction.atomic
 def reject_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
-    """Reject a signup."""
     _reread_signup(signup)
     if signup.status in REMOVED_SIGNUP_STATUSES:
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
@@ -831,7 +831,6 @@ def _withdraw(signup: EventSignup, *, by_member: bool) -> str:
 
 @transaction.atomic
 def cancel_signup(signup: EventSignup, *, actor: SignupActor) -> EventSignup:
-    """Cancel a signup."""
     _reread_signup(signup)
     before = snapshot(signup)
     prior_status = _withdraw(signup, by_member=_by_member(actor))
@@ -1389,10 +1388,20 @@ def ensure_tournament_with_signups(
 
 
 @transaction.atomic
-def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
-    cancel_ready_check(
-        event, actor=_staff_or_system_actor(actor), reason="event_cancelled"
-    )
+def cancel_event(event: Event, *, actor: CustomUser | None, reason: str = "") -> Event:
+    event = lock_event(event)
+    if EventState.CANCELLED not in EVENT_STATE_TRANSITIONS.get(event.state, ()):
+        event.transition_state(EventState.CANCELLED)
+    signup_actor = _staff_or_system_actor(actor)
+    signups = [
+        (signup, snapshot(signup))
+        for signup in EventSignup.objects.nocache()
+        .filter(event=event)
+        .exclude(status__in=REMOVED_SIGNUP_STATUSES)
+        .select_related("user__base_profile")
+        .order_by("pk")
+    ]
+    cancel_ready_check(event, actor=signup_actor, reason="event_cancelled")
     if event.tournament:
         tournament = event.tournament
         event.tournament = None
@@ -1401,6 +1410,16 @@ def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
     event.transition_state(EventState.CANCELLED)
     event.refresh_from_db(from_queryset=Event.objects.nocache().all())
     standing.on_event_closed(event, cancelled=True, source="cancel", actor=actor)
+    for signup, before in signups:
+        _reread_signup(signup)
+        _record_leaf(
+            signup,
+            event=event,
+            actor=signup_actor,
+            action=SignupAction.EVENT_CANCELLED,
+            before=before,
+            reason=reason,
+        )
     try:
         discord_event = event.discord_event
     except DiscordEvent.DoesNotExist:
@@ -1424,17 +1443,44 @@ def cancel_event(event: Event, *, actor: CustomUser | None) -> Event:
     return event
 
 
-def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
+class SignupRecordsConflict(Exception):
+    """Teardown refused: the event has signup ledger entries."""
+
+    def __init__(self, count: int) -> None:
+        super().__init__(f"Event has {count} signup records")
+        self.count: int = count
+
+
+class SignupRecordsPermissionError(PermissionError):
+    """Only an organization admin may delete an event with signup records."""
+
+
+def teardown_event(
+    event: Event,
+    *,
+    actor: CustomUser | None = None,
+    confirm_signup_records: bool = False,
+) -> None:
     """Delete an event and everything Discord/tournament-related it owns.
 
-    Dispatches deletion of the live Discord scheduled event (nothing else in the
-    app removes scheduled events), then removes the linked tournament, DiscordEvent
-    (cascades to messages, logs, DMs) and legacy message logs, then the event row.
+    An event with signup ledger entries raises SignupRecordsConflict unless
+    confirm_signup_records is set by an org admin actor; the ledger survives.
+
+    Dispatches deletion of the live Discord scheduled event on commit, then
+    removes the linked tournament, DiscordEvent (cascades to messages, logs,
+    DMs) and legacy message logs, then the event row.
     Shared by EventViewSet (single delete), EventRepeaterViewSet (series delete)
     and sync_future_events' realign, so no path leaves ghost events behind.
     """
 
     with transaction.atomic():
+        event = lock_event(event)
+        count = SignupLedgerEntry.objects.filter(event_id=event.pk).count()
+        if count:
+            if not confirm_signup_records:
+                raise SignupRecordsConflict(count)
+            if actor is None or not has_org_admin_access(actor, event.organization):
+                raise SignupRecordsPermissionError(event.pk)
         standing.on_event_deleted(event, actor=actor)
         invalidate_after_commit(event)
         if event.tournament:
@@ -1449,8 +1495,12 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
             discord_event = None
         if discord_event is not None:
             if discord_event.scheduled_event_id:
-                delete_discord_scheduled_event.delay(
-                    discord_event.guild_id, discord_event.scheduled_event_id
+                guild_id = discord_event.guild_id
+                scheduled_event_id = discord_event.scheduled_event_id
+                transaction.on_commit(
+                    lambda: delete_discord_scheduled_event.delay(
+                        guild_id, scheduled_event_id
+                    )
                 )
             discord_event.delete()
 
@@ -1465,11 +1515,12 @@ def teardown_event(event: Event, *, actor: CustomUser | None = None) -> None:
 def teardown_event_repeater(
     repeater: EventRepeater, *, actor: CustomUser | None = None
 ) -> None:
-    """Delete a series after tearing down its still-active occurrences.
+    """Delete a series after closing its still-active occurrences.
 
-    Their live Discord scheduled events would otherwise come back as ghosts on the
-    next sync_discord_events run. Completed and cancelled occurrences stay, with
-    Event.event_repeater set to NULL, as the series' history.
+    Active occurrences with any signup or ledger history are cancelled and
+    kept; empty ones are torn down so their live Discord scheduled events
+    can't come back as ghosts. Completed, in-progress and cancelled
+    occurrences stay. Retained rows get Event.event_repeater set to NULL.
     """
     active_states = [
         EventState.UPCOMING,
@@ -1477,9 +1528,22 @@ def teardown_event_repeater(
         EventState.ROLL_CALL,
     ]
     with transaction.atomic():
-        for event in list(repeater.events.filter(state__in=active_states)):
-            teardown_event(event, actor=actor)
+        for event in list(
+            repeater.events.filter(state__in=active_states).order_by("pk")
+        ):
+            locked = lock_event(event)
+            if locked.state not in active_states:
+                continue
+            has_signups = EventSignup.objects.nocache().filter(event=locked).exists()
+            if has_signups or _has_signup_records(locked.pk):
+                cancel_event(locked, actor=actor)
+            else:
+                teardown_event(locked, actor=actor)
         repeater.delete()
+
+
+def _has_signup_records(event_id: int) -> bool:
+    return SignupLedgerEntry.objects.filter(event_id=event_id).exists()
 
 
 # ---------------------------------------------------------------------------
@@ -1896,7 +1960,7 @@ def sync_future_events(
         to_date = today + timedelta(days=repeater.generate_days_ahead)
         new_occurrences = set(_get_next_occurrences(repeater, today, to_date))
 
-        # Tear down UPCOMING rows that don't match the new occurrence set.
+        # Ledger-bearing UPCOMING occurrences must survive realignment.
         doomed = (
             Event.objects.filter(
                 event_repeater=repeater,
@@ -1905,8 +1969,26 @@ def sync_future_events(
             .exclude(is_off_schedule=True)
             .exclude(scheduled_at__in=new_occurrences)
         )
-        for event in list(doomed):
-            teardown_event(event)
+        for event in list(doomed.order_by("pk")):
+            with transaction.atomic():
+                locked = lock_event(event)
+                if (
+                    locked.state != EventState.UPCOMING
+                    or locked.is_off_schedule
+                    or locked.event_repeater_id != repeater.pk
+                    or locked.scheduled_at in new_occurrences
+                ):
+                    continue
+                if _has_signup_records(locked.pk):
+                    logger.info(
+                        "realign_skipped_signup_records",
+                        system="events",
+                        subsystem="services",
+                        event_id=locked.pk,
+                        repeater_id=repeater.pk,
+                    )
+                    continue
+                teardown_event(locked)
 
         # Generate any missing occurrences. The existing helper handles
         # the "row already exists" check via its pre-insert filter.
@@ -1961,7 +2043,6 @@ def sync_future_events(
             event, changed_draft_option_fields(previous_draft_options, event)
         )
 
-    # Single batched invalidation post-commit
     if future_events:
         invalidate_after_commit(*future_events)
 

@@ -10,6 +10,8 @@ import {
 import { useCallback, useEffect, useMemo } from 'react';
 
 import type {
+  CancelEventOptions,
+  DeleteEventOptions,
   EventRepeaterListItem,
   EventRepeaterType,
   EventStaffPayload,
@@ -299,25 +301,40 @@ export function useEventActionMutation(eventId: number) {
       },
     }),
     cancelEvent: useMutation({
-      mutationFn: () => cancelEventAPI(eventId),
-      onSuccess: (data) => {
-        queryClient.setQueryData(['event', eventId], data);
+      // A changed key detaches pending mutations instead of replacing their options.
+      mutationKey: ['event', eventId, 'cancel'],
+      onMutate: () => ({ eventId }) as const,
+      mutationFn: (options: CancelEventOptions | void) =>
+        cancelEventAPI(eventId, options || undefined),
+      onSuccess: (data, _options, { eventId: affectedEventId }) => {
+        queryClient.setQueryData(['event', affectedEventId], data);
         void invalidateEventLists(queryClient);
-        invalidateSignupHistory(queryClient, eventId);
+        invalidateSignupHistory(queryClient, affectedEventId);
         void invalidateConductQueries(queryClient, data.organization);
         void invalidateOrgStandingQueries(queryClient, data.organization);
+        void queryClient.invalidateQueries({
+          queryKey: ['event-signups', affectedEventId],
+        });
       },
     }),
     deleteEvent: useMutation({
-      mutationFn: () => deleteEventAPI(eventId),
-      onSuccess: () => {
-        const orgId = queryClient.getQueryData<EventType>([
-          'event',
+      mutationKey: ['event', eventId, 'delete'],
+      retry: false,
+      onMutate: () =>
+        ({
           eventId,
-        ])?.organization;
+          orgId: queryClient.getQueryData<EventType>(['event', eventId])
+            ?.organization,
+        }) as const,
+      mutationFn: (options: DeleteEventOptions | void) =>
+        deleteEventAPI(eventId, options || undefined),
+      onSuccess: (_data, _options, { eventId: affectedEventId, orgId }) => {
         void invalidateEventLists(queryClient);
-        queryClient.removeQueries({ queryKey: ['event', eventId] });
-        removeSignupHistoryQueries(queryClient, eventId);
+        queryClient.removeQueries({ queryKey: ['event', affectedEventId] });
+        queryClient.removeQueries({
+          queryKey: ['event-signups', affectedEventId],
+        });
+        removeSignupHistoryQueries(queryClient, affectedEventId);
         void invalidateConductQueries(queryClient);
         void invalidateOrgStandingQueries(queryClient, orgId);
         if (orgId != null) void invalidatePromotionQueries(queryClient, orgId);
@@ -444,7 +461,14 @@ export function useDeleteEventRepeaterMutation() {
       queryClient.removeQueries({ queryKey: repeaterKeys.detail(repeater.id) });
       queryClient.invalidateQueries({ queryKey: ['events'] });
       queryClient.invalidateQueries({ queryKey: repeaterKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: ['event'] });
+      void queryClient.invalidateQueries({ queryKey: ['event-signups'] });
+      void queryClient.invalidateQueries({
+        queryKey: ['event-signup-history'],
+      });
       void invalidateConductQueries(queryClient, repeater.organization);
+      void invalidateOrgStandingQueries(queryClient, repeater.organization);
+      void invalidatePromotionQueries(queryClient, repeater.organization);
     },
   });
 }
@@ -648,10 +672,7 @@ export function useUpdateOrgDefaultsMutation(orgId: number) {
   });
 }
 
-/**
- * Upsert signup user data into the entity adapter cache.
- * Call this after fetching signups to ensure all signup users are in the cache.
- */
+/** After fetching signups, upsert all signup users into the entity adapter cache. */
 export function useEventSignupUsers(
   signups: EventSignupType[] | undefined,
   /**

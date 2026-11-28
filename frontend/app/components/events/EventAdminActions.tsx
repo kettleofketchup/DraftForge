@@ -11,6 +11,11 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import type { DeleteEventOptions } from '~/components/api/eventsAPI';
+import {
+  EventDeleteFlow,
+  isEventCancellable,
+} from '~/components/events/EventDeleteFlow';
 import type { EventType } from '~/components/events/schemas';
 import { EventState } from '~/components/events/schemas';
 import {
@@ -44,7 +49,11 @@ interface EventAdminActionsProps {
   onStartRollCallClick: () => void;
   onReopenSignupsClick: () => void;
   onOpenRollCallClick: () => void;
-  onDeleteConfirmed: () => void;
+  canDelete: boolean;
+  isOrganizationAdmin: boolean;
+  onDelete: (options?: DeleteEventOptions) => Promise<void>;
+  onCancel: () => Promise<void>;
+  onDeleted: () => void;
   canComplete: boolean;
   showCompletePointsNote?: boolean;
   onCompleteConfirmed: () => void | Promise<void>;
@@ -57,19 +66,20 @@ export function EventAdminActions({
   onStartRollCallClick,
   onReopenSignupsClick,
   onOpenRollCallClick,
-  onDeleteConfirmed,
+  canDelete,
+  isOrganizationAdmin,
+  onDelete,
+  onCancel,
+  onDeleted,
   canComplete,
   showCompletePointsNote = false,
   onCompleteConfirmed,
 }: EventAdminActionsProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
-  const isCancellable =
-    event.state !== EventState.COMPLETED &&
-    event.state !== EventState.CANCELLED;
+  const isCancellable = isEventCancellable(event);
 
-  // Mobile dropdown actions — NO data-testid here (would collide with desktop).
-  // Tests reach mobile actions via the parent `event-admin-actions-mobile`.
+  // Mobile action IDs must stay distinct from the desktop IDs.
   const dropdownActions: BrandDropdownAction[] = [
     {
       key: 'edit',
@@ -146,14 +156,17 @@ export function EventAdminActions({
     });
   }
 
-  dropdownActions.push({
-    key: 'delete',
-    icon: <Trash2 className="h-4 w-4 mr-1.5" />,
-    label: 'Delete',
-    onClick: () => setShowDeleteConfirm(true),
-    variant: 'destructive',
-    disabled: actions.deleteEvent.isPending,
-  });
+  if (canDelete) {
+    dropdownActions.push({
+      key: 'delete',
+      icon: <Trash2 className="h-4 w-4 mr-1.5" />,
+      label: 'Delete',
+      'data-testid': 'event-mobile-delete',
+      onClick: () => setShowDeleteConfirm(true),
+      variant: 'destructive',
+      disabled: actions.deleteEvent.isPending,
+    });
+  }
 
   return (
     <>
@@ -245,15 +258,17 @@ export function EventAdminActions({
           </DestructiveButton>
         )}
 
-        <DestructiveButton
-          size="sm"
-          onClick={() => setShowDeleteConfirm(true)}
-          loading={actions.deleteEvent.isPending}
-          data-testid="event-delete-btn"
-        >
-          <Trash2 className="h-4 w-4 mr-1.5" />
-          Delete
-        </DestructiveButton>
+        {canDelete && (
+          <DestructiveButton
+            size="sm"
+            onClick={() => setShowDeleteConfirm(true)}
+            loading={actions.deleteEvent.isPending}
+            data-testid="event-delete-btn"
+          >
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            Delete
+          </DestructiveButton>
+        )}
       </div>
 
       {/* Mobile: labeled dropdown — testid lives on the wrapper, not on items */}
@@ -267,16 +282,20 @@ export function EventAdminActions({
         />
       </div>
 
-      {/* On-brand delete confirmation (replaces window.confirm) */}
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        onOpenChange={setShowDeleteConfirm}
-        title="Delete Event"
-        description={`Permanently delete "${event.name}"? This cannot be undone.`}
-        confirmLabel="Delete Event"
-        variant="destructive"
-        onConfirm={onDeleteConfirmed}
-      />
+      {canDelete && (
+        <EventDeleteFlow
+          event={event}
+          open={showDeleteConfirm}
+          onOpenChange={setShowDeleteConfirm}
+          isOrganizationAdmin={isOrganizationAdmin}
+          isPending={
+            actions.deleteEvent.isPending || actions.cancelEvent.isPending
+          }
+          onDelete={onDelete}
+          onCancel={onCancel}
+          onDeleted={onDeleted}
+        />
+      )}
 
       <ConfirmDialog
         open={showCompleteConfirm}

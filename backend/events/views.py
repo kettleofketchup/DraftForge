@@ -124,6 +124,7 @@ from events.reopen import ReopenNotPermitted
 from events.roster import RosterSyncResult
 from events.schemas import SignupInputPatch
 from events.serializers import (
+    CancelEventSerializer,
     EventRepeaterSerializer,
     EventRepeaterSlimSerializer,
     EventSerializer,
@@ -144,6 +145,8 @@ from events.serializers import (
 from events.services import (
     REPEATER_SCHEDULE_FIELDS,
     OccurrenceCollision,
+    SignupRecordsConflict,
+    SignupRecordsPermissionError,
     apply_signup_input,
     approve_signup,
     cancel_event,
@@ -967,7 +970,6 @@ class EventViewSet(viewsets.ModelViewSet):
             )
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
-        # Auto-create DiscordEvent if org has Discord configured
         ensure_discord_event(event)
         open_signups = self.request.query_params.get("open_signups") == "true"
         if initial_state_for_new_event(open_signups) == EventState.SIGNUPS_OPEN:
@@ -1627,17 +1629,34 @@ class EventViewSet(viewsets.ModelViewSet):
             not_in_check_message=SELF_NOT_IN_CHECK_MESSAGE,
         )
 
-    def perform_destroy(self, instance: Event) -> None:
-        """Clean up tournament and Discord messages before deleting event."""
-        teardown_event(instance, actor=self.request.user)
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delete an event; signup history needs an org admin's ?confirm=true."""
+        event = self.get_object()
+        confirm = request.query_params.get("confirm") == "true"
+        if confirm and not has_org_admin_access(request.user, event.organization):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        try:
+            teardown_event(event, actor=request.user, confirm_signup_records=confirm)
+        except SignupRecordsConflict as conflict:
+            return Response(
+                {"error": "has_signup_records", "count": conflict.count},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except SignupRecordsPermissionError:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: str | None = None) -> Response:
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
+        serializer = CancelEventSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         try:
-            cancel_event(event, actor=request.user)
+            cancel_event(
+                event, actor=request.user, reason=serializer.validated_data["reason"]
+            )
             qs = with_event_staff(with_signup_counts(Event.objects.filter(pk=event.pk)))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)

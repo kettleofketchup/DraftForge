@@ -172,7 +172,9 @@ class SyncFutureEventsShieldTest(EventTestCase):
     @patch("events.services.delete_discord_scheduled_event")
     @patch("events.services.notify_create_discord_event")
     @patch("events.services.notify_new_event")
-    def test_realign_delete_tears_down_discord(self, _n, _c, mock_delete):
+    def test_realign_delete_tears_down_discord(
+        self, _n: MagicMock, _c: MagicMock, mock_delete: MagicMock
+    ) -> None:
         self.org.discord_server_id = "734185035623825559"
         self.org.save(update_fields=["discord_server_id"])
         stale = Event.objects.create(
@@ -190,7 +192,8 @@ class SyncFutureEventsShieldTest(EventTestCase):
 
         self.repeater.day_of_week = 3
         self.repeater.save()
-        sync_future_events(self.repeater, realign_schedule=True)
+        with self.captureOnCommitCallbacks(execute=True):
+            sync_future_events(self.repeater, realign_schedule=True)
 
         self.assertFalse(Event.objects.filter(pk=stale.pk).exists())
         mock_delete.delay.assert_called_once_with(

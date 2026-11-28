@@ -94,6 +94,8 @@ class CleanupMovedEventTests(TestCase):
         stale.tournament = tournament
         stale.save(update_fields=["tournament"])
         signup = self._signup(stale, self.mover, SignupStatus.APPROVED)
+        removed = self._signup(stale, self.clash, SignupStatus.REJECTED)
+        original_signups = list(EventSignup.objects.filter(event=stale).values())
         check = ReadyCheck.objects.create(event=stale)
         ReadyCheckEntry.objects.create(
             ready_check=check, signup=signup, user=self.mover
@@ -124,13 +126,32 @@ class CleanupMovedEventTests(TestCase):
         self.assertEqual(check.phase, ReadyCheckPhase.CANCELLED)
         rows = list(SignupLedgerEntry.objects.filter(event=stale).order_by("pk"))
         self.assertEqual(
-            [row.action for row in rows],
-            [SignupAction.READY_CHECK_WITHDRAWN, SignupAction.READY_CHECK_TRANSITION],
+            [(row.action, row.reason) for row in rows],
+            [
+                (SignupAction.READY_CHECK_WITHDRAWN, "event_cancelled"),
+                (SignupAction.READY_CHECK_TRANSITION, "event_cancelled"),
+                (SignupAction.EVENT_CANCELLED, ""),
+            ],
         )
         for row in rows:
             self.assertEqual(row.actor_role, ActorRole.SYSTEM)
+            self.assertEqual(row.means, SignupMeans.SYSTEM)
             self.assertIsNone(row.actor_user_id)
-            self.assertEqual(row.reason, "event_cancelled")
+        cancelled = rows[-1]
+        self.assertEqual(cancelled.signup_id, signup.pk)
+        self.assertEqual(cancelled.before["status"], SignupStatus.APPROVED)
+        self.assertEqual(cancelled.before, cancelled.after)
+        self.assertEqual(cancelled.event_snapshot["state"], EventState.CANCELLED)
+        self.assertFalse(
+            SignupLedgerEntry.objects.filter(
+                signup_id=removed.pk, action=SignupAction.EVENT_CANCELLED
+            ).exists()
+        )
+        self.assertEqual(
+            list(EventSignup.objects.nocache().filter(event=stale).values()),
+            original_signups,
+        )
+        self.assertIsNotNone(stale.conduct_finalized_at)
         closed.assert_called_once_with(
             stale, cancelled=True, source="cancel", actor=None
         )
