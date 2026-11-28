@@ -253,6 +253,7 @@ def _classify(
     status = response.status
     if status in (401, 403):
         return State.PAUSED, "auth_failed"
+    # 408 is a request timeout, retried like a transport timeout.
     if status in (408, 429) or status >= 500:
         return State.RETRY, f"http_{status}"
     if not 200 <= status < 300:
@@ -267,10 +268,47 @@ def _classify(
     return State.PAUSED, "invalid_acknowledgement"
 
 
+def _recheck(
+    locked: OrgApiMmrDelivery, state: str, reason: str
+) -> tuple[str, str, ConnectionAuthorityLost | None]:
+    if state == State.RETRY and (
+        _siblings(locked).filter(revision__gt=locked.revision).exists()
+    ):
+        return State.SUPERSEDED, "superseded", None
+    connection = OrgApiConnection.objects.get(pk=locked.connection_id)
+    if state == State.RETRY:
+        try:
+            origin = canonical_origin(connection.outbound_base_url)
+        except CredentialError:
+            origin = ""
+        if origin != locked.destination_origin:
+            return State.PAUSED, "origin_changed", None
+        if (
+            connection.archived_at is not None
+            or connection.config_version != locked.config_version
+        ):
+            return State.PAUSED, "configuration_changed", None
+    try:
+        assert_connection_authority(connection, direction="mmr_push")
+    except ConnectionAuthorityLost as lost:
+        return State.PAUSED, "authority_lost", lost
+    except PermissionDenied as denied:
+        return State.PAUSED, denial_code(denied), None
+    if state == State.RETRY and locked.attempts >= MAX_ATTEMPTS:
+        return State.PAUSED, "retries_exhausted", None
+    return state, reason, None
+
+
 def _finalize(
-    delivery: OrgApiMmrDelivery, fence: UUID, state: str, reason: str
+    delivery: OrgApiMmrDelivery,
+    fence: UUID,
+    state: str,
+    reason: str,
+    *,
+    recheck: bool = False,
 ) -> StepResult:
     now = timezone.now()
+    lost: ConnectionAuthorityLost | None = None
     with transaction.atomic():
         locked = (
             OrgApiMmrDelivery.objects.select_for_update()
@@ -285,20 +323,13 @@ def _finalize(
         if locked is None:
             delivery.refresh_from_db()
             return StepResult(delivery.state, False, "stale_fence")
+        if recheck and state in (State.RETRY, State.PAUSED):
+            state, reason, lost = _recheck(locked, state, reason)
         if state == State.RETRY:
-            connection = OrgApiConnection.objects.get(pk=locked.connection_id)
-            if _siblings(locked).filter(revision__gt=locked.revision).exists():
-                state, reason = State.SUPERSEDED, "superseded"
-            elif (
-                connection.archived_at is not None
-                or connection.config_version != locked.config_version
-            ):
-                state, reason = State.PAUSED, "configuration_changed"
-            elif locked.attempts >= MAX_ATTEMPTS:
-                state, reason = State.PAUSED, "retries_exhausted"
-            else:
-                locked.due_at = now + retry_delay(locked.attempts)
+            locked.due_at = now + retry_delay(locked.attempts)
         _settle(locked, state, reason)
+    if lost is not None:
+        lost.cleanup()
     log.info(
         "api_connection_delivery",
         system="org",
@@ -343,4 +374,4 @@ def step_mmr_delivery(delivery_id: UUID, *, fence: UUID) -> StepResult:
     else:
         state, reason = _classify(delivery, response)
     del request
-    return _finalize(delivery, fence, state, reason)
+    return _finalize(delivery, fence, state, reason, recheck=True)

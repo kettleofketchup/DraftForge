@@ -25,6 +25,70 @@ def _loop_suspected(connection: OrgApiConnection, state: OrgMmrSyncState) -> boo
     return recent.count() >= LOOP_LIMIT
 
 
+def build_mmr_delivery(
+    connection: OrgApiConnection,
+    state: OrgMmrSyncState,
+    *,
+    origin_connection_id: int | None,
+    guarded: bool = False,
+) -> OrgApiMmrDelivery:
+    user = state.org_user.user
+    delivery_id = uuid4()
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "delivery_id": str(delivery_id),
+        "org_id": connection.organization_id,
+        "game_type": state.game_type,
+        "entries": [
+            {
+                "org_user_id": state.org_user_id,
+                "steam_id": str(user.steam_account_id)
+                if user.steam_account_id is not None
+                else None,
+                "discord_id": user.discordId or None,
+                "mmr": state.value,
+                "revision": state.revision,
+            }
+        ],
+    }
+    return OrgApiMmrDelivery(
+        connection=connection,
+        org_user=state.org_user,
+        game_type=state.game_type,
+        revision=state.revision,
+        delivery_id=delivery_id,
+        payload=payload,
+        origin_connection_id=origin_connection_id,
+        config_version=connection.config_version,
+        destination_origin=canonical_origin(connection.outbound_base_url),
+        state="paused" if guarded else "pending",
+        last_reason="sync_loop_suspected" if guarded else "",
+    )
+
+
+def supersede_unsent(
+    connection: OrgApiConnection,
+    *,
+    game_type: int,
+    org_user_ids: list[int],
+    below_revision: int,
+) -> int:
+    now = timezone.now()
+    return OrgApiMmrDelivery.objects.filter(
+        connection=connection,
+        org_user_id__in=org_user_ids,
+        game_type=game_type,
+        revision__lt=below_revision,
+        state__in=UNSENT_STATES,
+    ).update(
+        state="superseded",
+        last_reason="superseded",
+        lease_token=None,
+        lease_expires_at=None,
+        updated_at=now,
+    )
+
+
 def enqueue_mmr_delivery(
     connection: OrgApiConnection,
     state: OrgMmrSyncState,
@@ -44,47 +108,33 @@ def enqueue_mmr_delivery(
         return None
     if current.game_type is not None and current.game_type != state.game_type:
         return None
-    user = state.org_user.user
-    delivery_id = uuid4()
-    payload: dict[str, object] = {
-        "schema_version": 1,
-        "delivery_id": str(delivery_id),
-        "org_id": current.organization_id,
-        "game_type": state.game_type,
-        "entries": [
-            {
-                "org_user_id": state.org_user_id,
-                "steam_id": str(user.steam_account_id)
-                if user.steam_account_id is not None
-                else None,
-                "discord_id": user.discordId or None,
-                "mmr": state.value,
-                "revision": state.revision,
-            }
-        ],
-    }
     guarded = origin_connection_id is not None and _loop_suspected(current, state)
+    built = build_mmr_delivery(
+        current, state, origin_connection_id=origin_connection_id, guarded=guarded
+    )
     delivery, created = OrgApiMmrDelivery.objects.get_or_create(
         connection=current,
         org_user=state.org_user,
         game_type=state.game_type,
         revision=state.revision,
         defaults={
-            "delivery_id": delivery_id,
-            "payload": payload,
-            "origin_connection_id": origin_connection_id,
-            "config_version": current.config_version,
-            "destination_origin": canonical_origin(current.outbound_base_url),
-            "state": "paused" if guarded else "pending",
-            "last_reason": "sync_loop_suspected" if guarded else "",
+            field: getattr(built, field)
+            for field in (
+                "delivery_id",
+                "payload",
+                "origin_connection_id",
+                "config_version",
+                "destination_origin",
+                "state",
+                "last_reason",
+            )
         },
     )
     if created:
-        OrgApiMmrDelivery.objects.filter(
-            connection=current,
-            org_user=state.org_user,
+        supersede_unsent(
+            current,
             game_type=state.game_type,
-            revision__lt=state.revision,
-            state__in=UNSENT_STATES,
-        ).update(state="superseded", last_reason="superseded", lease_token=None)
+            org_user_ids=[state.org_user_id],
+            below_revision=state.revision,
+        )
     return delivery

@@ -425,7 +425,7 @@ def connection_delivery_recovery(
     connection = _connection(org, connection_id)
     allowed = {"config_version"} | ({"confirm"} if action == "resync" else set())
     if type(request.data) is not dict or set(request.data) - allowed:
-        return _invalid("invalid_config")
+        return _invalid()
     version = request.data.get("config_version")
     check_action_budget(org.pk, request.user.pk, kind="manual")
     try:

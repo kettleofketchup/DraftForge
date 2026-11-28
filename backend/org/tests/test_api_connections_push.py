@@ -3,7 +3,9 @@ from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
 
+from django.db import connection as db_connection
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from structlog.testing import capture_logs
 
@@ -354,6 +356,30 @@ class PushDeliveryTests(PushBase):
         self.assertFalse(self.connection.mmr_push_enabled)
         self.assertEqual(self.connection.outbound_credential_ciphertext, "")
 
+    def test_authority_lost_during_request_pauses_and_cleans_up(self) -> None:
+        self.write(4500)
+
+        def lose(request: SafeHttpRequest) -> None:
+            self.org.admins.remove(self.admin)
+
+        result, delivery = self.step(self.latest(), FakeRemote([(503, lose)]))
+        self.assertEqual(result.error_code, "authority_lost")
+        self.assertEqual(delivery.state, "paused")
+        self.assertIsNone(delivery.lease_token)
+        self.connection.refresh_from_db()
+        self.assertFalse(self.connection.mmr_push_enabled)
+        self.assertEqual(self.connection.outbound_credential_ciphertext, "")
+
+    def test_feature_locked_during_request_pauses(self) -> None:
+        self.write(4500)
+
+        def lock(request: SafeHttpRequest) -> None:
+            set_org_feature(self.org, FeatureKey.MMR_SYNC, enabled=False, actor=None)
+
+        _, delivery = self.step(self.latest(), FakeRemote([(401, lock)]))
+        self.assertEqual(delivery.state, "paused")
+        self.assertEqual(delivery.last_reason, "feature_locked")
+
     def test_feature_locked_before_send_pauses(self) -> None:
         self.write(4500)
         delivery = self.latest()
@@ -543,6 +569,120 @@ class PushRecoveryTests(PushBase):
         self.assertTrue(remote.requests[0].url.startswith("https://new.example.test/"))
         self.assertEqual(remote.requests[0].credential, "new-secret")
 
+    def test_origin_change_during_request_reports_origin_changed(self) -> None:
+        self.write(4500)
+
+        def move(request: SafeHttpRequest) -> None:
+            self.patch_config(
+                outbound_base_url="https://new.example.test",
+                outbound_credential="new-secret",
+            )
+
+        _, delivery = self.step(self.latest(), FakeRemote([(503, move)]))
+        self.assertEqual(delivery.state, "paused")
+        self.assertEqual(delivery.last_reason, "origin_changed")
+        self.assertEqual(self.resume(), 0)
+
+    def add_members(self, count: int) -> list[OrgUser]:
+        members = []
+        for _ in range(count):
+            index = OrgUser.objects.count()
+            member = OrgUser.objects.create(
+                user=type(self.alice).objects.create_user(
+                    username=f"resync{index}", steam_account_id=5000 + index
+                ),
+                organization=self.org,
+            )
+            self.write(3000 + index, member)
+            members.append(member)
+        return members
+
+    def resync(self) -> int:
+        self.connection.refresh_from_db()
+        return resync_mmr_deliveries(
+            self.connection,
+            actor=self.admin,
+            expected_version=self.connection.config_version,
+            confirmed=True,
+        )
+
+    def test_resync_allocates_contiguous_revisions_in_bulk(self) -> None:
+        self.add_members(3)
+        self.assertEqual(self.resync(), 3)
+        fresh = list(
+            OrgApiMmrDelivery.objects.filter(
+                connection=self.connection, state="pending"
+            ).order_by("revision")
+        )
+        revisions = [delivery.revision for delivery in fresh]
+        self.assertEqual(revisions, list(range(revisions[0], revisions[0] + 3)))
+        for delivery in fresh:
+            state = OrgMmrSyncState.objects.get(
+                org_user_id=delivery.org_user_id, game_type=GAME
+            )
+            entry = delivery.payload["entries"][0]
+            self.assertEqual(state.revision, delivery.revision)
+            self.assertEqual(entry["revision"], delivery.revision)
+            self.assertEqual(entry["mmr"], state.value)
+            self.assertEqual(delivery.payload["delivery_id"], str(delivery.delivery_id))
+            self.assertEqual(delivery.destination_origin, f"{ORIGIN}:443")
+        self.assertEqual(
+            OrgApiMmrDelivery.objects.filter(
+                connection=self.connection, last_reason="resynced"
+            ).count(),
+            3,
+        )
+
+    def test_resync_query_count_does_not_grow_per_member(self) -> None:
+        self.add_members(1)
+        self.resync()
+        with CaptureQueriesContext(db_connection) as one:
+            self.resync()
+        self.add_members(5)
+        self.resync()
+        with CaptureQueriesContext(db_connection) as six:
+            self.assertEqual(self.resync(), 6)
+        self.assertEqual(len(six), len(one))
+
+    def test_resync_runs_in_bounded_chunks(self) -> None:
+        self.add_members(3)
+        chunks: list[int] = []
+        original = recovery._resync_chunk
+
+        def counted(*args: Any) -> int:
+            chunks.append(len(args[2]))
+            return original(*args)
+
+        with (
+            patch.object(recovery, "RESYNC_CHUNK", 2),
+            patch.object(recovery, "_resync_chunk", side_effect=counted),
+        ):
+            self.assertEqual(self.resync(), 3)
+        self.assertEqual(chunks, [2, 1])
+
+    def test_resync_supersedes_change_enqueued_between_chunks(self) -> None:
+        self.write(4500)
+        original = recovery._resync_chunk
+
+        def racing(*args: Any) -> int:
+            self.write(4700)
+            return original(*args)
+
+        with patch.object(recovery, "_resync_chunk", side_effect=racing):
+            self.assertEqual(self.resync(), 1)
+        raced = OrgApiMmrDelivery.objects.get(
+            connection=self.connection,
+            payload__entries__0__mmr=4700,
+            state="superseded",
+        )
+        fresh = OrgApiMmrDelivery.objects.get(
+            connection=self.connection, state="pending"
+        )
+        self.assertGreater(fresh.revision, raced.revision)
+        self.assertEqual(fresh.payload["entries"][0]["mmr"], 4700)
+        self.assertIsNotNone(raced.updated_at)
+        self.assertGreaterEqual(raced.updated_at, raced.created_at)
+
     def test_same_origin_configuration_change_pauses_until_resume(self) -> None:
         self.write(4500)
         delivery = self.latest()
@@ -673,6 +813,15 @@ class PushApiTests(PushBase):
         )
         self.assertEqual(resynced.status_code, 200, resynced.data)
         self.assertEqual(resynced.data["enqueued"], 1)
+
+    def test_malformed_recovery_body_is_invalid_request(self) -> None:
+        response = self.client.post(
+            f"{self.base}deliveries/resume/",
+            {"config_version": self.connection.config_version, "bogus": 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "invalid_request")
 
     def test_delivery_routes_are_org_scoped_and_paginated(self) -> None:
         self.other_org.admins.add(self.admin)

@@ -1,5 +1,7 @@
+from collections import defaultdict
+
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from app.models import CustomUser
@@ -9,14 +11,18 @@ from org.api_connections.authority import (
     assert_connection_authority,
 )
 from org.api_connections.crypto import CredentialError, canonical_origin
-from org.api_connections.mmr_delivery import UNSENT_STATES, enqueue_mmr_delivery
+from org.api_connections.mmr_delivery import (
+    UNSENT_STATES,
+    build_mmr_delivery,
+    supersede_unsent,
+)
 from org.api_connections.mutations import lock_memberships
-from org.api_connections.revisions import lock_revision_counters, next_revision
 from org.api_connections.schemas import ConnectionConfigError
 from org.feature_errors import not_permitted, require_org_admin
 from org.models import (
     OrgApiConnection,
     OrgApiMmrDelivery,
+    OrgMmrRevisionCounter,
     OrgMmrSyncState,
     OrgUserGameMmr,
 )
@@ -26,6 +32,7 @@ log = get_logger(__name__)
 
 State = OrgApiMmrDelivery.State
 RESUME_LIMIT = 500
+RESYNC_CHUNK = 500
 CONDITIONAL_REASONS = ("auth_failed", "schema_rejected", "origin_changed")
 
 
@@ -112,6 +119,79 @@ def resume_mmr_deliveries(
     return len(ids)
 
 
+def _resync_values(current: OrgApiConnection) -> QuerySet[OrgUserGameMmr]:
+    values = OrgUserGameMmr.objects.nocache().filter(
+        org_user__organization_id=current.organization_id, mmr__gt=0
+    )
+    if current.game_type is not None:
+        values = values.filter(game_type=current.game_type)
+    return values
+
+
+def _resync_chunk(
+    connection: OrgApiConnection, expected_version: int, member_ids: list[int]
+) -> int:
+    with transaction.atomic():
+        current = _lock(connection, expected_version)
+        assert_connection_authority(current, direction="mmr_push")
+        members = lock_memberships(member_ids, required=False)
+        rows = list(
+            _resync_values(current)
+            .filter(org_user_id__in=[member.pk for member in members])
+            .select_related("org_user__user")
+            .order_by("org_user_id", "game_type")
+        )
+        by_game: defaultdict[int, list[OrgUserGameMmr]] = defaultdict(list)
+        for row in rows:
+            by_game[row.game_type].append(row)
+        existing = {
+            (state.org_user_id, state.game_type): state
+            for state in OrgMmrSyncState.objects.filter(
+                org_user_id__in=[row.org_user_id for row in rows],
+                game_type__in=list(by_game),
+            )
+        }
+        now = timezone.now()
+        updated: list[OrgMmrSyncState] = []
+        created: list[OrgMmrSyncState] = []
+        deliveries: list[OrgApiMmrDelivery] = []
+        for game_type in sorted(by_game):
+            group = by_game[game_type]
+            counter, _ = (
+                OrgMmrRevisionCounter.objects.select_for_update().get_or_create(organization_id=current.organization_id, game_type=game_type)
+            )
+            first = counter.revision + 1
+            counter.revision += len(group)
+            counter.save(update_fields=["revision"])
+            for offset, row in enumerate(group):
+                state = existing.get((row.org_user_id, game_type))
+                if state is None:
+                    state = OrgMmrSyncState(org_user=row.org_user, game_type=game_type)
+                    created.append(state)
+                else:
+                    state.org_user = row.org_user
+                    updated.append(state)
+                state.revision = first + offset
+                state.value = row.mmr
+                state.verified_at = row.verified_at
+                state.updated_at = now
+                deliveries.append(
+                    build_mmr_delivery(current, state, origin_connection_id=None)
+                )
+            supersede_unsent(
+                current,
+                game_type=game_type,
+                org_user_ids=[row.org_user_id for row in group],
+                below_revision=first,
+            )
+        OrgMmrSyncState.objects.bulk_update(
+            updated, ["revision", "value", "verified_at", "updated_at"]
+        )
+        OrgMmrSyncState.objects.bulk_create(created)
+        OrgApiMmrDelivery.objects.bulk_create(deliveries)
+    return len(deliveries)
+
+
 def resync_mmr_deliveries(
     connection: OrgApiConnection,
     *,
@@ -124,7 +204,6 @@ def resync_mmr_deliveries(
     _authorize(connection, actor)
     with transaction.atomic():
         current = _lock(connection, expected_version)
-        now = timezone.now()
         canceled = OrgApiMmrDelivery.objects.filter(
             connection=current, state__in=UNSENT_STATES
         ).update(
@@ -132,35 +211,23 @@ def resync_mmr_deliveries(
             last_reason="resynced",
             lease_token=None,
             lease_expires_at=None,
-            updated_at=now,
+            updated_at=timezone.now(),
         )
-        values = OrgUserGameMmr.objects.nocache().filter(
-            org_user__organization_id=current.organization_id, mmr__gt=0
+        member_ids = sorted(
+            set(_resync_values(current).values_list("org_user_id", flat=True))
         )
-        if current.game_type is not None:
-            values = values.filter(game_type=current.game_type)
-        members = lock_memberships(
-            sorted(set(values.values_list("org_user_id", flat=True))), required=False
-        )
-        lock_revision_counters(members)
-        enqueued = 0
-        for row in values.select_related("org_user__user").order_by(
-            "org_user_id", "game_type"
-        ):
-            state, _ = OrgMmrSyncState.objects.update_or_create(
-                org_user=row.org_user,
-                game_type=row.game_type,
-                defaults={
-                    "revision": next_revision(current.organization_id, row.game_type),
-                    "value": row.mmr,
-                    "verified_at": row.verified_at,
-                },
-            )
-            if enqueue_mmr_delivery(current, state, origin_connection_id=None):
-                enqueued += 1
         audit_connection(
             current, actor=actor, action="resync_mmr_deliveries", fields=[]
         )
+    enqueued = 0
+    try:
+        for start in range(0, len(member_ids), RESYNC_CHUNK):
+            enqueued += _resync_chunk(
+                current, expected_version, member_ids[start : start + RESYNC_CHUNK]
+            )
+    except ConnectionAuthorityLost as lost:
+        lost.cleanup()
+        raise
     log.info(
         "api_connection_deliveries_resynced",
         system="org",
