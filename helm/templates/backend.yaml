@@ -88,6 +88,10 @@ spec:
               protocol: TCP
           envFrom:
             {{- include "draftforge.envFrom" . | nindent 12 }}
+            {{- range .Values.backend.extraEnvSecrets }}
+            - secretRef:
+                name: {{ . }}
+            {{- end }}
           startupProbe:
             httpGet:
               path: /api/

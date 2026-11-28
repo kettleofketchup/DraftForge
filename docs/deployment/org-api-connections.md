@@ -41,21 +41,24 @@ connection or pointing the connection at another host makes it unreadable.
 **Where to put it.** It is a server secret, and only the Django backend process uses
 it:
 
+- Helm: put it in its own Secret and list that Secret in `backend.extraEnvSecrets`.
+  The chart loads those Secrets only into the backend (Daphne) container, not the
+  migrate or seed init containers and not the frontend, Celery or Discord bot pods.
+  Never put it in a Secret listed in the top-level `extraEnvSecrets`: the chart adds
+  those to every pod, the frontend included.
 - Docker Compose release stack: add it to `backend/.env` on the host. Never put it in
   `docker/.env.*`: those files are committed and are also given to the frontend
   container.
-- Helm: add it to a Secret listed in `extraEnvSecrets`.
 
-Neither location is backend-only. The release Compose file mounts `backend/.env` into
-the Celery worker, Celery beat and Discord bot containers too, and
+The Compose route is not backend-only. The release Compose file mounts `backend/.env`
+into the Celery worker, Celery beat and Discord bot containers too, and
 `config.settings_celery` loads it, so those processes have the variable in their
-environment. Helm adds every `extraEnvSecrets` Secret to every pod. They never read it:
-the light worker settings and the org API sync task and internal-client modules do not
-reference the key ring or the crypto module, and task messages and internal API
-responses carry only run and delivery IDs and lease tokens, never credentials or keys.
-A release-gate test checks those modules and payloads; it does not check container
-environments. Treat every container that receives `backend/.env` or the Secret as able
-to see the key ring.
+environment. They never read it: the light worker settings and the org API sync task
+and internal-client modules do not reference the key ring or the crypto module, and
+task messages and internal API responses carry only run and delivery IDs and lease
+tokens, never credentials or keys. A release-gate test checks those modules and
+payloads; it does not check container environments. Treat every container that
+receives `backend/.env` as able to see the key ring.
 
 **Back it up.** Store the key ring with the database backup but separately from it. A
 database backup without its keys has unreadable outbound credentials; org admins would

@@ -10,7 +10,7 @@ image:
 priorityClassName: ""
 previewCommit: ""         # set by the ApplicationSet; becomes pod annotation draftforge.kettle.sh/commit
 # ephemeral-storage bounds the writable layer, logs and emptyDirs of each pod.
-backend:   { replicas: 1, progressDeadlineSeconds: 900, resources: {requests: {cpu: 200m, memory: 512Mi, ephemeral-storage: 256Mi}, limits: {cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi}} }
+backend:   { replicas: 1, extraEnvSecrets: [], progressDeadlineSeconds: 900, resources: {requests: {cpu: 200m, memory: 512Mi, ephemeral-storage: 256Mi}, limits: {cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi}} }
 frontend:  { replicas: 1, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 192Mi, ephemeral-storage: 64Mi}, limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}} }
 celeryWorker: { enabled: true, concurrency: 20, progressDeadlineSeconds: 300, resources: {requests: {cpu: 100m, memory: 256Mi, ephemeral-storage: 64Mi}, limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}} }
 celeryBeat:   { enabled: true, resources: {requests: {cpu: 50m, memory: 128Mi, ephemeral-storage: 64Mi}, limits: {cpu: 250m, memory: 256Mi, ephemeral-storage: 256Mi}} }
