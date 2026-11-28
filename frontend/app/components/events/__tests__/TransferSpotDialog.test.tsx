@@ -131,6 +131,7 @@ const overrideBody: OverrideRequired = {
 
 interface HarnessProps {
   mode: 'member' | 'staff';
+  giver?: EventSignupType;
   signups?: EventSignupType[];
   autoApprove?: boolean;
   policy?: StaffReasonPolicy;
@@ -139,7 +140,8 @@ interface HarnessProps {
 
 function Harness({
   mode,
-  signups = [GIVER],
+  giver = GIVER,
+  signups = [giver],
   autoApprove = true,
   policy = 'optional',
   onTransferred,
@@ -154,7 +156,7 @@ function Harness({
       <TransferSpotDialog
         open={open}
         onOpenChange={setOpen}
-        signup={GIVER}
+        signup={giver}
         event={event(autoApprove)}
         signups={signups}
         mode={mode}
@@ -273,6 +275,40 @@ describe('TransferSpotDialog', () => {
     expect((confirmButton() as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('member may swap with an earlier line spot in a worse status class', () => {
+    const giver = row(101, 21, 'approved', 7);
+    for (const status of ['pending_approval', 'waitlisted']) {
+      setup({
+        mode: 'member',
+        giver,
+        signups: [giver, row(102, 31, status, 3)],
+      });
+      pick(31);
+      expect(screen.queryByTestId('transfer-spot-demote')).toBeNull();
+      expect((confirmButton() as HTMLButtonElement).disabled).toBe(false);
+      cleanup();
+    }
+  });
+
+  it('member cannot swap into a better status class behind them', () => {
+    const giver = row(101, 21, 'waitlisted', 3);
+    setup({
+      mode: 'member',
+      giver,
+      signups: [giver, row(102, 31, 'approved', 7)],
+    });
+    pick(31);
+    expect(screen.getByTestId('transfer-spot-demote')).toBeTruthy();
+    expect((confirmButton() as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('member cannot swap with a confirmed seat behind an approved one', () => {
+    setup({ mode: 'member', signups: [GIVER, row(102, 31, 'confirmed', 7)] });
+    pick(31);
+    expect(screen.getByTestId('transfer-spot-demote')).toBeTruthy();
+    expect((confirmButton() as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('staff may swap with a better place', () => {
     setup({ mode: 'staff', signups: [GIVER, LEE_ROW] });
     pick(41);
@@ -296,6 +332,11 @@ describe('TransferSpotDialog', () => {
             message: 'Steam friend ID missing',
           },
           { code: 'mmr_missing', rule: 'mmr', message: 'MMR not verified' },
+          {
+            code: 'dota_rank_undeclared',
+            rule: 'dota',
+            message: 'server label',
+          },
         ],
       }),
     );
@@ -305,6 +346,7 @@ describe('TransferSpotDialog', () => {
     const list = await screen.findByTestId('transfer-spot-reasons');
     expect(within(list).getByText('Steam friend ID missing')).toBeTruthy();
     expect(within(list).getByText('MMR not verified')).toBeTruthy();
+    expect(within(list).getByText('Rank not declared')).toBeTruthy();
     expect(screen.getByTestId('harness-open').textContent).toBe('true');
     expect(h.toastSuccess).not.toHaveBeenCalled();
   });

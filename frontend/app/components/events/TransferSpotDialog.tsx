@@ -29,6 +29,8 @@ import { getLogger } from '~/lib/logger';
 import { signupStatusLabel } from './EventStateBadge';
 import type { EventSignupType, EventType } from './schemas';
 import { isRemovedSignup } from './signupPartitions';
+import { swapWouldDemoteRecipient } from './spotTransferRank';
+import { unmetLabel } from './unmetRequirements';
 import type { SignupOverride } from './useSignupOverride';
 import type { StaffAction } from './useStaffAction';
 
@@ -41,6 +43,7 @@ const FAILURE = 'Failed to transfer place';
 
 type Candidate = SearchUserResult & { pk: number };
 
+/** Keep this mounted and drive `open`: staff override retries finish after it closes. */
 export interface TransferSpotDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -96,7 +99,7 @@ export function TransferSpotDialog({
   const [picked, setPicked] = useState<Candidate | null>(null);
   const [refusal, setRefusal] = useState<SpotTransferRefusal | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const armed = useRef<{ signupId: number; since: number } | null>(null);
+  const armed = useRef(new Map<number, number>());
   const handledAt = useRef<number | null>(null);
   const staff = mode === 'staff';
 
@@ -133,12 +136,12 @@ export function TransferSpotDialog({
 
   const { data, status, submittedAt } = transfer;
   useEffect(() => {
-    const target = armed.current;
-    if (status !== 'success' || !data || !target) return;
-    if (data.giver.id !== target.signupId || submittedAt < target.since) return;
+    if (status !== 'success' || !data) return;
+    const since = armed.current.get(data.giver.id);
+    if (since === undefined || submittedAt < since) return;
     if (handledAt.current === submittedAt) return;
     handledAt.current = submittedAt;
-    armed.current = null;
+    armed.current.delete(data.giver.id);
     log.info('Spot transferred', {
       signupId: data.giver.id,
       mode: data.mode,
@@ -146,18 +149,13 @@ export function TransferSpotDialog({
     });
     toast.success(successMessage(mode, data));
     onTransferred?.(data);
-    onOpenChange(false);
-  }, [data, status, submittedAt, mode, onTransferred, onOpenChange]);
+    if (data.giver.id === signup.id) onOpenChange(false);
+  }, [data, status, submittedAt, mode, onTransferred, onOpenChange, signup.id]);
 
   const giverName = staff ? DisplayName(signup) : null;
   const theirRow = picked ? rowByUser.get(picked.pk) : undefined;
   const swap = holdsPlace(theirRow);
-  const theirBetter =
-    swap &&
-    theirRow.line_rank != null &&
-    signup.line_rank != null &&
-    theirRow.line_rank < signup.line_rank;
-  const blocked = !staff && theirBetter;
+  const blocked = !staff && swap && swapWouldDemoteRecipient(signup, theirRow);
   const pickedName = picked ? DisplayName(picked) : '';
 
   const copy = (() => {
@@ -203,7 +201,7 @@ export function TransferSpotDialog({
       });
     let reason = await collect();
     if (reason === null) {
-      armed.current = null;
+      armed.current.delete(signup.id);
       return;
     }
     try {
@@ -212,7 +210,7 @@ export function TransferSpotDialog({
       if (!isStaffReasonRequiredError(error)) throw error;
       reason = await collect(true);
       if (reason === null) {
-        armed.current = null;
+        armed.current.delete(signup.id);
         return;
       }
       await send(reason);
@@ -224,7 +222,7 @@ export function TransferSpotDialog({
     if (!picked || blocked || submitting) return;
     setRefusal(null);
     setSubmitting(true);
-    armed.current = { signupId: signup.id, since: Date.now() };
+    armed.current.set(signup.id, Date.now());
     log.info('Spot transfer requested', {
       signupId: signup.id,
       mode,
@@ -238,7 +236,7 @@ export function TransferSpotDialog({
           recipient_user_id: picked.pk,
         });
     } catch (error) {
-      armed.current = null;
+      armed.current.delete(signup.id);
       showRefusal(error);
     } finally {
       setSubmitting(false);
@@ -314,7 +312,9 @@ export function TransferSpotDialog({
                       data-testid="transfer-spot-reasons"
                     >
                       {refusal.reasons.map((r) => (
-                        <li key={`${r.rule}:${r.code}`}>{r.message}</li>
+                        <li key={`${r.rule}:${r.code}`}>
+                          {unmetLabel(r.code, r.message)}
+                        </li>
                       ))}
                     </ul>
                   </>
