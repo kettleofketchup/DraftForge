@@ -303,7 +303,7 @@ export function TeamManageDialog({
     pendingRef.current = { action, reason: values.reason };
     setActionReason(values.reason);
     setError(null);
-    return run();
+    return run().then(() => undefined);
   };
 
   const handleOpenChange = (next: boolean) => {
