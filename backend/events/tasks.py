@@ -1646,7 +1646,7 @@ def send_subscriber_notifications(event_id: int) -> str:
     DiscordEventDM (delivered=False) is created from the claim hook, then the
     DM is sent and the record updated with the delivery status.
 
-    Rate-limited at 1 DM/second to respect Discord limits.
+    Paced by the shared Discord token bucket in ``_rate_limited_request``.
     """
 
     event = get_event_for_task(event_id)
