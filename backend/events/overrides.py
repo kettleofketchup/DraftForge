@@ -126,6 +126,14 @@ def parse_staff_reason(data: Mapping[str, Any]) -> str:
     return serializer.validated_data["reason"] or ""
 
 
+def org_override_settings(organization_id: int) -> OrgSettings:
+    """The organization's settings row that ``check_overrides`` reads its policy from."""
+    # Deferred: this module must import no models (test_module_loads_no_models).
+    from org.settings_service import get_org_settings
+
+    return get_org_settings(organization_id)
+
+
 def _policy(org_settings: OrgSettings | None) -> str:
     if org_settings is None:
         return StaffOverridePolicy.SILENT

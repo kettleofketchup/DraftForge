@@ -81,7 +81,12 @@ from events.models import (
     SignupLedgerEntry,
     TournamentTemplateMixin,
 )
-from events.overrides import OverrideRequired, Violation, check_overrides
+from events.overrides import (
+    OverrideRequired,
+    Violation,
+    check_overrides,
+    org_override_settings,
+)
 from events.ready_check_constants import (
     DROPPED_SIGNUP_MESSAGE,
     REMOVED_SIGNUP_STATUSES,
@@ -113,7 +118,6 @@ from org.mmr import game_for_event
 from org.mmr_official import apply_official_org_mmr
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile
-from org.settings_service import get_org_settings
 from org.standing import api as standing
 from org.standing.cache import StandingCache
 from telemetry.logging import get_logger
@@ -1216,6 +1220,7 @@ def reinstate_signup(
     actor: SignupActor,
     for_staff_placement: bool = True,
     reason: str = "",
+    acknowledged_codes: Collection[str] = (),
 ) -> EventSignup:
     """Bring a removed signup back into the active list.
 
@@ -1227,8 +1232,9 @@ def reinstate_signup(
                       can re-confirm without leaving the rollcall screen.
     DROPPED is reinstated like CANCELLED, by staff only; a DROPPED entry in
     the live ready check becomes EXCUSED.
-    Staff reinstate with withdrawal history delegates to ``void_withdrawal``
-    unless that would seat the member over capacity.
+    Staff reinstate with withdrawal history delegates to ``void_withdrawal``;
+    while signups are open it skips that when the restore would seat the
+    member over capacity.
     """
     _reread_signup(signup)
     event = signup.event
@@ -1243,8 +1249,15 @@ def reinstate_signup(
             raise ValueError(
                 "Only removed or rejected signups can be reinstated during roll call."
             )
-        if _delegates_to_void(signup, for_staff_placement=for_staff_placement):
-            return void_withdrawal(signup, actor=actor, reason=reason)
+        if _delegates_to_void(
+            signup, for_staff_placement=for_staff_placement, over_capacity_ok=True
+        ):
+            return void_withdrawal(
+                signup,
+                actor=actor,
+                reason=reason,
+                acknowledged_codes=acknowledged_codes,
+            )
         reason = _require_reason(
             signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
         )
@@ -1288,8 +1301,12 @@ def reinstate_signup(
         raise ValueError("Only cancelled signups can be reinstated.")
     if event.state != "signups_open":
         raise ValueError(NOT_ACCEPTING_MESSAGE)
-    if _delegates_to_void(signup, for_staff_placement=for_staff_placement):
-        return void_withdrawal(signup, actor=actor, reason=reason)
+    if _delegates_to_void(
+        signup, for_staff_placement=for_staff_placement, over_capacity_ok=False
+    ):
+        return void_withdrawal(
+            signup, actor=actor, reason=reason, acknowledged_codes=acknowledged_codes
+        )
     reason = _require_reason(
         signup, actor=actor, action=SignupAction.REINSTATED, reason=reason
     )
@@ -1413,7 +1430,7 @@ def _check_void_overrides(
     try:
         return check_overrides(
             _void_violations(event, snap),
-            org_settings=get_org_settings(event.organization_id),
+            org_settings=org_override_settings(event.organization_id),
             acknowledged=acknowledged_codes,
             reason=reason,
         )
@@ -1438,13 +1455,17 @@ def _restored_eligibility(signup: EventSignup, event: Event) -> list[str]:
     )
 
 
-def _delegates_to_void(signup: EventSignup, *, for_staff_placement: bool) -> bool:
+def _delegates_to_void(
+    signup: EventSignup, *, for_staff_placement: bool, over_capacity_ok: bool
+) -> bool:
     if not for_staff_placement:
         return False
     locked = lock_event(signup.event)
     voided = latest_restorable_withdrawal(signup)
     if voided is None:
         return False
+    if over_capacity_ok:
+        return True
     return not _void_violations(locked, SignupSnapshot.model_validate(voided.before))
 
 

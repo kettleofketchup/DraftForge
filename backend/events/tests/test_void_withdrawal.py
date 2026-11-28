@@ -55,9 +55,8 @@ from events.services import (
 )
 from events.tests.base import EventTestCase
 from events.tests.test_signup_ledger_contract import LedgerContractMixin
-from org.models import OrgSettings
 from org.settings_constants import StaffOverridePolicy
-from org.settings_service import get_org_settings
+from tests.helpers.override_policy import set_org_override_policy
 from tournament.models import Team, Tournament
 
 
@@ -576,10 +575,7 @@ class _VoidFixtures(LedgerContractMixin, EventTestCase):
     def _set_policy(
         self, policy: str, codes: Sequence[str] = ("over_capacity",)
     ) -> None:
-        row = get_org_settings(self.org)
-        OrgSettings.objects.filter(pk=row.pk).update(
-            staff_override_policy=policy, staff_override_warning_codes=list(codes)
-        )
+        set_org_override_policy(self.org, policy, codes)
 
 
 @patch("events.services.notify_signup_changed")

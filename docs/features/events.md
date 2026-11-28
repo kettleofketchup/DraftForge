@@ -205,11 +205,11 @@ Voiding never moves anyone else. Members promoted into the freed seat keep it. A
 
 When several warnings arrive at once, for example after voiding two rows quickly, they wait in turn and each names its member.
 
-**Restore** uses the same exact restore when the signup's withdrawal is on record and restoring would not seat the member over capacity. Otherwise Restore keeps its earlier behaviour:
+**Restore** uses the same exact restore when the signup's withdrawal is on record, with these exceptions:
 
 - no recorded withdrawal: Restore works as before;
 - while signups are open and the event is full, a member whose restored status holds a seat goes to the back of the waitlist, whatever the Staff placement policy. Restore never seats anyone over capacity during signups; Void withdrawal is the only way to do that;
-- during roll call, a member whose restored status holds a seat on a full event comes back approved as a main, as Restore did before.
+- during roll call, Restore on a full event is a void: the Staff placement policy decides, exactly as in the table above.
 
 While signups are open, Restore refuses a rejected signup ("Only cancelled signups can be reinstated."). To undo a rejection then, use Void withdrawal.
 
@@ -383,7 +383,7 @@ See [Roll Call](events/roll-call.md) for the dedicated roll call feature documen
 | POST | `/api/events/signups/{id}/unconfirm/` | Reverse a confirm |
 | POST | `/api/events/signups/{id}/demote/` | Move an active signup to the waitlist; it moves to the back of the line. Nobody is promoted into the freed seat; staff fill it by hand |
 | POST | `/api/events/signups/{id}/cancel_signup/` | Cancel a signup (user or admin) |
-| POST | `/api/events/signups/{id}/reinstate/` | Re-enable a cancelled signup. Staff restore the exact place when the withdrawal is on record and restoring would not seat the member over capacity; see [Voiding a withdrawal](#voiding-a-withdrawal) |
+| POST | `/api/events/signups/{id}/reinstate/` | Re-enable a cancelled signup. Staff restore the exact place when the withdrawal is on record (while signups are open, only when that would not seat the member over capacity). Staff may send `acknowledged_codes`; `409` `override_required` in roll call on a full event under the Confirm or Block policy. See [Voiding a withdrawal](#voiding-a-withdrawal) |
 | POST | `/api/events/signups/{id}/void-withdrawal/` | Void the latest cancel, decline or rejection and restore the signup exactly (event staff; `403` for anyone else). Optional body `{"reason": "...", "acknowledged_codes": ["over_capacity"]}`. `400` when the signup is not cancelled or rejected, or has no recorded withdrawal; `409` `override_required` on a full event under the Confirm or Block policy. See [Voiding a withdrawal](#voiding-a-withdrawal) |
 
 ### Repeaters & defaults

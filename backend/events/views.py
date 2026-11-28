@@ -2005,6 +2005,9 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         if signup.user != request.user and not is_staff:
             return Response(status=status.HTTP_403_FORBIDDEN)
         reason = parse_staff_reason(request.data)
+        acknowledged = (
+            parse_override_request(request.data).acknowledged_codes if is_staff else []
+        )
         try:
             if not is_staff:
                 ensure_self_serve(signup.event, request.user)
@@ -2017,6 +2020,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
                         ),
                         for_staff_placement=is_staff,
                         reason=reason,
+                        acknowledged_codes=acknowledged,
                     ),
                     context={"request": request},
                 ).data

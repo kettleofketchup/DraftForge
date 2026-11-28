@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from app.models import CustomUser
 from events.constants import (
     ActorRole,
+    EventState,
     SignupAction,
     SignupMeans,
     SignupStatus,
@@ -20,9 +21,9 @@ from events.overrides import REASON_MAX_LENGTH
 from events.schemas import SignupSnapshot
 from events.services import VOID_NO_HISTORY_MESSAGE, cancel_signup, process_rsvp
 from events.tests.base import EventTestCase
-from org.models import Organization, OrgSettings
+from org.models import Organization
 from org.settings_constants import StaffOverridePolicy
-from org.settings_service import get_org_settings
+from tests.helpers.override_policy import set_org_override_policy
 
 
 class _VoidApiFixtures(EventTestCase):
@@ -34,10 +35,7 @@ class _VoidApiFixtures(EventTestCase):
     def _set_policy(
         self, policy: str, codes: Sequence[str] = ("over_capacity",)
     ) -> None:
-        row = get_org_settings(self.org)
-        OrgSettings.objects.filter(pk=row.pk).update(
-            staff_override_policy=policy, staff_override_warning_codes=list(codes)
-        )
+        set_org_override_policy(self.org, policy, codes)
 
     def _row(self, signup: EventSignup) -> EventSignup:
         return EventSignup.objects.nocache().get(pk=signup.pk)
@@ -249,7 +247,9 @@ class ReinstateDelegationApiTests(_VoidApiFixtures):
         self.assertEqual(entry.caused_by_id, withdrew.pk)
         self.assertEqual(self._row(signup).line_seq, snap.line_seq)
 
-    def test_staff_reinstate_full_event_never_409s(self, _notify: Any) -> None:
+    def test_staff_reinstate_signups_open_full_event_never_409s(
+        self, _notify: Any
+    ) -> None:
         for policy in StaffOverridePolicy:
             with self.subTest(policy=policy):
                 self._set_policy(policy)
@@ -266,6 +266,54 @@ class ReinstateDelegationApiTests(_VoidApiFixtures):
                 self.assertEqual(response.data["status"], SignupStatus.WAITLISTED)
                 self.assertEqual(self._void_entries(signup), [])
                 self.assertEqual(self._actions(signup)[-1], SignupAction.REINSTATED)
+
+    def test_staff_reinstate_roll_call_full_event_needs_override(
+        self, _notify: Any
+    ) -> None:
+        signup, withdrew = self._full_after_withdrawal()
+        Event.objects.filter(pk=signup.event_id).update(state=EventState.ROLL_CALL)
+
+        first = self._post(
+            signup,
+            {"reason": "x"},
+            as_user=self.admin,
+            endpoint="event-signup-reinstate",
+        )
+
+        self.assertEqual(first.status_code, 409, first.content)
+        self.assertEqual(first.data["code"], "override_required")
+        self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
+
+        second = self._post(
+            signup,
+            {"reason": "x", "acknowledged_codes": ["over_capacity"]},
+            as_user=self.admin,
+            endpoint="event-signup-reinstate",
+        )
+
+        self.assertEqual(second.status_code, 200, second.content)
+        snap = SignupSnapshot.model_validate(withdrew.before)
+        self.assertEqual(second.data["status"], snap.status)
+        [entry] = self._void_entries(signup)
+        self.assertEqual(entry.rules_overridden, ["over_capacity"])
+        self.assertEqual(entry.caused_by_id, withdrew.pk)
+
+    def test_staff_reinstate_roll_call_full_event_blocked(self, _notify: Any) -> None:
+        self._set_policy(StaffOverridePolicy.BLOCK)
+        signup, _withdrew = self._full_after_withdrawal()
+        Event.objects.filter(pk=signup.event_id).update(state=EventState.ROLL_CALL)
+
+        response = self._post(
+            signup,
+            {"reason": "x", "acknowledged_codes": ["over_capacity"]},
+            as_user=self.admin,
+            endpoint="event-signup-reinstate",
+        )
+
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertIs(response.data["blocked"], True)
+        self.assertEqual(self._row(signup).status, SignupStatus.CANCELLED)
+        self.assertEqual(self._actions(signup)[-1], SignupAction.WITHDREW)
 
     def test_member_reinstate_never_delegates(self, _notify: Any) -> None:
         signup, _withdrew = self._withdrawn()

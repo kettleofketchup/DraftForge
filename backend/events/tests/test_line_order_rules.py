@@ -16,6 +16,7 @@ from events.constants import (
     SignupType,
 )
 from events.models import Event, EventSignup, EventTeam, SignupLedgerEntry
+from events.overrides import OverrideRequired
 from events.ready_check_constants import DROPPED_SIGNUP_MESSAGE
 from events.schemas import SignupSnapshot
 from events.services import (
@@ -32,10 +33,9 @@ from events.services import (
 )
 from events.tests.base import EventTestCase
 from events.tests.test_signup_ledger_contract import LedgerContractMixin
-from org.models import OrgSettings
 from org.settings_constants import StaffOverridePolicy
-from org.settings_service import get_org_settings
 from org.standing.cache import StandingCache
+from tests.helpers.override_policy import set_org_override_policy
 
 
 @patch("events.services.notify_signup_changed")
@@ -728,11 +728,7 @@ class ReinstateLineTests(LedgerContractMixin, EventTestCase):
         ]
 
     def _set_policy(self, policy: str) -> None:
-        row = get_org_settings(self.org)
-        OrgSettings.objects.filter(pk=row.pk).update(
-            staff_override_policy=policy,
-            staff_override_warning_codes=["over_capacity"],
-        )
+        set_org_override_policy(self.org, policy)
 
     def _removal(self, signup: EventSignup) -> SignupLedgerEntry:
         return SignupLedgerEntry.objects.filter(signup=signup).latest("pk")
@@ -917,21 +913,70 @@ class ReinstateLineTests(LedgerContractMixin, EventTestCase):
         self.assertEqual(row.line_seq, a.line_seq)
         self.assertEqual(self._last_entry(event).action, SignupAction.VOIDED_WITHDRAWAL)
 
-    def test_roll_call_reinstate_with_history_full_event_does_not_delegate(
-        self, _notify: Any
-    ) -> None:
+    def _roll_call_full_with_history(self) -> tuple[Event, EventSignup]:
         event = self.make_event(max_players=1)
         a = process_rsvp(event, self.subject, actor=self.member_actor)
         cancel_signup(a, actor=self.member_actor)
         process_rsvp(event, self.make_user(), actor=self.staff_actor)
         Event.objects.filter(pk=event.pk).update(state=EventState.ROLL_CALL)
+        return event, a
+
+    def test_roll_call_reinstate_with_history_full_event_silent_records_override(
+        self, _notify: Any
+    ) -> None:
+        event, a = self._roll_call_full_with_history()
+        withdrew = self._removal(a)
 
         reinstate_signup(self._row(a), actor=self.staff_actor)
 
         self.assertEqual(self._row(a).status, SignupStatus.APPROVED)
+        self.assertEqual(count_seats(event), 2)
         entry = self._last_entry(event)
-        self.assertEqual(entry.action, SignupAction.REINSTATED)
-        self.assertEqual(entry.rules_overridden, [])
+        self.assertEqual(entry.action, SignupAction.VOIDED_WITHDRAWAL)
+        self.assertEqual(entry.rules_overridden, ["over_capacity"])
+        self.assertEqual(entry.caused_by_id, withdrew.pk)
+
+    def test_roll_call_reinstate_with_history_full_event_follows_policy(
+        self, _notify: Any
+    ) -> None:
+        for policy in (StaffOverridePolicy.CONFIRM, StaffOverridePolicy.BLOCK):
+            with self.subTest(policy=policy):
+                self._set_policy(policy)
+                event, a = self._roll_call_full_with_history()
+
+                with self.assertRaises(OverrideRequired) as raised:
+                    reinstate_signup(
+                        self._row(a),
+                        actor=self.staff_actor,
+                        reason="x",
+                        acknowledged_codes=(
+                            ["over_capacity"]
+                            if policy == StaffOverridePolicy.BLOCK
+                            else []
+                        ),
+                    )
+
+                self.assertEqual(
+                    raised.exception.blocked, policy == StaffOverridePolicy.BLOCK
+                )
+                self.assertEqual(self._row(a).status, SignupStatus.CANCELLED)
+                self.assertEqual(count_seats(event), 1)
+                self.assertEqual(self._last_entry(event).action, SignupAction.WITHDREW)
+
+        self._set_policy(StaffOverridePolicy.CONFIRM)
+        event, a = self._roll_call_full_with_history()
+
+        reinstate_signup(
+            self._row(a),
+            actor=self.staff_actor,
+            reason="x",
+            acknowledged_codes=["over_capacity"],
+        )
+
+        self.assertEqual(self._row(a).status, SignupStatus.APPROVED)
+        entry = self._last_entry(event)
+        self.assertEqual(entry.action, SignupAction.VOIDED_WITHDRAWAL)
+        self.assertEqual(entry.rules_overridden, ["over_capacity"])
 
     def test_bare_decline_reinstate_always_back(self, _notify: Any) -> None:
         callers = (
