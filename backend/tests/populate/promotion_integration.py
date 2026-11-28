@@ -34,7 +34,14 @@ from org.contributions.kinds import ContributionKind
 from org.contributions.services import award_entry
 from org.integration.contacts import import_contact_receipts
 from org.integration.receipts import format_timestamp
-from org.models import Organization, OrgUser, PromoSend
+from org.models import (
+    Organization,
+    OrgApiPromotionAdoption,
+    OrgApiPromotionBinding,
+    OrgApiPromotionEventBinding,
+    OrgUser,
+    PromoSend,
+)
 from org.models_promotion_sync import (
     ContactMethod,
     ContactReason,
@@ -62,13 +69,19 @@ RECEIPTS: Final[tuple[tuple[str, str | None, int, int, str | None], ...]] = (
 
 
 def restore_promotion_integration_settings() -> None:
-    """Undo the binding and drop every receipt and outbox row of the org."""
+    """Undo the binding and drop every receipt, outbox row and per-org
+    promotion stream binding or adoption of the org."""
     global _original_sync
     if _original_sync is not _NOT_SET:
         settings.PROMOTION_SYNC = _original_sync
         _original_sync = _NOT_SET
     ExternalPromotionReceipt.objects.filter(organization_id=FEATURES_ORG.pk).delete()
     PromotionContactOutbox.objects.filter(organization_id=FEATURES_ORG.pk).delete()
+    OrgApiPromotionEventBinding.objects.filter(
+        binding__organization_id=FEATURES_ORG.pk
+    ).delete()
+    OrgApiPromotionBinding.objects.filter(organization_id=FEATURES_ORG.pk).delete()
+    OrgApiPromotionAdoption.objects.filter(organization_id=FEATURES_ORG.pk).delete()
 
 
 def seed_promotion_integration(

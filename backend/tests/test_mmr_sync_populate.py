@@ -53,8 +53,12 @@ class MmrSyncDataTest(TestCase):
         self.assertFalse(OrgApiLimits.objects.filter(organization=org).exists())
 
     def test_reset_is_idempotent(self) -> None:
-        reset_mmr_sync_data()
-        reset_mmr_sync_data()
+        for _ in range(2):
+            reset_mmr_sync_data()
+            self.assertEqual(
+                CustomUser.objects.get(pk=MS_PLAYER.pk).steam_account_id,
+                MS_PLAYER.steam_id,
+            )
         self.assertEqual(
             set(
                 OrgUser.objects.filter(organization_id=MMR_SYNC_ORG.pk).values_list(

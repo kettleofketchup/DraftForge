@@ -1,9 +1,9 @@
 """Populate and reset the MMR sync API E2E data (tests.data.mmr_sync).
 
 reset_mmr_sync_data, behind POST /api/tests/mmr-sync/reset/, creates or
-updates the orgs and users, deletes every token, usage row and limits
-override of the two orgs, puts the switches and roles back and resets the
-sync target's org MMR. populate_mmr_sync_data runs the same reset.
+updates the orgs and users, deletes every connection (with its ledgers),
+token, usage row and limits override of the two orgs, puts the switches and
+roles back and resets the sync target's org MMR. populate_mmr_sync_data runs the same reset.
 """
 
 from typing import Any
@@ -15,13 +15,7 @@ from app.models import CustomUser
 from common.game import GameType
 from org.features import FeatureKey, set_org_feature
 from org.mmr import set_org_mmr
-from org.models import (
-    Organization,
-    OrgApiLimits,
-    OrgApiToken,
-    OrgApiTokenUsage,
-    OrgUser,
-)
+from org.models import Organization, OrgUser
 from tests.data.mmr_sync import (
     MMR_SYNC_LOCKED_ORG,
     MMR_SYNC_ORG,
@@ -33,6 +27,7 @@ from tests.data.mmr_sync import (
     MS_PLAYER_SEED_MMR,
 )
 from tests.data.models import TestOrganization, TestUser
+from tests.populate.org_api_connections import reset_connection_rows
 from tests.populate.utils import ensure_org_user
 from user.models import PositionsModel
 
@@ -59,7 +54,7 @@ def _ensure_user(data: TestUser) -> CustomUser:
     user.nickname = data.nickname
     user.discordId = data.discord_id
     user.steam_account_id = data.get_steam_account_id()
-    user.steamid = None
+    user.steamid = data.get_steam_id_64()
     user.save()
     return user
 
@@ -70,9 +65,7 @@ def reset_mmr_sync_data() -> dict[str, Any]:
         orgs = {o.pk: _ensure_org(o) for o in MMR_SYNC_ORGS}
         users = {u.pk: _ensure_user(u) for u in MMR_SYNC_ROLE_USERS.values()}
         org_pks = list(orgs)
-        OrgApiTokenUsage.objects.filter(organization_id__in=org_pks).delete()
-        OrgApiToken.objects.filter(organization_id__in=org_pks).delete()
-        OrgApiLimits.objects.filter(organization_id__in=org_pks).delete()
+        reset_connection_rows(org_pks)
         for org_data, owner, admins, staff, members in MMR_SYNC_ROLES:
             org = orgs[org_data.pk]
             org.owner = users[owner.pk]
