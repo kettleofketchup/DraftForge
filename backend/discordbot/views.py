@@ -155,9 +155,7 @@ def _ephemeral(content: str) -> JsonResponse:
 
 
 def _enqueue_within_ack(task: Task, *, args: list[Any], argsrepr: str) -> None:
-    """Enqueue fast enough to answer within Discord's acknowledgement window."""
-    # A disconnected broker must not consume Discord's three-second
-    # acknowledgement window. Limit both Redis connect and I/O waits.
+    """Enqueue so a disconnected Redis broker cannot eat Discord's 3s ack window."""
     app = task.app
     transport = dict(app.conf.broker_transport_options or {})
     transport.update(socket_connect_timeout=0.5, socket_timeout=0.5)
