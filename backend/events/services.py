@@ -1,9 +1,11 @@
 import calendar
 import datetime
 import re
+import sys
 from collections.abc import Collection, Sequence
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.models import AnonymousUser
@@ -45,6 +47,7 @@ from events.discord import (
 from events.discord.gates import repeater_generates
 from events.eligibility import (
     EligibilityResult,
+    ReasonCode,
     claim_friend_id,
     clear_eligibility,
     eligibility_values,
@@ -1562,6 +1565,75 @@ def void_withdrawal(
         )
     )
     return signup
+
+
+TRANSFER_EVENT_STATES: frozenset[str] = frozenset(
+    {EventState.SIGNUPS_OPEN, EventState.ROLL_CALL}
+)
+
+
+@dataclass(frozen=True)
+class SpotTransferResult:
+    mode: Literal["transfer", "swap"]
+    giver: EventSignup
+    recipient: EventSignup
+    correlation_id: str
+
+
+_PLACE_CLASS: dict[str, int] = {
+    SignupStatus.APPROVED: 0,
+    SignupStatus.CONFIRMED: 0,
+    SignupStatus.RSVP: 1,
+    SignupStatus.PENDING_APPROVAL: 1,
+    SignupStatus.WAITLISTED: 2,
+    SignupStatus.TENTATIVE: 3,
+}
+_UNPLACED_CLASS = 4
+_UNSEQUENCED = sys.maxsize
+_SEAT_STATUS_ORDER: tuple[str, ...] = (
+    SignupStatus.RSVP,
+    SignupStatus.PENDING_APPROVAL,
+    SignupStatus.APPROVED,
+    SignupStatus.CONFIRMED,
+)
+_MEMBER_OPAQUE_REASON_CODES: frozenset[str] = frozenset(
+    {ReasonCode.CONDUCT_BELOW_THRESHOLD}
+)
+_MEMBER_GENERIC_REASON: dict[str, str] = {
+    "code": "recipient_ineligible",
+    "rule": "eligibility",
+    "message": "Not eligible for this event",
+}
+
+
+def _place_rank(signup: EventSignup) -> tuple[int, int, int]:
+    return (
+        _PLACE_CLASS.get(signup.status, _UNPLACED_CLASS),
+        _UNSEQUENCED if signup.line_seq is None else signup.line_seq,
+        signup.pk,
+    )
+
+
+def _member_status_cap(giver_status: str, decided: str) -> str:
+    if giver_status not in _SEAT_STATUS_ORDER or decided not in _SEAT_STATUS_ORDER:
+        return giver_status
+    return min(giver_status, decided, key=_SEAT_STATUS_ORDER.index)
+
+
+def _member_safe_reasons(result: EligibilityResult) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for reason in result.reasons:
+        if reason.code in _MEMBER_OPAQUE_REASON_CODES:
+            entry = dict(_MEMBER_GENERIC_REASON)
+        else:
+            entry = {
+                "code": str(reason.code),
+                "rule": reason.rule,
+                "message": ReasonCode(reason.code).label,
+            }
+        if entry not in out:
+            out.append(entry)
+    return out
 
 
 # ---------------------------------------------------------------------------
