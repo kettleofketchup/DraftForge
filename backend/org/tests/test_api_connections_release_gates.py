@@ -33,7 +33,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 TOKEN = "release-gate-internal-token"
 KEY_RING_SETTING = "ORG_API_CREDENTIAL_KEYS"
 
-# Evidence owned by earlier tasks; release verification selects these modules.
+# Release-gate tests defined in other modules; each name must resolve to one test.
 EVIDENCE_TESTS: tuple[str, ...] = (
     "org.tests.test_api_connections_safe_http.SafeHttpTests."
     "test_rebinding_never_redials_hostname",
