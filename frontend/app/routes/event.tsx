@@ -49,6 +49,7 @@ import {
   Clock,
   Loader2,
   Repeat,
+  RotateCcw,
   Undo2,
   UserCheck,
   UserPlus,
@@ -71,6 +72,7 @@ import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluate
 import { EventStaffSection } from '~/components/events/EventStaffCard';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { MySignupActions } from '~/components/events/MySignupActions';
+import { OverrideWarningDialog } from '~/components/events/OverrideWarningDialog';
 import { SignupHistorySection } from '~/components/events/SignupHistorySection';
 import {
   historySubjectFor,
@@ -94,6 +96,7 @@ import type {
 import { EventState, rollCallLabel } from '~/components/events/schemas';
 import {
   canRestoreSignup,
+  canVoidWithdrawal,
   isRemovedSignup,
   partitionSignups,
 } from '~/components/events/signupPartitions';
@@ -104,6 +107,7 @@ import {
   signupHoldReason,
   signupSuccessMessage,
 } from '~/components/events/unmetRequirements';
+import { useSignupOverride } from '~/components/events/useSignupOverride';
 import { useStaffAction } from '~/components/events/useStaffAction';
 import {
   GAME_LABEL,
@@ -116,6 +120,7 @@ import {
   orgUsersQueryKey,
   useOrgUsersQuery,
 } from '~/components/organization/hooks/useOrgUsersQuery';
+import type { OrganizationType } from '~/components/organization/schemas';
 import { Badge } from '~/components/ui/badge';
 import {
   DestructiveButton,
@@ -693,6 +698,7 @@ export default function EventPage() {
               autoApprove={event.auto_approve}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
               currentUserId={currentUser?.pk}
               staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
@@ -710,6 +716,7 @@ export default function EventPage() {
               signups={tentativeSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
               currentUserId={currentUser?.pk}
               staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
@@ -724,6 +731,7 @@ export default function EventPage() {
               signups={waitlistedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
               currentUserId={currentUser?.pk}
               staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
@@ -738,6 +746,7 @@ export default function EventPage() {
               signups={removedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              organization={eventOrg}
               currentUserId={currentUser?.pk}
               staffReasonPolicy={event.staff_reason_policy}
               conductMemberFor={conductMemberFor}
@@ -984,7 +993,9 @@ function SignupsTab({
   eventTimezone,
   currentUserId,
   staffReasonPolicy,
+  organization,
 }: {
+  organization?: OrganizationType | null;
   currentUserId: number | undefined;
   staffReasonPolicy: StaffReasonPolicy | undefined;
   conductMemberFor?: ConductMemberLookup;
@@ -1014,6 +1025,7 @@ function SignupsTab({
     policy: staffReasonPolicy,
     currentUserId,
   });
+  const signupOverride = useSignupOverride(signupActions);
   const reasonMode = (
     action: Parameters<typeof staffReasonMode>[1],
     signup: EventSignupType | null,
@@ -1277,11 +1289,10 @@ function SignupsTab({
                       size="sm"
                       data-testid="event-restore-btn"
                       onClick={() =>
-                        void run('reinstate', signup, (reason) =>
-                          signupActions.reinstate.mutateAsync({
-                            id: signup.id,
-                            ...(reason === undefined ? {} : { reason }),
-                          }),
+                        void run(
+                          'reinstate',
+                          signup,
+                          signupOverride.fire('reinstate', signup.id),
                         )
                       }
                       disabled={signupActions.reinstate.isPending}
@@ -1292,6 +1303,38 @@ function SignupsTab({
                   </TooltipTrigger>
                   <TooltipContent className="lg:hidden">
                     Restore signup
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {canVoidWithdrawal(signup.status) && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton
+                      size="sm"
+                      aria-label="Void withdrawal"
+                      data-testid="event-void-withdrawal-btn"
+                      onClick={() =>
+                        void run(
+                          'void_withdrawal',
+                          signup,
+                          signupOverride.fire('void_withdrawal', signup.id),
+                          {
+                            title: 'Void withdrawal',
+                            actionLabel: 'Void withdrawal',
+                            errorLabel: 'void withdrawal',
+                          },
+                        )
+                      }
+                      disabled={signupActions.voidWithdrawal.isPending}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">
+                        Void withdrawal
+                      </span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Restore exact place, class and commitment
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -1503,6 +1546,10 @@ function SignupsTab({
         }}
       />
       <StaffReasonDialog {...dialogProps} />
+      <OverrideWarningDialog
+        {...signupOverride.dialogProps}
+        organization={organization ?? null}
+      />
     </div>
   );
 }

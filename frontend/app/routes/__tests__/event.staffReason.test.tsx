@@ -9,6 +9,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import { AxiosError, AxiosHeaders } from 'axios';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +24,7 @@ import { useUserStore } from '~/store/userStore';
 
 const h = vi.hoisted(() => ({
   policy: 'optional' as StaffReasonPolicy,
+  manage: true,
   status: 'rsvp',
   actions: Object.fromEntries(
     [
@@ -51,7 +53,7 @@ vi.mock('~/hooks/useEvent', async (importOriginal) => ({
     data: {
       ...baseEvent,
       state: 'signups_open',
-      user_can_manage: true,
+      user_can_manage: h.manage,
       staff_reason_policy: h.policy,
     },
     isLoading: false,
@@ -188,7 +190,7 @@ function renderPage() {
   const tab =
     h.status === 'waitlisted'
       ? 'waitlist'
-      : ['cancelled', 'rejected'].includes(h.status)
+      : ['cancelled', 'rejected', 'dropped'].includes(h.status)
         ? 'removed'
         : 'signups';
   render(
@@ -229,11 +231,47 @@ async function openRecap() {
   });
 }
 
+function axiosError(status: number, data: unknown): AxiosError {
+  return new AxiosError('fail', 'ERR_BAD_REQUEST', undefined, undefined, {
+    status,
+    statusText: '',
+    data,
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+  });
+}
+const overCapacity = () =>
+  axiosError(409, {
+    code: 'override_required',
+    blocked: false,
+    violations: [
+      {
+        code: 'over_capacity',
+        rule: 'capacity',
+        category: 'seating',
+        message:
+          'Event is at capacity; restoring seats this member over capacity.',
+        blocking: false,
+        params: { capacity: 10, seated: 10 },
+      },
+    ],
+  });
+async function confirmOverride(reason: string) {
+  const dialog = await screen.findByTestId('override-warning-dialog');
+  fireEvent.change(within(dialog).getByRole('textbox'), {
+    target: { value: reason },
+  });
+  await act(async () => {
+    fireEvent.click(within(dialog).getByRole('button', { name: /override/i }));
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   for (const action of Object.values(h.actions))
     action.mutateAsync.mockReset().mockResolvedValue({ user_data: null });
   h.policy = 'optional';
+  h.manage = true;
   h.status = 'rsvp';
   useUserStore.setState({
     currentUser: { pk: 1, username: 'viewer' } as UserType,
@@ -492,5 +530,164 @@ describe('event signup staff reasons', () => {
     await waitFor(() =>
       expect(h.toastError).toHaveBeenCalledWith('Cannot demote this signup.'),
     );
+  });
+});
+
+describe('event page void withdrawal', () => {
+  it.each(['cancelled', 'rejected'])(
+    'Void withdrawal shows for staff on %s rows',
+    (status) => {
+      h.status = status;
+      renderPage();
+      const row = screen.getByTestId('event-signup-row-101');
+      expect(
+        within(row).getByTestId('event-void-withdrawal-btn'),
+      ).toHaveAccessibleName('Void withdrawal');
+    },
+  );
+
+  it.each(['dropped', 'approved', 'waitlisted'])(
+    'Void withdrawal is hidden on %s rows',
+    (status) => {
+      h.status = status;
+      renderPage();
+      expect(screen.queryByTestId('event-void-withdrawal-btn')).toBeNull();
+    },
+  );
+
+  it('Void withdrawal is hidden from members', () => {
+    h.status = 'cancelled';
+    h.manage = false;
+    renderPage();
+    expect(screen.queryByTestId('event-void-withdrawal-btn')).toBeNull();
+  });
+
+  it('optional Void fires without a prompt', async () => {
+    h.status = 'cancelled';
+    renderPage();
+    fireEvent.click(screen.getByTestId('event-void-withdrawal-btn'));
+    await waitFor(() =>
+      expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenCalledWith({
+        id: 101,
+      }),
+    );
+    expect(screen.queryByTestId('staff-reason-dialog')).toBeNull();
+  });
+
+  it('Void under placements policy asks for a reason then posts it', async () => {
+    h.policy = 'placements';
+    h.status = 'cancelled';
+    renderPage();
+    fireEvent.click(screen.getByTestId('event-void-withdrawal-btn'));
+    expect(screen.getByTestId('staff-reason-dialog')).toBeTruthy();
+    expect(h.actions.voidWithdrawal.mutateAsync).not.toHaveBeenCalled();
+    await sendReason('mistaken');
+    await waitFor(() =>
+      expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenCalledWith({
+        id: 101,
+        reason: 'mistaken',
+      }),
+    );
+  });
+
+  it('409 on Void opens the override dialog and confirm retries with acknowledged_codes and reason', async () => {
+    h.policy = 'placements';
+    h.status = 'cancelled';
+    h.actions.voidWithdrawal.mutateAsync.mockRejectedValueOnce(overCapacity());
+    renderPage();
+    fireEvent.click(screen.getByTestId('event-void-withdrawal-btn'));
+    await sendReason('mistaken');
+    const dialog = await screen.findByTestId('override-warning-dialog');
+    expect(
+      within(dialog).getByText(
+        'Event is at capacity; restoring seats this member over capacity.',
+      ),
+    ).toBeTruthy();
+    expect(within(dialog).getByRole('textbox')).toHaveValue('mistaken');
+    await confirmOverride('mistaken');
+    await waitFor(() =>
+      expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenLastCalledWith({
+        id: 101,
+        reason: 'mistaken',
+        acknowledged_codes: ['over_capacity'],
+      }),
+    );
+    expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(screen.queryByTestId('override-warning-dialog')).toBeNull(),
+    );
+    expect(h.toastError).not.toHaveBeenCalled();
+  });
+
+  it('server reason_required after Void opens the recovery prompt', async () => {
+    h.status = 'cancelled';
+    h.actions.voidWithdrawal.mutateAsync.mockRejectedValueOnce(
+      axiosError(400, { error: 'reason_required' }),
+    );
+    renderPage();
+    fireEvent.click(screen.getByTestId('event-void-withdrawal-btn'));
+    await screen.findByTestId('staff-reason-dialog');
+    expect(h.toastError).not.toHaveBeenCalled();
+    await sendReason('policy changed');
+    await waitFor(() =>
+      expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenLastCalledWith({
+        id: 101,
+        reason: 'policy changed',
+      }),
+    );
+  });
+
+  it('non-override error toasts exactly once', async () => {
+    h.status = 'cancelled';
+    h.actions.voidWithdrawal.mutateAsync.mockRejectedValueOnce(
+      axiosError(400, {
+        error: 'This withdrawal has no recorded place to restore.',
+      }),
+    );
+    renderPage();
+    fireEvent.click(screen.getByTestId('event-void-withdrawal-btn'));
+    await waitFor(() =>
+      expect(h.toastError).toHaveBeenCalledWith(
+        'This withdrawal has no recorded place to restore.',
+      ),
+    );
+    expect(h.toastError).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('override-warning-dialog')).toBeNull();
+  });
+
+  it('Restore on a full event 409 opens the override dialog', async () => {
+    h.status = 'cancelled';
+    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
+    renderPage();
+    fireEvent.click(rowButton('Restore'));
+    await confirmOverride('back in');
+    await waitFor(() =>
+      expect(h.actions.reinstate.mutateAsync).toHaveBeenLastCalledWith({
+        id: 101,
+        reason: 'back in',
+        acknowledged_codes: ['over_capacity'],
+      }),
+    );
+    expect(h.actions.voidWithdrawal.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('an error after confirming the override toasts once', async () => {
+    h.status = 'cancelled';
+    h.actions.voidWithdrawal.mutateAsync
+      .mockRejectedValueOnce(overCapacity())
+      .mockRejectedValueOnce(
+        axiosError(400, {
+          error: 'Only withdrawn or rejected signups can be voided.',
+        }),
+      );
+    renderPage();
+    fireEvent.click(screen.getByTestId('event-void-withdrawal-btn'));
+    await confirmOverride('mistaken');
+    await waitFor(() =>
+      expect(h.toastError).toHaveBeenCalledWith(
+        'Only withdrawn or rejected signups can be voided.',
+      ),
+    );
+    expect(h.toastError).toHaveBeenCalledTimes(1);
   });
 });
