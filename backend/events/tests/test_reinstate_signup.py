@@ -112,7 +112,7 @@ class ReinstateSignupTest(TestCase):
         ):
             reinstate_signup(signup, actor=SYSTEM)
 
-    # ---- signups_open branch (existing behavior preserved) ----------------
+    # ---- signups_open branch ----------------------------------------------
 
     @patch("events.services.notify_signup_changed")
     def test_signups_open_cancelled_to_rsvp_when_room(self, _notify):

@@ -794,7 +794,7 @@ export default function RollCallPage() {
   );
 }
 
-/** Individual signup strip with confirm/reject actions */
+/** One signup row with the staff actions its status allows. */
 const SignupStrip = memo(function SignupStrip({
   signup,
   userMap,

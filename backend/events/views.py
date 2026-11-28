@@ -1996,7 +1996,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"])
     def reinstate(self, request: Request, pk: str | None = None) -> Response:
-        """Reinstate a cancelled signup.
+        """Reinstate a removed signup.
 
         Staff may always reinstate; the owner only when self-serve is open.
         """
