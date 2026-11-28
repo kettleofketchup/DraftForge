@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Request } from '@playwright/test';
+import type { BrowserContext, Locator, Page, Request } from '@playwright/test';
 import {
   expect,
   getEventsTestData,
@@ -63,6 +63,22 @@ async function persistedSeries(
   expect(resp.ok()).toBe(true);
   const body = await resp.json();
   return Object.fromEntries(PERSISTED_SERIES_FIELDS.map((k) => [k, body[k]]));
+}
+
+async function scrollViewportOverflow(target: Locator): Promise<number[]> {
+  return target.evaluate((el) => {
+    const viewport = el.closest('[data-slot="scroll-area-viewport"]');
+    if (!viewport) throw new Error('target is not inside a scroll viewport');
+    const ring = 3;
+    const b = el.getBoundingClientRect();
+    const v = viewport.getBoundingClientRect();
+    return [
+      v.left - (b.left - ring),
+      v.top - (b.top - ring),
+      b.right + ring - v.right,
+      b.bottom + ring - v.bottom,
+    ].map((px) => Math.max(0, Math.round(px)));
+  });
 }
 
 async function openNeedsInputPreview(page: Page, kind: string) {
@@ -292,6 +308,13 @@ test.describe('Discord message preview @cicd', () => {
       'discord-preview-missing-schedule',
     );
     await scheduleAction.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(scheduleAction).toBeFocused();
+    expect(
+      await scheduleAction.evaluate((el) => el.matches(':focus-visible')),
+    ).toBe(true);
+    expect(await scrollViewportOverflow(scheduleAction)).toEqual([0, 0, 0, 0]);
     await page.keyboard.press('Enter');
 
     await expect(page.getByTestId('discord-preview-dialog')).toHaveCount(0);

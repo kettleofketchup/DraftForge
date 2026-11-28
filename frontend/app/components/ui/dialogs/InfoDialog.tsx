@@ -81,7 +81,10 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh] pr-4">{children}</ScrollArea>
+          {/* -m-1/p-1: room for focus rings the viewport would clip, text stays aligned. */}
+          <ScrollArea className="-m-1 max-h-[60vh] pr-4">
+            <div className="p-1">{children}</div>
+          </ScrollArea>
 
           {showClose && (
             <DialogFooter>
