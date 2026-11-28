@@ -118,7 +118,7 @@ export const ModerationReviewSchema = z.object({
 });
 export type ModerationReview = z.infer<typeof ModerationReviewSchema>;
 
-// backend/org/leadership/constants.py ModerationReleaseState; 'hidden' is the viewer's own snapshot
+// backend/org/leadership/constants.py ModerationReleaseState; 'hidden' replaces every unreleased state on the viewer's own snapshot
 export const RELEASE_STATES = [
   'voided',
   'open',
