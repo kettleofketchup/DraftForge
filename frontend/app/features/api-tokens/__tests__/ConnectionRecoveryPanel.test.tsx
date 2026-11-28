@@ -124,6 +124,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listConnectionDeliveries).mockResolvedValue({
     counts: { pending: 0, retry: 0, paused: 0, in_flight: 0 },
+    reasons: { paused: {} },
     items: [],
     next_cursor: null,
   });
@@ -133,6 +134,7 @@ describe('ConnectionRecoveryPanel', () => {
   it('test_error_repair_resume_and_origin_resync', async () => {
     vi.mocked(listConnectionDeliveries).mockResolvedValue({
       counts: { pending: 1, retry: 0, paused: 2, in_flight: 0 },
+      reasons: { paused: { auth_failed: 1, origin_changed: 1 } },
       items: [
         delivery({ delivery_id: 'a', last_reason: 'auth_failed' }),
         delivery({ delivery_id: 'b', last_reason: 'origin_changed' }),
@@ -176,9 +178,36 @@ describe('ConnectionRecoveryPanel', () => {
     );
   });
 
+  it('reads paused reasons from server totals, not the first page', async () => {
+    vi.mocked(listConnectionDeliveries).mockResolvedValue({
+      counts: { pending: 0, retry: 0, paused: 200, in_flight: 0 },
+      reasons: { paused: { auth_failed: 50, origin_changed: 150 } },
+      items: Array.from({ length: 50 }, (_, i) =>
+        delivery({ delivery_id: `d${i}`, last_reason: 'auth_failed' }),
+      ),
+      next_cursor: 'next',
+    });
+    wrap(
+      <ConnectionRecoveryPanel
+        orgId={ORG}
+        access={access}
+        connection={connection()}
+        readOnly={false}
+      />,
+    );
+    expect(
+      await screen.findByTestId('api-connection-delivery-count-paused'),
+    ).toHaveTextContent('200');
+    const reasons = screen.getByTestId('api-connection-delivery-reasons');
+    expect(reasons).toHaveTextContent('50 paused:');
+    expect(reasons).toHaveTextContent('150 paused:');
+    expect(screen.getByTestId('api-connection-origin-resync')).toBeVisible();
+  });
+
   it('shows a stale-version refusal instead of retrying blindly', async () => {
     vi.mocked(listConnectionDeliveries).mockResolvedValue({
       counts: { pending: 0, retry: 0, paused: 1, in_flight: 0 },
+      reasons: { paused: { auth_failed: 1 } },
       items: [delivery({})],
       next_cursor: null,
     });

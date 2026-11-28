@@ -121,7 +121,7 @@ export function RunCounters({
 
 export interface MakeRunColumnsOptions {
   testIdPrefix: string;
-  onView: (run: ConnectionRun) => void;
+  onView: (run: ConnectionRun, opener: HTMLElement) => void;
 }
 
 export function makeConnectionRunColumns({
@@ -218,7 +218,7 @@ export function makeConnectionRunColumns({
           className="min-h-11 sm:min-h-8"
           onClick={(e) => {
             e.stopPropagation();
-            onView(row.original);
+            onView(row.original, e.currentTarget);
           }}
           aria-label={`View ${runKindLabel(row.original)} run from ${relativeTime(row.original.created_at)}`}
           data-testid={`${testIdPrefix}-view-${row.original.id}`}

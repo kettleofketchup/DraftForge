@@ -156,7 +156,9 @@ function ConnectionEditor({
     resolver,
     defaultValues: connectionFormDefaults(),
   });
-  const { isDirty } = form.formState;
+  const { isDirty: formDirty } = form.formState;
+  const [bindingsDirty, setBindingsDirty] = useState(false);
+  const isDirty = formDirty || bindingsDirty;
 
   const adopt = useCallback(
     (row: ApiConnection): void => {
@@ -324,7 +326,7 @@ function ConnectionEditor({
   };
 
   const requestClose = (): void => {
-    if (form.formState.isDirty) setConfirm('discard');
+    if (isDirty) setConfirm('discard');
     else onOpenChange(false);
   };
 
@@ -484,7 +486,7 @@ function ConnectionEditor({
                       <ConnectionInboundTab
                         form={form}
                         saved={latest}
-                        dirty={isDirty || creating}
+                        dirty={formDirty || creating}
                         readOnly={readOnly}
                         access={access}
                         keyOwners={keyOwners}
@@ -502,7 +504,7 @@ function ConnectionEditor({
                       <ConnectionMmrPushTab
                         form={form}
                         saved={latest}
-                        dirty={isDirty || creating}
+                        dirty={formDirty || creating}
                         readOnly={readOnly}
                         orgId={orgId}
                         access={access}
@@ -513,7 +515,7 @@ function ConnectionEditor({
                       <ConnectionMmrPullTab
                         form={form}
                         saved={latest}
-                        dirty={isDirty || creating}
+                        dirty={formDirty || creating}
                         readOnly={readOnly}
                         orgId={orgId}
                         access={access}
@@ -521,15 +523,20 @@ function ConnectionEditor({
                         onRunStarted={onRunStarted}
                       />
                     </TabsContent>
-                    <TabsContent value="promotion">
+                    <TabsContent
+                      value="promotion"
+                      forceMount
+                      className="data-[state=inactive]:hidden"
+                    >
                       <ConnectionPromotionTab
                         form={form}
                         saved={latest}
-                        dirty={isDirty || creating}
+                        dirty={formDirty || creating}
                         readOnly={readOnly}
                         orgId={orgId}
                         access={access}
                         onRunStarted={onRunStarted}
+                        onBindingsDirtyChange={setBindingsDirty}
                       />
                     </TabsContent>
                     {latest && (
@@ -585,7 +592,7 @@ function ConnectionEditor({
               <PrimaryButton
                 type="button"
                 onClick={() => void save()}
-                disabled={saving || loading || (!isDirty && !creating)}
+                disabled={saving || loading || (!formDirty && !creating)}
                 data-testid="api-connection-save"
               >
                 {saving ? 'Saving...' : creating ? 'Create' : 'Save'}

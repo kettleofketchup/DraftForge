@@ -40,14 +40,26 @@ export function ConnectionRunsTab({
   onSelectRun,
 }: ConnectionRunsTabProps) {
   const runs = useConnectionRuns(orgId, access, connectionId);
+  const opener = useRef<HTMLElement | null>(null);
+  const historyHeading = useRef<HTMLHeadingElement>(null);
   const columns = useMemo(
     () =>
       makeConnectionRunColumns({
         testIdPrefix: 'api-connection-run',
-        onView: (run) => onSelectRun(run.id),
+        onView: (run, button) => {
+          opener.current = button;
+          onSelectRun(run.id);
+        },
       }),
     [onSelectRun],
   );
+  const closeDetail = (): void => {
+    onSelectRun(null);
+    const target = opener.current;
+    opener.current = null;
+    if (target?.isConnected) target.focus();
+    else historyHeading.current?.focus();
+  };
   return (
     <div className="flex flex-col gap-6" data-testid="api-connection-runs-tab">
       {selectedRunId && (
@@ -56,7 +68,7 @@ export function ConnectionRunsTab({
           access={access}
           connectionId={connectionId}
           runId={selectedRunId}
-          onClose={() => onSelectRun(null)}
+          onClose={closeDetail}
         />
       )}
       <section
@@ -65,7 +77,9 @@ export function ConnectionRunsTab({
       >
         <h3
           id="api-connection-runs-heading"
-          className="text-base font-semibold"
+          ref={historyHeading}
+          tabIndex={-1}
+          className="text-base font-semibold outline-none"
         >
           Run history
         </h3>

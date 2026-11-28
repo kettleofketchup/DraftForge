@@ -5,7 +5,7 @@ from typing import Any
 
 from org.api_connections.serializers import ConnectionSerializer
 from org.api_connections.types import MmrPullConfig, MmrPushConfig
-from org.models import OrgApiConnection
+from org.models import OrgApiConnection, OrgApiMmrDelivery
 from org.tests.test_api_tokens import ApiTokenBase
 
 WIRE_FIXTURE = Path(__file__).parent / "golden" / "api_connection_wire.json"
@@ -20,6 +20,8 @@ STABLE: dict[str, object] = {
     "created_at": "2026-01-01T00:00:00Z",
     "updated_at": "2026-01-01T00:00:00Z",
     "revoked_at": "2026-01-02T00:00:00Z",
+    "delivery_id": "a3b0c442-98fc-4c1c-b39d-5c4f2f0e1a11",
+    "due_at": "2026-01-01T00:00:00Z",
 }
 
 
@@ -71,8 +73,22 @@ class ConnectionWireFixtureTests(ApiTokenBase):
             f"{self.url}{legacy_row['id']}/rotate-key/", {}, format="json"
         )
         self.assertEqual(rotated.status_code, 201, rotated.data)
+        for revision, reason in enumerate(("auth_failed", "origin_changed"), start=1):
+            OrgApiMmrDelivery.objects.create(
+                connection=backfilled,
+                game_type=1,
+                revision=revision,
+                payload={"entries": [{"mmr": 4200, "steam_id": 76561198000000000}]},
+                destination_origin="https://ratings.example",
+                state=OrgApiMmrDelivery.State.PAUSED,
+                attempts=3,
+                last_reason=reason,
+            )
+        deliveries = self.client.get(f"{self.url}{backfilled.pk}/deliveries/")
+        self.assertEqual(deliveries.status_code, 200, deliveries.data)
         return {
             "connections": _stable(rows),
+            "delivery_page": _stable(deliveries.json()),
             "issue_key_response": _stable(rotated.json()),
         }
 

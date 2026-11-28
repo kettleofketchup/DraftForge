@@ -233,6 +233,29 @@ describe('ConnectionMmrPullTab', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the page size for cursor paging too', () => {
+    const saved = savedPull({
+      mmr_pull_config: {
+        ...apiConnection().mmr_pull_config,
+        pagination: {
+          kind: 'cursor',
+          start: 1,
+          page_size: 200,
+          has_more_path: null,
+          next_cursor_path: 'meta.next',
+        },
+      },
+    });
+    renderTab({ saved });
+    expect(screen.getByTestId('api-connection-pull-page-size')).toHaveValue(
+      200,
+    );
+    expect(screen.getByTestId('api-connection-pull-next-cursor')).toHaveValue(
+      'meta.next',
+    );
+    expect(screen.queryByTestId('api-connection-pull-page-start')).toBeNull();
+  });
+
   it('serializes typed rows and the key slot into the saved config', () => {
     const saved = savedPull({
       outbound_auth: 'api_key_field',

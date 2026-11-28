@@ -20,7 +20,6 @@ import {
   connectionErrorCode,
   connectionErrorMessage,
   type ApiConnection,
-  type ConnectionDelivery,
   type PromotionOutbox,
 } from './connectionSchemas';
 
@@ -35,17 +34,6 @@ export interface ConnectionRecoveryPanelProps {
   access: OrgFeatureAccess;
   connection: ApiConnection;
   readOnly: boolean;
-}
-
-function reasonCounts(
-  items: readonly ConnectionDelivery[],
-): [string, number][] {
-  const counts = new Map<string, number>();
-  for (const item of items) {
-    if (item.state !== 'paused' || !item.last_reason) continue;
-    counts.set(item.last_reason, (counts.get(item.last_reason) ?? 0) + 1);
-  }
-  return [...counts.entries()];
 }
 
 function errorText(err: unknown, fallback: string): string {
@@ -104,7 +92,7 @@ export function ConnectionRecoveryPanel({
   };
 
   const counts = deliveries.data?.counts;
-  const reasons = reasonCounts(deliveries.data?.items ?? []);
+  const reasons = Object.entries(deliveries.data?.reasons.paused ?? {});
   const originChanged = reasons.some(([reason]) => reason === 'origin_changed');
   const unsent = counts ? counts.pending + counts.retry + counts.paused : 0;
   const held = outbox.data?.counts.backlog_held ?? 0;

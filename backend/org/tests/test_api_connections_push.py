@@ -776,6 +776,7 @@ class PushApiTests(PushBase):
         listed = self.client.get(f"{self.base}deliveries/", {"state": "paused"})
         self.assertEqual(listed.status_code, 200, listed.data)
         self.assertEqual(listed.data["counts"]["paused"], 1)
+        self.assertEqual(listed.data["reasons"], {"paused": {"auth_failed": 1}})
         item = listed.data["items"][0]
         self.assertEqual(item["delivery_id"], str(delivery.delivery_id))
         self.assertEqual(item["last_reason"], "auth_failed")
@@ -847,6 +848,13 @@ class PushApiTests(PushBase):
             )
             self.assertEqual(len(second.data["items"]), 1)
             self.assertIsNone(second.data["next_cursor"])
+            OrgApiMmrDelivery.objects.filter(connection=self.connection).update(
+                state="paused", last_reason="origin_changed"
+            )
+            paged = self.client.get(f"{self.base}deliveries/")
+            self.assertEqual(len(paged.data["items"]), 2)
+            self.assertEqual(paged.data["counts"]["paused"], 3)
+            self.assertEqual(paged.data["reasons"], {"paused": {"origin_changed": 3}})
         other = f"/api/organizations/{self.org.pk}/api-connections/{OrgApiConnection.objects.create(organization=self.org, name='x').pk}/deliveries/"
         self.assertEqual(
             self.client.get(other, {"cursor": first.data["next_cursor"]}).status_code,

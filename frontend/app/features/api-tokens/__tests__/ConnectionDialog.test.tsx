@@ -27,6 +27,7 @@ import { listApiTokens } from '../api';
 import {
   createConnection,
   getConnection,
+  getPromotionStream,
   issueConnectionKey,
   revokeConnectionKey,
   updateConnection,
@@ -46,6 +47,7 @@ vi.mock('../connectionApi', () => ({
   createConnection: vi.fn(),
   getConnection: vi.fn(),
   getConnectionRun: vi.fn(),
+  getPromotionStream: vi.fn(),
   issueConnectionKey: vi.fn(),
   listConnectionDeliveries: vi.fn(),
   listConnectionRuns: vi.fn(),
@@ -365,6 +367,39 @@ describe('ConnectionDialog', () => {
     );
     expect(document.body.textContent).not.toContain(RAW_KEY);
     expect(cacheText(client)).not.toContain(RAW_KEY);
+  });
+
+  it('guards close and keeps tab switches for unsaved event bindings', async () => {
+    vi.mocked(getConnection).mockResolvedValue(apiConnection());
+    vi.mocked(getPromotionStream).mockResolvedValue({
+      source: 'none',
+      adopted: false,
+      connection_id: null,
+      guild_id: '42',
+      events: [],
+      transport: 'none',
+    });
+    const { onDirtyChange, onOpenChange } = setup();
+    await screen.findByTestId('api-connection-name');
+    openTab('promotion');
+    fireEvent.click(await screen.findByTestId('api-connection-binding-add'));
+    fireEvent.change(screen.getByTestId('api-connection-binding-event-0'), {
+      target: { value: '5' },
+    });
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+    expect(screen.getByTestId('api-connection-save')).toBeDisabled();
+
+    openTab('general');
+    openTab('promotion');
+    expect(screen.getByTestId('api-connection-binding-event-0')).toHaveValue(
+      '5',
+    );
+
+    fireEvent.click(screen.getByTestId('api-connection-cancel'));
+    expect(
+      await screen.findByTestId('api-connection-discard-confirm'),
+    ).toBeVisible();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it('test_cas_reload_and_dirty_refetch_preserve_draft', async () => {

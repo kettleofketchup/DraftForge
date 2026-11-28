@@ -192,6 +192,7 @@ describe('connection api', () => {
     get.mockResolvedValueOnce({
       data: {
         counts: { pending: 0, retry: 0, paused: 0, in_flight: 0 },
+        reasons: { paused: {} },
         items: [],
         next_cursor: null,
       },

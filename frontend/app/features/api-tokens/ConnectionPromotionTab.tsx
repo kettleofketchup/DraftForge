@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -47,6 +47,7 @@ export interface ConnectionPromotionTabProps {
   orgId: number;
   access: OrgFeatureAccess;
   onRunStarted?: (runId: string) => void;
+  onBindingsDirtyChange?: (dirty: boolean) => void;
 }
 
 export function promotionPushLockedReason(
@@ -69,6 +70,7 @@ export function ConnectionPromotionTab({
   orgId,
   access,
   onRunStarted,
+  onBindingsDirtyChange,
 }: ConnectionPromotionTabProps) {
   const stream = usePromotionStream(orgId, access, access.promotionEnabled);
   const test = useConnectionTestAction(orgId, access, saved, onRunStarted);
@@ -155,6 +157,7 @@ export function ConnectionPromotionTab({
             readOnly={readOnly}
             orgId={orgId}
             access={access}
+            onBindingsDirtyChange={onBindingsDirtyChange}
           />
         ) : null}
       </section>
@@ -203,12 +206,14 @@ function StreamStatus({
   readOnly,
   orgId,
   access,
+  onBindingsDirtyChange,
 }: {
   stream: PromotionStream;
   saved: ApiConnection | null;
   readOnly: boolean;
   orgId: number;
   access: OrgFeatureAccess;
+  onBindingsDirtyChange?: (dirty: boolean) => void;
 }) {
   if (stream.source === 'deployment' && !stream.adopted) {
     return (
@@ -262,6 +267,7 @@ function StreamStatus({
           connectionId={saved.id}
           orgId={orgId}
           access={access}
+          onDirtyChange={onBindingsDirtyChange}
         />
       ) : (
         <>
@@ -302,11 +308,13 @@ function BindingEditor({
   connectionId,
   orgId,
   access,
+  onDirtyChange,
 }: {
   stream: PromotionStream;
   connectionId: number;
   orgId: number;
   access: OrgFeatureAccess;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const save = useSetPromotionBinding(orgId, access);
   const [rows, setRows] = useState<PromotionEventBinding[]>(() =>
@@ -316,6 +324,17 @@ function BindingEditor({
     })),
   );
   const [error, setError] = useState<string | null>(null);
+  const dirty =
+    rows.length !== stream.events.length ||
+    rows.some(
+      (row, i) =>
+        row.event_id !== stream.events[i].event_id ||
+        row.occasion_id !== stream.events[i].occasion_id,
+    );
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const valid = rows.every(
     (r) => DIGITS.test(r.event_id.trim()) && DIGITS.test(r.occasion_id.trim()),
   );

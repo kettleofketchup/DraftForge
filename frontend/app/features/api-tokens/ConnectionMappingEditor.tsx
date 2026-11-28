@@ -428,31 +428,7 @@ export function ConnectionMappingEditor({
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="pull.page_size"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Page size</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      max={500}
-                      name={field.name}
-                      ref={field.ref}
-                      onBlur={field.onBlur}
-                      value={Number.isNaN(field.value) ? '' : field.value}
-                      onChange={(e) => field.onChange(e.target.valueAsNumber)}
-                      disabled={readOnly}
-                      data-testid="api-connection-pull-page-size"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <PageSizeField form={form} readOnly={readOnly} />
             <FormField
               control={form.control}
               name="pull.has_more_path"
@@ -479,32 +455,68 @@ export function ConnectionMappingEditor({
           </div>
         )}
         {pagination === 'cursor' && (
-          <FormField
-            control={form.control}
-            name="pull.next_cursor_path"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Next cursor field</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    placeholder="meta.next"
-                    autoComplete="off"
-                    className="font-mono"
-                    disabled={readOnly}
-                    data-testid="api-connection-pull-next-cursor"
-                  />
-                </FormControl>
-                <FormDescription>
-                  Sent back through the Cursor variable. A missing or empty
-                  cursor ends the run.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <PageSizeField form={form} readOnly={readOnly} />
+            <FormField
+              control={form.control}
+              name="pull.next_cursor_path"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Next cursor field</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="meta.next"
+                      autoComplete="off"
+                      className="font-mono"
+                      disabled={readOnly}
+                      data-testid="api-connection-pull-next-cursor"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Sent back through the Cursor variable. A missing or empty
+                    cursor ends the run.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         )}
       </fieldset>
     </div>
+  );
+}
+
+function PageSizeField({ form, readOnly }: ConnectionMappingEditorProps) {
+  return (
+    <FormField
+      control={form.control}
+      name="pull.page_size"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Page size</FormLabel>
+          <FormControl>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={500}
+              name={field.name}
+              ref={field.ref}
+              onBlur={field.onBlur}
+              value={Number.isNaN(field.value) ? '' : field.value}
+              onChange={(e) => field.onChange(e.target.valueAsNumber)}
+              disabled={readOnly}
+              data-testid="api-connection-pull-page-size"
+            />
+          </FormControl>
+          <FormDescription>
+            {'Sent through the {{page_size}} variable.'}
+          </FormDescription>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   );
 }

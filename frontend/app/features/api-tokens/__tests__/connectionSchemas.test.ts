@@ -35,7 +35,11 @@ const backendWire = JSON.parse(
     ),
     'utf8',
   ),
-) as { connections: unknown[]; issue_key_response: unknown };
+) as {
+  connections: unknown[];
+  delivery_page: unknown;
+  issue_key_response: unknown;
+};
 
 describe('backend wire fixture', () => {
   it('parses legacy-route and backfilled rows', () => {
@@ -44,6 +48,11 @@ describe('backend wire fixture', () => {
     expect(rows[0].mmr_pull_config.mapping.player_id_type).toBe(
       'steam_account_id',
     );
+  });
+
+  it('parses a delivery page with aggregated paused reasons', () => {
+    const page = DeliveryPageSchema.parse(backendWire.delivery_page);
+    expect(page.reasons.paused).toEqual({ auth_failed: 1, origin_changed: 1 });
   });
 
   it('parses an issue-key response', () => {
@@ -316,6 +325,7 @@ describe('response contracts', () => {
   it('parses a delivery page', () => {
     const page = DeliveryPageSchema.parse({
       counts: { pending: 1, retry: 0, paused: 2, in_flight: 0 },
+      reasons: { paused: { auth_failed: 2 } },
       items: [
         {
           delivery_id: 'a3b0c442-98fc-4c1c-b39d-5c4f2f0e1a11',
@@ -336,6 +346,7 @@ describe('response contracts', () => {
       next_cursor: null,
     });
     expect(page.counts.paused).toBe(2);
+    expect(page.reasons.paused).toEqual({ auth_failed: 2 });
     expect(
       DeliveryPageSchema.safeParse({ items: [], next_cursor: null }).success,
     ).toBe(false);

@@ -454,6 +454,13 @@ def connection_deliveries(
         .annotate(total=Count("pk"))
         .values_list("state", "total")
     )
+    paused_reasons = dict(
+        rows.filter(state="paused")
+        .exclude(last_reason="")
+        .values("last_reason")
+        .annotate(total=Count("pk"))
+        .values_list("last_reason", "total")
+    )
     rows = rows.filter(state=state) if state else rows.filter(state__in=DELIVERY_STATES)
     if cursor := params.get("cursor"):
         try:
@@ -476,6 +483,7 @@ def connection_deliveries(
             "counts": {
                 name: counts.get(name, 0) for name in (*DELIVERY_STATES, "in_flight")
             },
+            "reasons": {"paused": paused_reasons},
             "items": [_delivery_row(delivery) for delivery in page],
             "next_cursor": signing.dumps(
                 {"c": connection.pk, "s": state, "p": page[-1].pk},

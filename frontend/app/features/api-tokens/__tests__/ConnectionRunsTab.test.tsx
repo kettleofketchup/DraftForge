@@ -213,4 +213,30 @@ describe('ConnectionRunsTab', () => {
     fireEvent.click(screen.getByTestId('api-connection-run-view-a'));
     expect(onSelectRun).toHaveBeenCalledWith('a');
   });
+
+  it('returns focus to the View button when the detail closes', async () => {
+    vi.mocked(listConnectionRuns).mockResolvedValue({
+      items: [connectionRun({ id: 'a' })],
+      next_cursor: null,
+    });
+    vi.mocked(getConnectionRun).mockResolvedValue(connectionRun({ id: 'a' }));
+    const { onSelectRun, rerender } = renderRuns({ runId: null });
+    const view = await screen.findByTestId('api-connection-run-view-a');
+    fireEvent.click(view);
+    rerender({ runId: 'a' });
+    fireEvent.click(
+      await screen.findByTestId('api-connection-run-detail-close'),
+    );
+    expect(onSelectRun).toHaveBeenLastCalledWith(null);
+    expect(view).toHaveFocus();
+  });
+
+  it('focuses run history when a run opened without a View button closes', async () => {
+    vi.mocked(getConnectionRun).mockResolvedValue(connectionRun({ id: 'a' }));
+    renderRuns({ runId: 'a' });
+    fireEvent.click(
+      await screen.findByTestId('api-connection-run-detail-close'),
+    );
+    expect(screen.getByRole('heading', { name: 'Run history' })).toHaveFocus();
+  });
 });

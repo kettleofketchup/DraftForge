@@ -378,6 +378,7 @@ export const DeliveryPageSchema = z.object({
     paused: z.number().int(),
     in_flight: z.number().int(),
   }),
+  reasons: z.object({ paused: z.record(z.string(), z.number().int()) }),
   items: z.array(DeliverySchema),
   next_cursor: z.string().nullable(),
 });
@@ -484,6 +485,49 @@ export const CONNECTION_ERROR_MESSAGES: Record<string, string> = {
   missing_mmr: 'The row has no MMR field.',
   conflict: 'The MMR changed in DraftForge during the run; it was kept.',
   skipped_policy: 'Kept by the overwrite rule.',
+  invalid_credential:
+    'The stored credential cannot be sent to this destination. Replace it on the General tab.',
+  shared_credential:
+    "This credential is the server's shared promotion key. Use a credential issued for this organization.",
+  destination_conflict:
+    'The promotion connection already points at a different destination.',
+  promotion_keys_elsewhere:
+    'Another connection holds an active key with promotion grants. Revoke it first.',
+  operator_required: 'Only a site operator can do this.',
+  not_legacy_bound:
+    'This organization has no promotion sync in the server configuration.',
+  unsafe_destination:
+    'The destination address is not allowed. Use a public https:// address.',
+  binding_mismatch:
+    "The configured Discord server does not match this organization's server.",
+  invalid_cursor: 'The list changed. Reload it and try again.',
+  membership_removed: 'The member left the organization.',
+  superseded: 'A newer MMR for this member replaced this one.',
+  resynced: 'Canceled by a resync, which queued the current MMR instead.',
+  unsupported_kind: 'This kind of run is not supported.',
+  timeout: 'The destination did not answer in time.',
+  connection_error: 'The destination could not be reached.',
+  transport_error: 'The request to the destination failed.',
+  server_error: 'The destination had a server error.',
+  invalid_response:
+    'The destination sent a response DraftForge could not read.',
+  adaptor_unauthorized:
+    'The destination rejected the credential. Replace it, then resume.',
+  adaptor_forbidden:
+    'The destination refused access for this credential. Check its permissions, then resume.',
+  adaptor_rejected: 'The destination rejected the send.',
+  adaptor_unavailable: 'The destination is temporarily unavailable.',
+  mapping_required:
+    'The destination does not recognize this event. Map it there first.',
+  idempotency_conflict:
+    'The destination already holds a different send with the same ID.',
+  direction_disabled: 'Promotion push is turned off for this connection.',
+  writeback_disabled: 'The destination has recording turned off.',
+  dry_run: 'The destination is in test mode and recorded nothing.',
+  payload_integrity: 'The stored send failed its integrity check.',
+  retries_exhausted: 'The send failed too many times and stopped retrying.',
+  dispatch_error: 'An internal error stopped the send.',
+  account_deleted: 'The member deleted their account.',
 };
 
 export function connectionErrorCode(err: unknown): string | undefined {
