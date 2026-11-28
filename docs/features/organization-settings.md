@@ -19,7 +19,7 @@ An **Org Settings** button (cog icon) in the organization header opens the modal
 
 | Group | Sections |
 |---|---|
-| **Organization** | General, Discord, Members, Rules, Admin Team, Staff placement, Conduct (when the [conduct](organization-conduct.md) feature is unlocked) |
+| **Organization** | General, Discord, Members, Rules, Admin Team, Staff placement, Sign-up records, Conduct (when the [conduct](organization-conduct.md) feature is unlocked) |
 | **New Event Defaults** | Event, Tournament, Lobby, Discord, Ready check |
 
 The **New Event Defaults** sections hold the values the create-event form pre-fills (see
@@ -37,7 +37,7 @@ field error is marked in the sidebar and opens on save.
 
 The open section is kept in the URL as `?settings=<section>`, so a link such as
 `/organizations/12?settings=staff-placement` opens the modal on that section. Section
-ids are `general`, `discord`, `members`, `rules`, `admins`, `staff-placement`, `conduct`,
+ids are `general`, `discord`, `members`, `rules`, `admins`, `staff-placement`, `signup-records`, `conduct`,
 `defaults-event`, `defaults-tournament`, `defaults-lobby`, `defaults-discord` and
 `defaults-ready`. The older `?tab=settings&section=<id>` links are rewritten to
 `?settings=<id>`.
@@ -63,6 +63,16 @@ event defaults, because new events are pre-filled from them.
 | Org admin | 200 | 200 |
 | Org owner | 200 | 200 |
 | Site admin (`is_staff` / `is_superuser`) | 200 | 200 |
+
+Org staff can still export sign-up records from the organization page; only changing how
+long they are kept needs settings access:
+
+| Actor | Export sign-up records | Change sign-up record retention |
+|---|---|---|
+| Org member or promoter | No | No |
+| League staff | No | No |
+| Org staff | Yes | No |
+| Org admin, owner or site admin | Yes | Yes |
 
 Admins and owners of one organization get `403` on another organization's settings.
 Denials use the coded body `{"code": "not_permitted", "detail": ...}`.
@@ -108,6 +118,33 @@ ticked by default:
 Eligibility and team rules (a missing Steam ID, MMR below the minimum, the stand-in cap
 and so on) are not in this list. They always ask staff to confirm with a reason, whatever
 the policy, and unticking a code never hides one.
+
+---
+
+## Sign-up records
+
+The **Sign-up records** section sets how long the organization keeps its
+[signup ledger](events/signup-ledger.md) entries, the history of who signed up for each event.
+
+| Option | Meaning |
+|---|---|
+| **Forever** (default) | Nothing is deleted |
+| **For a set period** | Entries for events that ended more than this many days ago are deleted every night |
+
+The period must be a whole number of days between 30 and 36,500. The API returns `400`
+below the minimum, for example
+`{"signup_record_retention_days": ["Retention must be at least 30 days."]}`. The minimum
+comes from the `SIGNUP_RECORD_MIN_RETENTION_DAYS` environment variable (default `30`), and
+the section shows the current value. Django admin applies the same limits.
+
+!!! danger "Deletion is permanent"
+    A shorter period applies at the next nightly run, at 04:30, and deleted records cannot be
+    recovered. Signups themselves are never deleted, only their history. Export the records
+    first if you need them; see
+    [Exporting sign-up records](events/signup-ledger.md#exporting-sign-up-records).
+
+How the nightly job decides what to delete is described in
+[Signup Ledger: Retention and purge](events/signup-ledger.md#retention-and-purge).
 
 ---
 
@@ -227,7 +264,7 @@ database hash, so CI runs one fresh populate for that PR.
 |---|---|
 | Codes, labels, policy choices | `backend/org/settings_constants.py` |
 | Model | `backend/org/models_settings.py` (re-exported from `org.models`) |
-| Read and write services | `backend/org/settings_service.py` |
+| Read and write services | `backend/org/settings_service.py` (`validate_retention_days` for the retention bounds) |
 | API view | `backend/org/views_settings.py` |
 | Serializer | `backend/org/serializers.py` (`OrgSettingsSerializer`) |
 | Django admin | `backend/org/admin.py` (`OrgSettingsAdmin`) |
