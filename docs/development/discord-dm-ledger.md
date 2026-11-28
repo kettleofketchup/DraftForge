@@ -38,7 +38,7 @@ row. `DiscordDM.delete()` and `DiscordDM.objects.delete()` raise
 
 | Kind | Sent by | Idempotency key | Context |
 |---|---|---|---|
-| `signup_reminder` | `events/tasks.py send_subscriber_notifications` | `signup_reminder:event:{event_id}:user:{user_pk}` | `discord_event_id`, `repeater_id` |
+| `signup_reminder` | `events/tasks.py send_subscriber_notifications` | `signup_reminder:event:{event_id}:user:{user_pk}` | `discord_event_id`, `repeater_id`, `live_v2`, `live_digest` |
 | `tournament_draft_link` | `events/tournament_tasks.py` | `tournament_draft_link:run:{task_id}:discord:{discord_id}` | `draft_id`, `activity` |
 | `tournament_herodraft_link` | `events/tournament_tasks.py` | `tournament_herodraft_link:run:{task_id}:discord:{discord_id}` | `draft_id`, `game_id`, `activity` |
 | `lobby_info` | `lobby/tasks.py send_lobby_info` | `lobby_info:lobby:{lobby_id}:run:{task_id}:discord:{discord_id}` | `side` |
@@ -140,6 +140,8 @@ every gateway view, modal and component callback and fails if a DM is sent outsi
 To add a DM: add a `DMKind`, a key helper in `dm_keys.py`, a context model in
 `dm_context.py` and send through `send_dm` or `send_interaction_dm`. The coverage test
 fails until all three exist.
+
+Successful subscriber reminders carrying the `live_v2` marker also register their Discord receipt for in-place updates. See [Live Discord messages](live-discord-messages.md) for the renderers, tracked changes and worker behavior.
 
 ## Click tracking
 

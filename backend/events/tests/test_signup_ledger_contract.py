@@ -11,6 +11,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone as tz
 
 from app.models import CustomUser
+from discordbot.models import LiveDiscordMessage
 from events.constants import (
     ActorRole,
     Commitment,
@@ -1012,8 +1013,15 @@ class PromotionQueryCostTests(EventTestCase):
         ).related_model._meta.db_table
         self._promote(1)
         q1, q2, q3 = (self._promote(n) for n in (1, 2, 3))
-        self.assertEqual(len(q2) - len(q1), BASE_PER_ROW + 1)
-        self.assertEqual(len(q3) - len(q2), BASE_PER_ROW + 1)
+        # Each promotion adds one signup ledger entry and one indexed UPDATE
+        # that marks its event's live Discord reminders dirty.
+        live_update = f'UPDATE "{LiveDiscordMessage._meta.db_table}"'
+        for count, queries in enumerate((q1, q2, q3), start=1):
+            self.assertEqual(
+                sum(q["sql"].startswith(live_update) for q in queries), count
+            )
+        self.assertEqual(len(q2) - len(q1), BASE_PER_ROW + 2)
+        self.assertEqual(len(q3) - len(q2), BASE_PER_ROW + 2)
 
         def profile_reads(queries: list[dict[str, str]]) -> int:
             return sum(profile_table in q["sql"] for q in queries)

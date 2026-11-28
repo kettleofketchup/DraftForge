@@ -12,6 +12,7 @@ from django.db.models import F, Value
 from django.db.models.functions import Coalesce
 
 from discordbot.dm_context import validate_context
+from discordbot.live_messages import track_delivered_dm
 from discordbot.models import DiscordDM, DMKind, DMStatus, DMSubject
 from telemetry.logging import get_logger
 
@@ -348,6 +349,7 @@ def finalize(
         row.sent_at = now if status == DMStatus.SENT else None
         row.finished_at = now
         row.save()
+        track_delivered_dm(row)
     log.info(
         "dm_finalized",
         system="discord",

@@ -88,6 +88,13 @@ class DMContextTests(SimpleTestCase):
         data = {"snapshot_id": 1, "part": 1, "parts": 2, "trait_ids": [3, 4]}
         self.assertEqual(validate_context(DMKind.LEADERSHIP_REVIEW, data), data)
 
+    def test_reminder_live_digest_is_optional_validated_metadata(self) -> None:
+        self.assertEqual(validate_context(DMKind.SIGNUP_REMINDER, {}), {})
+        data = {"live_v2": True, "live_digest": "ab" * 32}
+        self.assertEqual(validate_context(DMKind.SIGNUP_REMINDER, data), data)
+        with self.assertRaises(ValueError):
+            validate_context(DMKind.SIGNUP_REMINDER, {"live_digest": "not a digest"})
+
     def test_signup_confirmation_result_choices(self) -> None:
         ok = {"result": "tentative", "interaction_id": "5"}
         self.assertEqual(validate_context(DMKind.SIGNUP_CONFIRMATION, ok), ok)

@@ -48,6 +48,11 @@ _beat_schedule = {
         "task": "events.tournament_tasks.sweep_auto_herodrafts",
         "schedule": 10.0,
     },
+    "refresh-live-discord-messages": {
+        "task": "discordbot.tasks.refresh_live_messages",
+        "schedule": 15.0,
+        "options": {"expires": 15},
+    },
     "sweep-stale-discord-leases": {
         "task": "discordbot.tasks.sweep_stale_discord_leases",
         "schedule": 60.0,

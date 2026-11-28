@@ -1,0 +1,67 @@
+name: Live Discord message tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/discordbot/**'
+      - 'backend/events/**'
+      - 'backend/org/**'
+      - 'backend/config/celery*.py'
+      - 'docker/.env.test'
+      - 'pyproject.toml'
+      - 'poetry.lock'
+      - '.github/workflows/live-discord-messages.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tracking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:8.2.1-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 2s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install locked dependencies
+        run: |
+          pipx install poetry==2.2.0
+          poetry install --no-interaction --no-ansi
+      - name: Check migrations and run tracking regressions
+        working-directory: backend
+        run: |
+          set -a
+          source ../docker/.env.test
+          set +a
+          export REDIS_HOST=127.0.0.1
+          python=../.venv/bin/python
+          "$python" manage.py check
+          "$python" manage.py makemigrations --check --dry-run
+
+          shopt -s failglob
+          labels=()
+          for file in {discordbot,events}/tests/test_live_*.py; do
+            module=${file%.py}
+            labels+=("${module//\//.}")
+          done
+          "$python" manage.py test "${labels[@]}" \
+            discordbot.tests.test_dm_ledger discordbot.tests.test_dm_send \
+            discordbot.tests.test_internal_dm_views discordbot.tests.test_dm_choke_point \
+            discordbot.tests.test_dm_keys discordbot.tests.test_leadership_gateway \
+            events.tests.test_discord_tasks events.tests.test_discord_preview \
+            events.tests.test_signup_ledger_contract org.tests.test_standing_contribution_parity \
+            org.tests.test_leadership_review_dm org.tests.test_leadership_review_dm_task \
+            app.tests.test_celery_settings tests.test_app_boundaries user.tests.test_app_registration --parallel 2

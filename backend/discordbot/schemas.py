@@ -16,6 +16,7 @@ transport layer.
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Any, Literal, Optional, Self
 from uuid import UUID
 
@@ -566,3 +567,38 @@ class SignupDeliveryCompleteReply(BaseModel):
 class SignupDeliveryBlockedReply(BaseModel):
     event_ids: list[PositiveId]
     model_config = {"extra": "ignore"}
+
+
+class LiveEditClaimRequest(BaseModel):
+    # A test worker can only narrow the backend's own eligible destinations.
+    discord_user_id: DiscordId | None = None
+    model_config = {"extra": "forbid"}
+
+
+LIVE_EDIT_SCAN_HEADER = "X-Live-Edit-Scan"
+
+
+class LiveEditScan(StrEnum):
+    LIMIT_REACHED = "limit-reached"
+
+
+class LiveEditPayload(BaseModel):
+    """The worker sends only editable components and its own quiet mention policy."""
+
+    components: list[dict[str, Any]] = Field(min_length=1)
+
+
+class LiveEditClaim(BaseModel):
+    id: PositiveId
+    token: UUID
+    channel_id: DiscordId
+    message_id: DiscordId
+    payload: LiveEditPayload
+
+
+class LiveEditFinish(BaseModel):
+    token: UUID
+    outcome: Literal["edited", "missing", "blocked", "retry"]
+    error_code: StrictCode | None = None
+    retry_after: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    model_config = {"extra": "forbid"}

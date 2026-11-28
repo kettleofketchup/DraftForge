@@ -15,6 +15,7 @@ from app.internal_client import (
 )
 from discordbot.activity_launch_gateway import prepare_launch_payload
 from discordbot.internal_client.leadership_actions import SAVE_FAILED, review_click
+from discordbot.live_worker import drain_live_edits
 from discordbot.schemas import ReviewClickBody
 from discordbot.utils import sync_add_reactions, sync_send_embed
 from telemetry.logging import get_logger
@@ -240,3 +241,8 @@ def complete_review_click(payload: dict[str, Any]) -> None:
             )
     if result.ephemeral:
         _review_followup(webhook, result.ephemeral)
+
+
+@shared_task(ignore_result=True)
+def refresh_live_messages() -> int:
+    return drain_live_edits()

@@ -80,6 +80,7 @@ class UserAppRegistrationTests(SimpleTestCase):
                 "discordbot_draftactivitychannel",
                 "discordbot_draftactivityinstance",
                 "discordbot_discorddm",
+                "discordbot_livediscordmessage",
                 "org_orguser",
                 "org_orgusergamemmr",
                 "org_mmrchangerequest",

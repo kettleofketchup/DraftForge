@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from app.cache_utils import invalidate_obj
@@ -105,6 +105,7 @@ class Organization(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    @transaction.atomic(savepoint=False)
     def save(self, *args: object, **kwargs: object) -> None:
         super().save(*args, **kwargs)
         # cacheops' post_save handles invalidation.

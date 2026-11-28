@@ -22,6 +22,7 @@ from rest_framework.exceptions import ValidationError
 from structlog.testing import capture_logs
 
 from app.models import CustomUser
+from discordbot.live_renderers import render_live_message
 from discordbot.models import (
     DiscordEvent,
     DiscordEventLog,
@@ -384,10 +385,12 @@ class PreviewParityTest(_PreviewTestCase):
 
         self.assertEqual(len(sent.messages), 2)
         self.assertEqual(len(response.messages), 1)
+        live_render = render_live_message("event_signup_reminder", self.ev.pk)
         for body in sent.messages:
             self.assertTrue(body.pop("enforce_nonce"))
             self.assertTrue(body.pop("nonce").startswith("dm"))
             self.assertEqual(_dump(response.messages[0]), body)
+            self.assertEqual(live_render, body)
         self.assertEqual(response.destination.type, "dm")
         self.assertIn("dm_per_subscriber", response.notes)
 

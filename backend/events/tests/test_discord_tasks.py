@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 from celery.exceptions import Retry
+from django.db import transaction
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -31,11 +32,13 @@ from discordbot.models import (
     DMStatus,
     DMSubject,
 )
+from discordbot.payloads import live_component_digest
 from discordbot.schemas import DMClaimBody
+from discordbot.tasks import refresh_live_messages
 from discordbot.tests.ledger_bridge import ledger_bridge
 from discordbot.utils import DISCORD_API_BASE
-from events.constants import EventState
-from events.models import EventRepeater, RepeaterSubscription
+from events.constants import EventState, SignupStatus
+from events.models import EventRepeater, EventSignup, RepeaterSubscription
 from events.schemas import RepeaterSubscriberSchema
 from events.tasks import (
     build_announcement_v2,
@@ -743,6 +746,10 @@ class SubscriberReminderLedgerTest(_DiscordTaskTestCase):
             {
                 "discord_event_id": self.discord_event.pk,
                 "repeater_id": self.repeater.pk,
+                "live_v2": True,
+                "live_digest": live_component_digest(
+                    self._lease().embed_data["components"]
+                ),
             },
         )
 
@@ -753,6 +760,89 @@ class SubscriberReminderLedgerTest(_DiscordTaskTestCase):
         self.assertEqual(row.status, DMStatus.SENT)
         self.assertFalse(DiscordEventDM.objects.filter(ledger_entry=row).exists())
         self.assertEqual(DiscordEventDM.objects.count(), 1)
+
+    @override_settings(DISCORD_BOT_TOKEN="fake-token")
+    def test_signup_change_edits_each_delivered_dm_in_place(self) -> None:
+        self._run()
+        destinations = {
+            self._row(recipient).delivered_address
+            for recipient in (self.member, self.outsider)
+        }
+        self.assertEqual(len(destinations), 2)
+
+        edits = {}
+
+        def discord_patch(method, url, *, json, **kwargs):
+            self.assertEqual(method, "PATCH")
+            channel, _, message = url.split("/")[-3:]
+            self.assertIn((channel, message), destinations)
+            self.assertEqual(json["allowed_mentions"], {"parse": []})
+            edits[channel, message] = str(json["components"])
+            return _discord_response(200, {"channel_id": channel, "id": message})
+
+        self.enterContext(patch("discordbot.utils._acquire_rate_limit_token"))
+        self.enterContext(
+            patch("discordbot.utils.requests.request", side_effect=discord_patch)
+        )
+
+        self.assertEqual(refresh_live_messages(), 0)
+        self.assertFalse(edits)
+        signup = EventSignup.objects.create(
+            event=self.event, user=self.admin, status=SignupStatus.RSVP
+        )
+        self.event.name = "Friday Cup"
+        self.event.save(update_fields=["name"])
+        self.assertEqual(refresh_live_messages(), 2)
+        self.assertEqual(edits.keys(), destinations)
+        for components in edits.values():
+            self.assertIn("Friday Cup", components)
+            self.assertIn("**Signed up:** 1/10 players", components)
+
+        edits.clear()
+        with transaction.atomic():
+            signup.delete()
+            transaction.set_rollback(True)
+        self.assertEqual(refresh_live_messages(), 0)
+        self.assertFalse(edits)
+
+        EventSignup.objects.filter(event=self.event, user=self.admin).delete()
+        self.assertEqual(refresh_live_messages(), 2)
+        self.assertTrue(
+            all("**Signed up:** 0/10 players" in body for body in edits.values())
+        )
+        self.assertEqual(self.discord.posts, 2)
+
+    @override_settings(DISCORD_BOT_TOKEN="fake-token")
+    def test_confirmation_during_patch_edits_each_reminder_only_once(self) -> None:
+        self._run()
+        destinations = [
+            self._row(recipient).delivered_address
+            for recipient in (self.member, self.outsider)
+        ]
+        signup = EventSignup.objects.create(
+            event=self.event, user=self.admin, status=SignupStatus.APPROVED
+        )
+        edits: list[tuple[str, str]] = []
+
+        def confirm_during_patch(
+            method: str, url: str, *, json: dict[str, Any], **kwargs: Any
+        ) -> Response:
+            self.assertEqual(method, "PATCH")
+            channel, _, message = url.split("/")[-3:]
+            self.assertIn("**Signed up:** 1/10 players", str(json["components"]))
+            if not edits:
+                signup.status = SignupStatus.CONFIRMED
+                signup.save(update_fields=["status"])
+            edits.append((channel, message))
+            return _discord_response(200, {"channel_id": channel, "id": message})
+
+        self.enterContext(patch("discordbot.utils._acquire_rate_limit_token"))
+        self.enterContext(
+            patch("discordbot.utils.requests.request", side_effect=confirm_during_patch)
+        )
+        self.assertEqual(refresh_live_messages(), 2)
+        self.assertCountEqual(edits, destinations)
+        self.assertEqual(refresh_live_messages(), 0)
 
     def test_reminder_event_dm_has_ledger_entry(self) -> None:
         self._run()

@@ -3,9 +3,18 @@
 Django-free and HTTP-free.
 """
 
+import hashlib
+import json
 from typing import Any, Literal, TypedDict
 
 JSONDict = dict[str, Any]
+V2_FLAG: int = 1 << 15
+
+
+def live_component_digest(components: list[JSONDict]) -> str:
+    """Hash what the live editor can replace, independently of key order."""
+    canonical = json.dumps(components, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 class ChannelMessagePayload(TypedDict):
