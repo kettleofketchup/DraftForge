@@ -11,6 +11,7 @@ class ConnectionSerializer(serializers.ModelSerializer):
     credential_present = serializers.SerializerMethodField()
     inbound_credentials = serializers.SerializerMethodField()
     promotion_stream = serializers.SerializerMethodField()
+    outbound_principal = serializers.SerializerMethodField()
 
     class Meta:
         model = OrgApiConnection
@@ -26,6 +27,7 @@ class ConnectionSerializer(serializers.ModelSerializer):
             "credential_present",
             "outbound_credential_owner",
             "outbound_authorizer",
+            "outbound_principal",
             "outbound_credential_set_at",
             "inbound_credentials",
             "legacy_multi_credential",
@@ -67,3 +69,11 @@ class ConnectionSerializer(serializers.ModelSerializer):
 
     def get_promotion_stream(self, obj: OrgApiConnection) -> bool:
         return hasattr(obj, "promotion_adoption")
+
+    def get_outbound_principal(self, obj: OrgApiConnection) -> dict[str, Any] | None:
+        user = (
+            obj.outbound_authorizer
+            if obj.outbound_auth == "none"
+            else obj.outbound_credential_owner
+        )
+        return {"pk": user.pk, "username": user.username} if user else None

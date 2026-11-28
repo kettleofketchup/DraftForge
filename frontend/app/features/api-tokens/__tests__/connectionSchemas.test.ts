@@ -11,6 +11,7 @@ import {
   DeliveryPageSchema,
   IssueKeyResponseSchema,
   RunSchema,
+  buildConnectionCreate,
   buildConnectionPatch,
   connectionFormDefaults,
   connectionFormValues,
@@ -139,7 +140,8 @@ describe('ApiTokenSchema legacy fallback', () => {
 
 describe('form defaults and patches', () => {
   it('starts a new connection fully disabled with no grants', () => {
-    expect(connectionFormDefaults()).toEqual({
+    const defaults = connectionFormDefaults();
+    expect(defaults).toMatchObject({
       name: '',
       enabled: false,
       inbound_enabled: false,
@@ -148,7 +150,52 @@ describe('form defaults and patches', () => {
       outbound_auth: 'none',
       credential_action: 'keep',
       outbound_credential: '',
+      mmr_push_enabled: false,
+      mmr_pull_enabled: false,
+      promotion_push_enabled: false,
+      game_type: null,
+      overwrite_policy: 'missing_only',
+      mark_verified: false,
+      interval_minutes: null,
     });
+    expect(defaults.pull).toMatchObject({
+      request_mode: 'org',
+      acknowledge_per_member: false,
+      query: [],
+      body: [],
+    });
+    expect(buildConnectionCreate(defaults)).toEqual({ name: '' });
+  });
+
+  it('round-trips saved sync configs without sending them back', () => {
+    const saved = apiConnection({
+      config_version: 2,
+      outbound_auth: 'api_key_field',
+      mmr_pull_config: {
+        ...apiConnection().mmr_pull_config,
+        method: 'POST',
+        query: {
+          org: '{{org.id}}',
+          limit: 50,
+          live: true,
+          k: '{{credential}}',
+        },
+        body: { ids: '{{players.steam64_ids}}', nested: { a: [1] } },
+        credential_field: { location: 'query', key: 'k' },
+      },
+    });
+    const values = connectionFormValues(saved);
+    expect(values.pull.query.map((r) => r.kind)).toEqual([
+      'variable',
+      'number',
+      'boolean',
+    ]);
+    expect(values.pull.body[1]).toEqual({
+      key: 'nested',
+      kind: 'json',
+      value: '{"a":[1]}',
+    });
+    expect(buildConnectionPatch(saved, values)).toEqual({ config_version: 2 });
   });
 
   it('never seeds the credential input from a saved row', () => {

@@ -20,6 +20,8 @@ import {
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Switch } from '~/components/ui/switch';
+import { UserAvatar } from '~/components/user/UserAvatar';
+import { DisplayName } from '~/components/user/avatar';
 import { connectionStatus, lastSyncText } from './apiConnectionColumns';
 import { relativeTime } from './apiTokenColumns';
 import {
@@ -195,6 +197,7 @@ export function ConnectionGeneralTab({
             readOnly={readOnly}
           />
         )}
+        <OutboundAuthority form={form} saved={saved} readOnly={readOnly} />
         {credentialError && (
           <p
             role="alert"
@@ -322,6 +325,99 @@ function CredentialControls({
             >
               {action === 'clear' ? 'Keep stored credential' : 'Cancel'}
             </SecondaryButton>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const OUTBOUND_DIRECTIONS = [
+  { name: 'mmr_pull_enabled', label: 'MMR pull' },
+  { name: 'mmr_push_enabled', label: 'MMR push' },
+  { name: 'promotion_push_enabled', label: 'promotion push' },
+] as const;
+
+/** Who outbound work runs under, and the way back after that admin lost access. */
+function OutboundAuthority({
+  form,
+  saved,
+  readOnly,
+}: {
+  form: UseFormReturn<ConnectionForm>;
+  saved: ApiConnection | null;
+  readOnly: boolean;
+}) {
+  const auth = form.watch('outbound_auth');
+  const principal =
+    saved && (saved.outbound_auth === 'none') === (auth === 'none')
+      ? saved.outbound_principal
+      : null;
+  const lost = saved?.last_error_code === 'authority_lost';
+  const directions = OUTBOUND_DIRECTIONS.filter(
+    (d) => d.name !== 'promotion_push_enabled' || saved?.promotion_stream,
+  );
+  const reenable = (name: (typeof OUTBOUND_DIRECTIONS)[number]['name']) => {
+    form.setValue(name, true, { shouldDirty: true, shouldValidate: true });
+    if (auth !== 'none' && form.getValues('credential_action') !== 'replace') {
+      form.setValue('credential_action', 'replace', { shouldDirty: true });
+      form.setValue('outbound_credential', '', { shouldDirty: true });
+    }
+  };
+  return (
+    <div
+      className="flex flex-col gap-2 text-sm"
+      data-testid="api-connection-authority"
+    >
+      {principal ? (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          data-testid="api-connection-authorizer"
+        >
+          <span className="text-muted-foreground">
+            {auth === 'none' ? 'Authorized by' : 'Credential supplied by'}
+          </span>
+          <UserAvatar user={principal} size="xs" />
+          <span>{DisplayName(principal)}</span>
+        </div>
+      ) : (
+        <p
+          className="text-xs text-muted-foreground"
+          data-testid="api-connection-authorizer-none"
+        >
+          {auth === 'none'
+            ? 'No credential is sent. Outbound work runs under the admin who turns on a direction and saves.'
+            : 'Outbound work runs under the admin who supplies the credential.'}
+        </p>
+      )}
+      {lost && (
+        <div
+          role="status"
+          className="flex flex-col gap-2 rounded-md border border-warning/40 p-3"
+          data-testid="api-connection-authority-lost"
+        >
+          <p>
+            Outbound directions were turned off because the admin who authorized
+            them no longer manages this organization.
+            {auth === 'none'
+              ? ' Turning a direction back on and saving makes you the authorizer.'
+              : ' Enter a new credential; saving makes you its owner.'}
+          </p>
+          {!readOnly && (
+            <div className="flex flex-wrap gap-2">
+              {directions.map((d) => (
+                <SecondaryButton
+                  key={d.name}
+                  type="button"
+                  size="sm"
+                  className="min-h-11 sm:min-h-8"
+                  onClick={() => reenable(d.name)}
+                  data-testid={`api-connection-reenable-${d.name}`}
+                >
+                  Turn {d.label} back on
+                </SecondaryButton>
+              ))}
+            </div>
           )}
         </div>
       )}

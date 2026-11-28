@@ -30,6 +30,11 @@ import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { ConnectionGeneralTab } from './ConnectionGeneralTab';
 import { ConnectionInboundTab } from './ConnectionInboundTab';
+import { ConnectionMmrPullTab } from './ConnectionMmrPullTab';
+import { ConnectionMmrPushTab } from './ConnectionMmrPushTab';
+import { ConnectionPromotionTab } from './ConnectionPromotionTab';
+import { ConnectionRecoveryPanel } from './ConnectionRecoveryPanel';
+import { ConnectionRunsTab } from './ConnectionRunsTab';
 import { TokenSecret } from './TokenSecret';
 import {
   canManageConnections,
@@ -72,6 +77,8 @@ export interface ConnectionDialogProps {
   onCreated?: (connectionId: number) => void;
   /** Local unsaved state, for the host's close and navigation guard. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** The org's saved member count, for pull request estimates. */
+  memberCount?: number | null;
 }
 
 /**
@@ -95,7 +102,7 @@ export function ConnectionDialog(props: ConnectionDialogProps) {
   );
 }
 
-type KeyAction = 'rotate' | 'revoke' | 'archive' | 'discard' | null;
+type KeyAction = 'issue' | 'rotate' | 'revoke' | 'archive' | 'discard' | null;
 
 function ConnectionEditor({
   orgId,
@@ -104,6 +111,7 @@ function ConnectionEditor({
   onOpenChange,
   onCreated,
   onDirtyChange,
+  memberCount,
 }: ConnectionDialogProps) {
   const queryClient = useQueryClient();
   const detail = useConnection(orgId, access, connectionId);
@@ -121,6 +129,15 @@ function ConnectionEditor({
   const [serverError, setServerError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<KeyAction>(null);
   const [tab, setTab] = useState('general');
+  const [runId, setRunId] = useState<string | null>(null);
+  const onRunStarted = useCallback((id: string) => {
+    setRunId(id);
+    setTab('runs');
+  }, []);
+  const memberCountRef = useRef(memberCount);
+  useEffect(() => {
+    memberCountRef.current = memberCount;
+  }, [memberCount]);
 
   const baseRef = useRef<ApiConnection | null>(null);
   useEffect(() => {
@@ -128,11 +145,11 @@ function ConnectionEditor({
   }, [base]);
   const resolver = useCallback<Resolver<ConnectionForm>>(
     (values, context, options) =>
-      zodResolver(ConnectionFormSchema(baseRef.current))(
-        values,
-        context,
-        options,
-      ) as ReturnType<Resolver<ConnectionForm>>,
+      zodResolver(
+        ConnectionFormSchema(baseRef.current, {
+          memberCount: memberCountRef.current,
+        }),
+      )(values, context, options) as ReturnType<Resolver<ConnectionForm>>,
     [],
   );
   const form = useForm<ConnectionForm>({
@@ -423,6 +440,31 @@ function ConnectionEditor({
                       label: 'Inbound key',
                       invalid: Boolean(errors.operations),
                     },
+                    {
+                      value: 'push',
+                      label: 'MMR push',
+                      invalid: Boolean(errors.push || errors.mmr_push_enabled),
+                    },
+                    {
+                      value: 'pull',
+                      label: 'MMR pull',
+                      invalid: Boolean(
+                        errors.pull ||
+                        errors.mmr_pull_enabled ||
+                        errors.interval_minutes,
+                      ),
+                    },
+                    {
+                      value: 'promotion',
+                      label: 'Promotion',
+                      invalid: Boolean(errors.promotion_push_enabled),
+                    },
+                    ...(creating
+                      ? []
+                      : [
+                          { value: 'runs', label: 'Runs' },
+                          { value: 'recovery', label: 'Recovery' },
+                        ]),
                   ]}
                 />
                 <ScrollArea className="max-h-[calc(100svh-14rem)] sm:max-h-[60vh] pr-4">
@@ -447,11 +489,70 @@ function ConnectionEditor({
                         access={access}
                         keyOwners={keyOwners}
                         pending={keyPending}
-                        onIssue={() => void runIssue(false)}
+                        onIssue={() =>
+                          latest?.legacy_multi_credential
+                            ? setConfirm('issue')
+                            : void runIssue(false)
+                        }
                         onRotate={() => setConfirm('rotate')}
                         onRevoke={() => setConfirm('revoke')}
                       />
                     </TabsContent>
+                    <TabsContent value="push">
+                      <ConnectionMmrPushTab
+                        form={form}
+                        saved={latest}
+                        dirty={isDirty || creating}
+                        readOnly={readOnly}
+                        orgId={orgId}
+                        access={access}
+                        onRunStarted={onRunStarted}
+                      />
+                    </TabsContent>
+                    <TabsContent value="pull">
+                      <ConnectionMmrPullTab
+                        form={form}
+                        saved={latest}
+                        dirty={isDirty || creating}
+                        readOnly={readOnly}
+                        orgId={orgId}
+                        access={access}
+                        memberCount={memberCount}
+                        onRunStarted={onRunStarted}
+                      />
+                    </TabsContent>
+                    <TabsContent value="promotion">
+                      <ConnectionPromotionTab
+                        form={form}
+                        saved={latest}
+                        dirty={isDirty || creating}
+                        readOnly={readOnly}
+                        orgId={orgId}
+                        access={access}
+                        onRunStarted={onRunStarted}
+                      />
+                    </TabsContent>
+                    {latest && (
+                      <>
+                        <TabsContent value="runs">
+                          <ConnectionRunsTab
+                            orgId={orgId}
+                            access={access}
+                            connectionId={latest.id}
+                            selectedRunId={runId}
+                            onSelectRun={setRunId}
+                          />
+                        </TabsContent>
+                        <TabsContent value="recovery">
+                          <ConnectionRecoveryPanel
+                            orgId={orgId}
+                            access={access}
+                            connection={latest}
+                            readOnly={readOnly}
+                          />
+                        </TabsContent>
+                      </>
+                    )}
                   </div>
                 </ScrollArea>
               </Tabs>
@@ -508,6 +609,20 @@ function ConnectionEditor({
           <TokenSecret token={secret.token} testIdPrefix="api-connection-key" />
         )}
       </InfoDialog>
+      <ConfirmDialog
+        open={confirm === 'issue'}
+        onOpenChange={(next) => {
+          if (!next) setConfirm(null);
+        }}
+        title="Issue a key with these grants?"
+        description={`The new key holds: ${operationLabelList(latest?.operations ?? [])}. Any migrated personal tokens on this connection stop working.`}
+        confirmLabel="Issue"
+        variant="warning"
+        isLoading={issue.isPending}
+        onConfirm={() => runIssue(false)}
+        confirmTestId="api-connection-issue-confirm"
+        cancelTestId="api-connection-issue-cancel"
+      />
       <ConfirmDialog
         open={confirm === 'rotate'}
         onOpenChange={(next) => {

@@ -77,6 +77,7 @@ export function apiConnection(
     credential_present: false,
     outbound_credential_owner: null,
     outbound_authorizer: null,
+    outbound_principal: null,
     outbound_credential_set_at: null,
     inbound_credentials: [],
     legacy_multi_credential: false,

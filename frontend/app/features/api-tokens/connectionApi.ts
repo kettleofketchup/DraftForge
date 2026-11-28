@@ -5,9 +5,15 @@ import {
   ConnectionSchema,
   ConnectionsSchema,
   DeliveryPageSchema,
+  EnqueuedSchema,
   IssueKeyResponseSchema,
+  PromotionOutboxSchema,
+  PromotionStreamSchema,
+  ReleasedSchema,
+  ResumedSchema,
   RunPageSchema,
   RunSchema,
+  TestStartedSchema,
   type ApiConnection,
   type ConnectionCreate,
   type ConnectionPatch,
@@ -16,7 +22,11 @@ import {
   type DeliveryState,
   type IssueKeyOptions,
   type IssuedKey,
+  type PromotionEventBinding,
+  type PromotionOutbox,
+  type PromotionStream,
   type RunPage,
+  type TestDirection,
 } from './connectionSchemas';
 
 const base = (orgId: number): string =>
@@ -148,4 +158,104 @@ export async function listConnectionDeliveries(
     signal,
   });
   return DeliveryPageSchema.parse(response.data);
+}
+
+/** Queues a test of the saved configuration; it never enables sync. */
+export async function testConnection(
+  orgId: number,
+  connectionId: number,
+  direction: TestDirection,
+): Promise<string> {
+  const response = await api.post(`${one(orgId, connectionId)}/test/`, {
+    direction,
+  });
+  return TestStartedSchema.parse(response.data).run_id;
+}
+
+/** Queues a pull with the saved configuration, or returns the active one. */
+export async function pullConnection(
+  orgId: number,
+  connectionId: number,
+): Promise<ConnectionRun> {
+  const response = await api.post(`${one(orgId, connectionId)}/pull/`, {});
+  return RunSchema.parse(response.data);
+}
+
+export async function resumeConnectionDeliveries(
+  orgId: number,
+  connectionId: number,
+  configVersion: number,
+): Promise<number> {
+  const response = await api.post(
+    `${one(orgId, connectionId)}/deliveries/resume/`,
+    { config_version: configVersion },
+  );
+  return ResumedSchema.parse(response.data).resumed;
+}
+
+export async function resyncConnectionDeliveries(
+  orgId: number,
+  connectionId: number,
+  configVersion: number,
+): Promise<number> {
+  const response = await api.post(
+    `${one(orgId, connectionId)}/deliveries/resync/`,
+    { config_version: configVersion, confirm: true },
+  );
+  return EnqueuedSchema.parse(response.data).enqueued;
+}
+
+export async function getPromotionStream(
+  orgId: number,
+  signal?: AbortSignal,
+): Promise<PromotionStream> {
+  const response = await api.get(`${base(orgId)}/promotion/`, { signal });
+  return PromotionStreamSchema.parse(response.data);
+}
+
+export async function setPromotionBinding(
+  orgId: number,
+  connectionId: number,
+  events: PromotionEventBinding[],
+): Promise<PromotionStream> {
+  const response = await api.put(
+    `${one(orgId, connectionId)}/promotion-binding/`,
+    { events },
+  );
+  return PromotionStreamSchema.parse(response.data);
+}
+
+export async function getPromotionOutbox(
+  orgId: number,
+  connectionId: number,
+  signal?: AbortSignal,
+): Promise<PromotionOutbox> {
+  const response = await api.get(
+    `${one(orgId, connectionId)}/promotion/outbox/`,
+    { signal },
+  );
+  return PromotionOutboxSchema.parse(response.data);
+}
+
+export async function resumePromotionOutbox(
+  orgId: number,
+  connectionId: number,
+): Promise<number> {
+  const response = await api.post(
+    `${one(orgId, connectionId)}/promotion/resume/`,
+    {},
+  );
+  return ResumedSchema.parse(response.data).resumed;
+}
+
+export async function sendPromotionBacklog(
+  orgId: number,
+  connectionId: number,
+  confirmedCount: number,
+): Promise<number> {
+  const response = await api.post(
+    `${one(orgId, connectionId)}/promotion/send-backlog/`,
+    { confirmed_count: confirmedCount },
+  );
+  return ReleasedSchema.parse(response.data).released;
 }

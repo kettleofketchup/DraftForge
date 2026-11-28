@@ -13,10 +13,20 @@ import {
   createConnection,
   getConnection,
   getConnectionRun,
+  getPromotionOutbox,
+  getPromotionStream,
   issueConnectionKey,
+  listConnectionDeliveries,
   listConnectionRuns,
   listConnections,
+  pullConnection,
+  resumeConnectionDeliveries,
+  resumePromotionOutbox,
+  resyncConnectionDeliveries,
   revokeConnectionKey,
+  sendPromotionBacklog,
+  setPromotionBinding,
+  testConnection,
   updateConnection,
 } from './connectionApi';
 import { connectionKeys } from './connectionQueryKeys';
@@ -25,9 +35,16 @@ import type {
   ConnectionCreate,
   ConnectionPatch,
   ConnectionRun,
+  DeliveryPage,
+  DeliveryState,
   IssueKeyOptions,
   IssuedKey,
+  PromotionEventBinding,
+  PromotionOutbox,
+  PromotionStream,
   RunPage,
+  RunState,
+  TestDirection,
 } from './connectionSchemas';
 
 export function canManageConnections(access: OrgFeatureAccess): boolean {
@@ -73,6 +90,32 @@ export function useConnectionRuns(
   });
 }
 
+export const RUN_POLL_MS = 2000;
+export const ACTIVE_RUN_STATES: readonly RunState[] = [
+  'queued',
+  'running',
+  'partial',
+];
+
+export function isActiveRun(state: RunState | undefined): boolean {
+  return state !== undefined && ACTIVE_RUN_STATES.includes(state);
+}
+
+function pageVisible(): boolean {
+  return (
+    typeof document === 'undefined' || document.visibilityState === 'visible'
+  );
+}
+
+/** Poll an unfinished run every 2s while the page is visible; stop otherwise. */
+export function runPollInterval(
+  run: ConnectionRun | undefined,
+  failed = false,
+): number | false {
+  if (failed || !pageVisible() || !isActiveRun(run?.state)) return false;
+  return RUN_POLL_MS;
+}
+
 export function useConnectionRun(
   orgId: number,
   access: OrgFeatureAccess,
@@ -89,6 +132,63 @@ export function useConnectionRun(
     queryFn: ({ signal }) =>
       getConnectionRun(orgId, connectionId, runId ?? '', signal),
     enabled: runId != null && canManageConnections(access),
+    refetchInterval: (query) =>
+      runPollInterval(query.state.data, query.state.status === 'error'),
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useConnectionDeliveries(
+  orgId: number,
+  access: OrgFeatureAccess,
+  connectionId: number,
+  state: DeliveryState | null,
+  enabled = true,
+): UseQueryResult<DeliveryPage> {
+  return useQuery({
+    queryKey: connectionKeys.deliveries(
+      orgId,
+      access.viewerPk,
+      connectionId,
+      state,
+    ),
+    queryFn: ({ signal }) =>
+      listConnectionDeliveries(
+        orgId,
+        connectionId,
+        state ? { state } : {},
+        signal,
+      ),
+    enabled: enabled && canManageConnections(access),
+  });
+}
+
+export function usePromotionStream(
+  orgId: number,
+  access: OrgFeatureAccess,
+  enabled = true,
+): UseQueryResult<PromotionStream> {
+  return useQuery({
+    queryKey: connectionKeys.promotionStream(orgId, access.viewerPk),
+    queryFn: ({ signal }) => getPromotionStream(orgId, signal),
+    enabled: enabled && canManageConnections(access),
+  });
+}
+
+export function usePromotionOutbox(
+  orgId: number,
+  access: OrgFeatureAccess,
+  connectionId: number,
+  enabled = true,
+): UseQueryResult<PromotionOutbox> {
+  return useQuery({
+    queryKey: connectionKeys.promotionOutbox(
+      orgId,
+      access.viewerPk,
+      connectionId,
+    ),
+    queryFn: ({ signal }) => getPromotionOutbox(orgId, connectionId, signal),
+    enabled: enabled && canManageConnections(access),
   });
 }
 
@@ -287,4 +387,141 @@ export function useConnectionQueryHygiene(
     if (!allowed) drop(orgId, viewerPk);
     previous.current = { orgId, viewerPk };
   }, [queryClient, orgId, viewerPk, allowed]);
+}
+
+function refreshConnection(
+  queryClient: QueryClient,
+  orgId: number,
+  viewerPk: number | null,
+  connectionId: number,
+): Promise<void> {
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: connectionKeys.detail(orgId, viewerPk, connectionId),
+    }),
+    queryClient.invalidateQueries({
+      queryKey: connectionKeys.list(orgId, viewerPk),
+      exact: true,
+    }),
+  ]).then(() => undefined);
+}
+
+export interface TestConnectionInput {
+  connectionId: number;
+  direction: TestDirection;
+}
+
+/** Resolves to the queued test run's ID. */
+export function useTestConnection(
+  orgId: number,
+  access: OrgFeatureAccess,
+): UseMutationResult<string, unknown, TestConnectionInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ connectionId, direction }) =>
+      testConnection(orgId, connectionId, direction),
+    onSuccess: (_, { connectionId }) =>
+      refreshConnection(queryClient, orgId, access.viewerPk, connectionId),
+  });
+}
+
+export function usePullNow(
+  orgId: number,
+  access: OrgFeatureAccess,
+): UseMutationResult<ConnectionRun, unknown, number> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (connectionId) => pullConnection(orgId, connectionId),
+    onSuccess: (_, connectionId) =>
+      refreshConnection(queryClient, orgId, access.viewerPk, connectionId),
+  });
+}
+
+export interface DeliveryRecoveryInput {
+  connectionId: number;
+  configVersion: number;
+}
+
+export function useResumeDeliveries(
+  orgId: number,
+  access: OrgFeatureAccess,
+): UseMutationResult<number, unknown, DeliveryRecoveryInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ connectionId, configVersion }) =>
+      resumeConnectionDeliveries(orgId, connectionId, configVersion),
+    onSuccess: (_, { connectionId }) =>
+      refreshConnection(queryClient, orgId, access.viewerPk, connectionId),
+  });
+}
+
+export function useResyncDeliveries(
+  orgId: number,
+  access: OrgFeatureAccess,
+): UseMutationResult<number, unknown, DeliveryRecoveryInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ connectionId, configVersion }) =>
+      resyncConnectionDeliveries(orgId, connectionId, configVersion),
+    onSuccess: (_, { connectionId }) =>
+      refreshConnection(queryClient, orgId, access.viewerPk, connectionId),
+  });
+}
+
+export interface PromotionBindingInput {
+  connectionId: number;
+  events: PromotionEventBinding[];
+}
+
+export function useSetPromotionBinding(
+  orgId: number,
+  access: OrgFeatureAccess,
+): UseMutationResult<PromotionStream, unknown, PromotionBindingInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ connectionId, events }) =>
+      setPromotionBinding(orgId, connectionId, events),
+    onSuccess: (stream, { connectionId }) => {
+      queryClient.setQueryData(
+        connectionKeys.promotionStream(orgId, access.viewerPk),
+        stream,
+      );
+      return refreshConnection(
+        queryClient,
+        orgId,
+        access.viewerPk,
+        connectionId,
+      );
+    },
+  });
+}
+
+export function useResumePromotion(
+  orgId: number,
+  access: OrgFeatureAccess,
+): UseMutationResult<number, unknown, number> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (connectionId) => resumePromotionOutbox(orgId, connectionId),
+    onSuccess: (_, connectionId) =>
+      refreshConnection(queryClient, orgId, access.viewerPk, connectionId),
+  });
+}
+
+export interface SendBacklogInput {
+  connectionId: number;
+  confirmedCount: number;
+}
+
+export function useSendPromotionBacklog(
+  orgId: number,
+  access: OrgFeatureAccess,
+): UseMutationResult<number, unknown, SendBacklogInput> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ connectionId, confirmedCount }) =>
+      sendPromotionBacklog(orgId, connectionId, confirmedCount),
+    onSettled: (_, __, { connectionId }) =>
+      refreshConnection(queryClient, orgId, access.viewerPk, connectionId),
+  });
 }

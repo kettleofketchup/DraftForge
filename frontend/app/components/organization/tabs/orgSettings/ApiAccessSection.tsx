@@ -47,6 +47,7 @@ export function useApiAccessSection(
         access={access}
         enabled={enabled}
         onConnectionDraftChange={onConnectionDraftChange}
+        memberCount={organization?.users_count ?? null}
       />
     ),
     unit,

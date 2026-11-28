@@ -96,6 +96,8 @@ export interface ApiAccessPanelProps {
   enabled?: boolean;
   /** Reports the open connection dialog's unsaved state to the host. */
   onConnectionDraftChange?: (state: ConnectionDraftState) => void;
+  /** The org's saved member count, for pull request estimates. */
+  memberCount?: number | null;
 }
 
 type ConnectionTarget = { id: number | null } | null;
@@ -105,6 +107,7 @@ export function ApiAccessPanel({
   access,
   enabled = true,
   onConnectionDraftChange,
+  memberCount,
 }: ApiAccessPanelProps) {
   const isSiteAdmin = useIsSuperuser();
   useConnectionQueryHygiene(orgId, access);
@@ -315,6 +318,7 @@ export function ApiAccessPanel({
         }}
         onCreated={(id) => setTarget({ id })}
         onDirtyChange={onConnectionDirty}
+        memberCount={memberCount}
       />
       <CreateTokenDialog
         orgId={orgId}

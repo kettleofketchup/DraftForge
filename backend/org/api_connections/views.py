@@ -201,7 +201,11 @@ def connections(request: Request, org_id: int) -> Response:
         return Response(
             ConnectionSerializer(
                 org.api_connections.order_by("pk")
-                .select_related("promotion_adoption")
+                .select_related(
+                    "promotion_adoption",
+                    "outbound_authorizer",
+                    "outbound_credential_owner",
+                )
                 .prefetch_related(
                     Prefetch("tokens", queryset=OrgApiToken.objects.order_by("pk"))
                 ),

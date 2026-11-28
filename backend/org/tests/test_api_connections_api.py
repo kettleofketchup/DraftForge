@@ -175,6 +175,40 @@ class ConnectionApiTests(ApiTokenBase):
             self.assertNotIn("outbound_credential_ciphertext", fields)
             self.assertNotIn("secret_hash", fields)
 
+    @override_settings(ORG_API_CREDENTIAL_KEYS=json.dumps([OLD_KEY]))
+    def test_outbound_principal_names_the_authority_for_each_auth_mode(
+        self,
+    ) -> None:
+        row = self.create()
+        self.assertIsNone(row["outbound_principal"])
+        url = f"{self.url}{row['id']}/"
+        enabled = self.client.patch(
+            url,
+            {
+                "config_version": 1,
+                "outbound_base_url": "https://ratings.example",
+                "mmr_pull_enabled": True,
+            },
+            format="json",
+        )
+        self.assertEqual(enabled.status_code, 200, enabled.data)
+        expected = {"pk": self.admin.pk, "username": self.admin.username}
+        self.assertEqual(enabled.data["outbound_principal"], expected)
+        credentialed = self.client.patch(
+            url,
+            {
+                "config_version": enabled.data["config_version"],
+                "outbound_auth": "bearer",
+                "outbound_credential": "synthetic-write-only-secret",
+            },
+            format="json",
+        )
+        self.assertEqual(credentialed.status_code, 200, credentialed.data)
+        self.assertIsNone(credentialed.data["outbound_authorizer"])
+        self.assertEqual(credentialed.data["outbound_principal"], expected)
+        listed = self.client.get(self.url).data
+        self.assertEqual(listed[0]["outbound_principal"], expected)
+
     def test_locked_features_allow_read_disable_revoke_not_add_issue_enable(
         self,
     ) -> None:

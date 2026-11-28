@@ -1,5 +1,20 @@
 import { z } from 'zod';
 import {
+  DEFAULT_PULL_CONFIG,
+  DEFAULT_PUSH_CONFIG,
+  INTERVAL_MAX,
+  INTERVAL_MIN,
+  PullFormSchema,
+  PushFormSchema,
+  pullConfigFromForm,
+  pullFormValues,
+  pullIssues,
+  pushConfigFromForm,
+  pushFormValues,
+  pushIssues,
+} from './connectionSyncSchemas';
+import {
+  ApiUserRefSchema,
   OPERATION_LABELS,
   TOKEN_NAME_MAX_LENGTH,
   operationLabel,
@@ -215,6 +230,8 @@ export const ConnectionSchema = z.object({
   credential_present: z.boolean(),
   outbound_credential_owner: z.number().nullable(),
   outbound_authorizer: z.number().nullable(),
+  /** The authorizer for auth none, else the credential owner. */
+  outbound_principal: ApiUserRefSchema.nullable(),
   outbound_credential_set_at: z.string().nullable(),
   inbound_credentials: z.array(ConnectionCredentialSchema),
   legacy_multi_credential: z.boolean(),
@@ -402,6 +419,71 @@ export const CONNECTION_ERROR_MESSAGES: Record<string, string> = {
     'Confirm the grants the new key will hold before issuing it.',
   authority_lost: 'Your account can no longer manage this connection.',
   rate_limited: 'Too many changes in a short time. Wait a minute and retry.',
+  per_member_acknowledgement_required:
+    'Per-member mode needs more than 100 requests. Confirm the request count on the MMR pull tab and save.',
+  credential_unavailable:
+    'The stored credential could not be used. Replace it on the General tab.',
+  credential_binding_invalid:
+    'The stored credential belongs to another destination. Replace it on the General tab.',
+  confirmation_required: 'Confirm this action before it runs.',
+  backlog_changed:
+    'The number of held sends changed. Review the new count and confirm again.',
+  managed_by_deployment:
+    'Promotion sync for this organization is set in the server configuration. A site operator must move it here first.',
+  guild_missing: 'Link a Discord server to this organization first.',
+  foreign_event: 'One of the events does not belong to this organization.',
+  invalid_binding: 'Each event needs one distinct event ID and occasion ID.',
+  not_found: 'That item no longer exists.',
+  invalid_request: 'The request was not valid.',
+  not_permitted: 'Your account cannot do this.',
+  worker_unavailable:
+    'No sync worker has picked this run up. Ask a site admin to check the workers.',
+  waiting_for_capacity:
+    "Waiting for the organization's other outbound requests to finish.",
+  dns_failed: 'The destination host name could not be resolved.',
+  unsafe_address:
+    'The destination resolves to a private or reserved address and is blocked.',
+  peer_mismatch: 'The destination answered from an unexpected address.',
+  redirect_forbidden:
+    'The destination answered with a redirect. Use its final address.',
+  deadline_exceeded: 'The destination did not answer within 15 seconds.',
+  network_failed: 'The destination could not be reached.',
+  response_too_large: 'The response was larger than the 1 MiB page limit.',
+  request_too_large: 'The request was larger than allowed.',
+  invalid_json: 'The response was not valid JSON.',
+  invalid_compression: 'The response could not be decompressed.',
+  unsupported_encoding: 'The response used an unsupported encoding.',
+  unsupported_media_type: 'The response was not JSON.',
+  invalid_origin: 'The destination address is not valid.',
+  pagination_loop: 'The destination returned the same page twice.',
+  pull_incomplete:
+    'The destination had more rows than one run may fetch. Nothing was imported.',
+  pull_ambiguous: 'The response could not be matched unambiguously.',
+  member_limit_exceeded:
+    'The organization has more members than one run may cover.',
+  cursor_too_large: 'The next cursor was larger than 1 KiB.',
+  missing_identifier: 'A member had no identifier for this request.',
+  run_deadline_exceeded: 'The run took longer than 10 minutes and stopped.',
+  run_abandoned: 'The run stopped responding and was ended.',
+  auth_failed:
+    'The destination rejected the credential. Replace it, then resume.',
+  schema_rejected:
+    'The destination rejected the request. Fix the push settings, then resume.',
+  origin_changed:
+    'The destination changed after these were queued. Resync to send current values to the new destination.',
+  invalid_acknowledgement:
+    'The destination sent an answer DraftForge does not understand.',
+  sync_loop_suspected: 'Paused because the same change kept coming back.',
+  unmatched: 'No member matched this player ID.',
+  ambiguous_duplicate:
+    'Several rows named the same member with different values; none applied.',
+  invalid_entry: 'This row is not an object.',
+  invalid_envelope: 'The player list was not found at the configured path.',
+  invalid_identifier: 'The player ID is missing or not a valid ID.',
+  invalid_mmr: 'The MMR is not a whole number in range.',
+  missing_mmr: 'The row has no MMR field.',
+  conflict: 'The MMR changed in DraftForge during the run; it was kept.',
+  skipped_policy: 'Kept by the overwrite rule.',
 };
 
 export function connectionErrorCode(err: unknown): string | undefined {
@@ -412,10 +494,27 @@ export function connectionErrorCode(err: unknown): string | undefined {
 }
 
 export function connectionErrorMessage(code: string): string {
-  return CONNECTION_ERROR_MESSAGES[code] ?? `Request refused (${code}).`;
+  const known = CONNECTION_ERROR_MESSAGES[code];
+  if (known) return known;
+  const http = /^http_(\d{3})$/.exec(code);
+  if (http) return `The destination answered HTTP ${http[1]}.`;
+  return `Request refused (${code}).`;
 }
 
 export const CREDENTIAL_ACTIONS = ['keep', 'replace', 'clear'] as const;
+
+export const OVERWRITE_POLICY_VALUES = [
+  'missing_only',
+  'unverified_only',
+  'replace',
+] as const;
+export type OverwritePolicy = (typeof OVERWRITE_POLICY_VALUES)[number];
+
+export const OVERWRITE_POLICY_LABELS: Record<OverwritePolicy, string> = {
+  missing_only: 'Only fill missing MMRs',
+  unverified_only: 'Replace unverified MMRs',
+  replace: 'Replace any MMR',
+};
 
 export const CONNECTION_NAME_MAX_LENGTH = TOKEN_NAME_MAX_LENGTH;
 
@@ -442,6 +541,20 @@ const ConnectionFormBase = z.object({
   outbound_auth: z.enum(OUTBOUND_AUTH_VALUES),
   credential_action: z.enum(CREDENTIAL_ACTIONS),
   outbound_credential: z.string(),
+  mmr_push_enabled: z.boolean(),
+  mmr_pull_enabled: z.boolean(),
+  promotion_push_enabled: z.boolean(),
+  game_type: z.number().int().nullable(),
+  overwrite_policy: z.enum(OVERWRITE_POLICY_VALUES),
+  mark_verified: z.boolean(),
+  interval_minutes: z
+    .number({ error: 'Enter a number of minutes' })
+    .int('Use whole minutes')
+    .min(INTERVAL_MIN, `At least ${INTERVAL_MIN} minutes`)
+    .max(INTERVAL_MAX, `At most ${INTERVAL_MAX} minutes (one week)`)
+    .nullable(),
+  push: PushFormSchema,
+  pull: PullFormSchema,
 });
 export type ConnectionForm = z.infer<typeof ConnectionFormBase>;
 
@@ -461,10 +574,64 @@ function originChanged(saved: ApiConnection, url: string): boolean {
   return httpsOrigin(saved.outbound_base_url) !== httpsOrigin(url);
 }
 
+export interface ConnectionFormOptions {
+  /** The org's saved member count, for the per-member request estimate. */
+  memberCount?: number | null;
+}
+
 /** The draft schema; `saved` is the row the draft was edited from, null when creating. */
-export function ConnectionFormSchema(saved: ApiConnection | null) {
+export function ConnectionFormSchema(
+  saved: ApiConnection | null,
+  options: ConnectionFormOptions = {},
+) {
   return ConnectionFormBase.superRefine((values, ctx) => {
+    const sync = {
+      auth: values.outbound_auth,
+      pushEnabled: values.mmr_push_enabled,
+      pullEnabled: values.mmr_pull_enabled,
+      memberCount: options.memberCount,
+    };
+    for (const issue of [
+      ...pushIssues(values.push, sync),
+      ...pullIssues(values.pull, sync),
+    ]) {
+      ctx.addIssue({
+        code: 'custom',
+        path: issue.path,
+        message: issue.message,
+      });
+    }
+    const outbound =
+      values.mmr_push_enabled ||
+      values.mmr_pull_enabled ||
+      values.promotion_push_enabled;
+    if (outbound && !values.outbound_base_url.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outbound_base_url'],
+        message:
+          'Enter the destination before turning on an outbound direction.',
+      });
+    }
+    if (values.promotion_push_enabled && values.outbound_auth !== 'bearer') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['promotion_push_enabled'],
+        message: 'Promotion push needs bearer authentication.',
+      });
+    }
     if (values.outbound_auth === 'none') return;
+    if (
+      outbound &&
+      values.credential_action !== 'replace' &&
+      (!saved?.credential_present || values.credential_action === 'clear')
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outbound_credential'],
+        message: 'Add the credential before turning on an outbound direction.',
+      });
+    }
     if (
       values.credential_action === 'replace' &&
       values.outbound_credential.length === 0
@@ -500,6 +667,15 @@ export function connectionFormDefaults(): ConnectionForm {
     outbound_auth: 'none',
     credential_action: 'keep',
     outbound_credential: '',
+    mmr_push_enabled: false,
+    mmr_pull_enabled: false,
+    promotion_push_enabled: false,
+    game_type: null,
+    overwrite_policy: 'missing_only',
+    mark_verified: false,
+    interval_minutes: null,
+    push: pushFormValues(DEFAULT_PUSH_CONFIG),
+    pull: pullFormValues(DEFAULT_PULL_CONFIG),
   };
 }
 
@@ -517,6 +693,15 @@ export function connectionFormValues(saved: ApiConnection): ConnectionForm {
     outbound_auth: saved.outbound_auth,
     credential_action: 'keep',
     outbound_credential: '',
+    mmr_push_enabled: saved.mmr_push_enabled,
+    mmr_pull_enabled: saved.mmr_pull_enabled,
+    promotion_push_enabled: saved.promotion_push_enabled,
+    game_type: saved.game_type,
+    overwrite_policy: saved.overwrite_policy,
+    mark_verified: saved.mark_verified,
+    interval_minutes: saved.interval_minutes,
+    push: pushFormValues(saved.mmr_push_config),
+    pull: pullFormValues(saved.mmr_pull_config),
   };
 }
 
@@ -549,6 +734,36 @@ function changedFields(
     } else if (values.credential_action === 'clear') {
       body.clear_outbound_credential = true;
     }
+  }
+  for (const flag of [
+    'mmr_push_enabled',
+    'mmr_pull_enabled',
+    'promotion_push_enabled',
+    'mark_verified',
+  ] as const) {
+    if (values[flag] !== from[flag]) body[flag] = values[flag];
+  }
+  if (values.game_type !== from.game_type) body.game_type = values.game_type;
+  if (values.overwrite_policy !== from.overwrite_policy) {
+    body.overwrite_policy = values.overwrite_policy;
+  }
+  if (values.interval_minutes !== from.interval_minutes) {
+    body.interval_minutes = values.interval_minutes;
+  }
+  // Auth decides where the key slot goes, so compare rendered configs.
+  const push = pushConfigFromForm(values.push, values.outbound_auth);
+  if (
+    JSON.stringify(push) !==
+    JSON.stringify(pushConfigFromForm(from.push, from.outbound_auth))
+  ) {
+    body.mmr_push_config = push;
+  }
+  const pull = pullConfigFromForm(values.pull, values.outbound_auth);
+  if (
+    JSON.stringify(pull) !==
+    JSON.stringify(pullConfigFromForm(from.pull, from.outbound_auth))
+  ) {
+    body.mmr_pull_config = pull;
   }
   return body;
 }
@@ -586,6 +801,9 @@ export function connectionErrorField(
       return 'outbound_base_url';
     case 'promotion_stream_exists':
       return 'operations';
+    case 'not_promotion_stream':
+    case 'unsupported_auth':
+      return 'promotion_push_enabled';
     default:
       return null;
   }
@@ -593,4 +811,66 @@ export function connectionErrorField(
 
 export function operationLabelList(operations: readonly string[]): string {
   return operations.map(operationLabel).join(', ');
+}
+
+export const TEST_DIRECTIONS = [
+  'mmr_pull',
+  'mmr_push',
+  'promotion_push',
+] as const;
+export type TestDirection = (typeof TEST_DIRECTIONS)[number];
+
+// backend/org/api_connections/views.py (connection_test).
+export const TestStartedSchema = z.object({
+  run_id: z.string(),
+  state: RunStateSchema,
+});
+
+export const ResumedSchema = z.object({ resumed: z.number().int() });
+export const EnqueuedSchema = z.object({ enqueued: z.number().int() });
+export const ReleasedSchema = z.object({ released: z.number().int() });
+
+// backend/org/api_connections/promotion_config.py (describe).
+export const PromotionStreamSchema = z.object({
+  source: z.enum(['deployment', 'connection', 'none']),
+  adopted: z.boolean(),
+  connection_id: z.number().nullable(),
+  guild_id: z.string().nullable(),
+  events: z.array(
+    z.object({
+      event_id: z.string(),
+      occasion_id: z.string(),
+      effective_at: z.string().nullable(),
+    }),
+  ),
+  transport: z.enum(['env', 'connection', 'held', 'none']),
+});
+export type PromotionStream = z.infer<typeof PromotionStreamSchema>;
+
+export const PROMOTION_OUTBOX_STATES = [
+  'pending',
+  'in_flight',
+  'retry',
+  'paused',
+  'backlog_held',
+  'reconciliation_required',
+  'applied',
+  'canceled',
+] as const;
+export type PromotionOutboxState = (typeof PROMOTION_OUTBOX_STATES)[number];
+
+// backend/org/api_connections/recovery.py (promotion_outbox_summary).
+export const PromotionOutboxSchema = z.object({
+  counts: z.record(z.enum(PROMOTION_OUTBOX_STATES), z.number().int()),
+  reasons: z.object({
+    retry: z.record(z.string(), z.number().int()),
+    paused: z.record(z.string(), z.number().int()),
+    reconciliation_required: z.record(z.string(), z.number().int()),
+  }),
+});
+export type PromotionOutbox = z.infer<typeof PromotionOutboxSchema>;
+
+export interface PromotionEventBinding {
+  event_id: string;
+  occasion_id: string;
 }

@@ -24,6 +24,13 @@ export const connectionKeys = {
       'run',
       runId,
     ] as const,
+  promotionStream: (orgId: number, viewerPk: ViewerPk) =>
+    [...connectionKeys.all(orgId, viewerPk), 'promotion-stream'] as const,
+  promotionOutbox: (orgId: number, viewerPk: ViewerPk, connectionId: number) =>
+    [
+      ...connectionKeys.detail(orgId, viewerPk, connectionId),
+      'promotion-outbox',
+    ] as const,
   deliveries: (
     orgId: number,
     viewerPk: ViewerPk,
