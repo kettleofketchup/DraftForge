@@ -29,29 +29,6 @@ from telemetry.logging import get_logger
 log = get_logger(__name__)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def get_user_guilds(request: Request) -> JsonResponse:
-    access_token = request.user.social_auth.get(provider="discord").extra_data[
-        "access_token"
-    ]
-    url = "https://discord.com/api/users/@me/guilds"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    cache_key = "discord_guilds"
-    cached_guilds = cache.get(cache_key)
-    if cached_guilds:
-        return JsonResponse({"guilds": cached_guilds}, safe=True)
-
-    try:
-        response = requests.get(url, headers=headers, timeout=DISCORD_HTTP_TIMEOUT_S)
-        response.raise_for_status()
-        guilds = response.json()
-        cache.set(cache_key, guilds, timeout=5)
-        return JsonResponse({"guilds": guilds}, safe=True)
-    except requests.exceptions.RequestException as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-
 def get_discord_members_api() -> JsonResponse:
     """
     API endpoint function that returns JsonResponse with discord members.
