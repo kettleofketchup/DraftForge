@@ -7,7 +7,8 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { AxiosError, AxiosHeaders } from 'axios';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { h, renderRollCall, signup } from './rollcallHarness';
 
 afterEach(() => {
@@ -369,3 +370,165 @@ it.each([
     focused(next);
   },
 );
+
+function axiosError(status: number, data: unknown): AxiosError {
+  return new AxiosError('fail', 'ERR_BAD_REQUEST', undefined, undefined, {
+    status,
+    statusText: '',
+    data,
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+  });
+}
+const overCapacity = () =>
+  axiosError(409, {
+    code: 'override_required',
+    blocked: false,
+    violations: [
+      {
+        code: 'over_capacity',
+        rule: 'capacity',
+        category: 'seating',
+        message:
+          'Event is at capacity; restoring seats this member over capacity.',
+        blocking: false,
+        params: { capacity: 10, seated: 10 },
+      },
+    ],
+  });
+const voidButton = (id: number) =>
+  within(screen.getByTestId(`rollcall-row-${id}`)).getByTestId(
+    'rollcall-void-withdrawal-btn',
+  );
+
+describe('Void withdrawal and override-aware Restore', () => {
+  it('shows Void on cancelled and rejected rows only', () => {
+    renderRollCall({
+      signups: [
+        signup(101, 'cancelled'),
+        signup(102, 'rejected'),
+        signup(103, 'approved'),
+        signup(104, 'dropped'),
+      ],
+    });
+    expect(voidButton(101)).toHaveTextContent('Void');
+    expect(voidButton(102)).toBeInTheDocument();
+    for (const id of [103, 104])
+      expect(
+        within(screen.getByTestId(`rollcall-row-${id}`)).queryByTestId(
+          'rollcall-void-withdrawal-btn',
+        ),
+      ).toBeNull();
+  });
+
+  it.each(['optional', 'placements'] as const)(
+    'Void dispatches void_withdrawal under %s policy and moves focus',
+    async (policy) => {
+      renderRollCall({
+        event: { staff_reason_policy: policy },
+        signups: [signup(101, 'cancelled'), signup(102, 'cancelled')],
+      });
+      focused(101);
+      fireEvent.click(voidButton(101));
+      if (policy === 'placements') {
+        expect(h.actions.voidWithdrawal.mutateAsync).not.toHaveBeenCalled();
+        expect(screen.getByRole('alertdialog')).toHaveTextContent(
+          'Void withdrawal',
+        );
+        type('mistaken');
+        await waitFor(() =>
+          expect(screen.getByTestId('staff-reason-confirm')).toBeEnabled(),
+        );
+        fireEvent.click(screen.getByTestId('staff-reason-confirm'));
+      }
+      await waitFor(() =>
+        expect(
+          h.actions.voidWithdrawal.mutateAsync,
+        ).toHaveBeenCalledExactlyOnceWith(
+          policy === 'placements'
+            ? { id: 101, reason: 'mistaken' }
+            : { id: 101 },
+        ),
+      );
+      await waitFor(() => focused(102));
+      expect(h.actions.reinstate.mutateAsync).not.toHaveBeenCalled();
+    },
+  );
+
+  it('Void 409 opens the override dialog and confirm retries with acknowledged codes', async () => {
+    renderRollCall({ signups: [signup(101, 'cancelled')] });
+    h.actions.voidWithdrawal.mutateAsync.mockRejectedValueOnce(overCapacity());
+    fireEvent.click(voidButton(101));
+    const dialog = await screen.findByTestId('override-warning-dialog');
+    fireEvent.change(within(dialog).getByRole('textbox'), {
+      target: { value: 'mistaken' },
+    });
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: /override/i }),
+      );
+    });
+    await waitFor(() =>
+      expect(h.actions.voidWithdrawal.mutateAsync).toHaveBeenLastCalledWith({
+        id: 101,
+        reason: 'mistaken',
+        acknowledged_codes: ['over_capacity'],
+      }),
+    );
+    expect(h.toastError).not.toHaveBeenCalled();
+  });
+
+  it('keyboard 1 Restore with a 409 opens the override dialog', async () => {
+    renderRollCall({ signups: [signup(101, 'cancelled')] });
+    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
+    key('1');
+    expect(
+      await screen.findByTestId('override-warning-dialog'),
+    ).toHaveTextContent('Event is at capacity');
+    expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledExactlyOnceWith({
+      id: 101,
+    });
+    expect(h.toastError).not.toHaveBeenCalled();
+  });
+
+  it('Restore 409 leaves the row in its Removed group and blocks keys while the override dialog is open', async () => {
+    renderRollCall({
+      signups: [
+        signup(101, 'cancelled'),
+        signup(102, 'cancelled'),
+        signup(103, 'approved'),
+      ],
+    });
+    h.actions.reinstate.mutateAsync.mockRejectedValueOnce(overCapacity());
+    key('End');
+    key('k');
+    focused(101);
+    key('1');
+    await screen.findByTestId('override-warning-dialog');
+    await waitFor(() => focused(102));
+    const removed = screen.getByText(/^Other \(/).parentElement!;
+    expect(within(removed).getByTestId('rollcall-row-101')).toBeInTheDocument();
+    const awaiting = screen.getByTestId(
+      'rollcall-awaiting-section',
+    ).parentElement!;
+    expect(within(awaiting).queryByTestId('rollcall-row-101')).toBeNull();
+    for (const k of ['k', 'ArrowUp', 'Home', '1', '2', 's']) key(k);
+    focused(102);
+    expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledTimes(1);
+    for (const action of ['approve', 'confirm', 'reject', 'cancel'] as const)
+      expect(h.actions[action].mutateAsync).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('rollcall-start-dialog-confirm')).toBeNull();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('Void is not bound to a key', async () => {
+    renderRollCall({ signups: [signup(101, 'cancelled')] });
+    for (const k of ['2', '3', 'v', 'V', 'Enter']) key(k);
+    key('1');
+    await waitFor(() =>
+      expect(h.actions.reinstate.mutateAsync).toHaveBeenCalledTimes(1),
+    );
+    expect(h.actions.voidWithdrawal.mutateAsync).not.toHaveBeenCalled();
+    expect(voidButton(101).querySelector('kbd')).toBeNull();
+  });
+});

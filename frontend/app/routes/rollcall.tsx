@@ -34,6 +34,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
+  RotateCcw,
   Undo2,
   Users,
   XCircle,
@@ -41,6 +42,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
+import { OverrideWarningDialog } from '~/components/events/OverrideWarningDialog';
 import {
   isApprovableSignup,
   moveRollCallFocus,
@@ -52,13 +54,17 @@ import {
 import type { EventSignupType } from '~/components/events/schemas';
 import { EventState, SignupStatus } from '~/components/events/schemas';
 import { SignupInLineSince } from '~/components/events/SignupInLineSince';
-import { canRestoreSignup } from '~/components/events/signupPartitions';
+import {
+  canRestoreSignup,
+  canVoidWithdrawal,
+} from '~/components/events/signupPartitions';
 import { StaffReasonDialog } from '~/components/events/StaffReasonDialog';
 import {
   staffReasonMode,
   type StaffSignupAction,
 } from '~/components/events/staffReasonPolicy';
 import { startTournamentErrorMessage } from '~/components/events/startTournamentError';
+import { useSignupOverride } from '~/components/events/useSignupOverride';
 import { useStaffAction } from '~/components/events/useStaffAction';
 import { toGameType } from '~/components/game/constants';
 import { useOrganization } from '~/components/organization';
@@ -73,6 +79,11 @@ import {
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 import { Kbd } from '~/components/ui/kbd';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '~/components/ui/tooltip';
 import { UserStrip } from '~/components/user';
 import { DisplayName } from '~/components/user/avatar';
 import {
@@ -115,6 +126,8 @@ export default function RollCallPage() {
   );
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+  const { fire, dialogProps: overrideDialogProps } =
+    useSignupOverride(signupActions);
   const currentUserId = useUserStore((state) => state.currentUser?.pk);
   const {
     dispatch,
@@ -193,26 +206,38 @@ export default function RollCallPage() {
     [],
   );
 
-  const { mutateAsync: reinstate } = signupActions.reinstate;
   const handleRestore = useCallback(
     async (signup: EventSignupType) => {
       const next = nextFocusFrom(signup);
       if (
+        await dispatch('reinstate', signup, fire('reinstate', signup.id), {
+          errorLabel: `restore ${DisplayName(signup)}`,
+        })
+      ) {
+        setFocusedId(next);
+      }
+    },
+    [dispatch, fire, nextFocusFrom],
+  );
+  const handleVoid = useCallback(
+    async (signup: EventSignupType) => {
+      const next = nextFocusFrom(signup);
+      if (
         await dispatch(
-          'reinstate',
+          'void_withdrawal',
           signup,
-          (reason) =>
-            reinstate({
-              id: signup.id,
-              ...(reason === undefined ? {} : { reason }),
-            }),
-          { errorLabel: `restore ${DisplayName(signup)}` },
+          fire('void_withdrawal', signup.id),
+          {
+            title: 'Void withdrawal',
+            actionLabel: 'Void withdrawal',
+            errorLabel: `void withdrawal for ${DisplayName(signup)}`,
+          },
         )
       ) {
         setFocusedId(next);
       }
     },
-    [dispatch, reinstate, nextFocusFrom],
+    [dispatch, fire, nextFocusFrom],
   );
 
   const minPlayers = event?.min_players;
@@ -242,6 +267,7 @@ export default function RollCallPage() {
         rejectSignup ||
         cancelSignup ||
         staffActionIsOpen ||
+        overrideDialogProps.open ||
         showStartConfirm
       )
         return;
@@ -299,6 +325,7 @@ export default function RollCallPage() {
     rejectSignup,
     cancelSignup,
     staffActionIsOpen,
+    overrideDialogProps.open,
     showStartConfirm,
   ]);
 
@@ -367,6 +394,7 @@ export default function RollCallPage() {
       onRequestReject={setRejectSignup}
       onRequestCancel={setCancelSignup}
       onRequestRestore={handleRestore}
+      onRequestVoid={handleVoid}
     />
   );
 
@@ -545,6 +573,10 @@ export default function RollCallPage() {
       />
 
       <StaffReasonDialog {...dialogProps} />
+      <OverrideWarningDialog
+        {...overrideDialogProps}
+        organization={eventOrg ?? null}
+      />
 
       {/* Per-row Confirm (approved → confirmed) */}
       <StaffReasonDialog
@@ -769,6 +801,7 @@ const SignupStrip = memo(function SignupStrip({
   onRequestReject,
   onRequestCancel,
   onRequestRestore,
+  onRequestVoid,
   conductMember,
 }: {
   conductMember?: ForecastMember;
@@ -785,6 +818,7 @@ const SignupStrip = memo(function SignupStrip({
   onRequestReject: (signup: EventSignupType) => void;
   onRequestCancel: (signup: EventSignupType) => void;
   onRequestRestore: (signup: EventSignupType) => void;
+  onRequestVoid: (signup: EventSignupType) => void;
 }) {
   const user = userMap.get(signup.user);
   const isApprovable = isApprovableSignup(signup.status);
@@ -888,6 +922,25 @@ const SignupStrip = memo(function SignupStrip({
           <Undo2 className="h-3.5 w-3.5" />
           <span className="hidden sm:inline ml-1">Restore</span>
         </SecondaryButton>
+      )}
+      {canVoidWithdrawal(signup.status) && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SecondaryButton
+              size="sm"
+              aria-label="Void withdrawal"
+              data-testid="rollcall-void-withdrawal-btn"
+              onClick={() => onRequestVoid(signup)}
+              disabled={pending}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline ml-1">Void</span>
+            </SecondaryButton>
+          </TooltipTrigger>
+          <TooltipContent>
+            Restore exact place, class and commitment
+          </TooltipContent>
+        </Tooltip>
       )}
     </div>
   ) : undefined;
