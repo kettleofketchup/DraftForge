@@ -962,6 +962,18 @@ Both POSTs return `success`, `detail`, and counts (`events`, `joined`, `left`, `
 |--------|----------|-------------|
 | POST | `/api/internal/events/{id}/auto-close/` | Used by `cleanup_stale_events` (X-Internal-Token). Closes to `completed` from `roll_call`/`in_progress`, or `cancelled` from `upcoming`/`signups_open`. `200 {"closed": true, "state"}` when it closed the event, `200 {"closed": false, "state"}` when it was already terminal or lost the race, `400` for other states, `404` if missing. |
 
+Discord DM ledger routes use the same internal token and IP allowlist. Ledger rows
+are described in [Discord DM Ledger](../development/discord-dm-ledger.md).
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/internal/discord/dms/claim/` | Claim a ledger row before a DM: `kind`, `idempotency_key`, `claim_token`, `discord_user_id`, optional `recipient_user_id`, `organization_id`, `subject_type`, `subject_id`, `tournament_log_id`, `context`, `has_components`, `initial_status` (`skipped_*` only). `201 {id, status, attempts}` new row, `200` same body when granted on an existing row, `409 {id, status}` not granted, `400 invalid_request` |
+| POST | `/api/internal/discord/dms/{id}/sending/` | Body `{claim_token}`. Marks the row as sending right before the Discord POST. `204`; `409` wrong token or not pending |
+| POST | `/api/internal/discord/dms/{id}/finalize/` | Body `{claim_token, status, error_class?, discord_channel_id?, discord_message_id?, http_status?, error_code?, error?}`. `200 {id, status}` (also on a repeat with the same token and status), `409` conflict, `404` missing, `400` pending status or bad body |
+| POST | `/api/internal/discord/dms/click/` | Body `{discord_message_id, discord_user_id}`. Counts a component click on a DM. Always `204` |
+
+No ledger endpoint returns Discord channel or message ids.
+
 Event endpoints added with these features (`complete/`, `staff/`, `stale_before`) are
 listed in [Events: API Endpoints](../features/events.md#api-endpoints).
 

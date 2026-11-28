@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import discord
+from asgiref.sync import sync_to_async
 from django.conf import settings
 
 from discordbot.activity_ids import decode_draft_launch
@@ -15,12 +18,34 @@ from discordbot.components import (
 )
 from discordbot.components.registry import iter_component_providers
 from discordbot.custom_ids import CustomId, DeclineId, NotifyId, SignupId, TentativeId
+from discordbot.internal_client.dm_ledger import record_dm_click
 from discordbot.log_context import discord_log_context
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
 STALE_COMPONENT_MESSAGE = "❌ This menu is out of date."
+_click_tasks: set[asyncio.Task[None]] = set()
+
+
+async def _record_click(discord_message_id: str, discord_user_id: str) -> None:
+    try:
+        await sync_to_async(record_dm_click, thread_sensitive=False)(
+            discord_message_id, discord_user_id
+        )
+    except Exception:
+        log.warning(
+            "dm_click_record_failed", system="discord", subsystem="dm", exc_info=True
+        )
+
+
+def _schedule_dm_click(interaction: discord.Interaction, custom_id: str) -> None:
+    message = interaction.message
+    if interaction.guild_id is not None or message is None:
+        return
+    task = asyncio.create_task(_record_click(str(message.id), str(interaction.user.id)))
+    _click_tasks.add(task)
+    task.add_done_callback(_click_tasks.discard)
 
 
 async def _reject_bad_custom_id(
@@ -47,6 +72,8 @@ async def _reject_bad_custom_id(
 async def route_component_interaction(
     interaction: discord.Interaction, custom_id: str
 ) -> None:
+    _schedule_dm_click(interaction, custom_id)
+
     if custom_id.startswith("draft_activity:") and custom_id != "draft_activity:launch":
         draft = decode_draft_launch(custom_id)
         if draft is None:

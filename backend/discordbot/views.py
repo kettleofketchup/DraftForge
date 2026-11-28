@@ -4,10 +4,12 @@ import json
 
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from kombu.exceptions import KombuError
 
+from discordbot import dm_ledger
 from discordbot.activity_ids import decode_draft_launch
 from discordbot.models import DraftActivityChannel
 from discordbot.tasks import complete_activity_launch
@@ -143,11 +145,31 @@ def handle_application_command(data: dict) -> JsonResponse:
 ACTIVITY_LAUNCH_TASK_EXPIRES_S = 14 * 60
 
 
+def _record_dm_click(data: dict, custom_id: str, user: dict) -> None:
+    if data.get("guild_id"):
+        return
+    message_id = str((data.get("message") or {}).get("id") or "")
+    discord_user_id = str(user.get("id") or "")
+    if not message_id or not discord_user_id:
+        return
+    try:
+        dm_ledger.record_click(
+            discord_message_id=message_id,
+            discord_user_id=discord_user_id,
+            now=timezone.now(),
+        )
+    except Exception:
+        log.warning(
+            "dm_click_record_failed", system="discord", subsystem="dm", exc_info=True
+        )
+
+
 def handle_message_component(data: dict) -> JsonResponse:
     """Handle button/select menu interactions."""
     custom_id = data.get("data", {}).get("custom_id", "")
     user = data.get("member", {}).get("user", {}) or data.get("user", {})
     username = user.get("username", "Unknown")
+    _record_dm_click(data, custom_id, user)
 
     log.info(
         "component_interaction_received",

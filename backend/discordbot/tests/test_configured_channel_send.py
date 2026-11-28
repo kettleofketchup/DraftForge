@@ -2,7 +2,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import requests
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase
 from structlog.testing import capture_logs
 
 from app import internal_client
@@ -352,22 +352,7 @@ class ConfiguredChannelSendTest(DiscordTestMixin, TestCase):
         self.assertEqual(self.posts()[0].kwargs["json"], payload)
         self.assertTrue(self.posts()[0].args[1].endswith("/messages"))
 
-    @override_settings(TEST_DISCORD_USER_ID="100000000000000004")
-    def test_dm_and_reply_sends_unchanged(self) -> None:
-        self.http.side_effect = [
-            response(200, {"id": CHANNEL}),
-            response(201, {"id": MESSAGE}),
-        ]
-        self.assertEqual(
-            utils.sync_send_dm(
-                "100000000000000004", embed={"title": "Synthetic Event"}
-            )["id"],
-            MESSAGE,
-        )
-        self.assertFalse(
-            any(call.args[0] == "GET" for call in self.http.call_args_list)
-        )
-        self.http.reset_mock()
+    def test_reply_send_unchanged(self) -> None:
         self.http.side_effect = [response(201, {"id": MESSAGE})]
         utils.sync_send_embed_with_components(
             CHANNEL, {}, message_reference={"message_id": MESSAGE}

@@ -32,6 +32,7 @@ class TournamentTaskSchema(BaseModel):
     discord_send_herodraft_link: bool = False
     tournament_type: str = "double_elimination"
     draft_type: str = "shuffle"
+    organization_id: int | None = None
 
     @property
     def pk(self) -> int:

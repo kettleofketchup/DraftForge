@@ -4,6 +4,9 @@ from unittest.mock import MagicMock, patch
 from django.test import SimpleTestCase, override_settings
 
 from discordbot import utils
+from discordbot.dm import DMRequest, send_dm
+from discordbot.dm_ledger import ClaimResult
+from discordbot.models import DMKind, DMStatus
 
 API = "https://discord.com/api/v10"
 
@@ -20,16 +23,18 @@ ROW: list[dict[str, Any]] = [
 
 
 class _Recorder:
-    def __init__(self) -> None:
+    def __init__(self, dm_channel_id: str = "dm-chan", message_id: str = "m1") -> None:
         self.calls: list[tuple[str, str, Any]] = []
+        self.dm_channel_id = dm_channel_id
+        self.message_id = message_id
 
     def __call__(self, method: str, url: str, **kwargs: Any) -> MagicMock:
         self.calls.append((method, url, kwargs.get("json")))
         resp = MagicMock(status_code=200)
         if url.endswith("/users/@me/channels"):
-            resp.json.return_value = {"id": "dm-chan"}
+            resp.json.return_value = {"id": self.dm_channel_id}
         else:
-            resp.json.return_value = {"id": "m1"}
+            resp.json.return_value = {"id": self.message_id}
         return resp
 
 
@@ -184,11 +189,26 @@ class ChannelSendWireBodyTest(SimpleTestCase):
 
 
 @override_settings(TEST=False)
+@patch("discordbot.dm.finalize_dm", return_value=True)
+@patch("discordbot.dm.mark_dm_sending", return_value=True)
+@patch(
+    "discordbot.dm.claim_dm",
+    return_value=ClaimResult(
+        id=7, granted=True, status=DMStatus.PENDING, attempts=1, created=True
+    ),
+)
 class DmSendWireBodyTest(SimpleTestCase):
     def _send_dm(self, **kwargs: Any) -> list[Any]:
-        recorder = _Recorder()
-        with patch("discordbot.utils._rate_limited_request", recorder):
-            utils.sync_send_dm("555", **kwargs)
+        recorder = _Recorder(dm_channel_id="900", message_id="901")
+        with patch("discordbot.dm._rate_limited_request", recorder):
+            send_dm(
+                DMRequest(
+                    kind=DMKind.TEST_NOTIFICATION,
+                    idempotency_key="test_notification:wire",
+                    discord_user_id="555",
+                    **kwargs,
+                )
+            )
         self.assertEqual(
             recorder.calls[0],
             ("POST", f"{API}/users/@me/channels", {"recipient_id": "555"}),
@@ -196,12 +216,12 @@ class DmSendWireBodyTest(SimpleTestCase):
         message_posts = [
             body
             for method, url, body in recorder.calls
-            if method == "POST" and url == f"{API}/channels/dm-chan/messages"
+            if method == "POST" and url == f"{API}/channels/900/messages"
         ]
         self.assertEqual(len(message_posts), 1)
         return message_posts
 
-    def test_dm_body_embed_dict_and_components(self) -> None:
+    def test_dm_body_embed_dict_and_components(self, *_: MagicMock) -> None:
         (body,) = self._send_dm(embed={"title": "A"}, components=ROW)
         self.assertEqual(
             body,
@@ -220,9 +240,13 @@ class DmSendWireBodyTest(SimpleTestCase):
                         ],
                     }
                 ],
+                "nonce": "dm7",
+                "enforce_nonce": True,
             },
         )
 
-    def test_dm_body_content_only_drops_empty_components(self) -> None:
+    def test_dm_body_content_only_drops_empty_components(self, *_: MagicMock) -> None:
         (body,) = self._send_dm(content="hello", embed=None, components=[])
-        self.assertEqual(body, {"content": "hello"})
+        self.assertEqual(
+            body, {"content": "hello", "nonce": "dm7", "enforce_nonce": True}
+        )
