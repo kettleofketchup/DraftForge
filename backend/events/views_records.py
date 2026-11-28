@@ -2,7 +2,7 @@ import csv
 import io
 from collections.abc import Mapping
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from django.db.models import Q
@@ -120,7 +120,12 @@ def _parse_bound(text: str, org: Organization) -> datetime | None:
         value = datetime.fromisoformat(text)
     except ValueError:
         return None
-    return value if value.tzinfo is not None else None
+    if value.tzinfo is None:
+        return None
+    try:
+        return value.astimezone(UTC)
+    except OverflowError:
+        return None
 
 
 def _records_params(

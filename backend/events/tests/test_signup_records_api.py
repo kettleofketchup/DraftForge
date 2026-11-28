@@ -295,6 +295,23 @@ class SignupRecordsApiTest(EventTestCase):
             self._assert_json_error(self._get(self.org_staff, {"series": "x"}), 400),
         )
 
+    def test_out_of_range_offset_datetime_is_400(self) -> None:
+        self._signed(self.make_event(scheduled_at=T0))
+        cases = (
+            ("since", "0001-01-01T00:00:00+05:00"),
+            ("until", "9999-12-31T23:00:00-05:00"),
+        )
+        for name, text in cases:
+            with self.subTest(name=name):
+                body = self._assert_json_error(
+                    self._get(self.org_staff, {name: text}), 400
+                )
+                self.assertEqual(
+                    body, {name: ["Use an ISO date or a datetime with a UTC offset."]}
+                )
+                internal = self._internal({name: text, "organization": self.org.pk})
+                self.assertIn(name, self._assert_json_error(internal, 400))
+
     def test_org_timezone_dates(self) -> None:
         Organization.objects.filter(pk=self.org.pk).update(timezone="America/New_York")
         inside = self.make_event(scheduled_at=datetime(2026, 3, 13, 1, 0, tzinfo=UTC))
