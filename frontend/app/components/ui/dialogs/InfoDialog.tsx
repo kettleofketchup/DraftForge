@@ -14,21 +14,18 @@ import { cn } from '~/lib/utils';
 export type InfoDialogSize = 'sm' | 'md' | 'lg';
 
 export interface InfoDialogProps {
-  /** Whether the dialog is open */
   open: boolean;
-  /** Callback when open state changes */
   onOpenChange: (open: boolean) => void;
-  /** Dialog title. Accepts a node so callers can attach test ids / markup. */
+  onCloseAutoFocus?: React.ComponentProps<
+    typeof DialogContent
+  >['onCloseAutoFocus'];
+  /** Accepts a node so callers can attach test ids / markup. */
   title: React.ReactNode;
-  /** Dialog description for accessibility (visually hidden if not provided) */
+  /** Omitted: a visually hidden "<title> dialog", or "Dialog" for a non-string title. */
   description?: string;
-  /** Dialog content */
   children: React.ReactNode;
-  /** Dialog size */
   size?: InfoDialogSize;
-  /** Whether to show close button in footer */
   showClose?: boolean;
-  /** Close button label */
   closeLabel?: string;
   'data-testid'?: string;
 }
@@ -57,6 +54,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
     {
       open,
       onOpenChange,
+      onCloseAutoFocus,
       title,
       description,
       children,
@@ -71,6 +69,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           ref={ref}
+          onCloseAutoFocus={onCloseAutoFocus}
           data-testid={testId}
           className={cn('max-w-[calc(100%-2rem)]', sizeClasses[size])}
         >

@@ -1,0 +1,1 @@
+- Link missing Discord preview prerequisites to event and series settings without losing unsaved edits.

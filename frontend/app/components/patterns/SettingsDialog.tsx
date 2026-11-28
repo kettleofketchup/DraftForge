@@ -55,6 +55,8 @@ export interface SettingsSection<
 
 export interface SettingsDialogHandle<V extends string = string> {
   selectSection: (value: V) => void;
+  /** Clears search, then reveals `field` in its owning section, else `fallbackSection`. */
+  revealField: (field: string, fallbackSection: V) => void;
   /**
    * The section that renders `field` (or a collapsed block holding it), else its
    * registered section. `within` limits the lookup to those section values, for
@@ -117,11 +119,6 @@ function isTypingTarget(t: HTMLElement): boolean {
   );
 }
 
-/**
- * Full-screen settings form: a searchable category sidebar (a tab strip on
- * phones) beside the active category's fields. Search matches category names,
- * keywords and the labels and headings rendered in each mounted category.
- */
 interface SettingsLayoutOptions<V extends string> {
   /** Resets to the first section each time this turns true. */
   open: boolean;
@@ -129,7 +126,7 @@ interface SettingsLayoutOptions<V extends string> {
   testIdPrefix: string;
   sectionRef?: React.Ref<SettingsDialogHandle<V>>;
   searchPlaceholder?: string;
-  /** Requested section, e.g. from the URL; falls back to the first when unknown or hidden. */
+  /** Requested section, e.g. from the URL; falls back to the first when unknown or null. */
   value?: string | null;
   onValueChange?: (value: V) => void;
 }
@@ -198,11 +195,15 @@ function useSettingsLayout<V extends string>({
     },
     [],
   );
-  React.useImperativeHandle(
-    sectionRef,
-    () => ({ selectSection, sectionOfField }),
-    [selectSection, sectionOfField],
-  );
+  const openRef = React.useRef(open);
+  openRef.current = open;
+  const mountedRef = React.useRef(false);
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const q = React.useMemo(() => terms(query), [query]);
   const searching = q.length > 0;
@@ -383,7 +384,7 @@ function useSettingsLayout<V extends string>({
   );
 
   const jumpTo = React.useCallback(
-    (hit: SearchHit<V>) => {
+    (hit: SearchHit<V>, panelFallback = false) => {
       if (hit.el && !hit.el.isConnected) return;
       selectSection(hit.section);
       cancelAnimationFrame(rafRef.current);
@@ -421,9 +422,38 @@ function useSettingsLayout<V extends string>({
           return;
         }
         if (hit.el) revealLabel(hit.el);
+        else if (panelFallback && panel) highlight(panel, panel);
       });
     },
     [selectSection, highlight, revealLabel],
+  );
+
+  const revealField = React.useCallback(
+    (field: string, fallbackSection: V) => {
+      if (!mountedRef.current || !openRef.current) return;
+      const known = (value: V | undefined) =>
+        value !== undefined &&
+        sectionsRef.current.some((s) => s.value === value);
+      const owner = sectionOfField(field);
+      const section = known(owner)
+        ? owner
+        : known(fallbackSection)
+          ? fallbackSection
+          : undefined;
+      if (section === undefined) return;
+      setQuery('');
+      jumpTo(
+        { key: `${section}:${field}`, section, label: field, field },
+        true,
+      );
+    },
+    [sectionOfField, jumpTo],
+  );
+
+  React.useImperativeHandle(
+    sectionRef,
+    () => ({ selectSection, revealField, sectionOfField }),
+    [selectSection, revealField, sectionOfField],
   );
 
   React.useEffect(() => {
@@ -708,6 +738,7 @@ function useSettingsLayout<V extends string>({
       data-section={s.value}
       className={cn(
         'mx-auto flex w-full max-w-4xl flex-col gap-4',
+        'data-[search-hit]:rounded-md data-[search-hit]:ring-2 data-[search-hit]:ring-ring data-[search-hit]:ring-offset-2 data-[search-hit]:ring-offset-background',
         '[&_[data-search-hit]]:rounded-md [&_[data-search-hit]]:ring-2 [&_[data-search-hit]]:ring-ring [&_[data-search-hit]]:ring-offset-2 [&_[data-search-hit]]:ring-offset-background',
       )}
     >
@@ -720,7 +751,8 @@ function useSettingsLayout<V extends string>({
 
 /**
  * Full-screen settings form: a searchable category sidebar (a tab strip on
- * phones) beside the active category's fields.
+ * phones) beside the active category's fields. Search matches category names,
+ * keywords and the labels and headings rendered in each mounted category.
  */
 export function SettingsDialog<V extends string>({
   open,

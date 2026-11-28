@@ -1,8 +1,15 @@
 import type { TFunction } from 'i18next';
 import { useFormContext } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { DiscordPreviewButton } from '~/components/discord';
+import {
+  DiscordPreviewButton,
+  type DiscordPreviewRenderControls,
+} from '~/components/discord';
 import { openSignupsFromForm } from '~/components/events/createEventPayload';
+import {
+  useEventFormNavigation,
+  type EventFormNavigation,
+} from '~/components/events/form/EventFormNavigation';
 import { useUserStore } from '~/store/userStore';
 import { previewEventDiscordMessage } from './api';
 import {
@@ -10,7 +17,7 @@ import {
   valuesModeFor,
   type DiscordPreviewContext,
 } from './context';
-import { EventPreviewBody } from './EventPreviewBody';
+import { EventPreviewBody, type MissingFieldAction } from './EventPreviewBody';
 import { eventDiscordPreviewKeys } from './queryKeys';
 import type { PreviewKind } from './schemas';
 import { toPreviewValues } from './toPreviewValues';
@@ -31,6 +38,24 @@ export function kindTitle(
   };
 }
 
+const MISSING_FIELD_DESTINATIONS: ReadonlyMap<string, string> = new Map([
+  ['name', 'name'],
+  ['scheduled_at', 'scheduled_at'],
+  ['schedule', 'frequency'],
+]);
+
+function missingFieldActions(
+  navigation: EventFormNavigation,
+  controls: DiscordPreviewRenderControls,
+): MissingFieldAction {
+  return (code) => {
+    const destination = MISSING_FIELD_DESTINATIONS.get(code);
+    if (destination === undefined) return undefined;
+    return () =>
+      controls.closeAndThen(() => navigation.navigateToField(destination));
+  };
+}
+
 export function EventDiscordPreviewButton({
   kind,
   organizationId,
@@ -43,6 +68,7 @@ export function EventDiscordPreviewButton({
   const { t } = useTranslation('discordPreview');
   const form = useFormContext<Record<string, unknown>>();
   const viewerId = useUserStore((s) => s.currentUser?.pk);
+  const navigation = useEventFormNavigation();
   const title = kindTitle(t)[kind]();
   const testId = `discord-preview-${kind}`;
 
@@ -80,8 +106,14 @@ export function EventDiscordPreviewButton({
       title={title}
       data-testid={testId}
       fetchPreview={fetchPreview}
-      render={(data) => (
-        <EventPreviewBody data={data} organizationId={organizationId} />
+      render={(data, controls) => (
+        <EventPreviewBody
+          data={data}
+          organizationId={organizationId}
+          missingFieldAction={
+            navigation ? missingFieldActions(navigation, controls) : undefined
+          }
+        />
       )}
     />
   );
