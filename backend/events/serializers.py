@@ -530,6 +530,10 @@ class ReadyCheckConfirmInputSerializer(serializers.Serializer):
     user_id = serializers.IntegerField()
 
 
+class SpotTransferRequestSerializer(serializers.Serializer):
+    recipient_user_id = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+
+
 class EventSlimSerializer(serializers.ModelSerializer):
     """Lightweight serializer for event list views — only fields needed for cards."""
 

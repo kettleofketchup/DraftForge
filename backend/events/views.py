@@ -78,6 +78,7 @@ from events.eligibility import (
     precheck_friend_id,
     recheck_signup,
 )
+from events.exceptions import SpotTransferRefused
 from events.history import (
     HISTORY_MAX_PAGE_SIZE,
     HISTORY_PAGE_SIZE,
@@ -139,10 +140,12 @@ from events.serializers import (
     ReadyCheckSerializer,
     RepeaterSubscriptionSerializer,
     SignupLedgerEntrySerializer,
+    SpotTransferRequestSerializer,
     VoicePresenceOverrideInputSerializer,
 )
 from events.services import (
     REPEATER_SCHEDULE_FIELDS,
+    TRANSFER_REFUSAL_MESSAGES,
     OccurrenceCollision,
     apply_signup_input,
     approve_signup,
@@ -172,6 +175,7 @@ from events.services import (
     sync_tournament_from_event,
     teardown_event,
     teardown_event_repeater,
+    transfer_spot,
     unconfirm_signup,
 )
 from events.services import void_withdrawal as void_withdrawal_service
@@ -2049,6 +2053,68 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(
             EventSignupSerializer(restored, context={"request": request}).data
         )
+
+    @action(detail=True, methods=["post"], url_path="transfer")
+    def transfer(self, request: Request, pk: str | None = None) -> Response:
+        signup = self.get_object()
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        is_owner = signup.user_id == request.user.pk
+        if not is_owner and not has_event_staff_access(request.user, signup.event):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        reason = parse_staff_reason(request.data)
+        acknowledged = (
+            [] if is_owner else parse_override_request(request.data).acknowledged_codes
+        )
+        recipient = _transfer_recipient(request.data)
+        if recipient is None:
+            return _transfer_refusal_response(
+                SpotTransferRefused(
+                    "recipient_not_found",
+                    TRANSFER_REFUSAL_MESSAGES["recipient_not_found"],
+                )
+            )
+        try:
+            result = transfer_spot(
+                signup,
+                recipient,
+                actor=SignupActor.for_request_on(
+                    request, signup.user, signup.event, staff_only=not is_owner
+                ),
+                reason=reason,
+                acknowledged=acknowledged,
+            )
+        except SpotTransferRefused as e:
+            return _transfer_refusal_response(e)
+        context = {"request": request}
+        return Response(
+            {
+                "mode": result.mode,
+                "correlation_id": result.correlation_id,
+                "giver": EventSignupSerializer(result.giver, context=context).data,
+                "recipient": EventSignupSerializer(
+                    result.recipient, context=context
+                ).data,
+            }
+        )
+
+
+def _transfer_recipient(data: Any) -> CustomUser | None:
+    serializer = SpotTransferRequestSerializer(data=data)
+    if not serializer.is_valid():
+        return None
+    return (
+        CustomUser.objects.nocache()
+        .filter(pk=serializer.validated_data["recipient_user_id"])
+        .first()
+    )
+
+
+def _transfer_refusal_response(exc: SpotTransferRefused) -> Response:
+    body: dict[str, object] = {"code": exc.code, "error": exc.message}
+    if exc.reasons:
+        body["reasons"] = list(exc.reasons)
+    return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EventTeamViewSet(viewsets.ModelViewSet):
