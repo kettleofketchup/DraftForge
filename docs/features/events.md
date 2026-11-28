@@ -135,6 +135,19 @@ Each message toggle has a **Preview** button that shows exactly what Discord wil
 
 **Discord signup pipeline** (Dota events): clicking *Sign Up* either signs the user up directly (profile complete) or opens a modal with rank-status select → position select view → optional medal+star follow-up → optional screenshot upload. Each step routes through `events.services.apply_signup_input` — the **same service the web `/signup/` endpoint uses** — so the two paths converge on identical writes. Deadlock signups take a separate Discord-only branch that writes `PlayerDeadlockProfile.rank` directly.
 
+#### Signup post delivery
+
+Signup posts use the selected channel's type: ordinary text and announcement channels receive a normal message; forum channels receive a new forum post. The per-post channel choices and announcement-channel defaults above still apply.
+
+When Discord confirms a failed automatic attempt, retries wait 1, 2, 4 and 8 minutes after successive failures, stopping after 5 attempts in total. Changing the channel does not reset this limit or trigger a retry by itself. After fixing the configuration, use **Repost** in the event's **Discord Tasks** panel to start a fresh attempt budget.
+
+Repost requires confirmation and is refused while a signup post attempt is in progress. **Queue repost** queues work; a queued response does not mean the post has appeared in Discord. A queue failure means the work was not accepted, not that Discord rejected a post.
+
+!!! warning "An earlier post may already exist"
+    If an earlier attempt's result is unknown, automatic posting stops to avoid duplicates. Check the destination in Discord before explicitly reposting: an earlier post may already exist, and Repost can create a second post. This warning also applies when no successful post has been recorded yet.
+
+A failed announcement notice does not cause the signup post to be posted again. If the current signup post is deleted in Discord, it is eligible for automatic recreation when the deletion is detected; a deletion for an older, replaced post does not clear its replacement.
+
 ### RSVP & Signups
 
 Players RSVP from the event page (web) or via the Discord signup post. The signup flow respects event configuration:

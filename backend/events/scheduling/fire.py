@@ -12,6 +12,9 @@ Idempotency:
   DiscordMessageLog(source, source_id) WHERE success IS NOT FALSE is the
   actual correctness primitive: the reminder task's pre-send claim raises
   IntegrityError if two workers race past the cached exists() check.
+- Signup post candidates that are cooling down, exhausted, uncertain or
+  in flight are dropped before dispatch; the task's begin call stays
+  authoritative when that lookup is unavailable.
 - Stale leases (NULL >5min, False >1hr) are reaped by
   sweep_stale_discord_leases so transient failures don't permanently brick
   reminders.
@@ -25,8 +28,14 @@ from celery import current_app
 from dateutil.parser import isoparse
 from django.utils import timezone
 
-from app.internal_client import check_message_log_exists, get_events_list
+from app.internal_client import (
+    check_message_log_exists,
+    get_events_list,
+    get_signup_blocked_event_ids,
+)
 from events.scheduling.registry import REMINDERS, ScheduledReminder
+
+SIGNUP_SOURCE = "event_announcement"
 
 
 def fire_due_reminders() -> str:
@@ -40,6 +49,8 @@ def fire_due_reminders() -> str:
 
     for reminder in REMINDERS:
         candidates = _candidates_for(reminder, get_events_list)
+        if reminder.log_source == SIGNUP_SOURCE:
+            candidates = _without_blocked_signups(candidates)
         for ev in candidates:
             if not _ev_attr(ev, reminder.enabled_field):
                 continue
@@ -72,6 +83,15 @@ def fire_due_reminders() -> str:
                 dispatched += 1
 
     return f"fire_due_reminders: dispatched={dispatched} reminders={len(REMINDERS)}"
+
+
+def _without_blocked_signups(
+    candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    blocked = get_signup_blocked_event_ids([_ev_attr(ev, "id") for ev in candidates])
+    if not blocked:
+        return candidates
+    return [ev for ev in candidates if _ev_attr(ev, "id") not in blocked]
 
 
 def _candidates_for(

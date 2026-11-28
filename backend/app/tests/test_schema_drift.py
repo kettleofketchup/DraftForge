@@ -95,16 +95,22 @@ class MessageLogSchemaDriftTest(TestCase):
 
 
 class SyncDiscordStateSchemaDriftTest(TestCase):
-    def test_sync_state_validates(self):
+    def test_sync_state_validates(self) -> None:
         data = {
             "active_events": [{"pk": 1, "name": "Test", "state": "signups_open"}],
             "existing_logs": [["event_announcement", 1]],
             "events_with_signup": [1],
             "events_with_scheduled": [],
             "events_with_recent_attempt": [],
+            "events_with_signup_blocked": [2],
         }
         parsed = SyncDiscordStateSchema.model_validate(data)
         self.assertEqual(len(parsed.active_events), 1)
+        self.assertEqual(parsed.events_with_signup_blocked, [2])
+        del data["events_with_signup_blocked"]
+        self.assertEqual(
+            SyncDiscordStateSchema.model_validate(data).events_with_signup_blocked, []
+        )
 
 
 class DiscordEventStateSchemaDriftTest(TestCase):
