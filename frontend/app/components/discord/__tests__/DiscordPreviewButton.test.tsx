@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
 import { describe, expect, it, vi } from 'vitest';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { createI18nInstance } from '~/i18n/config';
 import { DiscordPreviewButton } from '../DiscordPreviewButton';
 
@@ -325,6 +326,117 @@ describe('DiscordPreviewButton: fetching', () => {
     expect(await screen.findByTestId('payload')).toHaveTextContent(
       'beta payload',
     );
+  });
+});
+
+describe('DiscordPreviewButton: deferred navigation', () => {
+  function navigationPreview(onNavigate: () => void, onSuperseded = () => {}) {
+    return (
+      <DiscordPreviewButton
+        queryKey={['navigation']}
+        title="Signup post"
+        fetchPreview={() => Promise.resolve('ready')}
+        render={(_data, { closeAndThen }) => (
+          <SecondaryButton
+            type="button"
+            onClick={() => {
+              closeAndThen(onSuperseded);
+              closeAndThen(onNavigate);
+            }}
+          >
+            Go to setting
+          </SecondaryButton>
+        )}
+      />
+    );
+  }
+
+  it('closes before consuming a navigation callback exactly once', async () => {
+    const dismissed: boolean[] = [];
+    const superseded = vi.fn();
+    wrap(
+      navigationPreview(() => {
+        dismissed.push(screen.queryByTestId('discord-preview-dialog') === null);
+      }, superseded),
+    );
+    openButton();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Go to setting' }),
+    );
+    await waitFor(() => expect(dismissed).toEqual([true]));
+    expect(superseded).not.toHaveBeenCalled();
+  });
+
+  it.each(['Close', 'Escape'])(
+    'normal %s does not invoke navigation',
+    async (method) => {
+      const navigate = vi.fn();
+      wrap(navigationPreview(navigate));
+      openButton();
+      await screen.findByRole('button', { name: 'Go to setting' });
+      if (method === 'Close') closeDialog();
+      else fireEvent.keyDown(document, { key: 'Escape' });
+      await waitFor(() =>
+        expect(screen.queryByTestId('discord-preview-dialog')).toBeNull(),
+      );
+      await act(async () => {});
+      expect(navigate).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['Close', 'Escape'])(
+    'normal %s returns focus to the preview trigger',
+    async (method) => {
+      wrap(navigationPreview(vi.fn()));
+      const trigger = screen.getByRole('button', {
+        name: /preview signup post/i,
+      });
+      trigger.focus();
+      openButton();
+      await screen.findByRole('button', { name: 'Go to setting' });
+      if (method === 'Close') closeDialog();
+      else fireEvent.keyDown(document, { key: 'Escape' });
+      await waitFor(() =>
+        expect(screen.queryByTestId('discord-preview-dialog')).toBeNull(),
+      );
+      expect(trigger).toHaveFocus();
+    },
+  );
+
+  it('does not reuse a pending callback on reopen', async () => {
+    const navigate = vi.fn();
+    wrap(navigationPreview(navigate));
+    openButton();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Go to setting' }),
+    );
+    await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+    openButton();
+    await screen.findByRole('button', { name: 'Go to setting' });
+    closeDialog();
+    await waitFor(() =>
+      expect(screen.queryByTestId('discord-preview-dialog')).toBeNull(),
+    );
+    await act(async () => {});
+    expect(navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('unmount cancels pending navigation', async () => {
+    const navigate = vi.fn();
+    const view = wrap(navigationPreview(navigate));
+    openButton();
+    const action = await screen.findByRole('button', { name: 'Go to setting' });
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        fireEvent.click(action);
+        view.unmount();
+      });
+      await act(async () => vi.runAllTimersAsync());
+      expect(navigate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

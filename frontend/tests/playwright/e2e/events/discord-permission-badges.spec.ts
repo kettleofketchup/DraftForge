@@ -81,6 +81,47 @@ async function edit(page: Page, eventId: number) {
   return page.getByTestId('edit-event-modal');
 }
 
+async function channelChoices(page: Page) {
+  await page.route(
+    `**/api/discord/organizations/${data.org_pk}/channels/**`,
+    (route) =>
+      route.fulfill({
+        json: {
+          channels: [
+            {
+              id: data.channel_ids.attendance,
+              name: 'attendance',
+              type: 0,
+              type_label: 'Text',
+            },
+            {
+              id: data.channel_ids.announcement,
+              name: 'announcements',
+              type: 0,
+              type_label: 'Text',
+            },
+          ],
+        },
+      }),
+  );
+}
+
+async function pickChannel(
+  page: Page,
+  scope: Locator | Page,
+  picker: string,
+  channelId: string,
+) {
+  const trigger = scope.getByTestId(picker);
+  await trigger.click();
+  await page.getByTestId(`${picker}-option-${channelId}`).click();
+  const name =
+    channelId === data.channel_ids.announcement
+      ? 'announcements'
+      : 'attendance';
+  await expect(trigger).toContainText(name);
+}
+
 async function savedChecks(context: BrowserContext, eventId: number) {
   const response = await context.request.get(
     `${API_URL}/events/${eventId}/permission-checks/`,
@@ -148,7 +189,7 @@ test.describe('Discord permission badges @cicd', () => {
   }) => {
     const modal = await edit(page, data.posted_event_pk);
     await expect(badge(modal, 'attendance_reminder')).toHaveText(
-      'Missing permissions',
+      '1 setting blocked',
     );
     const saved = page.waitForResponse(
       (response) =>
@@ -161,7 +202,7 @@ test.describe('Discord permission badges @cicd', () => {
 
     const reopened = await edit(page, data.posted_event_pk);
     await expect(badge(reopened, 'attendance_reminder')).toHaveText(
-      'Missing permissions',
+      '1 setting blocked',
     );
     const preview = page.waitForResponse(
       (response) =>
@@ -189,9 +230,21 @@ test.describe('Discord permission badges @cicd', () => {
     await expect(badge(reopened, 'attendance_reminder')).toHaveText(
       'Permissions verified',
     );
-    await badge(reopened, 'attendance_reminder').click();
+    await expect(badge(reopened, 'announcement')).toHaveText(
+      'Permissions verified',
+    );
     await expect(
-      page.getByTestId('discord-permission-details-attendance_reminder'),
+      reopened.getByTestId(/^discord-permission-shared-/),
+    ).toHaveCount(0);
+    await badge(reopened, 'announcement').click();
+    const panel = page.getByRole('dialog', {
+      name: 'Announcement channel permission details',
+    });
+    await expect(panel).toContainText(
+      'Post attendance reminder in Discord (no channel of its own; uses the announcement channel) can post here.',
+    );
+    await expect(
+      panel.getByTestId('discord-permission-details-attendance_reminder'),
     ).toContainText(`#${fallback?.destination.name} (fallback)`);
     const unchanged = await context.request.get(
       `${API_URL}/events/${data.posted_event_pk}/`,
@@ -407,39 +460,94 @@ test.describe('Discord permission badges @cicd', () => {
     });
   }
 
-  test('one Discord signup badge keeps both destinations and scrolls details in a short viewport', async ({
+  test('a blocked announcement channel never turns the working signup channel red', async ({
     page,
   }) => {
-    await page.route(
-      `**/api/discord/organizations/${data.org_pk}/channels/**`,
-      (route) =>
-        route.fulfill({
-          json: {
-            channels: [
-              {
-                id: data.channel_ids.attendance,
-                name: 'attendance',
-                type: 0,
-                type_label: 'Text',
-              },
-              {
-                id: data.channel_ids.announcement,
-                name: 'announcements',
-                type: 0,
-                type_label: 'Text',
-              },
-            ],
-          },
-        }),
+    await channelChoices(page);
+    const modal = await edit(page, data.fresh_event_pk);
+    await modal.getByTestId('discord-discord_post_signups').check();
+    await pickChannel(
+      page,
+      modal,
+      'discord-signup-channel-select',
+      data.channel_ids.announcement,
     );
+    await pickChannel(
+      page,
+      modal,
+      'discord-announcement-channel-select',
+      data.channel_ids.attendance,
+    );
+    const signup = badge(modal, 'signup_post');
+    const announcement = badge(modal, 'announcement');
+    await expect(signup).toHaveText('Permissions verified');
+    await expect(announcement).toHaveText('3 settings blocked');
+    await announcement.click();
+    const panel = page.getByRole('dialog', {
+      name: 'Announcement channel permission details',
+    });
+    await expect(panel).toContainText(
+      "Pre-day announcement won't post here — missing Embed Links.",
+    );
+    await expect(panel).toContainText(
+      "Post event signup embed (announcement fallback) won't post here — missing Embed Links.",
+    );
+    await page.keyboard.press('Escape');
+    await modal.getByTestId('discord-discord_confirm_attendance').uncheck();
+    await expect(announcement).toHaveText('2 settings blocked');
+    await expect(signup).toHaveText('Permissions verified');
+    await pickChannel(
+      page,
+      modal,
+      'discord-announcement-channel-select',
+      data.channel_ids.announcement,
+    );
+    await expect(announcement).toHaveText('Permissions verified');
+    await expect(signup).toHaveText('Permissions verified');
+    await signup.click();
+    const shared = page.getByRole('dialog', {
+      name: 'Signup channel permission details',
+    });
+    await expect(shared).toContainText('Pre-day announcement can post here.');
+    await expect(shared).toContainText(
+      'Post event signup embed can post here.',
+    );
+    await page.keyboard.press('Escape');
+  });
+
+  test('each channel badge covers only the settings that send there and scrolls details in a short viewport', async ({
+    page,
+  }) => {
+    await channelChoices(page);
     const modal = await edit(page, data.fresh_event_pk);
     await page.getByTestId('discord-discord_post_signups').check();
-    await page.getByTestId('discord-signup-channel-select').click();
-    await page.keyboard.press('Home');
-    await page.keyboard.press('Enter');
+    await pickChannel(
+      page,
+      modal,
+      'discord-signup-channel-select',
+      data.channel_ids.attendance,
+    );
     const trigger = badge(modal, 'signup_post');
-    await expect(trigger).toContainText('Missing permissions');
+    await expect(trigger).toHaveText('2 settings blocked');
     await expect(badge(modal, 'signup_fallback')).toHaveCount(0);
+    await expect(badge(modal, 'attendance_reminder')).toHaveText(
+      '2 settings blocked',
+    );
+    const announcement = badge(modal, 'announcement');
+    await expect(announcement).toHaveText('Permissions verified');
+    await announcement.click();
+    const announcementPanel = page.getByRole('dialog', {
+      name: 'Announcement channel permission details',
+    });
+    await expect(announcementPanel).toContainText(
+      'Post event signup embed (announcement fallback) can post here.',
+    );
+    await expect(announcementPanel).toContainText(
+      'Pre-day announcement can post here.',
+    );
+    await expect(announcementPanel).not.toContainText('blocked');
+    await page.keyboard.press('Escape');
+    await expect(announcementPanel).toBeHidden();
     await expect(
       trigger.getByTestId('discord-permission-discord-icon'),
     ).toBeVisible();
@@ -449,26 +557,36 @@ test.describe('Discord permission badges @cicd', () => {
     await page.setViewportSize({ width: 390, height: 500 });
     await trigger.click();
     const panel = page.getByRole('dialog', {
-      name: 'Signup post permission details',
+      name: 'Signup channel permission details',
     });
+    await expect(panel).toContainText(
+      "Post event signup embed won't post here — missing Embed Links.",
+    );
+    await expect(panel).toContainText(
+      "Post attendance reminder in Discord won't post here — missing Embed Links.",
+    );
     await expect(
-      panel.getByRole('heading', { name: 'Primary signup permissions' }),
+      panel.getByRole('heading', {
+        name: 'Post event signup embed permissions',
+      }),
     ).toHaveCount(1);
     await expect(
-      panel.getByRole('heading', { name: 'Announcement fallback permissions' }),
+      panel.getByRole('heading', {
+        name: 'Post attendance reminder in Discord permissions',
+      }),
     ).toHaveCount(1);
     await expect(
       panel.getByTestId('discord-permission-details-signup_post'),
     ).toContainText('Status: Missing permissions');
     await expect(
-      panel.getByTestId('discord-permission-details-signup_fallback'),
-    ).toContainText('Status: Permissions verified');
+      panel.getByTestId('discord-permission-details-attendance_reminder'),
+    ).toContainText('Status: Missing permissions');
     const bounds = await panel.boundingBox();
     expect(bounds).not.toBeNull();
     expect(bounds!.y).toBeGreaterThanOrEqual(15);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(485);
     const title = panel.getByTestId('discord-permission-details-title');
-    await expect(title).toHaveText('Signup post permissions');
+    await expect(title).toHaveText('Signup channel permissions');
     await expectPaddedScroll(panel);
     await expectFullyInside(panel, modal);
     const footer = modal.getByTestId('form-dialog-submit');
@@ -477,7 +595,7 @@ test.describe('Discord permission badges @cicd', () => {
     await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0);
     await expectFullyInside(title, panel);
     await expectFullyInside(
-      panel.getByRole('heading', { name: 'Primary signup permissions' }),
+      panel.getByRole('heading', { name: 'Blocked', exact: true }),
       scroll,
     );
     expect(
@@ -492,7 +610,7 @@ test.describe('Discord permission badges @cicd', () => {
           .filter(
             (viewport) =>
               !viewport.closest(
-                '[aria-label="Signup post permission details"]',
+                '[aria-label="Signup channel permission details"]',
               ),
           )
           .map((viewport) => viewport.scrollTop),
@@ -514,7 +632,7 @@ test.describe('Discord permission badges @cicd', () => {
     await page.keyboard.press('Home');
     await expect.poll(() => scroll.evaluate((el) => el.scrollTop)).toBe(0);
     await expectFullyInside(
-      panel.getByRole('heading', { name: 'Primary signup permissions' }),
+      panel.getByRole('heading', { name: 'Blocked', exact: true }),
       scroll,
     );
     const session = await page.context().newCDPSession(page);

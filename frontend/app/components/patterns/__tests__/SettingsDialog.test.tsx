@@ -7,10 +7,14 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import { useState } from 'react';
+import { createRef, useState, type Ref } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '~/components/ui/tooltip';
-import { SettingsDialog, type SettingsSection } from '../SettingsDialog';
+import {
+  SettingsDialog,
+  type SettingsDialogHandle,
+  type SettingsSection,
+} from '../SettingsDialog';
 
 class ResizeObserverStub {
   observe() {}
@@ -72,20 +76,99 @@ const sections: SettingsSection[] = [
 
 const onSubmit = vi.fn();
 
-function Harness({ items = sections }: { items?: SettingsSection[] }) {
+function Harness({
+  items = sections,
+  sectionRef,
+  prefix = 's',
+  open = true,
+}: {
+  items?: SettingsSection[];
+  sectionRef?: Ref<SettingsDialogHandle>;
+  prefix?: string;
+  open?: boolean;
+}) {
   return (
     <TooltipProvider>
       <SettingsDialog
-        open
+        open={open}
         onOpenChange={() => {}}
         title="Settings"
         onSubmit={onSubmit}
         sections={items}
-        testIdPrefix="s"
+        testIdPrefix={prefix}
+        sectionRef={sectionRef}
       />
     </TooltipProvider>
   );
 }
+
+function Collapsed() {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div data-fields="secret">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(true)}
+      >
+        More options
+      </button>
+      {expanded && (
+        <div data-field="secret">
+          <label htmlFor="secret-input">Secret</label>
+          <input id="secret-input" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const nameRow = (id: string) => (
+  <div data-field="name">
+    <label htmlFor={id}>Name</label>
+    <input id={id} />
+  </div>
+);
+
+const revealSections: SettingsSection[] = [
+  {
+    value: 'general',
+    label: 'General',
+    content: (
+      <div>
+        <label htmlFor="title-input">Title</label>
+        <input id="title-input" />
+      </div>
+    ),
+  },
+  {
+    value: 'schedule',
+    label: 'Schedule',
+    content: (
+      <div data-field="frequency">
+        <label htmlFor="frequency-input">Frequency</label>
+        <input id="frequency-input" />
+      </div>
+    ),
+  },
+  {
+    value: 'advanced',
+    label: 'Advanced',
+    content: <Collapsed />,
+  },
+  {
+    value: 'discord',
+    label: 'Discord',
+    lazy: true,
+    fields: { channel: { label: 'Announcement channel' } },
+    content: (
+      <div data-field="channel">
+        <label htmlFor="channel-input">Announcement channel</label>
+        <input id="channel-input" />
+      </div>
+    ),
+  },
+];
 
 const search = () => screen.getByTestId('s-search');
 const type = (value: string) =>
@@ -204,6 +287,170 @@ describe('SettingsDialog', () => {
     expect(document.activeElement).toBe(
       document.getElementById('region-input'),
     );
+    expect(search()).toHaveValue('region');
+  });
+
+  describe('imperative field reveal', () => {
+    it('reveals a lazy field and clears stale programmatic search', async () => {
+      const ref = createRef<SettingsDialogHandle>();
+      render(<Harness items={revealSections} sectionRef={ref} />);
+      const title = screen.getByLabelText('Title');
+      fireEvent.change(title, { target: { value: 'Unsaved title' } });
+      expect(screen.queryByLabelText('Announcement channel')).toBeNull();
+      type('no matching setting');
+
+      act(() => ref.current!.revealField('channel', 'general'));
+
+      expect(navItem('discord')).toHaveAttribute('data-state', 'active');
+      expect(search()).toHaveValue('');
+      await waitFor(() =>
+        expect(screen.getByLabelText('Announcement channel')).toHaveFocus(),
+      );
+      expect(
+        screen.getByLabelText('Announcement channel').closest('[data-field]'),
+      ).toHaveAttribute('data-search-hit');
+      act(() => ref.current!.selectSection('general'));
+      expect(screen.getByLabelText('Title')).toBe(title);
+      expect(title).toHaveValue('Unsaved title');
+    });
+
+    it('expands a collapsed field', async () => {
+      const ref = createRef<SettingsDialogHandle>();
+      render(<Harness items={revealSections} sectionRef={ref} />);
+
+      act(() => ref.current!.revealField('secret', 'advanced'));
+
+      expect(navItem('advanced')).toHaveAttribute('data-state', 'active');
+      await waitFor(() =>
+        expect(screen.getByLabelText('Secret')).toHaveFocus(),
+      );
+      expect(
+        screen.getByLabelText('Secret').closest('[data-field]'),
+      ).toHaveAttribute('data-search-hit');
+      expect(
+        screen.getByRole('button', { name: 'More options' }),
+      ).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('prefers rendered ownership over fallback', async () => {
+      const ref = createRef<SettingsDialogHandle>();
+      const items = revealSections.map((section) =>
+        section.value === 'discord'
+          ? { ...section, fields: { frequency: { label: 'Frequency' } } }
+          : section,
+      );
+      render(<Harness items={items} sectionRef={ref} />);
+
+      act(() => ref.current!.revealField('frequency', 'general'));
+
+      expect(navItem('schedule')).toHaveAttribute('data-state', 'active');
+      await waitFor(() =>
+        expect(screen.getByLabelText('Frequency')).toHaveFocus(),
+      );
+      expect(
+        screen.getByLabelText('Frequency').closest('[data-field]'),
+      ).toHaveAttribute('data-search-hit');
+    });
+
+    it('does not focus another settings instance', async () => {
+      const ref = createRef<SettingsDialogHandle>();
+      render(
+        <>
+          <Harness
+            prefix="other"
+            items={[
+              {
+                value: 'general',
+                label: 'General',
+                content: nameRow('other-name'),
+              },
+            ]}
+          />
+          <Harness
+            sectionRef={ref}
+            items={[
+              { value: 'general', label: 'General', content: <p>General</p> },
+              {
+                value: 'details',
+                label: 'Details',
+                content: nameRow('own-name'),
+              },
+            ]}
+          />
+        </>,
+      );
+
+      act(() => ref.current!.revealField('name', 'general'));
+
+      expect(navItem('details')).toHaveAttribute('data-state', 'active');
+      await waitFor(() =>
+        expect(document.getElementById('own-name')).toHaveFocus(),
+      );
+      expect(
+        document.getElementById('own-name')!.closest('[data-field]'),
+      ).toHaveAttribute('data-search-hit');
+      expect(
+        document.getElementById('other-name')!.closest('[data-field]'),
+      ).not.toHaveAttribute('data-search-hit');
+    });
+
+    it('focuses the panel for an unresolved row', async () => {
+      const ref = createRef<SettingsDialogHandle>();
+      render(<Harness items={revealSections} sectionRef={ref} />);
+
+      act(() => ref.current!.revealField('missing', 'schedule'));
+
+      expect(navItem('schedule')).toHaveAttribute('data-state', 'active');
+      const panel = screen.getByRole('tabpanel', { name: 'Schedule' });
+      await waitFor(() => expect(panel).toHaveFocus());
+      expect(panel).toHaveAttribute('data-search-hit');
+    });
+
+    it('ignores an unknown fallback section', async () => {
+      const ref = createRef<SettingsDialogHandle>();
+      render(<Harness items={revealSections} sectionRef={ref} />);
+      type('Title');
+      search().focus();
+
+      act(() => ref.current!.revealField('missing', 'removed'));
+      await frame();
+
+      expect(navItem('general')).toHaveAttribute('data-state', 'active');
+      expect(search()).toHaveValue('Title');
+      expect(search()).toHaveFocus();
+    });
+
+    it('does nothing through a closed or unmounted handle', async () => {
+      const ref = createRef<SettingsDialogHandle>();
+      const onSectionChange = vi.fn();
+      const dialog = (open: boolean) => (
+        <TooltipProvider>
+          <SettingsDialog
+            open={open}
+            onOpenChange={() => {}}
+            title="Settings"
+            onSubmit={onSubmit}
+            sections={revealSections}
+            testIdPrefix="s"
+            sectionRef={ref}
+            onSectionChange={onSectionChange}
+          />
+        </TooltipProvider>
+      );
+      const view = render(dialog(true));
+      view.rerender(dialog(false));
+
+      act(() => ref.current!.revealField('channel', 'discord'));
+      await frame();
+      expect(onSectionChange).not.toHaveBeenCalled();
+
+      view.rerender(dialog(true));
+      const handle = ref.current!;
+      view.unmount();
+      act(() => handle.revealField('channel', 'discord'));
+      await frame();
+      expect(onSectionChange).not.toHaveBeenCalled();
+    });
   });
 
   it('jumps to a heading hit and focuses the heading', async () => {

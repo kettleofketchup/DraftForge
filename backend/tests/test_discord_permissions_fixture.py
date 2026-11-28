@@ -17,7 +17,10 @@ from tests.data.discord_permissions import (
     PERMISSION_ORG,
 )
 from tests.populate.discord_permissions import (
+    FIXTURE_KEY,
+    clear_permission_snapshots,
     discord_permissions_test_data,
+    permission_snapshot_keys,
     populate_discord_permissions_data,
 )
 from tests.test_discord_permissions import (
@@ -43,6 +46,14 @@ def _forbid(*args: Any, **kwargs: Any) -> None:
     raise AssertionError("populate dispatched a task")
 
 
+ISOLATED_CACHE: dict[str, dict[str, str]] = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "discord-permissions-fixture",
+    }
+}
+
+
 @override_settings(TEST=True)
 class DiscordPermissionsFixtureTest(TestCase):
     def setUp(self) -> None:
@@ -53,7 +64,8 @@ class DiscordPermissionsFixtureTest(TestCase):
         self.factory = APIRequestFactory()
 
     def clear_snapshot_cache(self) -> None:
-        cache.delete_pattern(f"discord_perm*{PERMISSION_GUILD_ID}*")
+        cache.delete(FIXTURE_KEY)
+        clear_permission_snapshots()
 
     def scenario(self, name: str) -> Any:
         request = self.factory.post(
@@ -211,6 +223,21 @@ class DiscordPermissionsFixtureTest(TestCase):
         )
         self.assertEqual(data.data, second.data)
 
+    @override_settings(CACHES=ISOLATED_CACHE)
+    @patch("tests.test_discord_permissions.isTestEnvironment", return_value=True)
+    def test_scenario_switch_clears_snapshots_on_locmem(self, _env: Any) -> None:
+        self.scenario("all_granted")
+        self.assertEqual(self.attendance_status(), "verified")
+        keys = permission_snapshot_keys()
+        self.assertTrue(cache.get_many(keys))
+        unrelated = "permission-fixture-unrelated"
+        cache.set(unrelated, "keep")
+        self.addCleanup(cache.delete, unrelated)
+        self.scenario("attendance_missing_embed")
+        self.assertEqual(cache.get_many(keys), {})
+        self.assertEqual(cache.get(unrelated), "keep")
+        self.assertEqual(self.attendance_status(), "missing_permissions")
+
     def test_populate_dispatches_no_tasks(self) -> None:
         with (
             patch.object(Task, "apply_async", _forbid),
@@ -221,6 +248,17 @@ class DiscordPermissionsFixtureTest(TestCase):
             populate_discord_permissions_data(force=True)
             populate_discord_permissions_data(force=False)
         self.assertEqual(discord_permissions_test_data()["message_log_count"], 0)
+
+    @override_settings(INTERNAL_SERVICE_TOKEN="fixture-sync-token")
+    def test_events_are_outside_beat_sync(self) -> None:
+        client = APIClient()
+        client.credentials(HTTP_X_INTERNAL_TOKEN="fixture-sync-token")
+        response = client.get("/api/internal/discord/sync-state/")
+        self.assertEqual(response.status_code, 200, response.content)
+        active = {event["pk"] for event in response.json()["active_events"]}
+        self.assertFalse(
+            active & {self.data["fresh_event_pk"], self.data["posted_event_pk"]}
+        )
 
     def test_endpoints_404_outside_test(self) -> None:
         calls = (

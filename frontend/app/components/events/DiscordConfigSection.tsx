@@ -30,8 +30,12 @@ import {
   type PermissionScope,
 } from '~/features/discord-permissions';
 import {
+  channelPermissionGroups,
+  channelUseLabel,
+  SETTING_LABELS,
   SETTINGS_OPERATIONS,
   settingsDescriptors,
+  type ChannelPicker,
 } from '~/features/discord-permissions/descriptors';
 import {
   EventDiscordPreviewButton,
@@ -51,8 +55,8 @@ import {
 import { PostChannelField } from './PostChannelField';
 import {
   NO_CHANNEL_WARNING,
-  SIGNUP_NO_CHANNEL_WARNING,
   postChannelState,
+  SIGNUP_NO_CHANNEL_WARNING,
   type ChannelPost,
 } from './postChannelState';
 import type { discordConfigSchema } from './schemas';
@@ -106,8 +110,6 @@ export const DiscordIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-/** Reusable checkbox field for Discord config options. The `name` prop is
- *  constrained to known DiscordFields keys — a typo'd literal is a TS error. */
 function CheckboxField({
   control,
   name,
@@ -152,7 +154,6 @@ function CheckboxField({
   );
 }
 
-/** Reusable dropdown for reminder timing */
 function HoursSelect({
   control,
   name,
@@ -222,11 +223,13 @@ function AnnouncementChannelField({
   organizationId,
   lead,
   users,
+  diagnostic,
 }: {
   control: Control<DiscordFields>;
   organizationId: number;
   lead: string;
   users: string[];
+  diagnostic?: ReactNode;
 }) {
   return (
     <FormField
@@ -243,6 +246,7 @@ function AnnouncementChannelField({
               data-testid="discord-announcement-channel-select"
             />
           </FormControl>
+          {diagnostic}
           <FormDescription>
             {lead}
             <span className="block">{`Used by: ${users.join(', ')}`}</span>
@@ -359,33 +363,58 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
     };
     return permissionScope ? permissionQuery?.results.get(key) : noServer;
   };
-  const diagnostic = (key: string, relatedKeys: string[] = []) => {
-    const keys = [key, ...relatedKeys].filter((candidate) =>
-      descriptors.some((d) => d.key === candidate),
-    );
-    if (!canCheckPermissions || !keys.length) return null;
+  const diagnostic = (key: string) => {
+    if (!canCheckPermissions || !descriptors.some((d) => d.key === key))
+      return null;
     const operation = SETTINGS_OPERATIONS[key];
-    const checks = keys.map((candidate) => ({
-      operationLabel:
-        candidate === 'signup_post'
-          ? 'Primary signup'
-          : candidate === 'signup_fallback'
-            ? 'Announcement fallback'
-            : SETTINGS_OPERATIONS[candidate].label,
-      result: resultFor(candidate),
-    }));
     return (
       <DiscordPermissionBadge
         operationLabel={operation.label}
-        result={checks[0]?.result}
-        checks={relatedKeys.length ? checks : undefined}
+        result={resultFor(key)}
         state={permissionQuery?.state ?? 'idle'}
         disabled={!values[operation.field]}
         data-testid={`discord-permission-badge-${key}`}
       />
     );
   };
-  const signupDiagnostic = diagnostic('signup_post', ['signup_fallback']);
+  const groups = channelPermissionGroups(values, descriptors);
+  const channelLabels: Record<ChannelPicker, string> = {
+    signup_post: 'Signup channel',
+    announcement: 'Announcement channel',
+    attendance_reminder: discordLabel('discord_confirm_attendance_channel_id'),
+    profile_reminder: discordLabel('discord_profile_reminder_channel_id'),
+    new_event_notice: discordLabel('discord_new_event_channel_id'),
+  };
+  const channelDiagnostic = (picker: ChannelPicker) => {
+    if (!canCheckPermissions) return null;
+    let group = groups.get(picker);
+    if (!group) {
+      const descriptor = descriptors.find((d) => d.key === picker);
+      const owner = descriptor?.channel_id
+        ? [...groups].find(
+            ([, g]) => g.channelId === descriptor.channel_id,
+          )?.[0]
+        : picker === 'signup_post' && values.discord_announcement
+          ? 'announcement'
+          : undefined;
+      if (owner) group = groups.get(owner);
+    }
+    const checks = (group?.checks ?? []).map((descriptor) => ({
+      operationLabel: channelUseLabel(descriptor, values),
+      settingLabel: SETTING_LABELS[descriptor.key],
+      result: resultFor(descriptor.key),
+    }));
+    return (
+      <DiscordPermissionBadge
+        channel
+        operationLabel={channelLabels[picker]}
+        result={checks[0]?.result}
+        checks={checks}
+        state={permissionQuery?.state ?? 'idle'}
+        data-testid={`discord-permission-badge-${picker}`}
+      />
+    );
+  };
 
   const [
     createEvent,
@@ -568,7 +597,6 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_post_signups"
-            diagnostic={!values.discord_post_signups && signupDiagnostic}
             label="Post event signup embed"
             description="Post an embed to a channel where users can react to sign up"
             action={preview('signup_post')}
@@ -578,7 +606,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
               <PostChannelField
                 control={control}
                 name="discord_post_signups_channel_id"
-                diagnostic={signupDiagnostic}
+                diagnostic={channelDiagnostic('signup_post')}
                 label="Signup channel"
                 description="Channel where the signup embed will be posted"
                 organizationId={organizationId}
@@ -693,7 +721,6 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_announcement"
-            diagnostic={diagnostic('announcement')}
             label="Pre-day announcement"
             description="Post an announcement in a channel before the event"
             action={preview('announcement_notice')}
@@ -703,6 +730,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
               <AnnouncementChannelField
                 control={control}
                 organizationId={organizationId}
+                diagnostic={channelDiagnostic('announcement')}
                 lead="Channel for the pre-day announcement. Posts with no channel of their own use it too."
                 users={channelUsers}
               />
@@ -758,10 +786,6 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_confirm_attendance"
-            diagnostic={
-              !values.discord_confirm_attendance &&
-              diagnostic('attendance_reminder')
-            }
             label="Post attendance reminder in Discord"
             description={ATTENDANCE_REMINDER_DESCRIPTION}
             action={preview('attendance_reminder')}
@@ -776,7 +800,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
                 <PostChannelField
                   control={control}
                   name="discord_confirm_attendance_channel_id"
-                  diagnostic={diagnostic('attendance_reminder')}
+                  diagnostic={channelDiagnostic('attendance_reminder')}
                   label={discordLabel('discord_confirm_attendance_channel_id')}
                   organizationId={organizationId}
                   blankState={blankState('attendance')}
@@ -793,9 +817,6 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
           <CheckboxField
             control={control}
             name="discord_profile_reminder"
-            diagnostic={
-              !values.discord_profile_reminder && diagnostic('profile_reminder')
-            }
             label="Profile update reminder"
             description={PROFILE_REMINDER_DESCRIPTION}
             action={preview('profile_reminder')}
@@ -810,7 +831,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
                 <PostChannelField
                   control={control}
                   name="discord_profile_reminder_channel_id"
-                  diagnostic={diagnostic('profile_reminder')}
+                  diagnostic={channelDiagnostic('profile_reminder')}
                   label={discordLabel('discord_profile_reminder_channel_id')}
                   organizationId={organizationId}
                   blankState={blankState('profile')}
@@ -828,10 +849,6 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             <CheckboxField
               control={control}
               name="discord_notify_new_events"
-              diagnostic={
-                !values.discord_notify_new_events &&
-                diagnostic('new_event_notice')
-              }
               label="Post new events"
               description={NEW_EVENTS_DESCRIPTION}
               action={preview('new_event_post')}
@@ -841,7 +858,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
                 <PostChannelField
                   control={control}
                   name="discord_new_event_channel_id"
-                  diagnostic={diagnostic('new_event_notice')}
+                  diagnostic={channelDiagnostic('new_event_notice')}
                   label={discordLabel('discord_new_event_channel_id')}
                   organizationId={organizationId}
                   blankState={blankState('newEvent')}
@@ -861,6 +878,7 @@ function DiscordConfigFields<T extends FieldValues & DiscordFields>({
             <AnnouncementChannelField
               control={control}
               organizationId={organizationId}
+              diagnostic={channelDiagnostic('announcement')}
               lead="Used by posts with no channel of their own."
               users={channelUsers}
             />

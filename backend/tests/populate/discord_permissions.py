@@ -16,7 +16,7 @@ from django.utils import timezone
 from app.cache_utils import invalidate_model, invalidate_obj
 from app.models import CustomUser
 from discordbot.models import DiscordEvent, DiscordEventMsgSignup, DiscordMessageLog
-from events.constants import EventState
+from events.constants import DISCORD_SYNC_HORIZON, EventState
 from events.models import Event
 from league.models import League
 from org.models import Organization
@@ -45,6 +45,8 @@ from tests.populate.utils import delete_events
 from user.models import PositionsModel
 
 FIXTURE_KEY: str = f"discord_perm_fixture:{PERMISSION_GUILD_ID}"
+# discordbot.permissions.reader keys FixtureSource snapshots by this token.
+FIXTURE_TOKEN_FP: str = "test-fixture-v1"
 
 
 def _ensure_user(data: TestUser) -> CustomUser:
@@ -95,7 +97,8 @@ def _ensure_org_and_league(
 def _create_event(
     org: Organization, league: League, staff: CustomUser, name: str
 ) -> Event:
-    start = (timezone.now() + timedelta(days=14)).replace(
+    # Past the sync horizon so celery beat never posts for these events.
+    start = (timezone.now() + DISCORD_SYNC_HORIZON + timedelta(days=14)).replace(
         minute=0, second=0, microsecond=0
     )
     return Event.objects.create(
@@ -144,14 +147,33 @@ def _events(org_pk: int) -> Any:
     )
 
 
+def permission_snapshot_keys() -> list[str]:
+    """Every reader cache key the fixture guild's scenarios can write."""
+    scope = f"{FIXTURE_TOKEN_FP}:{PERMISSION_GUILD_ID}"
+    channels = (
+        PERMISSION_ANNOUNCEMENT_CHANNEL_ID,
+        PERMISSION_ATTENDANCE_CHANNEL_ID,
+        PERMISSION_HISTORY_CHANNEL_ID,
+        PERMISSION_HISTORY_THREAD_ID,
+    )
+    kinds = ["bot", "guild", "member", "channels"]
+    kinds.append(f"event:{PERMISSION_SCHEDULED_EVENT_ID}")
+    for channel in channels:
+        kinds += [
+            f"channel:{channel}",
+            f"thread-member:{channel}",
+            f"message:{channel}:{PERMISSION_SIGNUP_MESSAGE_ID}",
+        ]
+    return [
+        f"discord_perm_refresh:{scope}",
+        f"discord_perm_generation:{scope}",
+        *(f"discord_perm:v1:{scope}:{kind}" for kind in kinds),
+        *(f"discord_perm_channel_fence:{scope}:{channel}" for channel in channels),
+    ]
+
+
 def clear_permission_snapshots() -> None:
-    if hasattr(cache, "delete_pattern"):
-        for prefix in (
-            "discord_perm:v1",
-            "discord_perm_refresh",
-            "discord_perm_generation",
-        ):
-            cache.delete_pattern(f"{prefix}:*:{PERMISSION_GUILD_ID}*")
+    cache.delete_many(permission_snapshot_keys())
 
 
 def set_permission_scenario(name: str) -> None:

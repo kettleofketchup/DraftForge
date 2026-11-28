@@ -10,6 +10,7 @@ export {
 export {
   DiscordPreviewButton,
   type DiscordPreviewButtonProps,
+  type DiscordPreviewRenderControls,
 } from './DiscordPreviewButton';
 export { DiscordScheduledEventCard } from './DiscordScheduledEventCard';
 export {

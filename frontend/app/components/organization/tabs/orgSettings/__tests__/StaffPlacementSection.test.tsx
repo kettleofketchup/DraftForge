@@ -118,7 +118,11 @@ function refetched(changes: Partial<OrgSettings>) {
 beforeEach(() => {
   selectSection.mockClear();
   vi.mocked(toast.error).mockClear();
-  sectionsRef.current = { selectSection, sectionOfField: () => undefined };
+  sectionsRef.current = {
+    selectSection,
+    revealField: vi.fn(),
+    sectionOfField: () => undefined,
+  };
   vi.mocked(getOrgSettings).mockResolvedValue(SETTINGS);
 });
 
